@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" fill="none">
+<!-- asset.S3-10 · 底座未就绪错误图（同族 ×3 之一）：空盘 + 未立地桩 + 告警 · S3 -->
+<circle cx="52" cy="28" r="20" stroke="currentColor" stroke-width="1.5"/>
+<path d="M52 16v24M42 28h20" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+<path d="M52 48v14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M44 62h16" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-dasharray="4 3" opacity="0.4"/>
+<path d="M90 20l10 16M100 20l-10 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

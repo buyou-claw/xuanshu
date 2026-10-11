@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" fill="none">
+<!-- asset.S11-6 · 藏库 empty：空函套 + 飘带，还没有登记任何藏 · S11 -->
+<rect x="34" y="24" width="52" height="34" rx="4" stroke="currentColor" stroke-width="1.5"/>
+<path d="M34 24l26-8 26 8" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M34 24v34M86 24v34" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+<path d="M44 40h32" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.3"/>
+<path d="M22 14c6 4 6 10 0 14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+</svg>

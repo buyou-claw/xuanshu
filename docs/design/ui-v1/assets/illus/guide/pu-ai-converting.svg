@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 110" fill="none">
+<!-- asset.S5-5 · 创建谱「AI 转换中」示意：打字 / 附件 → AI → 结构 + 分节 · S5 -->
+<rect x="14" y="22" width="52" height="48" rx="5" stroke="currentColor" stroke-width="1.6"/>
+<path d="M24 36h32M24 44h32M24 52h20" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.3"/>
+<path d="M14 22l8-8 8 8" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+<path d="M66 46h30" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M89 40l7 6-7 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="122" cy="46" r="16" stroke="currentColor" stroke-width="1.6"/>
+<path d="M122 34v-3M122 58v3M110 46h-3M134 46h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+<path d="M138 46h30" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M161 40l7 6-7 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="176" y="16" width="50" height="60" rx="5" stroke="currentColor" stroke-width="1.6"/>
+<path d="M176 30h50" stroke="currentColor" stroke-width="1.2" opacity="0.4"/>
+<path d="M184 40h34M184 48h34M184 56h22M184 64h28" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.3"/>
+</svg>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<!-- asset.S6-5, asset.S8-1 · 临时挂载（卡扣/插头） · S6/S8 -->
+<rect x="3.5" y="5" width="7" height="10" rx="1.5"/>
+<path d="M10.5 7 H13 A1.5 1.5 0 0 1 14.5 8.5 V11.5 A1.5 1.5 0 0 1 13 13 H10.5"/>
+</svg>

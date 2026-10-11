@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+<!-- asset.S15-2 · 玄枢品牌标（sidebar.brand.mark）单色 currentColor 版：圆环绕一偏心枢点 + 过心辐条（枢轴 / 璇玑意象） · S15 -->
+<!-- 多档边长语义见 brand/brand-mark-notes.md；主图形边长由 --xs-size-glyph-brand 承载，侧栏档随 sidebar.brand.mark 宿主尺寸 -->
+<circle cx="12" cy="12" r="8.6" stroke="currentColor" stroke-width="1.8"/>
+<path d="M12 13.6 L12 3.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+<circle cx="12" cy="15.4" r="2.2" fill="currentColor"/>
+</svg>

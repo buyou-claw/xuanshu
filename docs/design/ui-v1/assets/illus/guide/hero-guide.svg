@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" fill="none">
+<!-- asset.S3-8 · conversation.hero 引导插图：出生信息 → 底座出盘 → 命盘点亮 · S3 -->
+<rect x="18" y="34" width="72" height="92" rx="6" stroke="currentColor" stroke-width="2"/>
+<path d="M28 50h52M28 60h36M28 70h44" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.3"/>
+<path d="M28 96h20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+<path d="M90 80h44" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+<path d="M124 70l12 10-12 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="196" cy="80" r="40" stroke="currentColor" stroke-width="2"/>
+<path d="M196 48v64M164 80h64" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+<circle cx="196" cy="80" r="22" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 5" opacity="0.35"/>
+<path d="M236 80h44" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+<path d="M270 70l12 10-12 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M282 68l14 14M296 68l-14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M18 148l12 8M30 156l-12 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.3"/>
+</svg>

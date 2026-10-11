@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+<!-- asset.S14-2 · 时间基准行「时刻」：钟面双针（本机时钟，生成时固定） · S14 -->
+<circle cx="8" cy="8" r="5.5"/>
+<path d="M8 5v3l2.25 1.5"/>
+</svg>

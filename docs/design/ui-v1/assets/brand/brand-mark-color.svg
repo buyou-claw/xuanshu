@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+<!-- asset.S15-2 · 玄枢品牌标（sidebar.brand.mark）品牌色版：玄青底版（light）；构图同 brand-mark.svg · S15 -->
+<!-- 品牌色 #2f3a5c（玄青，light；README §5 登记）；dark 模式实现切换 #a3b0e0（§5 已登记，取值以 §5 与实现票为准） -->
+<circle cx="12" cy="12" r="8.6" stroke="#2f3a5c" stroke-width="1.8"/>
+<path d="M12 13.6 L12 3.9" stroke="#2f3a5c" stroke-width="1.8" stroke-linecap="round"/>
+<circle cx="12" cy="15.4" r="2.2" fill="#2f3a5c"/>
+</svg>

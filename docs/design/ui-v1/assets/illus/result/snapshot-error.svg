@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" fill="none">
+<!-- asset.S2-9 · 快照读不出来 / 结构不符：破损快照框 + 错位栏 · S2 -->
+<rect x="34" y="16" width="52" height="40" rx="4" stroke="currentColor" stroke-width="1.5"/>
+<path d="M34 26l12-6 12 6 14-6 14 6" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" opacity="0.4"/>
+<path d="M44 36h32M44 44h32" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.3"/>
+<path d="M44 40l6-6M50 40l-6-6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+<path d="M96 52l6 6M102 52l-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+</svg>

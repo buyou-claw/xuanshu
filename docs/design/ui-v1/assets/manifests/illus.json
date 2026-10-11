@@ -1,0 +1,182 @@
+{
+  "name": "illus",
+  "owner": "illus-dev",
+  "scope": "illus：empty-state 14 条 + illustration 10 条 + placeholder 5 条（台账 29 条）",
+  "notes_global": "目录归族按 assets/README.md §1：empty/ 空态族、guide/ 引导与流程示意、result/ 成功/失败/错误、copy/ 文案表。空态 viewBox≈3:2（120×80），hero 引导 16:9（320×180），流程示意按内容。主描边 stroke=currentColor，第二层次只允许 currentColor + opacity 0.2–0.4，无字面颜色。同族关系：S2-8 与 S1-6 同族（独立文件、画面同源）；S4-1 与 S1-6 同族（viewBox 比例区分，卡内 2/3 高 vs 1/3 高）；S3-10 三张同族 ×3；S3-11 与 S1-6 命盘卡同族（点亮版）。S5-3/S6-6/S7-2/S8-4 台账 type=placeholder 但 raw_type=empty-state、suggested_format=SVG，故产出 SVG 空态并归 empty/。",
+  "entries": [
+    {
+      "ledger_id": "asset.S1-6",
+      "type": "empty-state",
+      "files": ["illus/empty/mingpan-empty.svg"],
+      "notes": "命盘卡 empty：「底座还没立起来」。空盘 + 地桩；尺寸语义「卡内 1/3 高」；与 S2-8/S4-1 同族（S4-1 卡内 2/3 高，viewBox 比例区分）"
+    },
+    {
+      "ledger_id": "asset.S1-7",
+      "type": "empty-state",
+      "files": ["illus/empty/rike-empty.svg"],
+      "notes": "日课卡 empty：「今天还没有生成日课」。空卷轴 + 未升起的太阳；同族风格"
+    },
+    {
+      "ledger_id": "asset.S1-8",
+      "type": "empty-state",
+      "files": ["illus/empty/digao-empty.svg"],
+      "notes": "底稿卡 empty（两种空因共用一张）。空文稿 + 三路来源空槽；同族风格"
+    },
+    {
+      "ledger_id": "asset.S1-9",
+      "type": "illustration",
+      "files": ["illus/result/cards-error.svg"],
+      "notes": "四卡共用 error 态，语义「断线 / 读不到」。卡面 + 断裂连接"
+    },
+    {
+      "ledger_id": "asset.S10-7",
+      "type": "empty-state",
+      "files": ["illus/empty/sediment-draft-empty.svg"],
+      "notes": "沉淀草稿卡 empty（会话刚收尾、尚无草稿）。空白草稿纸 + 搁置的笔"
+    },
+    {
+      "ledger_id": "asset.S11-6",
+      "type": "empty-state",
+      "files": ["illus/empty/cang-empty.svg"],
+      "notes": "藏库 empty（还没有登记任何藏）。空函套 + 飘带"
+    },
+    {
+      "ledger_id": "asset.S11-7",
+      "type": "empty-state",
+      "files": ["illus/empty/cang-pointer-note.svg"],
+      "notes": "登记抽屉「只取指针」说明配图（指针 ≠ 复制）。链环指针指向文件 + 交叉复制记号"
+    },
+    {
+      "ledger_id": "asset.S12-6",
+      "type": "empty-state",
+      "files": ["illus/empty/workflow-hall-empty.svg"],
+      "notes": "工作流门厅 empty（还没有工作流）。空门框 + 未起的流程线"
+    },
+    {
+      "ledger_id": "asset.S12-7",
+      "type": "empty-state",
+      "files": ["illus/empty/workflow-seed-empty.svg"],
+      "notes": "工作流会话内 empty（种子刚起、还没说要求）。刚冒芽的种子 + 空会话泡"
+    },
+    {
+      "ledger_id": "asset.S13-7",
+      "type": "empty-state",
+      "files": ["illus/empty/digao-empty-all.svg"],
+      "notes": "底稿 empty（三路皆空）。三路来源空槽 → 空底稿"
+    },
+    {
+      "ledger_id": "asset.S14-6",
+      "type": "empty-state",
+      "files": ["illus/empty/rike-empty-notime.svg"],
+      "notes": "日课 empty（今天未到点且无上一份）。钟未到点 + 空白宜/忌/流日卡"
+    },
+    {
+      "ledger_id": "asset.S14-7",
+      "type": "empty-state",
+      "files": ["illus/empty/baseplate-unready.svg"],
+      "notes": "日课底座未就绪态（指向 S3）。空盘 + 未立地桩 + 指引箭头；与 S3-10 底座未就绪同义、独立落 S14"
+    },
+    {
+      "ledger_id": "asset.S15-6",
+      "type": "empty-state",
+      "files": ["illus/empty/data-uninit.svg"],
+      "notes": "数据与拷走 empty（数据目录未初始化）。空目录夹 + 未初始化火花"
+    },
+    {
+      "ledger_id": "asset.S2-8",
+      "type": "empty-state",
+      "files": ["illus/empty/mingpan-snapshot-missing.svg"],
+      "notes": "命盘卡快照缺失（与 S1 命盘卡空态同族，独立文件、画面同源）。空盘内缺快照框 + 地桩"
+    },
+    {
+      "ledger_id": "asset.S3-10",
+      "type": "empty-state",
+      "files": ["illus/empty/baseplate-fail.svg", "illus/empty/cast-fail.svg", "illus/empty/plate-fail.svg"],
+      "notes": "底座未就绪 / 出盘失败 / 落谱失败三种错误图，同族 ×3：baseplate-fail=空盘+告警、cast-fail=盘+断裂出盘箭头、plate-fail=盘+谱+断裂写入箭头"
+    },
+    {
+      "ledger_id": "asset.S15-5",
+      "type": "illustration",
+      "files": ["illus/guide/takeaway-copy.svg"],
+      "notes": "「整体拷走」说明配图（两个目录 → 一处落地）。两目录 → 行囊箭头"
+    },
+    {
+      "ledger_id": "asset.S2-9",
+      "type": "illustration",
+      "files": ["illus/result/snapshot-error.svg"],
+      "notes": "快照读不出来 / 结构不符。破损快照框 + 错位栏"
+    },
+    {
+      "ledger_id": "asset.S3-8",
+      "type": "illustration",
+      "files": ["illus/guide/hero-guide.svg"],
+      "notes": "conversation.hero 引导插图。出生信息 → 底座出盘 → 命盘点亮；比例语义「hero 内 1/3 高」，viewBox 16:9"
+    },
+    {
+      "ledger_id": "asset.S3-9",
+      "type": "illustration",
+      "files": ["illus/guide/cast-in-progress.svg"],
+      "notes": "出盘进行中。盘 + 旋转弧（SMIL 为增强，首帧静态可读；降级 = 静止首帧）"
+    },
+    {
+      "ledger_id": "asset.S3-11",
+      "type": "illustration",
+      "files": ["illus/guide/cast-success-mingpan.svg"],
+      "notes": "出盘成功 → 命盘卡点亮。与 S1-6 命盘卡同族（点亮版：勾 + 放射）"
+    },
+    {
+      "ledger_id": "asset.S4-1",
+      "type": "illustration",
+      "files": ["illus/guide/mingpan-coldstart.svg"],
+      "notes": "命盘卡冷启动主态（「底座还没立起来」）。与 S1-6 同族，viewBox 比例区分：语义尺寸「卡内 2/3 高」"
+    },
+    {
+      "ledger_id": "asset.S5-5",
+      "type": "illustration",
+      "files": ["illus/guide/pu-ai-converting.svg"],
+      "notes": "创建谱向导「AI 转换中」过程示意（打字 / 附件 → 结构 + 分节）。静态占位，动画后置"
+    },
+    {
+      "ledger_id": "asset.S8-6",
+      "type": "illustration",
+      "files": ["illus/guide/mount-segment-cut.svg"],
+      "notes": "「按段裁剪」示意（段边界切分）。长条分段 + 剪刀，供预览区展开处使用"
+    },
+    {
+      "ledger_id": "asset.S9-5",
+      "type": "illustration",
+      "files": ["illus/guide/bestof-flow.svg"],
+      "notes": "「2 路并排 → 判官排序 → 采用 / 合并 / 否决」流程示意（费用确认框与拦截引导处使用）"
+    },
+    {
+      "ledger_id": "asset.S4-10",
+      "type": "placeholder",
+      "files": ["copy/s4-cold-start-empty-copy.md"],
+      "notes": "四条冷启动空态文案（命盘 / 日课 / 底稿 / 问事副标题）最终定稿；权威来源 S4 §2/§3 + S1 §6"
+    },
+    {
+      "ledger_id": "asset.S5-3",
+      "type": "placeholder",
+      "files": ["illus/empty/pu-empty.svg"],
+      "notes": "无任何可选谱的空态（S5 §6 empty）。空谱架 + 一本待写的谱；raw_type=empty-state、suggested_format=SVG，故产出 SVG 空态归 empty/"
+    },
+    {
+      "ledger_id": "asset.S6-6",
+      "type": "placeholder",
+      "files": ["illus/empty/consult-empty.svg"],
+      "notes": "未开过问事的面板落地态（S6 §2.2）。空会话泡 + 问号；raw_type=empty-state、suggested_format=SVG"
+    },
+    {
+      "ledger_id": "asset.S7-2",
+      "type": "placeholder",
+      "files": ["illus/empty/consult-history-empty.svg"],
+      "notes": "「还没有问事记录」首次空态（S7 §2.3 ①）。空历史列表 + 时钟；raw_type=empty-state、suggested_format=SVG"
+    },
+    {
+      "ledger_id": "asset.S8-4",
+      "type": "placeholder",
+      "files": ["illus/empty/mount-empty.svg"],
+      "notes": "没有可挂对象时的空态（S8 §2.4）。两个空挂载槽（工作区 / 工作流）+ 悬空挂钩；raw_type=empty-state、suggested_format=SVG"
+    }
+  ]
+}

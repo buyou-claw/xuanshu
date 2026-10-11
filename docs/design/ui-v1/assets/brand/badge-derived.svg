@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none">
+<!-- asset.S13-2 · 「纯派生 · 不可手改」约束徽标底版（盾形 + 斜杠；与 S1 / S4 同一枚） · S13 -->
+<!-- 底版占位色 #47557a（底）/ #f4f5f7（字形）；实现以 --xs-constraint-derived-bg / --xs-constraint-derived-fg 为准（设计token字典 §9，C2；assets README §3.3/§5） -->
+<rect x="1" y="1" width="18" height="18" rx="4.5" fill="#47557a"/>
+<path d="M10 4.6 L14.6 6.1 V9.9 C14.6 12.9 12.7 14.9 10 16.4 C7.3 14.9 5.4 12.9 5.4 9.9 V6.1 Z" stroke="#f4f5f7" stroke-width="1.3" stroke-linejoin="round"/>
+<path d="M6.8 13.4 L13.2 6.6" stroke="#f4f5f7" stroke-width="1.3" stroke-linecap="round"/>
+</svg>

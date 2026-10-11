@@ -1,0 +1,341 @@
+{
+  "scope": "icons-a",
+  "entries": [
+    {
+      "ledger_id": "asset.S1-1",
+      "files": [
+        "icons/nav/nav-overview.svg"
+      ],
+      "type": "icon",
+      "notes": "侧栏「家/总览」行；与 S15-1 同枚；别名 S4-5 复用"
+    },
+    {
+      "ledger_id": "asset.S1-2",
+      "files": [
+        "icons/card/card-mingpan.svg"
+      ],
+      "type": "icon",
+      "notes": "命盘卡卡头"
+    },
+    {
+      "ledger_id": "asset.S1-3",
+      "files": [
+        "icons/card/card-rike.svg"
+      ],
+      "type": "icon",
+      "notes": "日课卡卡头；S14-1 复用同枚"
+    },
+    {
+      "ledger_id": "asset.S1-4",
+      "files": [
+        "icons/card/card-digao.svg"
+      ],
+      "type": "icon",
+      "notes": "底稿卡卡头"
+    },
+    {
+      "ledger_id": "asset.S1-5",
+      "files": [
+        "icons/nav/nav-quick-consult.svg",
+        "icons/nav/nav-quick-workspace.svg",
+        "icons/nav/nav-quick-workflow.svg"
+      ],
+      "type": "icon",
+      "notes": "快捷入口三格（问事/工作区/工作流）；别名 S4-4 复用"
+    },
+    {
+      "ledger_id": "asset.S2-1",
+      "files": [
+        "icons/card/card-mingpan.svg"
+      ],
+      "type": "icon",
+      "notes": "抽屉头部命盘图标，与 S1-2 同枚"
+    },
+    {
+      "ledger_id": "asset.S2-2",
+      "files": [
+        "icons/inline/pillar-year.svg",
+        "icons/inline/pillar-month.svg",
+        "icons/inline/pillar-day.svg",
+        "icons/inline/pillar-hour.svg"
+      ],
+      "type": "icon",
+      "notes": "四柱表列头（年/月/日/时）四枚"
+    },
+    {
+      "ledger_id": "asset.S2-3",
+      "files": [
+        "icons/inline/unfold-more.svg",
+        "icons/inline/unfold-less.svg"
+      ],
+      "type": "icon",
+      "notes": "大运展开/收起两态"
+    },
+    {
+      "ledger_id": "asset.S2-4",
+      "files": [
+        "icons/inline/facet-nayin.svg",
+        "icons/inline/facet-shensha.svg",
+        "icons/inline/facet-kongwang.svg",
+        "icons/inline/facet-minggong.svg"
+      ],
+      "type": "icon",
+      "notes": "其它要点分块四枚同族"
+    },
+    {
+      "ledger_id": "asset.S3-1",
+      "files": [
+        "icons/status/step-current.svg",
+        "icons/status/step-done.svg",
+        "icons/status/step-todo.svg"
+      ],
+      "type": "icon",
+      "notes": "步骤条五格三态"
+    },
+    {
+      "ledger_id": "asset.S3-2",
+      "files": [
+        "icons/inline/time-popover.svg",
+        "icons/inline/time-type.svg",
+        "icons/inline/time-adjust.svg"
+      ],
+      "type": "icon",
+      "notes": "时间编辑三方式提示位"
+    },
+    {
+      "ledger_id": "asset.S3-3",
+      "files": [
+        "icons/inline/city-offline.svg",
+        "icons/inline/city-nomatch.svg"
+      ],
+      "type": "icon",
+      "notes": "城市库入口（离线/无匹配）两枚 20 框"
+    },
+    {
+      "ledger_id": "asset.S3-4",
+      "files": [
+        "icons/inline/coords.svg"
+      ],
+      "type": "icon",
+      "notes": "经纬度手输前置图标"
+    },
+    {
+      "ledger_id": "asset.S3-5",
+      "files": [
+        "icons/inline/tz-auto.svg",
+        "icons/inline/tz-manual.svg",
+        "icons/inline/tz-dst.svg"
+      ],
+      "type": "icon",
+      "notes": "时区自动/手动覆盖/夏令时标记三枚"
+    },
+    {
+      "ledger_id": "asset.S5-1",
+      "files": [
+        "icons/nav/nav-pu.svg"
+      ],
+      "type": "icon",
+      "notes": "侧栏「谱」行；与 S15-1 同枚"
+    },
+    {
+      "ledger_id": "asset.S5-2",
+      "files": [
+        "icons/action/plus.svg"
+      ],
+      "type": "icon",
+      "notes": "「＋创建新谱」主按钮；与 S6-3/S12-1 同枚"
+    },
+    {
+      "ledger_id": "asset.S5-4",
+      "files": [
+        "icons/status/level-base.svg",
+        "icons/status/level-optional.svg"
+      ],
+      "type": "icon",
+      "notes": "谱级别标识 base/optional 成对"
+    },
+    {
+      "ledger_id": "asset.S5-6",
+      "files": [
+        "icons/status/src-manual.svg",
+        "icons/status/src-ai.svg",
+        "icons/status/src-sediment.svg",
+        "icons/status/src-workflow.svg"
+      ],
+      "type": "icon",
+      "notes": "谱来源标识四枚同族"
+    },
+    {
+      "ledger_id": "asset.S5-7",
+      "files": [
+        "icons/inline/lock.svg"
+      ],
+      "type": "icon",
+      "notes": "锁定行标记；与 S6-2 同枚"
+    },
+    {
+      "ledger_id": "asset.S5-8",
+      "files": [
+        "icons/action/more.svg",
+        "icons/action/open.svg",
+        "icons/action/edit.svg",
+        "icons/action/remove.svg"
+      ],
+      "type": "icon",
+      "notes": "行菜单 + 打开/编辑/删除（后三枚复用 icons-b）"
+    },
+    {
+      "ledger_id": "asset.S6-1",
+      "files": [
+        "icons/nav/nav-consult.svg"
+      ],
+      "type": "icon",
+      "notes": "侧栏「问事」行；与 S15-1 同枚"
+    },
+    {
+      "ledger_id": "asset.S6-2",
+      "files": [
+        "icons/inline/lock.svg"
+      ],
+      "type": "icon",
+      "notes": "锁定行标记；与 S5-7 同枚"
+    },
+    {
+      "ledger_id": "asset.S6-3",
+      "files": [
+        "icons/action/plus.svg"
+      ],
+      "type": "icon",
+      "notes": "「＋开一次问事」主按钮；与 S5-2/S12-1 同枚"
+    },
+    {
+      "ledger_id": "asset.S6-4",
+      "files": [
+        "icons/action/history.svg"
+      ],
+      "type": "icon",
+      "notes": "「历史回看」入口；与 S7-1 同枚"
+    },
+    {
+      "ledger_id": "asset.S6-5",
+      "files": [
+        "icons/action/mount.svg"
+      ],
+      "type": "icon",
+      "notes": "「临时挂载」入口；S8-1 复用同枚"
+    },
+    {
+      "ledger_id": "asset.S6-7",
+      "files": [
+        "icons/status/approval-pending.svg",
+        "icons/status/approval-allowed.svg",
+        "icons/status/approval-rejected.svg"
+      ],
+      "type": "icon",
+      "notes": "审批卡三态同族"
+    },
+    {
+      "ledger_id": "asset.S6-8",
+      "files": [
+        "icons/inline/info.svg"
+      ],
+      "type": "icon",
+      "notes": "「ⓘ 说明卡」类提示"
+    },
+    {
+      "ledger_id": "asset.S6-9",
+      "files": [
+        "icons/action/open-conversation.svg"
+      ],
+      "type": "icon",
+      "notes": "「继续问事 ▸ conversation」切换入口（D5）"
+    },
+    {
+      "ledger_id": "asset.S7-1",
+      "files": [
+        "icons/action/history.svg"
+      ],
+      "type": "icon",
+      "notes": "历史回看子页切换入口；与 S6-4 同枚"
+    },
+    {
+      "ledger_id": "asset.S7-3",
+      "files": [
+        "icons/inline/bestof-check.svg"
+      ],
+      "type": "icon",
+      "notes": "合参轮次标记（合参√）"
+    },
+    {
+      "ledger_id": "asset.S7-4",
+      "files": [
+        "icons/inline/tool-read.svg"
+      ],
+      "type": "icon",
+      "notes": "工具调用折叠行（读 N 个文件）"
+    },
+    {
+      "ledger_id": "asset.S7-5",
+      "files": [
+        "icons/action/delete.svg"
+      ],
+      "type": "icon",
+      "notes": "破坏性删除动作"
+    },
+    {
+      "ledger_id": "asset.S7-6",
+      "files": [
+        "icons/action/export.svg",
+        "icons/status/saved.svg"
+      ],
+      "type": "icon",
+      "notes": "导出动作（复用 icons-b export）+ 落盘成功"
+    },
+    {
+      "ledger_id": "asset.S7-7",
+      "files": [
+        "icons/action/open-conversation.svg"
+      ],
+      "type": "icon",
+      "notes": "「继续问事 ▸」跨面板切换（D6）；与 S6-9 同枚"
+    },
+    {
+      "ledger_id": "asset.S11-1",
+      "files": [
+        "icons/nav/nav-cang.svg"
+      ],
+      "type": "icon",
+      "notes": "侧栏「藏」行；与 S15-1 同枚"
+    },
+    {
+      "ledger_id": "asset.S12-1",
+      "files": [
+        "icons/nav/nav-workflow.svg",
+        "icons/action/plus.svg"
+      ],
+      "type": "icon",
+      "notes": "侧栏「工作流」行 + [创建工作流]"
+    },
+    {
+      "ledger_id": "asset.S13-1",
+      "files": [
+        "icons/nav/nav-digao.svg"
+      ],
+      "type": "icon",
+      "notes": "侧栏「底稿」行 + 面板标题；与 S15-1 同枚"
+    },
+    {
+      "ledger_id": "asset.S15-1",
+      "files": [
+        "icons/nav/nav-overview.svg",
+        "icons/nav/nav-consult.svg",
+        "icons/nav/nav-pu.svg",
+        "icons/nav/nav-cang.svg",
+        "icons/nav/nav-digao.svg",
+        "icons/nav/nav-workflow.svg"
+      ],
+      "type": "icon",
+      "notes": "侧栏六行一套"
+    }
+  ]
+}

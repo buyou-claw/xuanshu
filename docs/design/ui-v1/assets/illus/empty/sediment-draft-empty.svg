@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" fill="none">
+<!-- asset.S10-7 · 沉淀草稿卡 empty：空白草稿纸 + 搁置的笔，尚无草稿 · S10 -->
+<path d="M34 20h40l12 12v28a4 4 0 0 1-4 4H34a4 4 0 0 1-4-4V24a4 4 0 0 1 4-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M74 20v12h12" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M40 38h28M40 45h36M40 52h20" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.3"/>
+<path d="M20 62l14-10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+<path d="M34 52l3-5 5 2z" stroke="currentColor" stroke-width="1" stroke-linejoin="round" opacity="0.4"/>
+</svg>
