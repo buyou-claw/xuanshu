@@ -161,7 +161,7 @@ declare module '@deepseek-ai/cordis' {
   export interface Context {
     /** Renderer-owned UI composition registry. */
     slots: SlotRegistry;
-    /** Panel navigation face（本票不调用，留给票 06 的默认面板切换）。 */
+    /** Panel navigation face（本票不调用，留给票 07 · 首页替换的默认面板切换）。 */
     layout: LayoutService;
   }
 }

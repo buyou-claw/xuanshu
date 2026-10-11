@@ -9,7 +9,7 @@
  *
  * 本票范围：**只注册空壳** —— `main` keyed 槽 key `overview` +
  * `sidebar.panellist` list 槽行 id `overview`（两处字符串同源，见 `./panel.js`）。
- * 四卡内容属票 06；不注册进 `root` 槽（会遮住整个框架）。
+ * 四卡内容属票 07 · 首页替换；不注册进 `root` 槽（会遮住整个框架）。
  */
 import type { Context } from '@deepseek-ai/cordis';
 

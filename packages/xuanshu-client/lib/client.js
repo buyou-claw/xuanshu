@@ -57,7 +57,7 @@ window.__ModuleLoader__.load({
 		var PANEL_ORDER = 20;
 		var PANEL_TITLE = "玄枢";
 		var PANEL_SUBTITLE = "自我总览";
-		var PANEL_PLACEHOLDER = "玄枢首屏空壳：四张卡（命盘 / 日课 / 底稿 / 快捷入口）将在票 06 填入。";
+		var PANEL_PLACEHOLDER = "玄枢首屏空壳：四张卡（命盘 / 日课 / 底稿 / 快捷入口）将在票 07 · 首页替换填入。";
 		var PANEL_LABEL = "总览";
 
 		// src/client/OverviewPanel.tsx

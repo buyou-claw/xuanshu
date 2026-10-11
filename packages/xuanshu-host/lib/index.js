@@ -259,10 +259,11 @@ function buildReport(ctx, config) {
   };
 
   // ok = 本票装配的三项必查都过：profileContext 可得、两个插件包都解析到、两行 id 都在树里。
+  // （`specifiers` 天然是「本包名 + PEER_PACKAGE」两个键，不必再数长度。）
   const missingRows = specifiers.filter((specifier) => report.patchRowIds.includes(specifier) !== true);
   if (missingRows.length > 0) notes.push(`补丁行未出现在本进程树中：${missingRows.join(', ')}。`);
   const allProbed = specifiers.every((specifier) => plugins[specifier] !== undefined);
-  report.ok = profileCtx !== undefined && specifiers.length === 2 && allProbed && missingRows.length === 0;
+  report.ok = profileCtx !== undefined && allProbed && missingRows.length === 0;
 
   return { report, dataDir };
 }

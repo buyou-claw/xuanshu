@@ -18,7 +18,7 @@ import { PANEL_PLACEHOLDER, PANEL_SUBTITLE, PANEL_TITLE } from './panel.js';
  *     `register` 文档「declaring an already-declared child key throws」），
  *     `main.conversation` 已由官方 ui-conversation 声明
  *     （`…/dsh-client-ui-conversation/lib/types/client/skeleton/ConversationPanel.d.ts:8`）；
- *   - 玄枢这个面板不渲染会话。将来「问事」是另开 `consult` key（票 09），
+ *   - 玄枢这个面板不渲染会话。将来「问事」是另开 `consult` key（票 10 · 问事闭环），
  *     不是复用 `conversation`。
  */
 export type OverviewPanelProps = PropsRuntime<'main'>;

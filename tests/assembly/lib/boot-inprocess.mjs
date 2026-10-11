@@ -28,6 +28,20 @@ import { pathToFileURL } from 'node:url'
 
 const MARKER = '##XUANSHU-BOOT-RESULT##'
 
+/**
+ * 传给官方 API 的 **binName**：固定 `'xuanshu'`，与 `--profile` 取值无关。
+ *
+ * 官方签名是 `loadProfile(binName, name, installAnchor, home)` /
+ * `boot(binName, rootConfig, patches, prepare)` —— 第一个参数是**诊断前缀**
+ * （`@deepseek-ai/dsh-app-boot/lib/types/profile.d.ts:211` 的
+ * `@param binName - the diagnostic prefix on thrown errors`；`profile-context.d.ts:45`
+ * 同义），第二个才是 profile 名（本探针用 `opts.profile`，默认也是 `xuanshu`，
+ * 但可用 `XUANSHU_PROFILE` 换成别的）。
+ * 它只影响报错文本，**不影响装配结果**，所以固定一个值就够了 —— 这里统一成常量，
+ * 免得「有些调用写死 `'xuanshu'`、有些用 `opts.profile`」这种读起来像 bug 的混用。
+ */
+const BIN_NAME = 'xuanshu'
+
 /** S2 用的 overlay：关掉 headless app 的启动行（理由见文件头注释）。 */
 const NO_APP_OVERLAY = [
   { id: 'headless-runner', disabled: true },
@@ -132,7 +146,7 @@ try {
     : (await import(pathToFileURL(api.launchEnv).href)).DSH_LAUNCH_ENVIRONMENT_KEY
 
   // --- 1. profile：CLI 的 prepareProfile 每次都会重写根 cordis.yml，这里自己兜住 ---
-  const profile = appBoot.loadProfile('xuanshu', opts.profile, installAnchor, opts.dshHome)
+  const profile = appBoot.loadProfile(BIN_NAME, opts.profile, installAnchor, opts.dshHome)
   result.profile = { name: opts.profile, dir: profile.dir, patchPath: profile.patchPath, bundles: profile.layers.map((l) => l.packageName) }
   const rootConfig = join(profile.dir, 'cordis.yml')
   const rootSnapshot = existsSync(rootConfig) ? readFileSync(rootConfig) : undefined
@@ -148,8 +162,8 @@ try {
 
   // --- 2. 运行时解析 + 补丁栈（复刻 runProfile） ---------------------------------
   const resolution = await appBoot.createRuntimeResolution({ installAnchor, profile, home: opts.dshHome })
-  const environment = appBoot.loadLayeredEnv('xuanshu', process.cwd())
-  const patches = appBoot.readProfilePatches('xuanshu', {
+  const environment = appBoot.loadLayeredEnv(BIN_NAME, process.cwd())
+  const patches = appBoot.readProfilePatches(BIN_NAME, {
     dir: profile.dir,
     patchPath: profile.patchPath,
     installAnchor,
@@ -161,7 +175,7 @@ try {
   // --- 3. boot：`boot()` 不装 PluginPackages、不装 failLoud，都得自己来 ----------
   let ctx
   try {
-    ctx = await appBoot.boot('xuanshu', rootConfig, patches, async (host) => {
+    ctx = await appBoot.boot(BIN_NAME, rootConfig, patches, async (host) => {
       host.provide('profileContext', {
         name: opts.profile,
         dir: profile.dir,

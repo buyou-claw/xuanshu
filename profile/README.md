@@ -23,8 +23,8 @@ xuanshu-host                 # 玄枢主机插件（数据目录 + 装配报告�
 xuanshu-client               # 玄枢客户端插件（自带预编译 bundle；宿主半边为空壳行）
 ```
 
-`@deepseek-ai/dsh-web-app`（Web 宿主 + 浏览器 roster）**本票不接**：首页替换属票 06，
-且接上它会让 headless 启动也去开 HTTP 服务，与票 03 的「开发期双实例隔离」正面冲突。
+`@deepseek-ai/dsh-web-app`（Web 宿主 + 浏览器 roster）**本票不接**：首页替换属票 07 · 首页替换，
+且接上它会让 headless 启动也去开 HTTP 服务，与票 04 · 开发期双实例隔离正面冲突。
 接入时只需往 `dsh.profile.bundles` 追加一项。
 
 ## 两个自有插件的行从哪来
@@ -33,6 +33,22 @@ xuanshu-client               # 玄枢客户端插件（自带预编译 bundle；
 （`packages/xuanshu-*/cordis.patch.yml`），bundle 层按上面的顺序展开时把行插进树。
 **同一个 id 不要在 profile 层再声明一次**——重复 id 会让 Loader 启动失败
 （本机 desktop profile 在 dsh-im 上踩过这个坑）。
+
+### 新增一个自有插件包时要动哪几处
+
+装配是「按名字串起来的」，插件包名同时出现在几个地方；漏一处不会报「配置错」，只会表现为
+某一行不在树里或报告 `ok=false`。**五处**（这是 review 点出的 Shotgun Surgery 隐患的缓解清单）：
+
+| # | 位置 | 要加什么 |
+|---|---|---|
+| 1 | `profile/package.json` | `dependencies` 里加该包，且把它加进 `dsh.profile.bundles`（**两处都要**） |
+| 2 | 新包自己 | `cordis.patch.yml`：`insert` 一行 `{ id, name }` 均为包名 |
+| 3 | `scripts/verify-assembly.mjs` | `OWN_ROW_IDS` 加该行 id（S1/S2/S3/S5 的断言集） |
+| 4 | `tests/assembly/lib/boot-inprocess.mjs` | `pluginPackages.packageOf('<包名>')` 的包名列表 |
+| 5 | `packages/xuanshu-host/lib/index.js` | `PEER_PACKAGE` 若不是对端包，报告里的插件键会缺 |
+
+改完跑 `pnpm test`（`XUANSHU_REQUIRE_ASSEMBLY=1`）+ `node scripts/verify-assembly.mjs`：
+两个自有包都必须出现在 S1 的行里、S2 的 `fiber.state === 2`、S5 报告的 `plugins` 与 `patchRowIds` 里。
 
 ## 安装
 

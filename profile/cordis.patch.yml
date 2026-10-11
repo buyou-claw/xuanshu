@@ -5,5 +5,6 @@
 # 玄枢：本层只做「本 profile 相对上游默认的差异」。两个自有插件的行由它们各自的
 # bundle 补丁（packages/xuanshu-*/cordis.patch.yml）插入，不在这里重复声明——
 # 重复声明同一个 id 会让 Loader 启动失败（desktop profile 踩过这个坑）。
-# horosa MCP 连接行属票 04/05，届时在本层按 mcp-filesystem 行的写法追加。
+# horosa MCP 连接行属票 06 · horosa 集成（它的安装与钉版落盘在票 05 · setup 一键安装），
+# 届时在本层按 mcp-filesystem 行的写法追加。
 []

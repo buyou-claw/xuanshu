@@ -553,7 +553,7 @@ function recordingContext(registrations) {
   })
 }
 
-function checkS3(opts, notes) {
+function checkS3(opts) {
   const check = { id: 'S3', name: '客户端预编译产物（静态契约）', ok: false, detail: '', evidence: {} }
   const packageDir = join(opts.profileDir, 'node_modules', 'xuanshu-client')
   const manifest = readPackageManifest(packageDir)
@@ -872,7 +872,7 @@ function main() {
 
     if (selected('s1')) result.checks.s1 = checkS1(cli, opts).check
     if (selected('s4')) result.checks.s4 = checkS4(cli, opts, baseline, undefined)
-    if (selected('s3')) result.checks.s3 = checkS3(opts, result.notes)
+    if (selected('s3')) result.checks.s3 = checkS3(opts)
     if (selected('s2')) result.checks.s2 = checkS2(cli, opts)
     if (selected('s5')) result.checks.s5 = checkS5(cli, opts)
 

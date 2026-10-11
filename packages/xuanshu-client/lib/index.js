@@ -3,7 +3,7 @@
  *
  * 职责边界（票 01 契约 §4）：本票**只**需要这一行在装配后的插件树里出现
  * （seam S1 断言 id 列表含 `xuanshu-client`）。业务全部在后继票：
- * 玄枢数据目录 / 装配报告 / horosa 进程托管属 xuanshu-host，四卡属票 06。
+ * 玄枢数据目录 / 装配报告 / horosa 进程托管属 xuanshu-host，四卡属票 07 · 首页替换。
  * 因此这里刻意不注册任何 service / tool / command / route，
  * 也不 inject 任何宿主 service —— 一个多余依赖都会让装配失败或引入无关行为。
  *

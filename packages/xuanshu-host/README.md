@@ -18,7 +18,7 @@ profile/xuanshu (dsh.profile.bundles)
 
 ## 运行时产物
 
-`apply(ctx)` 只做纯本地文件操作（**不调 LLM、不联网、不开端口**；只 import `node:fs`/`node:module`/`node:os`/`node:path`/`node:url`）：
+`apply(ctx)` 只做纯本地文件操作（**不调 LLM、不联网、不开端口**；只 import `node:fs`/`node:module`/`node:os`/`node:path`/`node:url` 五个 node 内置模块）：
 
 1. 建目录 `$DSH_HOME/xuanshu/`（`$DSH_HOME` 缺省 `~/.dsh`；契约 §0 数据目录）；
 2. 写出 `$DSH_HOME/xuanshu/assembly-report.json`（schema `xuanshu/assembly-report@1`）——票 01 唯一的运行时可观察证据（seam S2）。写法是同目录临时文件 + `rename` 覆盖，保证读到的一定是完整 JSON；
@@ -45,8 +45,8 @@ profile/xuanshu (dsh.profile.bundles)
 ```powershell
 # 导入自检（DoD）：导出 apply 函数
 node --input-type=module -e "const m = await import('file:///E:/ai_project/XuanShu/packages/xuanshu-host/lib/index.js'); console.log(typeof m.apply, m.name)"
-# 真实 cordis loader 里跑一遍插件行（只写 .scratch/host-plugin/tmp/）
-node .scratch/host-plugin/verify-apply.mjs
 ```
 
-「能装、能启」的装配契约验证（S1–S4）由票 01 的测试台负责，不放在本包内。
+真正「装进树里、状态激活、报告写出」的验证由票 01 的**装配契约测试台**负责（`tests/assembly/`，
+S1–S5），不放在本包内。本包**不带**自己的验证脚本：一次性的手写探针属于侦察草稿
+（`.scratch/**`，gitignore），不进提交物。

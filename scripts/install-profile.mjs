@@ -13,8 +13,9 @@
  *     只有一份 node_modules、一份 lockfile；仓库里的 `profile/pnpm-lock.yaml`
  *     就是真正在用的锁文件；测试可把 `DSH_HOME` 指到仓库内的隔离目录。
  *   copy（--copy，真分发包语义）
- *     复制 `package.json` / `cordis.patch.yml` / `cordis.yml` / `pnpm-workspace.yaml`
+ *     复制 `package.json` / `cordis.patch.yml` / `pnpm-workspace.yaml`
  *     到目标，把自有插件依赖改写成 `link:<仓库绝对路径>`，在目标里 `pnpm install`。
+ *     刻意不复制 `cordis.yml`（DSH 每次启动重写的运行期产物，见 installCopy 的注释）。
  *
  * 用法：
  *   node scripts/install-profile.mjs                    # link 模式，装到 ~/.dsh/profiles/xuanshu
@@ -155,18 +156,31 @@ function installCopy(opts, target) {
     }
   }
   writeFileSync(join(target, 'package.json'), `${JSON.stringify(manifest, undefined, 2)}\n`)
-  for (const file of ['cordis.patch.yml', 'cordis.yml', 'pnpm-workspace.yaml']) {
+  // 刻意**不**复制 `cordis.yml`：那是 DSH 每次启动都重写的运行期产物（gitignore）。
+  // 从旧目录带一份非空的过去，用户第一次启动就会撞 duplicate-insert（根配置里已经有那些行，
+  // 补丁栈再插一次）。让 DSH 首次启动自己生成空 root 配置。
+  for (const file of ['cordis.patch.yml', 'pnpm-workspace.yaml']) {
     const from = join(SOURCE_PROFILE, file)
     if (existsSync(from)) cpSync(from, join(target, file))
   }
   return target
 }
 
+/**
+ * 跑 `pnpm install`。
+ *
+ * Windows 上有两条路都走不通/不划算，本函数是实测出来的唯一稳妥写法（node 24 / pnpm 11 实测）：
+ *   - `spawnSync('pnpm.cmd', ['install'], { shell: false })` → **EINVAL**。node 从 18.20/20.12 起
+ *     出于命令注入防护，拒绝在 shell:false 下直接执行 `.cmd`/`.bat`（本机复现：status=null、error.code=EINVAL）。
+ *   - `spawnSync('pnpm', ['install'], { shell: true })` → 能跑，但 node 会对「带 args 又开 shell」
+ *     发 DEP0190 弃用警告（参数只做拼接、不转义）。
+ * 所以：Windows 用**整条命令字符串** + shell（没有 args 数组，因此不触发 DEP0190，也没有需要转义的
+ * 外部输入——命令里唯一的变量是目录，而目录走 cwd 参数传）；POSIX 直接按参数数组调用。
+ */
 function runPnpmInstall(dir) {
-  // Windows 上必须用 pnpm.cmd；不要用 shell:true —— 那会把参数交给 shell 拼接
-  // （node 已在 DEP0190 里警告），而且转义行为随 shell 变。
-  const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
-  const result = spawnSync(command, ['install'], { cwd: dir, stdio: 'inherit', shell: false })
+  const result = process.platform === 'win32'
+    ? spawnSync('pnpm install', { cwd: dir, stdio: 'inherit', shell: true })
+    : spawnSync('pnpm', ['install'], { cwd: dir, stdio: 'inherit', shell: false })
   if (result.error) throw result.error
   if (result.status !== 0) throw new Error(`pnpm install failed in ${dir} (exit ${result.status})`)
 }

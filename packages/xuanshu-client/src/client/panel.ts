@@ -20,7 +20,7 @@
 /**
  * 面板 key == 侧栏行 id。
  * 值固定为 `overview`（票 01 契约 §0 / §4：`main` keyed 槽 key `overview`
- * + `sidebar.panellist` 行 id `overview`）。四卡内容属票 06。
+ * + `sidebar.panellist` 行 id `overview`）。四卡内容属票 07 · 首页替换。
  */
 export const PANEL_ID = 'overview';
 
@@ -29,15 +29,15 @@ export const PANEL_ID = 'overview';
  * 依据：`@deepseek-ai/dsh-client-ui-slots/lib/types/index.d.ts:564-569`
  * （`order?: number`）与 `…/ui-sidebar/lib/client.js:461`（`sort` 升序）。
  * 取 20：排在官方 `plugins`/`schedules`（order 10）之后，不抢首行；
- * 「设为默认面板」是票 06 的事，本票只做可被选中的一行。
+ * 「设为默认面板」是票 07 · 首页替换的事，本票只做可被选中的一行。
  */
 export const PANEL_ORDER = 20;
 
-/** 占位文案（票 01 只做空壳；真实四卡文案属票 06）。 */
+/** 占位文案（票 01 只做空壳；真实四卡文案属票 07 · 首页替换）。 */
 export const PANEL_TITLE = '玄枢';
 export const PANEL_SUBTITLE = '自我总览';
 export const PANEL_PLACEHOLDER =
-  '玄枢首屏空壳：四张卡（命盘 / 日课 / 底稿 / 快捷入口）将在票 06 填入。';
+  '玄枢首屏空壳：四张卡（命盘 / 日课 / 底稿 / 快捷入口）将在票 07 · 首页替换填入。';
 
 /**
  * 侧栏行的显示文案。

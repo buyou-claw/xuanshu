@@ -5,7 +5,7 @@
 ——**不需要** `dev:web` 热更新，产物随包走。
 
 票 01 的范围是**空壳**：只注册两个槽位并渲染占位内容。
-四张卡（命盘 / 日课 / 底稿 / 快捷入口）的内容属票 06。
+四张卡（命盘 / 日课 / 底稿 / 快捷入口）的内容属票 07 · 首页替换。
 
 ---
 
@@ -47,18 +47,27 @@ node scripts/build-client.mjs
 解析，以适配 pnpm 的 isolated 布局 —— 这就是不能写 `import 'esbuild'` 的原因）；
 不联网、不读全局包；产物不含时间戳与绝对路径。
 
-**构建即自检**：脚本在写完 `lib/client.js` 后会
+**构建即自检**（全部通过之后才落盘：构建失败不会在磁盘上留下未经校验的产物）：
 
 1. **静态断言**产物文本（首行 `window.__ModuleLoader__.load(`、含 `id: "xuanshu-client"`、
-   含 `exports.apply` / `exports.inject`、无 `sourceMappingURL`、无仓库绝对路径、
-   无 react/react-dom 实现标记）；
+   恰好一次 `load()`、无 `sourceMappingURL`、无仓库绝对路径、无 react/react-dom 实现标记）；
 2. 用 `node:vm` + 假 `window.__ModuleLoader__` + 假 `require` **真的执行一遍产物**，
    物化 factory 并拿假 ctx 调一次 `apply`，断言两个槽位的注册形状
    （`main.key === sidebar.panellist.id === "overview"`）；
 3. 断言产物里**每一个** `require(...)` 都落在基线外部依赖表（或 `dsh.client.external`
-   的声明）内 —— 这是「外部依赖漂移」的构建期拦截点。
+   的声明）内 —— 这是「外部依赖漂移」的构建期拦截点；
+4. **导出面用行为断言，不用文本 grep**：从包体读出 esbuild 声明的导出名
+   （`__export(<obj>, {...})`），逐个断言它们真的在 factory 的返回对象上。
+   产物走的是 `return module.exports`，字面量 `exports.apply` **不存在**，所以断言的是
+   运行期事实；另外还会注入一个探针导出，验证「将来多一个导出也不会丢」。
 
-任何一条不过，脚本以非 0 退出。
+任何一条不过，脚本以非 0 退出（且不写盘）。
+
+`--check`：**不写盘**，走完全部构建与自检，把结果与磁盘上的 `lib/client.js` 逐字节比较
+（`node scripts/build-client.mjs --check`）。一致 → exit 0 打印 `in sync`；不一致 → exit 1
+打印「产物与源码不同步，请跑 `pnpm build:client`」+ 首个不同的行号。
+`tests/assembly/build-pipeline.test.mjs` 拿它当断言，因此「改了 `src/**` 忘记重建」
+会在 `pnpm test` 里红，而不是一路绿到 review。
 
 ## 3. 产物形态（为什么长这样）
 
@@ -169,12 +178,12 @@ react-dom/client
 - **不注册进 `root` 槽**：那是 single 槽，动态注册的条目会成为赢家并**单独占满整页**，
   ui-layout 声明的所有座位随之消失。
 - **不声明 `children`**：槽位声明是排他的，`main.conversation` 已由官方 ui-conversation
-  声明，抢声明会抛。「问事」将来是另开 `consult` key（票 09），不是复用 `conversation`。
+  声明，抢声明会抛。「问事」将来是另开 `consult` key（票 10 · 问事闭环），不是复用 `conversation`。
 - **不接 locale 服务**：本票是无 i18n 的单中文占位壳，`label` 用纯字符串
   （`SlotLabel = string | (() => string)`，侧栏按 `resolveSlotLabel(...) ?? id` 取值）。
   注意 `ctx.locale` 只有 `register(ns, locale, dict)` / `register(ns, dicts)` / `bind(ns)`，
   **没有 `t(ns, key)`** —— `t` 是写了 `locale:` 声明后框架合成到组件 props 上的座位。
-- **不设默认面板**：让 `overview` 成为打开玄枢时的首屏属票 06（需要时用
+- **不设默认面板**：让 `overview` 成为打开玄枢时的首屏属票 07 · 首页替换（需要时用
   `ctx.layout.selectPanel('overview')`）。
 
 ## 7. 验证
@@ -182,6 +191,9 @@ react-dom/client
 ```bash
 # 构建 + 内置自检（推荐，一条就够）
 pnpm build:client
+
+# 只校验「提交的 lib/client.js 与 src/** 同步」（不写盘；CI/提交前用）
+node scripts/build-client.mjs --check
 
 # 单独跑类型检查（构建本身不做类型检查）
 pnpm --filter ./packages/xuanshu-client run typecheck

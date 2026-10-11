@@ -28,12 +28,17 @@
  * 用法（两种等价）：
  *   node scripts/build-client.mjs
  *   pnpm build:client          # = pnpm --filter ./packages/xuanshu-client run build
+ *   node scripts/build-client.mjs --check   # 只校验提交的产物与 src 同步，不写盘
+ *
+ * **写盘时序**：全部自检通过之后才 `writeFileSync`。反过来的话，一次失败的构建会在磁盘上
+ * 留下未经校验的 `lib/client.js`，而 S3 的逐字节比对会把这个坏产物当成「仓库里那份」放过去。
+ * 构建失败时既不写盘也不删旧产物（旧内容原样留着，由人决定怎么办）。
  *
  * 离线、确定性：只用本仓 `node_modules` 里的 esbuild（经 `createRequire` 从包目录解析，
  * 以适配 pnpm 的 isolated 布局），不联网、不读全局包、产物不含时间戳/绝对路径。
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -68,6 +73,24 @@ const BASELINE_EXTERNALS = [
 
 /** 失败即退出：所有校验都抛这个，主函数统一打印。 */
 class BuildError extends Error {}
+
+/**
+ * 命令行参数：目前只有 `--check`（见文件头的用法）。
+ * @returns `{ check }`；`check === true` 表示「只校验、不写盘」。
+ */
+function parseArgs(argv) {
+  const opts = { check: false };
+  for (const arg of argv) {
+    if (arg === '--check') opts.check = true;
+    else {
+      throw new BuildError(
+        `未知参数 ${arg}。用法：node scripts/build-client.mjs [--check]` +
+          '（`--check` 只把本次构建结果与磁盘上的 lib/client.js 逐字节比较，不写盘）',
+      );
+    }
+  }
+  return opts;
+}
 
 /**
  * 从**包目录**解析 esbuild。
@@ -451,15 +474,70 @@ function probeExportForwarding(code, pkgName) {
   return [];
 }
 
+/**
+ * 逐字节比较「本次构建的产物」与「磁盘上那份」，找出**首个不同行**（1 基）。
+ *
+ * 为什么要行号：锚点漂移只差一两个字符时，光看体积根本不知道差在哪。
+ * 行数不同时，多出来的第一行就是首个不同行。
+ *
+ * @param left - 本次构建的文本（期望值）。
+ * @param right - 磁盘上的文本（实际提交的那份）。
+ * @returns `{ line, left, right }`：首个不同行号与两侧该行内容；一致返回 null。
+ */
+function firstDifference(left, right) {
+  if (left === right) return null;
+  const leftLines = left.split('\n');
+  const rightLines = right.split('\n');
+  const count = Math.max(leftLines.length, rightLines.length);
+  for (let index = 0; index < count; index += 1) {
+    const a = leftLines[index];
+    const b = rightLines[index];
+    if (a !== b) {
+      return { line: index + 1, left: a ?? '(文件在此结束)', right: b ?? '(文件在此结束)' };
+    }
+  }
+  return { line: count, left: '(尾部有不可见差异)', right: '(尾部有不可见差异)' };
+}
+
+/**
+ * `--check`：不写盘，把本次构建结果与磁盘上的 `lib/client.js` 逐字节比较。
+ *
+ * 这是「提交的产物与 `src/**` 同步」的唯一机器判据（`pnpm test` 不跑构建，
+ * `tests/assembly/build-pipeline.test.mjs` 就是拿它当断言）。
+ *
+ * @param code - 本次构建 + 自检通过的产物文本。
+ * @returns 一行比对结论（in sync / 不同步的说明）。
+ */
+function compareWithDisk(code) {
+  if (!existsSync(OUT_FILE)) {
+    throw new BuildError(
+      `${relative(REPO_ROOT, OUT_FILE)} 不存在：产物与源码不同步，请跑 pnpm build:client`,
+    );
+  }
+  const onDisk = readFileSync(OUT_FILE, 'utf8');
+  const diff = firstDifference(code, onDisk);
+  if (diff === null) {
+    return `in sync  ${relative(REPO_ROOT, OUT_FILE)}（${Buffer.byteLength(onDisk, 'utf8')} bytes）`;
+  }
+  throw new BuildError(
+    [
+      '产物与源码不同步，请跑 pnpm build:client',
+      `  首个不同行：第 ${diff.line} 行`,
+      `    本次构建：${diff.left}`,
+      `    磁盘上  ：${diff.right}`,
+    ].join('\n'),
+  );
+}
+
 async function main() {
-  const esbuild = loadEsbuild();
+  const opts = parseArgs(process.argv.slice(2));
+  // 先校验清单（纯读文件，不依赖依赖树），再解析 esbuild：路径/包名自相矛盾时
+  // 应该先报那个，而不是先抱怨「esbuild 没装」。
   const { name, declaredExternal } = readManifest();
+  const esbuild = loadEsbuild();
   const bundleText = await bundle(esbuild, { declaredExternal });
   const declaredExports = readDeclaredExports(bundleText);
   const { code, reindentBlockedBy } = wrapEnvelope(bundleText, name);
-
-  mkdirSync(dirname(OUT_FILE), { recursive: true });
-  writeFileSync(OUT_FILE, code, 'utf8');
 
   const executed = executeArtifact(code, name);
 
@@ -475,6 +553,15 @@ async function main() {
     );
   }
 
+  // ── 自检全过之后才落盘（理由见文件头「写盘时序」） ──
+  let checkNote;
+  if (opts.check) {
+    checkNote = compareWithDisk(code);
+  } else {
+    mkdirSync(dirname(OUT_FILE), { recursive: true });
+    writeFileSync(OUT_FILE, code, 'utf8');
+  }
+
   const bytes = Buffer.byteLength(code, 'utf8');
   const cjk = (code.match(/[\u4e00-\u9fff]/g) ?? []).length;
   // esbuild 会为每个用到 JSX 运行时的源模块各发一次 require（同一 spec 会重复出现）；
@@ -484,7 +571,7 @@ async function main() {
   const indentNote =
     reindentBlockedBy === null ? '已整体重排为两格 tab' : `跳过重排：${reindentBlockedBy}`;
 
-  console.log(`[build-client] ok  ${relative(REPO_ROOT, OUT_FILE)}`);
+  console.log(`[build-client] ${opts.check ? 'check' : 'ok'}  ${relative(REPO_ROOT, OUT_FILE)}`);
   console.log(`[build-client]     包名 / 信封 id : ${name}`);
   console.log(`[build-client]     产物体积      : ${bytes} bytes (${code.split('\n').length - 1} 行, 裸 CJK ${cjk} 字符)`);
   console.log(`[build-client]     external      : ${externalList.join(', ') || '(无)'}${requireCount > externalList.length ? `（${requireCount} 次 require，loader 侧按模块表缓存）` : ''}`);
@@ -493,6 +580,10 @@ async function main() {
   console.log('[build-client]     导出转发探针  : 注入第三个导出后仍在返回对象上（旧尾部写法会被此探针拦下）');
   console.log(`[build-client]     缩进护栏      : ${indentNote}`);
   console.log('[build-client]     自检          : 信封 / 物化 / 导出面 / 槽位注册形状 / 外部依赖 全部通过');
+  if (checkNote !== undefined) {
+    console.log('[build-client]     写盘          : 跳过（--check）');
+    console.log(`[build-client]     ${checkNote}`);
+  }
 }
 
 main().catch((error) => {
