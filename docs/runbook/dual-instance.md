@@ -80,7 +80,7 @@ node scripts/isolation/startup.mjs --mode env -- --trusted-host xuanshu.test
 | `free` | 没人 LISTEN | 放行。horosa 未启动是**正常**状态（票 05/06 才托管它的生命周期） |
 | `horosa-ready` | 有人在答，且应答形态像 MCP 端点（`mcp-session-id` 头 / JSON-RPC body / `405 + allow: POST`） | 放行，报告里记下证据 |
 | `occupied-foreign` | **有进程占着，但不是 horosa** | **fail-fast，退出码 3**，报告里给 `hint`（排查命令 + 换端口命令 + `--transport stdio` 免端口方案） |
-| `probe-failed` | 探针自身出错（不是"被占"） | 记 `unknown` 写进报告与 `notes`，不算隔离失败 |
+| `probe-failed` | **没验成**（两种来源：端口有人 LISTEN 但在预算内零 HTTP 响应 —— 可能是慢应答的 horosa；或探针自身出错） | **不算被占，也不算通过**：门的 `ok:false`（不显示成绿灯），但**退出码仍是 0**，结论记成 `unknown` 写进报告与 `notes` |
 
 「被占但不是 horosa」最常见的原因是**上一次 `serve` 没退干净**（`Ctrl+C` 之后 Java 子进程还挂着）。这时先看是谁：
 
