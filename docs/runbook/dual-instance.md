@@ -148,7 +148,7 @@ Remove-Item -Recurse -Force E:\ai_project\XuanShu\.dsh-home    # 只删隔离 ho
 | `找不到 DSH CLI（profile 树 / 同 home 的兄弟 profile / PATH 都没有）` | profile 里没装 `@deepseek-ai/dsh` | 在 `profile/` 下重跑 `pnpm install`（别用 PATH 上全局那份 0.1.2-rc.1） |
 | `CLI v0.1.2-rc.1（…）≠ profile 装的 @deepseek-ai/dsh-base 0.2.0-rc.2：版本不符的 CLI 会去解析别人的 node_modules` | 用错树了 | 同上；或显式 `--cli-bin <profile>\node_modules\@deepseek-ai\dsh\lib\bin.js` |
 | `horosa 守卫：… occupied-foreign` + `hint` | `8765` 被非 horosa 进程占着（**退出码 3**） | 见 §4 |
-| `horosa 守卫无法判定 …（probe-failed）` | 探针没拿到结论（端口有人在听但不应答，或探针自身出错） | **退出码仍是 0，但这一门不是绿灯**：看报告 `evidence`，人工确认 `8765` 上是谁 |
+| `有人 LISTEN，但在 <budget>ms 内没有给出任何 HTTP 响应…**无法判定**是不是 horosa` 或 `探针无法判定 <host>:<port> 的状态（网络错误：…）` | 探针没拿到结论（端口有人在听但不应答 —— 可能是慢应答的 horosa；或探针自身出错） | **退出码仍是 0，但这一门不是绿灯**（`horosaGuard.ok=false`）：看报告 `evidence` 人工确认 `8765` 上是谁，或先 `--timeout-ms 5000` 复探 |
 | `--mode web` 报「缺 `@deepseek-ai/dsh-web-app`」 | 本票还没接 web bundle（属票 07） | 用 `--mode headless` 跑自证，或 `--mode env` 取命令 |
 | 端口/路径看着都对、数据却混了 | 你可能直接手跑了 `dsh` 而没走启动器 | 一律用 `node scripts/isolation/startup.mjs`；`--mode env` 可以把同一套变量交给别的工具 |
 

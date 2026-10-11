@@ -83,9 +83,17 @@ const ISOLATED_PATH_KEYS = [
 const NEEDS_PROFILE = ['cli-version', 'profile-installed', 'web-port', 'horosa-guard', 'dual-instance', 'no-crosstalk']
 
 const TMP_REL = join('tests', 'isolation', '.tmp')
-/** 双实例的两个临时 home 名（各自一份状态，互不相交才叫隔离）。 */
-const DUAL_HOME_A = 'dual-a'
-const DUAL_HOME_B = 'dual-b'
+/**
+ * 每次运行给双实例的两个临时 home 一个**唯一后缀**（复审 N1）。
+ *
+ * 为什么不能用固定的 `dual-a` / `dual-b`：验收台会被并发跑（Lead 一边跑验收一边看别的、
+ * 多评审并行、CI 并行 job）。固定路径下两个进程会互相覆盖对方的哨兵、互相删对方的现场，
+ * 结果是**一个绿一个红**，而红的那次报的「哨兵被改动了」根本不是隔离被破坏 —— 结论不可复现。
+ * 改用 `pid + 时间戳` 之后，并发运行各写各的目录，互不干扰，而断言面（两两不相交）一字未改。
+ */
+const RUN_TAG = `${process.pid}-${Date.now().toString(36)}`
+const DUAL_HOME_A = `dual-a-${RUN_TAG}`
+const DUAL_HOME_B = `dual-b-${RUN_TAG}`
 /** I1 的纯函数对照组 home 名（只用来算路径，不 spawn）。 */
 const ALT_HOME = 'alt-home'
 /**

@@ -22,8 +22,8 @@
  * B 的进程按自己的 `$DSH_HOME` 解析后不会读到/写到 A 的 sessions/storages/凭据/机器级补丁；
  * 它**不**证明「两个会话互不可见」（那要有真会话才谈得上，等票 10）。
  */
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readdirSync } from 'node:fs'
+import { join, sep } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import {
@@ -33,8 +33,12 @@ import {
 import { DESKTOP_WEB_PORT } from '../../scripts/isolation/defaults.mjs'
 
 const SELECTED = ['dual-instance', 'no-crosstalk', 'no-real-home-write']
-const DUAL_DIR_A = join(TMP_ROOT, 'dual-a')
-const DUAL_DIR_B = join(TMP_ROOT, 'dual-b')
+/**
+ * 双实例临时 home 的名字带**每次运行的唯一后缀**（`dual-a-<pid>-<时间戳36>`，复审 N1）：
+ * 验收台可能被并发跑，固定名字会让两个进程互相覆盖哨兵、互相删现场，红的报错还不是真串扰。
+ * 所以这里不写死名字，只钉「落在 `.tmp/` 下」+「A/B 各自命名的前缀」+「A ≠ B」。
+ */
+const DUAL_NAME = { A: /^dual-a-/, B: /^dual-b-/ }
 /** desktop（Electron）独占的端口：xuanshu 必须用别的端口才能和它同跑。取值只认 defaults.mjs（复审②）。 */
 const DESKTOP_PORT = DESKTOP_WEB_PORT
 /** R15 指定的四个哨兵位置：存储根两处 + 两个「文件本身就是路径」的隔离对象。 */
@@ -68,9 +72,11 @@ withProfileGate('玄枢隔离验收 · I5/I6/I7（dual-instance / no-crosstalk /
     expect(homes.map((row) => row.name)).toEqual(['A', 'B'])
 
     for (const row of homes) {
-      const dir = row.name === 'A' ? DUAL_DIR_A : DUAL_DIR_B
-      expect(row.home).toBe(dir)
+      const dir = row.home
       expect(dir.startsWith(TMP_ROOT), `${dir} 不在 ${TMP_ROOT} 下（临时 home 必须留在 .tmp/）`).toBe(true)
+      const leaf = dir.slice(TMP_ROOT.length + 1)
+      expect(leaf, `${row.name} 的临时 home 名不合规：${leaf}`).toMatch(DUAL_NAME[row.name])
+      expect(leaf.includes(sep), `${row.name} 的临时 home 不该再嵌子目录：${leaf}`).toBe(false)
       expect(row.exitCode, `${row.name} headless exit=${row.exitCode}`).toBe(0)
       expect(row.spawnExit).toBe(0)
       expect(row.fresh, `${row.name} 的 assembly-report.json 不是本次新写出（mtime 没前进）`).toBe(true)
@@ -166,8 +172,11 @@ withProfileGate('玄枢隔离验收 · I5/I6/I7（dual-instance / no-crosstalk /
 
   it('现场回收干净：绿的时候临时 home 已删，且仓库 profile 本体毫发无损（junction 没被跟随删除）', () => {
     expectCheckPass(result, 'dual-instance') // 这条断言只在 I5 绿时有意义（红了验收台会故意留现场）
-    expect(existsSync(DUAL_DIR_A), `临时 home 没清掉：${DUAL_DIR_A}`).toBe(false)
-    expect(existsSync(DUAL_DIR_B), `临时 home 没清掉：${DUAL_DIR_B}`).toBe(false)
+    // 名字带运行后缀，所以按前缀找：本次运行留下的 dual-a-*/dual-b-* 必须一个都不剩。
+    const leftovers = existsSync(TMP_ROOT)
+      ? readdirSync(TMP_ROOT).filter((name) => /^dual-[ab]-/.test(name))
+      : []
+    expect(leftovers, `临时 home 没清掉：${leftovers.join(', ')}`).toEqual([])
     // 最重要的一条：删临时 home 绝不能跟着 junction 把仓库 profile 删了。
     expect(existsSync(join(REPO_ROOT, 'profile', 'package.json')), '仓库 profile 被删了！junction 被跟随').toBe(true)
     expect(existsSync(join(REPO_ROOT, 'profile', 'node_modules')), '仓库 profile 的 node_modules 被删了！').toBe(true)
