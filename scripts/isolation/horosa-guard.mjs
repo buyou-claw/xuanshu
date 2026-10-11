@@ -47,12 +47,17 @@
  */
 
 import { pathToFileURL } from 'node:url'
+import { DEFAULT_HOROSA_PORT } from './defaults.mjs'
 import { isPortBusy, httpGet, normalizeHeaders } from './port-probe.mjs'
 
 /** 只探本机回环：与 horosa serve 的默认绑定一致（非回环绑定无 token 会拒启，本就不该出现）。 */
 const HOST = '127.0.0.1'
-/** 与 defaults.mjs 的 DEFAULT_HOROSA_PORT 对齐；此处写字面量以避免模块装载顺序耦合。 */
-const DEFAULT_PORT = 8765
+/**
+ * 默认端口只有一处定义（`defaults.mjs` 的 `DEFAULT_HOROSA_PORT`）。
+ * 复审（§5.1 R8 精神）：这里原先自己写了一份 `8765` 字面量，理由是"避免模块装载顺序耦合"——
+ * 但 `defaults.mjs` 是纯数据模块（不 import 任何东西），ESM 下没有这个问题；两份默认值只会漂移。
+ */
+const DEFAULT_PORT = DEFAULT_HOROSA_PORT
 const DEFAULT_PATH = '/mcp'
 const BODY_HEAD_EVIDENCE_LIMIT = 200
 

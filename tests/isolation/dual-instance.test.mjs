@@ -30,12 +30,13 @@ import {
   DSH_HOME, PROFILE, PROFILE_DIR, REAL_HOME, REPO_ROOT, TMP_ROOT,
   expectCheckPass, runVerifier, withProfileGate,
 } from './lib/verifier.mjs'
+import { DESKTOP_WEB_PORT } from '../../scripts/isolation/defaults.mjs'
 
 const SELECTED = ['dual-instance', 'no-crosstalk', 'no-real-home-write']
 const DUAL_DIR_A = join(TMP_ROOT, 'dual-a')
 const DUAL_DIR_B = join(TMP_ROOT, 'dual-b')
-/** desktop（Electron）独占的端口：xuanshu 必须用别的端口才能和它同跑。 */
-const DESKTOP_PORT = 19387
+/** desktop（Electron）独占的端口：xuanshu 必须用别的端口才能和它同跑。取值只认 defaults.mjs（复审②）。 */
+const DESKTOP_PORT = DESKTOP_WEB_PORT
 /** R15 指定的四个哨兵位置：存储根两处 + 两个「文件本身就是路径」的隔离对象。 */
 const SENTINEL_SPOTS = [
   /^sessions\/.+/, /^storages\/.+/, /^\.credentials\.yaml$/, /^cordis\.patch\.yml$/,
