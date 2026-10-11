@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-<!-- asset.S11-3 · 卡片动作「以默认程序打开」：箭头离框（离开玄枢界面，五枚一组） · S11 -->
+<!-- asset.S11-3, asset.S5-8 · 卡片动作「打开」（S11 藏卡五枚一组 / S5 谱行菜单） · S11/S5 -->
 <path d="M8 4H5.5A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16h9a1.5 1.5 0 0 0 1.5-1.5V12"/>
 <path d="M11.5 3.5h5v5"/>
 <path d="M16.5 3.5L10.5 9.5"/>

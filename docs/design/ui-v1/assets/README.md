@@ -2,7 +2,7 @@
 
 > **这是什么**：玄枢自有界面（S1–S15）可直接引用/导入的**素材资源文件**——线性图标集、空态/插画、品牌标识、设计 token 取值（light/dark 双模）、组件皮肤规格、冷启动文案表——以及本清单（命名 / 目录 / 技术契约 / 总对账表）。
 > **这不是什么**：**不含实现代码**（无 tsx / 组件 / 样式表工程化接线；`tokens/` 是 token 资源不是组件代码）、**不含视觉精修**（光影/图层/动效曲线精调留 UI 阶段）。
-> 输入：[`../shared/素材需求台账.json`](../shared/素材需求台账.json)（124 条 + 5 复用别名 + 95 token 交接）；token 命名与语义权威 = [`../shared/设计token字典.md`](../shared/设计token字典.md)；各屏视觉元素要求 = [`../screens/`](../screens/) 各屏 §10。
+> 输入：[`../shared/素材需求台账.json`](../shared/素材需求台账.json)（124 条 + 5 复用别名 + 93 token 交接）；token 命名与语义权威 = [`../shared/设计token字典.md`](../shared/设计token字典.md)；各屏视觉元素要求 = [`../screens/`](../screens/) 各屏 §10。
 > 出处：票 03（`.scratch/assembly-foundation/issues/03-ui-asset-production.md`）｜ 日期：2026-10-11 ｜ 状态：draft
 > 术语一律用 `CONTEXT.md` 定名；禁用旧名（模块 / 资产<指「藏」的旧名> / 资料库 / 每日运势 / 聚合模块 / 写回 / 同步 / 归档）。
 
@@ -27,6 +27,7 @@ docs/design/ui-v1/assets/
 ├── tokens/
 │   ├── xs-tokens.json       # 机读取值：{ "--xs-*": { light, dark } }，对 ctx.theme.overrideTokens 直接可用
 │   ├── xs-tokens.css        # 人读镜像：:root 与 dark 两块 + 逐条注释（语义/用在哪/推导来源）
+│   ├── type-scale.md        # 字体排版规格（字族栈 + 字号/字重/行高语义档位取值；票 03「字体排版」交付）
 │   └── V29-primitives-token-consumption.md  # 票 03 研究报告：primitives 消费的 --dsw-* 名单（待实测登记处 V29）
 ├── skins/                   # 组件皮肤规格（Markdown：结构 + token 引用 + 状态；无代码）
 ├── copy/                    # 文案表（台账 placeholder 类条目）
@@ -72,7 +73,7 @@ docs/design/ui-v1/assets/
 
 ## 4. 设计 token 取值契约（验收项 3 的物理承载）
 
-- **填值范围** = 台账 `token_handoff` 全表（95 条）= [`../shared/设计token字典.md`](../shared/设计token字典.md) 各表「取值」列的全部「票 03 填」。
+- **填值范围** = 台账 `token_handoff` 全表（93 条）= [`../shared/设计token字典.md`](../shared/设计token字典.md) 各表「取值」列的全部「票 03 填」。
 - **双模必填**：每条都给 `light` 与 `dark`（DSH 契约：`requiresLightAndDark`，证据见字典 §13.1-1）。
 - **三类取值形态**：
   1. **别名引用**：`var(--dsw-alias-…)` / `var(--dsw-specific-…)` / `var(--dsw-radius-…)` 等——light/dark 都写同一引用（DSH 自带双模）；**不得**重定义被引用 alias 的语义（字典 §13.1-4）。

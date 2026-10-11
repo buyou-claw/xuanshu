@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-<!-- asset.S11-3 · 卡片动作「移除登记」：卡面一横（只从注册表移除，不删除原文件） · S11 -->
+<!-- asset.S11-3, asset.S5-8 · 卡片动作「移除」（S11 藏注册表移除 / S5 谱删除） · S11/S5 -->
 <path d="M5 4.5h10A1.5 1.5 0 0 1 16.5 6v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 14V6A1.5 1.5 0 0 1 5 4.5z"/>
 <path d="M7.25 10h5.5"/>
 </svg>

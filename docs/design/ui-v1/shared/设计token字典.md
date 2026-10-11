@@ -72,7 +72,7 @@ DSH 已有的 token 体系是**两层**：**尺度层** `--dsw-static-*`（静�
 | [`size`](#10-size尺寸) | 语义尺寸（宽 / 高 / 断点 / 图标 / 图形） | 12 | 全部 |
 | `motion` | 骨架扫光 / 抽屉与浮层进出 | 3 | S1 S2 S8 |
 
-**合计 95 个 token**（含附属 `motion`）。票 03 的填值工作量下界；`constraint` 与 `level` 两族是**新增值**的主要来源（DSH 侧无对应语义）。
+**合计 93 个 token**（含附属 `motion`；= 台账 `token_handoff` 的 93 条：91 个取值格 + `--xs-level-nonpu-*` 成对双 token + `--xs-size-breakpoint-wide`）。票 03 的填值工作量下界；`constraint` 与 `level` 两族是**新增值**的主要来源（DSH 侧无对应语义）。
 
 ---
 
@@ -98,7 +98,7 @@ DSH 已有的 token 体系是**两层**：**尺度层** `--dsw-static-*`（静�
 
 ## 3. `text`（文字）
 
-> 全部 `text` token 同时约束**颜色**与**字重/字号档位语义**；票 03 只填颜色侧，字号侧归 UI 阶段（README §1「不含视觉精修」）。
+> 全部 `text` token 同时约束**颜色**与**字重/字号档位语义**；票 03 填颜色侧（本文件「取值」列），**字重/字号/行高的语义档位取值**见 `docs/design/ui-v1/assets/tokens/type-scale.md`（票 03 交付，像素级精修仍留 UI 阶段）。
 
 | token | 语义 | 用在哪 | 建议别名 | 取值 |
 |---|---|---|---|---|
@@ -257,7 +257,7 @@ DSH 已有的 token 体系是**两层**：**尺度层** `--dsw-static-*`（静�
 
 | token | 语义 | 用在哪 | 取值 |
 |---|---|---|---|
-| `--xs-size-breakpoint-wide` | 宽 / 窄屏分界（语义已由 README §3.1 定为「宽 ≥1100 / 窄 <1100」，本 token 只承载这个名字，**取值不在此重复**） | 全部屏的响应式两态 | 见 README §3.1（票 03 不填） |
+| `--xs-size-breakpoint-wide` | 宽 / 窄屏分界（语义已由 README §3.1 定为「宽 ≥1100 / 窄 <1100」，本 token 只承载这个名字，**取值不在此重复**） | 全部屏的响应式两态 | 机读承载 `1100px`（见 `assets/tokens/xs-tokens.json`；语义权威 README §3.1） |
 | `--xs-size-panel-content-max` | 面板内容最大宽度（宽屏下的阅读宽度上限） | S1/S5/S6/S11/S13 面板内容列 | `960px`（light/dark 同） |
 | `--xs-size-card-minheight` | 卡的最小高度（语义「≈ 2 行 + 卡头」） | S1 四卡、S5 谱卡、S9 候选卡 | `108px`（light/dark 同） |
 | `--xs-size-scrollregion-max` | 正文内滚区最大高度（语义「≈ 10 行（内滚）」） | S2 命盘要点、S7 历史列表、S8 账本明细、S13 底稿正文 | `240px`（light/dark 同） |
@@ -348,7 +348,8 @@ DSH 已有的 token 体系是**两层**：**尺度层** `--dsw-static-*`（静�
 
 | 不定义 | 归谁 |
 |---|---|
-| 具体色值 / 字号 / 字重 / 行高 / 阴影 / 模糊 / 动效时长 | **票 03**（本文件的「取值」列） |
+| 具体色值 / 阴影 / 模糊 / 动效时长 | **票 03**（本文件的「取值」列） |
+| 字号 / 字重 / 行高的档位取值 | **票 03**（`docs/design/ui-v1/assets/tokens/type-scale.md`；本文件「取值」列只填颜色侧） |
 | 像素级尺寸与栅格 | **UI 阶段**（README §1、§3.1） |
 | 四卡的视觉精修 | 明确后置（README §6 末段） |
 | 签（tags）的视觉呈现 | 明确后置（README §6 末段；`docs/pu-spec-v1.md:30` 亦标「预留字段，功能暂不启用」） |

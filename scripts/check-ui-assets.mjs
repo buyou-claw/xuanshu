@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 票 03 质量门：玄枢 UI 素材资产库校验
 // 用法：node scripts/check-ui-assets.mjs
-// 校验：台账 124 条 + 5 别名 ↔ manifests 双向覆盖；SVG 技术契约；token 95 条双模；
+// 校验：台账 124 条 + 5 别名 ↔ manifests 双向覆盖；SVG 技术契约；token 93 条双模；
 //       命名 kebab-case；禁用旧名；注释溯源；brand 色值登记；无实现代码混入。
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -40,6 +40,7 @@ const ledger = JSON.parse(readFileSync(LEDGER, 'utf8'));
 const assets = ledger.assets; // 124
 const aliases = ledger.aliases ?? [];
 const handoff = ledger.token_handoff?.tokens ?? ledger.token_handoff ?? [];
+if (handoff.length !== 93) err(`token_handoff 期望 93 条，实际 ${handoff.length} 条（台账/字典口径漂移）`);
 
 // ---------- 1. 载入 manifests ----------
 const manDir = join(ASSETS, 'manifests');
@@ -93,12 +94,13 @@ for (const a of assets) {
         continue;
       }
       coveredFiles++;
-      // 注释溯源（SVG）
+      // 注释溯源（SVG）：契约 §3.4 要求「id 全列」，故所有服务 id 都必须出现
       if (rel.endsWith('.svg')) {
         const txt = readFileSync(abs, 'utf8');
         const idsOfFile = manifestEntries.filter((x) => (x.files ?? []).includes(rel)).map((x) => x.ledger_id);
-        if (!idsOfFile.some((id) => txt.includes(id))) {
-          err(`${rel}：缺少溯源注释（应含 ${idsOfFile.join(' / ')}）`);
+        const missing = idsOfFile.filter((id) => !txt.includes(id));
+        if (missing.length > 0) {
+          err(`${rel}：溯源注释缺 id（${missing.join(' / ')}；应全列 ${idsOfFile.join(' / ')}）`);
         }
       }
     }
@@ -117,11 +119,18 @@ for (const e of manifestEntries) {
 
 // ---------- 3. 命名与禁用旧名 ----------
 const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*\.(svg|json|css|md)$/;
-const BANNED = ['模块', '资产', '资料库', '每日运势', '聚合', '写回', '同步', '归档', '画像'];
+// 禁用旧名（CONTEXT.md 术语表 + ui-v1 README §7 术语对照；「复用」「勾选」是正确术语，不入表）
+const BANNED = ['模块', '资料库', '每日运势', '聚合', '写回', '同步', '归档', '画像', '档案', '知识库', '多模型对比', '投票', '共识稿', '提醒', '资产'];
 for (const { rel } of allListedFiles) {
   const base = rel.split('/').pop();
   if (!NAME_RE.test(base)) err(`命名违规（需 kebab-case）：${rel}`);
   for (const b of BANNED) if (rel.includes(b)) err(`文件名含禁用旧名「${b}」：${rel}`);
+}
+// manifest notes 的术语纪律（正文也扫，不只看文件名）
+for (const e of manifestEntries) {
+  for (const b of BANNED) {
+    if (String(e.notes ?? '').includes(b)) err(`${e.ledger_id}（${e._from}）备注含禁用旧名「${b}」`);
+  }
 }
 
 // ---------- 4. SVG 技术契约 ----------
