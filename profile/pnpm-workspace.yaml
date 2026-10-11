@@ -1,0 +1,14 @@
+packages:
+  - .
+
+nodeLinker: hoisted
+autoInstallPeers: false
+
+# 与上游 dsh 官方 profile 同款的构建脚本白名单。
+# 缺了它 `pnpm install` 会以 ERR_PNPM_IGNORED_BUILDS 退出 1（本机 0.2.0-rc.2 实测）。
+allowBuilds:
+  '@deepseek-ai/dsh-subprocess-local': true
+  '@google/genai': true
+  koffi: true
+  node-pty: true
+  protobufjs: true

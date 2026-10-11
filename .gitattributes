@@ -1,0 +1,25 @@
+# 行尾：玄枢自有代码与产物一律 LF。
+#
+# 这不是洁癖，有两个具体后果：
+#   1. `packages/xuanshu-client/lib/client.js` 是**浏览器侧预编译产物**，DSH 把它的字节
+#      直接当 JS 提供给浏览器（不做任何转译）；装配契约测试 S3 还会把它与 profile 安装点
+#      的拷贝做**逐字节**比对。检出时被改成 CRLF 会让「同一份源码 → 同一份产物字节」这条
+#      承诺随机器而变。
+#   2. 本机 `core.autocrlf=true`，实测 `git add` 已警告「LF will be replaced by CRLF」。
+#
+# 只钉自有目录，不动 docs/（既有文档的行尾保持原样，避免制造无关 diff）。
+/packages/** text eol=lf
+/scripts/** text eol=lf
+/tests/** text eol=lf
+/profile/*.json text eol=lf
+/profile/*.yml text eol=lf
+/profile/*.yaml text eol=lf
+/package.json text eol=lf
+/pnpm-workspace.yaml text eol=lf
+/vitest.config.mjs text eol=lf
+
+# 二进制不参与行尾转换
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

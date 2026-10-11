@@ -1,0 +1,22 @@
+{
+  "name": "dsh-profile-xuanshu",
+  "private": true,
+  "description": "玄枢（XuanShu）的 DSH profile 分发包：装配 xuanshu-host / xuanshu-client 两个插件包，零 DSH 源码改动（ADR-0001）",
+  "license": "AGPL-3.0-only",
+  "dependencies": {
+    "@deepseek-ai/dsh-base": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-headless": "0.2.0-rc.2",
+    "xuanshu-host": "file:../packages/xuanshu-host",
+    "xuanshu-client": "file:../packages/xuanshu-client"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-headless",
+        "xuanshu-host",
+        "xuanshu-client"
+      ]
+    }
+  }
+}

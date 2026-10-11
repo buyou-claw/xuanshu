@@ -1,0 +1,9 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+#
+# 玄枢：本层只做「本 profile 相对上游默认的差异」。两个自有插件的行由它们各自的
+# bundle 补丁（packages/xuanshu-*/cordis.patch.yml）插入，不在这里重复声明——
+# 重复声明同一个 id 会让 Loader 启动失败（desktop profile 踩过这个坑）。
+# horosa MCP 连接行属票 04/05，届时在本层按 mcp-filesystem 行的写法追加。
+[]

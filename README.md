@@ -21,10 +21,33 @@
 | `docs/research/` | 上游侦察报告（DSH / horosa-skill / 星阙桌面端 / 真太阳时 / 事实核查） |
 | `docs/agents/` | agent 工作流配置（issue tracker / domain docs） |
 
+## 仓库结构
+
+玄枢 = **一个 DSH profile + 两个插件包 + 内置 skills + setup 脚本**，零 DSH 源码改动（ADR-0001）。
+
+| 路径 | 是什么 |
+|---|---|
+| `packages/xuanshu-host/` | 主机插件：建数据目录 `$DSH_HOME/xuanshu/`、写装配报告、注册宿主侧命令 |
+| `packages/xuanshu-client/` | 客户端插件：`dsh.client{platform:'web'}` + **自带预编译 bundle**（`lib/client.js` 随包提交，装包即用，无需 `dev:web`）；`src/` 是源码，`scripts/build-client.mjs` 是构建管线 |
+| `profile/` | **DSH profile 分发包** `xuanshu`：`package.json`（`dsh.profile.bundles`）+ `cordis.patch.yml` + `pnpm-lock.yaml` |
+| `scripts/install-profile.mjs` | 装配：让 `profile/` 出现在 `$DSH_HOME/profiles/xuanshu`（link / copy 两种模式），再 `pnpm install` |
+| `scripts/verify-assembly.mjs` · `tests/assembly/` | **装配契约测试台**：启动装配后的 profile，断言「装配成功 / 两个插件包在运行时树中 / 补丁行 id 未漂移」 |
+| `docs/` | 架构、specs、ADR、上游侦察 |
+
+```bash
+pnpm install                                     # 仓库根依赖（构建管线用）
+node scripts/install-profile.mjs                 # 装 profile 到 ~/.dsh/profiles/xuanshu
+node scripts/install-profile.mjs --home <dir>    # 或装到隔离的 DSH_HOME（测试用）
+pnpm build:client                                # 从 src 重建客户端预编译 bundle
+pnpm verify:assembly                             # 跑装配契约校验
+pnpm test                                        # 全部测试
+```
+
 ## 状态
 
 - 产品与架构已定稿；Spec 001（装配基座：setup → 冷启动八字 → 自我总览四卡 → 问事闭环 → 谱）已发布为 [issue #1](https://github.com/buyou-claw/xuanshu/issues/1)（ready-for-agent）。
-- 代码尚未开工；下一步 = 拆 tickets → 按 S1（客户端构建管线）→ S2（首页替换）→ S3（horosa 集成）→ S4（问事闭环）逐票实现。
+- **票 01（空壳立起）已实现**：分发包骨架三件套齐备、客户端预编译构建管线跑通、headless 启动 `xuanshu` profile 成功、装配契约测试台绿。
+- 后续按 S1（客户端构建管线，已完成）→ S2（首页替换 / 票 06）→ S3（horosa 集成 / 票 04–05）→ S4（问事闭环 / 票 09）逐票实现。
 
 ## 许可
 

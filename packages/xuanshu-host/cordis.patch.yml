@@ -1,0 +1,11 @@
+# 玄枢主机插件的 bundle 补丁：把本插件行插进 profile 名册。
+#
+# 形态照抄上游样板 @linxin666/dsh-client-ui-skill-explorer/cordis.patch.yml
+# （bundle 层的 `insert` 写法）。行 id / name 按票 01 契约第 0 节固定 = 包名，
+# 装配后必须出现在运行时树的 id 列表里（seam S1：`dsh --profile xuanshu --dump-config`）。
+#
+# 本行没有 config：lib/index.js 的 apply 不需要任何配置即可建目录、写装配报告；
+# 它也不 inject 任何宿主 service（契约 §3 硬约束：不调 LLM、不联网、不开端口）。
+- insert:
+    - id: xuanshu-host
+      name: 'xuanshu-host'
