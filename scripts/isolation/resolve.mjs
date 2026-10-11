@@ -40,6 +40,35 @@ const fold = (path) => (CASE_INSENSITIVE ? path.toLowerCase() : path)
 /** 空 / 纯空白当「未设」——与 `@deepseek-ai/dsh-home-paths` 的语义保持一致，否则 `DSH_HOME=""` 会被当成路径。 */
 const isBlank = (value) => typeof value !== 'string' || value.trim() === ''
 
+/**
+ * 「候选值设了没有」。**只有 `undefined` 与空白字符串算「未设」**，其余一律进入校验。
+ *
+ * 为什么必须与 `isBlank` 分开：`runStartup({ webPort: 7973 })` 这种**以 API 复用**的调用方传的是
+ * 数字（CLI 走 argv 才是字符串）。曾按 `isBlank` 判，结果数字候选被当成「未设」静默跳过、退回默认
+ * 端口 —— 在一个「端口隔离」工具里，静默换端口是最危险的一类错误：报告里 `portSource: 'default'`
+ * 看着毫无异常，两个实例却可能因此撞端口（isolation-verifier 在 task-6 报过这条）。
+ *
+ * 顺带把同类漏洞一起堵死：`NaN` / `null` / 布尔 / 对象这些「设了但不是端口」的值**不许**再退回默认
+ * （那还是「静默换端口」），必须走 `asPortNumber()` 抛出来。宁可调用方看到一句明确的用法错，
+ * 也不要它以为自己在 7973 上跑、实际在 19388 上跑。
+ */
+const isUnset = (value) => value === undefined || (typeof value === 'string' && value.trim() === '')
+
+/**
+ * 把候选值折成端口号；不是「数字或数字字符串」就抛（不静默降级）。
+ * `Number('7973')`/`Number(7973)` 都成立；`Number('')`、`Number(null)`、`Number(true)` 这类
+ * 会被折成 0/1 的坑，在这里按类型先拦掉，免得它们变成「合法端口 1」。
+ */
+function asPortNumber(raw, source, label) {
+  const describe = typeof raw === 'number' ? String(raw) : JSON.stringify(raw) // JSON.stringify(NaN) 是 "null"，会看得人一头雾水
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  if (typeof raw === 'string') {
+    const parsed = Number(raw)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  throw new Error(`invalid ${label} port: ${describe} (from ${source}; expected a number, got ${raw === null ? 'null' : typeof raw})`)
+}
+
 /* ───────────────────────────── 路径比较 ───────────────────────────── */
 
 /** 两个路径是不是同一个位置（Windows 上忽略大小写）。空值一律 false，不抛异常。 */
@@ -91,10 +120,12 @@ export function resolveRepoRoot(from = process.cwd()) {
  *   3. `$DSH_HOME` —— **仅当它不指向用户真实 `~/.dsh`（或其子目录）时才采纳**
  *   4. `<repo>/.dsh-home`（默认；已 gitignore）
  *
- * 第 3 条的例外为什么必要：在一个 DSH 会话里跑本脚本时，环境里天然带着
- * `DSH_HOME=C:\Users\<me>\.dsh`（desktop 自己的 home）。若照单全收，默认调用会直接撞上
- * 真实 home 并被拒绝，隔离启动器等于开箱不可用。忽略这个值会写进 `ignored[]` 并进报告 notes，
- * 不会静默发生；显式传 `--home ~/.dsh` 仍然照契约硬拒绝（exit 1）。
+ * 第 3 条的例外为什么必要（评审裁决 §5.1 **R16** 确认的语义）：在一个 DSH 会话里跑本脚本时，
+ * 环境里天然带着 `DSH_HOME=C:\Users\<me>\.dsh`（desktop 自己的 home）。若照单全收，默认调用会
+ * 直接撞上真实 home 并被拒绝，隔离启动器等于开箱不可用。所以：
+ *   - **环境里那支 `DSH_HOME`** 指向真实 `~/.dsh` → 忽略 + 记 notes（软处理）；
+ *   - **显式 `--home` / `XUANSHU_DSH_HOME`** 指向真实 `~/.dsh` → 硬拒绝（exit 1，见 startup.mjs）。
+ * 「显式」= 有人真的打出来了，那就该按字面执行并拒绝；「环境里带的」= 不是这次调用的意图。
  */
 export function resolveHomeWithSource({ home, env = process.env, repoRoot, realHome = realDshHome() } = {}) {
   const root = repoRoot ?? resolveRepoRoot()
@@ -166,6 +197,29 @@ function normalizeExplicitBin(value) {
 }
 
 /**
+ * `source` 是**封闭枚举**（评审裁决 §5.1 R10）：报告、断言台、runbook 都拿它做比较，
+ * 裸字符串比较一旦有人手滑少个空格，就成了「看起来断言了、其实永远为真」的假绿。
+ * `sibling` 那段需要名字与 home 才能拼全，所以走 `cliSource()` 这个唯一构造入口。
+ */
+export const CLI_SOURCES = {
+  profile: 'profile node_modules',
+  explicit: 'explicit (--cli-bin)',
+  sibling: 'sibling profile',
+  path: 'PATH',
+}
+
+/** 构造 source 字符串的唯一入口（契约 §4.4 的 `sibling profile <name> (<home>)` 形态）。 */
+export function cliSource(kind, { profileName, home } = {}) {
+  const prefix = CLI_SOURCES[kind]
+  if (prefix === undefined) throw new Error(`unknown CLI source kind: ${JSON.stringify(kind)} (expected ${Object.keys(CLI_SOURCES).join('|')})`)
+  if (kind === 'sibling') {
+    if (profileName === undefined || home === undefined) throw new Error('cliSource("sibling") needs both profileName and home')
+    return `${prefix} ${profileName} (${home})`
+  }
+  return prefix
+}
+
+/**
  * 选一支 DSH CLI，并明确它「从哪来」「版本对不对」。
  *
  * 候选顺序（越靠前越受信任）：显式 `--cli-bin` → profile 自己装的 → 同一隔离 home 下的兄弟
@@ -185,7 +239,8 @@ export function resolveCli({ profileDir, explicit, repoRoot, env = process.env }
 
   const found = []
   const seen = new Set()
-  const consider = (packageDir, source) => {
+  /** kind ∈ CLI_SOURCES；detail 只有 sibling 需要（名字 + home）。 */
+  const consider = (packageDir, kind, detail) => {
     if (typeof packageDir !== 'string' || !existsSync(join(packageDir, 'package.json'))) return
     let key
     try {
@@ -198,7 +253,7 @@ export function resolveCli({ profileDir, explicit, repoRoot, env = process.env }
     const manifest = readManifest(packageDir)
     const binJs = join(packageDir, 'lib', 'bin.js')
     if (manifest === undefined || !existsSync(binJs)) return
-    found.push({ binJs, version: manifest.version, packageDir, source })
+    found.push({ binJs, version: manifest.version, packageDir, source: cliSource(kind, detail) })
   }
 
   if (!isBlank(requested)) {
@@ -209,10 +264,12 @@ export function resolveCli({ profileDir, explicit, repoRoot, env = process.env }
         + `  expected <...>/node_modules/@deepseek-ai/dsh/lib/bin.js (or the package / node_modules directory)`,
       )
     }
-    consider(dirname(dirname(binJs)), 'explicit (--cli-bin)')
+    consider(dirname(dirname(binJs)), 'explicit')
   }
 
-  consider(join(profileDir ?? '', 'node_modules', DSH_PACKAGE), 'profile node_modules')
+  // profile 自己那支：复用 findCliInProfile（R11），别在这里再写一遍 join。
+  const own = findCliInProfile(profileDir)
+  if (own !== undefined) consider(own.packageDir, 'profile')
 
   // 兄弟 profile：同一个隔离 home 下的 `profiles/*`。**只扫隔离 home**，不扫真实 home。
   const profilesDir = basename(dirname(profileDir ?? '')) === 'profiles' ? dirname(profileDir) : undefined
@@ -221,7 +278,7 @@ export function resolveCli({ profileDir, explicit, repoRoot, env = process.env }
     try {
       for (const entry of readdirSync(profilesDir, { withFileTypes: true })) {
         if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
-        consider(join(profilesDir, entry.name, 'node_modules', DSH_PACKAGE), `sibling profile ${entry.name} (${home})`)
+        consider(join(profilesDir, entry.name, 'node_modules', DSH_PACKAGE), 'sibling', { profileName: entry.name, home })
       }
     } catch {
       /* 目录读不了就当没有兄弟 profile，不影响 profile 自己那支 */
@@ -230,8 +287,8 @@ export function resolveCli({ profileDir, explicit, repoRoot, env = process.env }
 
   for (const dir of String(env?.PATH ?? env?.Path ?? '').split(process.platform === 'win32' ? ';' : ':')) {
     if (dir === '') continue
-    consider(join(dir, DSH_PACKAGE), 'PATH')
-    consider(join(dir, 'node_modules', DSH_PACKAGE), 'PATH')
+    consider(join(dir, DSH_PACKAGE), 'path')
+    consider(join(dir, 'node_modules', DSH_PACKAGE), 'path')
   }
 
   if (found.length === 0) return undefined
@@ -265,15 +322,37 @@ export function resolveCli({ profileDir, explicit, repoRoot, env = process.env }
 
 /* ───────────────────────────── 实例 ───────────────────────────── */
 
-/** 把「数字可能来自参数或环境」这件事收在一处：非法值一律抛（上层折成用法失败）。 */
-function pickPort(value, envValue, fallback, label) {
-  const raw = value ?? (isBlank(envValue) ? undefined : envValue)
-  if (raw === undefined) return fallback
-  const port = Number(raw)
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`invalid ${label} port: ${JSON.stringify(raw)} (expected an integer 1..65535)`)
+/**
+ * 端口解析：候选**按优先级排好**，第一个「设了值」的生效（空/纯空白当未设）。
+ * 为什么把来源一起回传：报告必须能回答「这个 18765 是哪来的」——是 `--horosa-port`、
+ * `XUANSHU_HOROSA_PORT`，还是 horosa skill 自己认的 `HOROSA_SKILL_PORT`（R6）。
+ * 端口不对时，人问的第一句话就是这个。
+ */
+function pickPort(candidates, fallback, label) {
+  for (const [raw, source] of candidates) {
+    if (isUnset(raw)) continue
+    const port = asPortNumber(raw, source, label)
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error(`invalid ${label} port: ${JSON.stringify(raw)} (from ${source}; expected an integer 1..65535)`)
+    }
+    return { port, source }
   }
-  return port
+  return { port: fallback, source: 'default' }
+}
+
+/**
+ * horosa 端口只要「能拿去做一次探测」，不需要「能拿去 bind」，所以这里**只**要求是数字：
+ * 越界值（如 70000）交给守卫去判 —— 它会回 `probe-failed`(=「没验成」)，按 §5.1 R14
+ * 这既不改退出码、也不会被误当成「端口被占」（本票 web bundle 不在，我们本来也不 bind 它）。
+ * 反过来，非数字（`--horosa-port abc`）是纯用法错，在这里就拦掉，别让它变成一句含糊的 unknown。
+ */
+function pickProbePort(candidates, fallback, label) {
+  for (const [raw, source] of candidates) {
+    if (isUnset(raw)) continue
+    const port = asPortNumber(raw, source, label)
+    return { port, source }
+  }
+  return { port: fallback, source: 'default' }
 }
 
 /**
@@ -293,8 +372,22 @@ export function resolveInstance({ home, profile, webPort, horosaPort, repoRoot, 
     throw new Error(`invalid profile name: ${JSON.stringify(profileName)}`)
   }
 
-  const resolvedWebPort = pickPort(webPort, env?.[ENV.webPort], DEFAULT_WEB_PORT, 'web')
-  const resolvedHorosaPort = pickPort(horosaPort, env?.[ENV.horosaPort], DEFAULT_HOROSA_PORT, 'horosa')
+  // 端口回退链（§5.1 R6）：web 只认 --web-port > XUANSHU_WEB_PORT；
+  // horosa 多一级 HOROSA_SKILL_PORT —— horosa 自己那份 skill 认的就是它，守卫必须跟着它走。
+  const web = pickPort(
+    [[webPort, '--web-port'], [env?.[ENV.webPort], ENV.webPort]],
+    DEFAULT_WEB_PORT,
+    'web',
+  )
+  const horosa = pickProbePort(
+    [
+      [horosaPort, '--horosa-port'],
+      [env?.[ENV.horosaPort], ENV.horosaPort],
+      [env?.[ENV.horosaSkillPort], ENV.horosaSkillPort],
+    ],
+    DEFAULT_HOROSA_PORT,
+    'horosa',
+  )
 
   const profileDir = join(resolvedHome, 'profiles', profileName)
   const cli = resolveCli({ profileDir, explicit: cliBin ?? explicit, repoRoot: root, env })
@@ -303,15 +396,18 @@ export function resolveInstance({ home, profile, webPort, horosaPort, repoRoot, 
     home: resolvedHome,
     profile: profileName,
     profileDir,
-    webPort: resolvedWebPort,
-    horosaPort: resolvedHorosaPort,
-    horosaUrl: `http://${PROBE_HOST}:${resolvedHorosaPort}${HOROSA_MCP_PATH}`,
+    webPort: web.port,
+    horosaPort: horosa.port,
+    horosaUrl: `http://${PROBE_HOST}:${horosa.port}${HOROSA_MCP_PATH}`,
     dataDir: join(resolvedHome, DATA_DIR_NAME),
     sessionsDir: join(resolvedHome, 'sessions'),
     storagesDir: join(resolvedHome, 'storages'),
     credentialsFile: join(resolvedHome, '.credentials.yaml'),
     machinePatchFile: join(resolvedHome, 'cordis.patch.yml'),
     reportFile: join(resolvedHome, DATA_DIR_NAME, 'assembly-report.json'),
+    // 非契约字段（报告里的 instance 由 INSTANCE_KEYS 白名单挑，不会泄漏）：
+    // 端口各自生效的来源，用来在报告/提示里说清「这个数字哪来的」。
+    portSources: { web: web.source, horosa: horosa.source },
     cli,
   }
 }

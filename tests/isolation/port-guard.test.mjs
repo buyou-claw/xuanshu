@@ -1,9 +1,12 @@
 /**
  * 隔离验收 · I3 / I4（web 端口门 + horosa 8765 守卫四态）
  *
- * 覆盖的断言面（契约 §5）：
+ * 覆盖的断言面（契约 §5；R5/R14 见 §5.1）：
  *   I3  web 端口门：被占 → 启动器退出码 3 + detail 点名端口；空闲 → 通过（exit 0）
- *   I4  horosa 守卫四态：free / horosa-ready / occupied-foreign / probe-failed 判对
+ *   I4  horosa 守卫四态：free / horosa-ready / occupied-foreign / probe-failed 判对，
+ *       且**真实端口**上四态都能复现（空闲 / 普通 HTML / MCP 形状 / 只 accept 不应答）
+ *   R5  「有人 LISTEN 但 HTTP 不应答」= probe-failed（无法判定），不再是 occupied-foreign
+ *   R14 `probe-failed` 时门 `ok:false`，但**启动器退出码仍是 0**（只有 occupied-foreign → 3）
  *
  * 分工（这条边界很重要）：
  *   本文件**造现场**——真起对照组服务端（`lib/fixture-server.mjs`，一律 `listen(0)` 拿 OS 分配的
@@ -13,16 +16,16 @@
  *
  * 对照组为什么必须独立成进程：验收台是 `spawnSync` 跑的（抓输出必须 utf8），而 spawnSync 会阻塞
  * 测试进程的事件循环 —— 对照组若长在测试进程里，探测那一刻它不会被调度，所有「有 HTTP 响应」的
- * 对照组都会退化成一件事（TCP 连得上、HTTP 无响应 → occupied-foreign），
+ * 对照组都会退化成一件事（TCP 连得上、HTTP 无响应 → 无法判定），
  * 于是 horosa-ready 那两态根本没被验过，测试却全绿。见 lib/fixture-server.mjs 的注释。
  *
- * probe-failed 那一态为什么用非法端口来钉：契约里它只能由「探针自身出错」触发，而 `resolve.mjs`
- * 会在端口号非法时先拒（用法失败）、能连上的假服务端一律按契约判 occupied-foreign ——
- * 所以只剩守卫的非法端口分支能在本机确定性地复现它。判据是 fail-closed（ok:false + hint），
- * 这一点比「凑齐四态」更重要：探针坏了绝不许静默放行一个被占的 8765。
+ * `probe-failed` 的两条来源都钉了：**非法端口**（守卫自己的入口分支）与**裸 TCP 不应答**（R5 的
+ * 行为改变）。前者无法经 `resolve.mjs` 走到 startup（它会先拒非法端口），所以由验收台直接调守卫；
+ * 后者必须经 `--horosa-port` 真跑一遍 startup 才能验到「门 ok:false 而退出码 0」。
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { INVALID_PROBE_PORT } from '../../scripts/isolation/defaults.mjs'
 import {
   DSH_HOME, PROFILE,
   expectCheckPass, reserveFreePort, runVerifier, startFixture, stopFixtures, withProfileGate,
@@ -99,31 +102,50 @@ withProfileGate('玄枢隔离验收 · I3/I4（web-port / horosa-guard）', () =
     expect(entry.evidence.probe.status).toBe(404)
   })
 
-  it('I4 只 accept 不应答的裸 TCP 服务 → occupied-foreign（不是 free，也不是 crash）', () => {
-    const entry = expectVerdict(runGuard(state.bareTcp.port), 'occupied-foreign')
-    expect(entry.evidence.gate.ok).toBe(false)
-    expect(entry.evidence.gate.hint).toBeTruthy()
+  it('I4 只 accept 不应答的裸 TCP 服务 → probe-failed（"无法判定" ≠ "确定被占"，R5）', () => {
+    const result = runGuard(state.bareTcp.port)
+    const entry = expectVerdict(result, 'probe-failed')
+    // R5：这一格的真值是「无法判定」—— 判成「确定被占」会在慢应答的 horosa 上制造假红。
+    expect(entry.evidence.gate.ok, 'R14：没验成不许显示成绿灯（门的 ok 必须是 false）').toBe(false)
+    expect(entry.evidence.gate.hint, 'fail-closed 时必须给排查 hint').toBeTruthy()
+    expect(String(entry.evidence.gate.detail)).toMatch(/无法判定/)
+    // R14 的另一半：门 ok:false **不改退出码** —— 只有 occupied-foreign 才是隔离失败。
+    expect(entry.evidence.startupExitCode, 'probe-failed 不该让启动器 exit 3').toBe(0)
+    expect(result.json.report.exitCode).toBe(0)
+    expect(result.json.report.checks.horosaGuard.ok, '启动器报告里的 horosaGuard 门 ok 必须是 false').toBe(false)
+    // 验收台自己的 check 说的是「判对了没有」：判对 → ok（它不是「端口没问题」的意思）。
+    expect(entry.ok).toBe(true)
   })
 
-  it('I4 probe-failed 子例：非法端口必须 fail-closed（ok:false + hint），不许静默放行', () => {
-    // 无论喂哪个端口，验收台都会附上这个子例：它是「探针坏了也必须拦住」的那道保险。
-    const entry = expectCheckPass(runGuard(state.freeHorosaPort), 'horosa-guard')
+  it('I4 probe-failed 子例：非法端口必须 fail-closed（ok:false + hint + unknown），且不改退出码', () => {
+    // 非法端口走的是**真链路**（`--horosa-port <INVALID_PROBE_PORT>` → 端口解析放行数字、守卫判「没验成」），
+    // 所以这里断言的是启动器报告里的 horosaGuard 门，而不是绕开启动器直接调守卫。
+    const result = runGuard(INVALID_PROBE_PORT)
+    const entry = expectCheckPass(result, 'horosa-guard')
     const sub = entry.evidence.probeFailed
     expect(sub.verdict).toBe('probe-failed')
     expect(sub.ok).toBe(false)
-    expect(String(sub.detail)).toMatch(/无法/)
-    expect(String(sub.detail)).toContain('70000')
+    expect(sub.unknown).toBe(true)
+    expect(sub.startupExitCode, 'probe-failed 不是隔离失败：启动器退出码必须是 0').toBe(0)
+    expect(result.json.report.exitCode).toBe(0)
+    expect(result.json.report.checks.horosaGuard.ok).toBe(false)
+    expect(String(sub.detail)).toMatch(/无法判定|没验成|无法探测/)
+    expect(String(sub.detail)).toContain(String(INVALID_PROBE_PORT))
+    expect(String(sub.hint ?? '')).toBeTruthy()
+    // 端口解析只拦**非数字**：越界数字必须原样透传给守卫（否则这一格又变成「无法复现」）。
+    expect(result.json.report.instance.horosaPort).toBe(INVALID_PROBE_PORT)
   })
 
-  it('I4 四态口径：验收台认的就是这四个 verdict，不多不少', () => {
+  it('I4 四态口径：验收台认的就是这四个 verdict，且真实端口上四态都能复现', () => {
     const seen = new Set()
-    for (const port of [state.freeHorosaPort, state.foreign.port, state.readyShape.port, state.ready405.port]) {
+    // 四个真实端口：空闲 / 普通 HTML / MCP 形状 / 只 accept 不应答 —— 正好覆盖四态。
+    for (const port of [state.freeHorosaPort, state.foreign.port, state.readyShape.port, state.bareTcp.port]) {
       const entry = expectCheckPass(runGuard(port), 'horosa-guard')
       seen.add(entry.evidence.verdict)
       expect(['free', 'horosa-ready', 'occupied-foreign', 'probe-failed']).toContain(entry.evidence.verdict)
     }
-    // 四次真实探测必须落在三种不同的态上（否则上面的断言可能只是「都判成了一样」）。
-    expect([...seen].sort()).toEqual(['free', 'horosa-ready', 'occupied-foreign'])
+    // 四次真实探测必须落在四个**不同**的态上（否则上面的断言可能只是「都判成了一样」）。
+    expect([...seen].sort()).toEqual(['free', 'horosa-ready', 'occupied-foreign', 'probe-failed'])
   })
 
   it('I3 web 端口被对照组占住 → 启动器 exit 3、detail 点名端口、hint 给换端口办法', () => {
@@ -161,9 +183,13 @@ withProfileGate('玄枢隔离验收 · I3/I4（web-port / horosa-guard）', () =
     expect(desktop.exitCode).toBe(3)
   })
 
-  it('CLI 表面：非法 --horosa-port 直接用法失败（绝不悄悄退回 8765 去探）', () => {
-    const result = runVerifier(['--json', '--horosa-port', '0'])
+  it('CLI 表面：非数字 --horosa-port 直接用法失败（越界数字则交给守卫判，见上一条）', () => {
+    const result = runVerifier(['--json', '--horosa-port', 'abc'])
     expect(result.status, result.raw()).toBe(1)
     expect(result.stderr).toContain('--horosa-port')
+    // `--web-port` 是要拿去 bind 的，越界值属于用法错，不该被透传（同一个越界原语，两种命运）。
+    const webOutOfRange = runVerifier(['--json', '--web-port', String(INVALID_PROBE_PORT)])
+    expect(webOutOfRange.status, webOutOfRange.raw()).toBe(1)
+    expect(webOutOfRange.stderr).toContain('--web-port')
   })
 })

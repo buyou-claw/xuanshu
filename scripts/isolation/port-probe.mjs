@@ -7,6 +7,9 @@
  *   isPortBusy(port, host = '127.0.0.1', timeoutMs = 1000) -> Promise<boolean>
  *   httpGet(port, path, { host = '127.0.0.1', timeoutMs = 1500 })
  *     -> Promise<{ reachable, status?, contentType?, headers?, body?, error? }>
+ *   normalizeHeaders(headers) -> Record<string,string>（键小写、数组 join(', ')）
+ *     —— §5.1 R7：全仓唯一一份 header 归一化；horosa-guard 复用这一份，不许再写第二份
+ *        （此前两份语义不一致：一份 join 数组，一份 String() 把数组拍成 'a,b'）。
  *
  * 状态机（本文件只负责「事实采集」，不负责裁决；裁决在 horosa-guard.mjs）：
  *   TCP 层     connect 成功            -> busy = true
@@ -15,6 +18,7 @@
  *   HTTP 层    拿到响应头              -> reachable:true + status/headers/body 前若干字节
  *             连接被拒（ECONNREFUSED）  -> reachable:false, error:'ECONNREFUSED'
  *             连上但没响应头（超时）    -> reachable:false, connected:true, timedOut:true
+ *                                        （守卫据此判 probe-failed = 无法判定，**不是**被占；§5.1 R5）
  *             DNS/权限等其它错误        -> reachable:false, error:<code>
  *
  * 三条设计约束（为什么这么写）：
@@ -44,8 +48,13 @@ function errCode(err) {
   return err.code || err.message || String(err)
 }
 
-/** Node 的 header 值可能是 string | string[] | undefined；统一成 Record<string,string> 且键小写。 */
-function flattenHeaders(raw) {
+/**
+ * 归一化 HTTP 响应头：键一律小写，值一律字符串。
+ * 为什么值要 join(', ')：同一 header 可能出现多次（`set-cookie`、`allow` 等），Node 会给 string[]；
+ * 直接 `String([...])` 会得到 `'a,b'` 这种没有分隔语义的串，而 `, ` 与 HTTP 的合并规则一致，
+ * 也让 `allow` 的 `/\bpost\b/i` 判定和 evidence 输出都可读。§5.1 R7：只此一份。
+ */
+export function normalizeHeaders(raw) {
   const out = {}
   if (!raw || typeof raw !== 'object') return out
   for (const [key, value] of Object.entries(raw)) {
@@ -147,7 +156,7 @@ function httpGetInner(port, path, host, timeoutMs) {
       connected: true,
       status: res?.statusCode,
       contentType: res?.headers?.['content-type'],
-      headers: flattenHeaders(res?.headers),
+      headers: normalizeHeaders(res?.headers),
       body: bodySoFar(),
       truncated,
       ...extra,
@@ -201,7 +210,7 @@ function httpGetInner(port, path, host, timeoutMs) {
     }
 
     // 记录 TCP 是否真的连上了：裸 TCP 服务（accept 但不应答）连得上，
-    // 而 ECONNREFUSED / 防火墙丢包连不上 —— 守卫靠这个区分「被占」和「unknown」。
+    // 而 ECONNREFUSED / 防火墙丢包连不上 —— 守卫靠这个区分「端口空着」和「无法判定」（§5.1 R5）。
     req.on('socket', (socket) => {
       socket.once('connect', () => {
         connected = true

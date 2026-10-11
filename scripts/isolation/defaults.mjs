@@ -28,10 +28,16 @@ export const DESKTOP_WEB_PORT = 19387
 /**
  * 本票自己引入的覆盖变量（前缀 XUANSHU_ 是为了不和 DSH 自身的 env 撞车）。
  * 优先级见 resolve.mjs：显式 CLI 参数 > 这些变量 > 定值。
+ *
+ * `horosaSkillPort` 是**新增**的一项（评审裁决 §5.1 R6）：horosa 自己那份 skill 认
+ * `HOROSA_SKILL_PORT`（`docs/research/horosa-skill-source.md` §67），而守卫判的必须是 horosa
+ * **真正会监听**的那个端口，所以它进回退链：
+ * `--horosa-port` > `XUANSHU_HOROSA_PORT` > `HOROSA_SKILL_PORT` > 8765。
  */
 export const ENV = {
   webPort: 'XUANSHU_WEB_PORT',
   horosaPort: 'XUANSHU_HOROSA_PORT',
+  horosaSkillPort: 'HOROSA_SKILL_PORT',
   home: 'XUANSHU_DSH_HOME',
   profile: 'XUANSHU_PROFILE',
   cliBin: 'XUANSHU_CLI_BIN',
@@ -72,6 +78,20 @@ export const DATA_DIR_NAME = 'xuanshu'
 /** CLI 包名与「版本锚」包名：CLI 必须和 profile 树里的 dsh-base 同版本，否则会去解析别人的树。 */
 export const DSH_PACKAGE = '@deepseek-ai/dsh'
 export const DSH_BASE_PACKAGE = '@deepseek-ai/dsh-base'
+
+/**
+ * `dsh web` 子命令的提供方。本票**不接**它（评审裁决 §5.1 R1：接进 `dsh.profile.bundles` 会让
+ * 装配树多出 4 条 `unrecognized Loader tree carrier` error 行，属票 07 首页替换），
+ * 但 `--mode web` 必须先查它到底在不在再决定要不要 spawn —— 见 startup.mjs 的 web bundle 门。
+ */
+export const DSH_WEB_APP_PACKAGE = '@deepseek-ai/dsh-web-app'
+
+/**
+ * 「非法端口」这个测试原语（评审裁决 §5.1 R8）：`verify-isolation.mjs`、`port-guard.test.mjs`、
+ * `tests/isolation/README.md` 全部引用它，不再各自写字面量 70000 —— 字面量散开后，
+ * 改一个数要全局 grep，而且写错一个零没人发现。
+ */
+export const INVALID_PROBE_PORT = 70_000
 
 /** 所有探针只探本机回环，绝不碰外部地址。 */
 export const PROBE_HOST = '127.0.0.1'

@@ -1,19 +1,26 @@
 /**
- * 隔离验收 · I5 / I6 / I7（双实例真跑 + 真 home 零写入 + desktop 19387 没被碰）
+ * 隔离验收 · I5 / I6 / I7（双实例真跑 + 哨兵法 + 真 home 零写入 + desktop 19387 没被碰）
  *
- * 覆盖的断言面（契约 §5）：
+ * 覆盖的断言面（契约 §5 / §5.1）：
  *   I5  两个隔离 home 各真跑一次 `--mode headless`（= 走一遍 boot + dispose + exit 0，不调 LLM、
- *       不开端口），各自写出**自己的** `sessions`/`storages`/`assembly-report.json`，两份清单不相交
- *   I6  跑完之后用户真实 `~/.dsh` 顶层 + sessions/storages 的 mtime+size 指纹**无新增无删除**
+ *       不开端口），各自写出**自己的** `assembly-report.json`，两份清单不相交
+ *   R15 哨兵法（I5 的行为证据）：在 home A 的 `sessions/`、`storages/`、`.credentials.yaml`、
+ *       `cordis.patch.yml` 各放一个哨兵，跑完 home B 后断言 **B 家一个哨兵都找不到**、
+ *       **A 家的哨兵原样还在（mtime/size 未变）**
+ *   I6  跑完之后用户真实 `~/.dsh` 顶层 + sessions/storages 的指纹**无新增无删除**
  *   I7  xuanshu 的 web 端口 ≠ desktop 的 19387（计划命令里也不许出现 19387）
  *
  * 本文件只跑 `scripts/verify-isolation.mjs --json --only dual-instance,no-crosstalk,no-real-home-write`：
- * 真跑、临时 home、指纹采集、清单比对全部在验收台里，测试断言它的结论 + 现场回收是否干净。
+ * 真跑、临时 home、种哨兵、指纹采集、清单比对全部在验收台里，测试断言它的结论 + 现场回收是否干净。
  *
  * 两条安全断言（本文件独有，因为只有它会创建/删除临时 home）：
  *   1) 临时 home 的 `profiles/<name>` 是指向仓库 profile 的 junction：跑完必须证明 profile 本体还在
  *      （rmSync 跟随联接去删就是灾难，这里钉住它没发生）；
  *   2) 绿的时候临时 home 必须被清掉（不往仓库里留垃圾）。
+ *
+ * 哨兵法的**边界**（同样写进 tests/isolation/README.md）：它证明「存储根真的分开」——
+ * B 的进程按自己的 `$DSH_HOME` 解析后不会读到/写到 A 的 sessions/storages/凭据/机器级补丁；
+ * 它**不**证明「两个会话互不可见」（那要有真会话才谈得上，等票 10）。
  */
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -29,6 +36,10 @@ const DUAL_DIR_A = join(TMP_ROOT, 'dual-a')
 const DUAL_DIR_B = join(TMP_ROOT, 'dual-b')
 /** desktop（Electron）独占的端口：xuanshu 必须用别的端口才能和它同跑。 */
 const DESKTOP_PORT = 19387
+/** R15 指定的四个哨兵位置：存储根两处 + 两个「文件本身就是路径」的隔离对象。 */
+const SENTINEL_SPOTS = [
+  /^sessions\/.+/, /^storages\/.+/, /^\.credentials\.yaml$/, /^cordis\.patch\.yml$/,
+]
 
 /** Windows 路径比较（大小写不敏感）；这里只用于「报告里的 home 是不是它自己那个」。 */
 const samePath = (a, b) => String(a).toLowerCase() === String(b).toLowerCase()
@@ -91,7 +102,26 @@ withProfileGate('玄枢隔离验收 · I5/I6/I7（dual-instance / no-crosstalk /
     }
   })
 
-  it('I5 B 跑完之后 A 的状态指纹逐条未变（串扰的直接否证）', () => {
+  it('R15 哨兵法：A 的四个哨兵原样还在，B 家一个都找不到（存储根真的分开）', () => {
+    const entry = expectCheckPass(result, 'dual-instance')
+    const { sentinels, sentinelHitsInB, sentinelMarker, manifestA } = entry.evidence
+    // 四个位置一个都不能少：少了就是这条断言在空转。
+    expect(sentinels).toHaveLength(SENTINEL_SPOTS.length)
+    for (const [index, spot] of SENTINEL_SPOTS.entries()) {
+      expect(sentinels[index].rel, `第 ${index + 1} 个哨兵不在契约指定的位置：${sentinels[index].rel}`).toMatch(spot)
+    }
+    for (const sentinel of sentinels) {
+      // 哨兵必须先真的存在于 A 的清单里（证明 B 跑的时候它在），再谈「原样还在」。
+      expect(manifestA, `A 的清单里没有 ${sentinel.rel}（哨兵没种上）`).toContain(sentinel.rel)
+      expect(sentinel.exists, `A 的哨兵不见了：${sentinel.rel}`).toBe(true)
+      expect(sentinel.unchanged, `A 的哨兵被改动了：${sentinel.rel}（${JSON.stringify(sentinel.plantedAt)} → ${JSON.stringify(sentinel.after)}）`).toBe(true)
+    }
+    // 串扰的唯一证据面：B 的 home 里按名字 + 按内容都不许出现哨兵。
+    expect(sentinelHitsInB, `B 的 home 里出现了 A 的哨兵：${JSON.stringify(sentinelHitsInB)}`).toEqual([])
+    expect(sentinelMarker).toBeTruthy()
+  })
+
+  it('I5 B 跑完之后 A 的状态指纹逐条未变（串扰的直接否证，哨兵也在里面）', () => {
     const entry = expectCheckPass(result, 'no-crosstalk')
     const fingerprint = entry.evidence.stateFingerprintA
     expect(fingerprint.changed, `B 动了 A 的状态：${JSON.stringify(fingerprint.changed)}`).toEqual([])

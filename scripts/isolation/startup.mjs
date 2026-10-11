@@ -14,13 +14,17 @@
  *     --dry-run               不 spawn，只打印计划
  *     --timeout-ms <n>        转发/等待上限，默认 180000
  *
- * 退出码（契约 §2）：0 通过；1 用法/内部错误；2 环境门失败（home / CLI / profile）；
- *                    3 隔离门失败（web 端口被占、horosa 被非 horosa 进程占用、状态外溢）。
+ * 退出码（契约 §2）：0 通过；1 用法/内部错误；2 环境门失败（home / CLI / profile，含 web 前提）；
+ *                    3 隔离门失败（web 端口被占、horosa 被**确认**非 horosa 进程占用、状态外溢）。
  *
  * 四种模式：
  *   doctor（默认） 算清一切 + 跑 webPort/horosaGuard 两道门 + 断言派生路径都在 home 下，只报告不 spawn；
- *   web            doctor 全绿后 spawn `dsh --profile <p> web --port <n> --no-open`（stdio inherit），
- *                  退出码 = 子进程退出码；
+ *   web            前提全绿后 spawn `dsh --profile <p> web --port <n> --no-open`，退出码 = 子进程退出码。
+ *                  **本票这条通常跑不起来**：`dsh web` 由 `@deepseek-ai/dsh-web-app` bundle 提供，
+ *                  而本票不接它（评审裁决 §5.1 R1：接进 `dsh.profile.bundles` 会让装配树多出 4 条
+ *                  error 行，属票 07 首页替换）。缺它时 CLI 会以 `error: unknown option '--port'` exit 1，
+ *                  所以这里**在 spawn 前就拒绝**：`profile` 门 FAIL、退出码 2、detail 点名缺哪个包、
+ *                  并给两条出路（`--mode env` 拿命令去有 bundle 的实例跑 / 等票 07）。
  *   headless       真跑一次 `dsh --profile <p> --help`（= boot + dispose + exit 0，不调 LLM、不开端口），
  *                  并断言 `<home>/xuanshu/assembly-report.json` **本次新写出**；
  *   env            不 spawn，只把 plan.env / plan.command 打到 stdout，给 pwsh / CI 用。
@@ -28,15 +32,25 @@
  * 隔离硬规矩（改代码前先读）：
  *   1) 解析出的 home 等于**或位于**用户真实 `~/.dsh` 下 → 用法失败（exit 1）。本票**不**提供
  *      `--allow-real-home` 之类的逃生舱：这个开关一存在，早晚会有人在 CI 里打开它。
- *   2) 环境里那支 `$DSH_HOME` 若指向真实 `~/.dsh` 会被**忽略**并记进 notes（在 DSH 会话里跑本脚本时，
- *      环境天然带着 desktop 的 `DSH_HOME`）；显式 `--home` / `XUANSHU_DSH_HOME` 永远优先。
+ *   2) （评审裁决 §5.1 R16）环境里那支 `$DSH_HOME` 若指向真实 `~/.dsh` 会被**忽略**并记进 notes ——
+ *      在 DSH 会话里跑本脚本时它天然如此，硬拒绝会让脚本在会话内根本没法用；
+ *      而**显式** `--home` / `XUANSHU_DSH_HOME` 指到真实 home 一律硬拒绝（exit 1）：
+ *      显式 = 有人真的这么打了，那就按字面执行并拒绝。
  *   3) CLI 一律用 profile 树里那份 `<profile>/node_modules/@deepseek-ai/dsh/lib/bin.js`：
  *      PATH 上全局 npm 装的是 0.1.2-rc.1，与本票的 0.2.0-rc.2 树不兼容（会崩在
  *      `does not provide an export named 'StartupError'`）。版本不符时 `cli` 门判 FAIL（exit 2）。
  *   4) `--json` 时 stdout 只有一份 JSON，其余一切走 stderr；`runStartup()` 被 import 时**不打印任何东西**
  *      （断言台要自己决定怎么输出），也不调用 process.exit。
+ *      `--mode web` 也不例外（§5.1 R3）：不预打印，子进程 stdout/stderr 被转发到**父进程 stderr**，
+ *      等子进程退出后打**终版报告**（含真实 spawn.exitCode/signal/ms）。代价是 `--json` 时拿不到
+ *      实时日志，这一条写进 notes。
  *   5) `<profile>/cordis.yml` 是 DSH 每次启动都重写的运行期产物（profile 已 gitignore）：
  *      启动器**不清理**它（清理会让下一次启动的补丁栈基线漂移），只在 notes 里说明。
+ *   6) horosa 端口的回退链是 `--horosa-port` > `XUANSHU_HOROSA_PORT` > `HOROSA_SKILL_PORT` > 8765
+ *      （§5.1 R6）：horosa 自己那份 skill 认 `HOROSA_SKILL_PORT`，守卫判的必须是它**真正会监听**的端口。
+ *   7) `horosaGuard` 门的 `ok` 与**退出码**解耦（§5.1 R14）：`ok = verdict ∈ {free, horosa-ready}`，
+ *      所以 `probe-failed`（没验成）是 `ok:false`，但只有 `occupied-foreign` 才让退出码变成 3。
+ *      「不确定」不该显示成绿灯，也不该被当成「隔离失败」。
  *
  * 仅使用 Node 内置模块，无第三方依赖。ESM。
  */
@@ -55,6 +69,7 @@ import {
   DESKTOP_WEB_PORT,
   DSH_BASE_PACKAGE,
   DSH_PACKAGE,
+  DSH_WEB_APP_PACKAGE,
   ENVIRONMENT_CHECK_IDS,
   ENV,
   EXIT,
@@ -76,6 +91,11 @@ const ISOLATED_PATH_KEYS = [
 ]
 /** 输出尾部截断长度：报告里只留「够看懂失败原因」的部分，避免 JSON 变成日志搬家。 */
 const TAIL_LIMIT = 2000
+/**
+ * 参与退出码的隔离门：**除了 horosaGuard**（§5.1 R14）。
+ * horosaGuard 的 ok 是「验没验成」，退出码只认「确认被外人占了」，两者不是一回事。
+ */
+const ISOLATION_EXIT_CHECK_IDS = ISOLATION_CHECK_IDS.filter((id) => id !== 'horosaGuard')
 
 function printHelp() {
   const text = readFileSync(fileURLToPath(import.meta.url), 'utf8')
@@ -208,17 +228,28 @@ async function loadGates() {
   }
 }
 
-function spawnInherit(command, args, { cwd, env, killAfterMs = 0 }) {
+/**
+ * 跑一个子进程并**收集**它的输出（stdio: ['inherit','pipe','pipe']）。
+ * 为什么不是 inherit：web 是长驻进程，`--json` 时若让它直接写 stdout，那份 JSON 后面就会接着
+ * 一坨服务器日志 —— 契约要的是「stdout 只有一份 JSON」。所以 stdout/stderr 走管道，
+ * 由调用方决定去哪（命令行壳转发到父进程 stderr，见 `onChildOutput`），同时留尾部进报告。
+ * stdin 仍然 inherit：交互式 CLI 不该被我们掐掉。
+ */
+function spawnPiped(command, args, { cwd, env, killAfterMs = 0, onOutput }) {
   return new Promise((resolvePromise) => {
     let settled = false
     let timer
+    let stdout = ''
+    let stderr = ''
     const done = (result) => {
       if (settled) return
       settled = true
       if (timer) clearTimeout(timer)
-      resolvePromise(result)
+      resolvePromise({ ...result, stdout, stderr })
     }
-    const child = spawn(command, args, { cwd, env, stdio: 'inherit' })
+    // 只留尾部：长驻服务器的日志可以无限长，报告里要的是「最后发生了什么」。
+    const absorb = (buffer, chunk) => (buffer + chunk).slice(-TAIL_LIMIT * 2)
+    const child = spawn(command, args, { cwd, env, stdio: ['inherit', 'pipe', 'pipe'] })
     if (killAfterMs > 0) {
       timer = setTimeout(() => {
         try {
@@ -229,6 +260,14 @@ function spawnInherit(command, args, { cwd, env, killAfterMs = 0 }) {
         done({ timedOut: true, signal: 'SIGTERM' })
       }, killAfterMs)
     }
+    child.stdout?.on('data', (chunk) => {
+      stdout = absorb(stdout, chunk)
+      onOutput?.('stdout', chunk)
+    })
+    child.stderr?.on('data', (chunk) => {
+      stderr = absorb(stderr, chunk)
+      onOutput?.('stderr', chunk)
+    })
     child.once('error', (error) => done({ error: error?.message ?? String(error) }))
     child.once('exit', (code, signal) => done({ code, signal }))
   })
@@ -236,6 +275,11 @@ function spawnInherit(command, args, { cwd, env, killAfterMs = 0 }) {
 
 /* ───────────────────────────── 报告骨架 ───────────────────────────── */
 
+/**
+ * 报告骨架。注意**没有** `spawn` 键（§5.1 R12）：契约 §4.5 标的是 `spawn?: …`，
+ * 「没 spawn 就不出现」比「塞一个 {attempted:false} 让调用方自己分辨」更难被读错 ——
+ * 后者只要有人写 `if (report.spawn)` 就永远为真，那正是评审要消掉的坑。
+ */
 function newReport(mode) {
   return {
     schema: ISOLATION_REPORT_SCHEMA,
@@ -247,11 +291,16 @@ function newReport(mode) {
     cli: undefined,
     checks: {},
     plan: { command: [], env: {}, display: '', dryRun: false },
-    spawn: { attempted: false },
     notes: [],
   }
 }
 
+/**
+ * 收尾：`generatedAt` 记的是**完成时刻**，`ok` 跟随退出码。
+ * 为什么 ok 跟退出码而不是「所有门都 ok」：§5.1 R14 明确把 horosaGuard 的 ok 与退出码解耦了
+ * （probe-failed = 没验成 → 门 ok:false，但退出码仍 0）。报告顶层的 ok 是给 CI 用的那个信号，
+ * 单门的 ok 是门自己的口径；两者的关系写在 notes 里，不靠猜。
+ */
 function finish(report) {
   report.generatedAt = new Date().toISOString()
   report.ok = report.exitCode === EXIT.ok
@@ -284,11 +333,15 @@ function abort(report, exitCode, id, detail, hint, error) {
 /**
  * 退出码推导：环境门（home/cli/profile）失败 → 2；否则隔离门失败 → 3；否则 0。
  * 探针模块缺失时强制 2：那是「环境还没准备好」，不是「端口被占」。
+ *
+ * horosaGuard **不按 ok 推**（§5.1 R14）：`probe-failed` 是 ok:false 但退出码不变，
+ * 只有 `verdict === 'occupied-foreign'`（真的拿到 HTTP 响应、但形态不像 MCP）才判 3。
  */
 function pickExitCode(checks, { probeUnavailable = false } = {}) {
   if (probeUnavailable) return EXIT.environment
   if (ENVIRONMENT_CHECK_IDS.some((id) => checks[id]?.ok !== true)) return EXIT.environment
-  if (ISOLATION_CHECK_IDS.some((id) => checks[id]?.ok !== true)) return EXIT.isolation
+  if (checks.horosaGuard?.evidence?.verdict === 'occupied-foreign') return EXIT.isolation
+  if (ISOLATION_EXIT_CHECK_IDS.some((id) => checks[id]?.ok !== true)) return EXIT.isolation
   return EXIT.ok
 }
 
@@ -399,31 +452,67 @@ export async function runStartup(options = {}) {
     notes.push(`--install：跑过 scripts/install-profile.mjs（exit ${run.status ?? 'null'}）`)
   }
 
-  /* ⑥ profile 门（doctor 层面：装没装；headless 之后还会加「能不能真的 boot」）。 */
+  /* ⑥ profile 门（doctor 层面：装没装；headless 之后还会加「能不能真的 boot」；
+      web 模式还会加一条「web bundle 在不在」的前置条件 —— 见下面 §5.1 R2 那段）。 */
   const profileManifest = readJsonFile(join(instance.profileDir, 'package.json'))
   const profileNodeModules = existsSync(join(instance.profileDir, 'node_modules'))
   const dshBaseVersion = readJsonFile(join(instance.profileDir, 'node_modules', ...DSH_BASE_PACKAGE.split('/'), 'package.json'))?.version
   const profileInstalled = profileManifest !== undefined && profileNodeModules
-  report.checks.profile = check(
-    'profile',
-    profileInstalled,
-    profileInstalled
+
+  // ── web bundle 门（评审裁决 §5.1 R2） ─────────────────────────────────────────
+  // `dsh web` 这个子命令由 `@deepseek-ai/dsh-web-app` 提供。profile 里**有它的包文件**不等于
+  // 它会加载：DSH 只把 `dsh.profile.bundles` 里声明的层叠进装配树（这也是票 01 的补丁栈语义）。
+  // 本机实测：包在 node_modules 里、但不在 bundles 列表里 → `dsh web --port N` 立刻
+  // `error: unknown option '--port'` exit 1（2.3s）。所以判据是「**声明了** + 装上了」，
+  // 而不是「node_modules 里躺着个目录」—— 后者会让我们 spawn 一个必死的子进程（正是 R2 禁止的）。
+  const bundles = Array.isArray(profileManifest?.dsh?.profile?.bundles) ? profileManifest.dsh.profile.bundles : []
+  const webAppDir = join(instance.profileDir, 'node_modules', ...DSH_WEB_APP_PACKAGE.split('/'))
+  const webAppManifest = readJsonFile(join(webAppDir, 'package.json'))
+  const webBundle = {
+    package: DSH_WEB_APP_PACKAGE,
+    installed: webAppManifest !== undefined,
+    version: webAppManifest?.version,
+    patchFile: existsSync(join(webAppDir, 'cordis.patch.yml')),
+    declaredInBundles: bundles.includes(DSH_WEB_APP_PACKAGE),
+    bundles,
+  }
+  webBundle.available = webBundle.declaredInBundles && webBundle.installed
+  // 只有 web 模式需要它：headless 与 web bundle 无关，doctor/env 只是「算清事实」，
+  // 让它们因此变红会把「本票装不出 web」误报成「隔离环境坏了」。
+  const webBundleBlocksMode = mode === 'web' && !webBundle.available
+  const profileOk = profileInstalled && !webBundleBlocksMode
+  const profileDetail = webBundleBlocksMode
+    ? `profile "${instance.profile}" 装在 ${instance.profileDir}，但缺 web bundle：${DSH_WEB_APP_PACKAGE} `
+      + `没有出现在 dsh.profile.bundles（当前：${bundles.join(', ') || '空'}；node_modules 里${webBundle.installed ? '有包文件但不会加载' : '连包文件都没有'}）`
+      + `—— 缺它时 \`dsh web --port\` 会以 \`error: unknown option '--port'\` exit 1，所以 --mode web 拒绝 spawn；`
+      + `该 bundle 属票 07（首页替换），本票不接（§5.1 R1）`
+    : profileInstalled
       ? `profile "${instance.profile}" 已装在 ${instance.profileDir}（node_modules 在${dshBaseVersion === undefined ? '' : `，${DSH_BASE_PACKAGE} ${dshBaseVersion}`}）`
-      : `profile "${instance.profile}" 没装在 ${instance.profileDir}（缺 ${profileManifest === undefined ? 'package.json' : 'node_modules'}）`,
-    {
-      hint: profileInstalled ? undefined : `node scripts/isolation/startup.mjs --install  或  node scripts/install-profile.mjs --home "${home}" --profile ${instance.profile}`,
-      evidence: {
-        profile: instance.profile,
-        profileDir: instance.profileDir,
-        linkTarget: linkTargetOf(instance.profileDir),
-        manifestName: profileManifest?.name,
-        nodeModules: profileNodeModules,
-        dshBaseVersion,
-        bundles: profileManifest?.dsh?.profile?.bundles,
-        install,
-      },
+      : `profile "${instance.profile}" 没装在 ${instance.profileDir}（缺 ${profileManifest === undefined ? 'package.json' : 'node_modules'}）`
+  report.checks.profile = check('profile', profileOk, profileDetail, {
+    hint: webBundleBlocksMode
+      ? [
+        `node scripts/isolation/startup.mjs --mode env    # 拿 plan.command 交给装了 web bundle 的实例去跑`,
+        `# 或等票 07 把 ${DSH_WEB_APP_PACKAGE} 接进 profile/package.json 的 dsh.profile.bundles（本票 §5.1 R1 明确不接）`,
+      ].join('\n')
+      : profileInstalled ? undefined : `node scripts/isolation/startup.mjs --install  或  node scripts/install-profile.mjs --home "${home}" --profile ${instance.profile}`,
+    evidence: {
+      profile: instance.profile,
+      profileDir: instance.profileDir,
+      linkTarget: linkTargetOf(instance.profileDir),
+      manifestName: profileManifest?.name,
+      nodeModules: profileNodeModules,
+      dshBaseVersion,
+      bundles,
+      webBundle,
+      install,
     },
-  )
+  })
+  if (mode === 'web' && !webBundle.available) {
+    notes.push(`${DSH_WEB_APP_PACKAGE} bundle 不在（declaredInBundles=${webBundle.declaredInBundles}, installed=${webBundle.installed}）：--mode web 在 spawn 前就拒绝，而不是放一个必死的子进程出去（§5.1 R2）。`)
+  } else if (!webBundle.available) {
+    notes.push(`${DSH_WEB_APP_PACKAGE} bundle 不在（属票 07）：--mode web 在本票用不了；doctor/env/headless 不受影响。`)
+  }
 
   /* ⑦ CLI 门：必须来自 profile 树且版本与 dsh-base 相符。 */
   const cliFound = instance.cli !== undefined
@@ -450,7 +539,6 @@ export async function runStartup(options = {}) {
   /* ⑧ 两道隔离门：web 端口 与 horosa 单占用守卫（并发跑，省一半等待）。 */
   const gates = await loadGates()
   const probeUnavailable = gates.error !== undefined
-  let guardResult
   if (probeUnavailable) {
     const detail = `探针模块不可用（等队友 B 的 scripts/isolation/port-probe.mjs + horosa-guard.mjs）：${gates.error}`
     report.checks.webPort = check('webPort', false, detail, { hint: '等这两个文件落盘后重跑；期间不要拿它当「端口空闲」的证据' })
@@ -462,7 +550,6 @@ export async function runStartup(options = {}) {
       gates.isPortBusy(DESKTOP_WEB_PORT),
       gates.checkHorosaPort({ port: instance.horosaPort, path: HOROSA_MCP_PATH }),
     ])
-    guardResult = guard
     const collidesWithDesktop = instance.webPort === DESKTOP_WEB_PORT
     const webPortOk = webBusy !== true && !collidesWithDesktop
     report.checks.webPort = check(
@@ -475,20 +562,37 @@ export async function runStartup(options = {}) {
           : `127.0.0.1:${instance.webPort} 空闲（desktop 的 ${DESKTOP_WEB_PORT} ${desktopBusy ? '在跑' : '没在跑'}）`,
       {
         hint: webPortOk ? undefined : `换端口：--web-port <n> 或设 ${ENV.webPort}=<n>（desktop 占 ${DESKTOP_WEB_PORT}，别撞）`,
-        evidence: { port: instance.webPort, busy: webBusy, desktopPort: DESKTOP_WEB_PORT, desktopBusy },
+        evidence: { port: instance.webPort, portSource: instance.portSources?.web, busy: webBusy, desktopPort: DESKTOP_WEB_PORT, desktopBusy },
       },
     )
 
-    // 契约 §4.5：free / horosa-ready / probe-failed 都不算失败；只有 occupied-foreign 让门 FAIL。
+    // §5.1 R14：`ok` 是「验没验成」，退出码只认「确认被外人占」（见 pickExitCode）。
+    // free / horosa-ready → ok:true；occupied-foreign → ok:false + exit 3；
+    // probe-failed → ok:false（没验成不能显示成绿灯）但**不改退出码**，结论记成 unknown。
     const verdict = guard?.verdict
-    const horosaOk = verdict !== 'occupied-foreign'
-    if (verdict === 'probe-failed') {
-      notes.push(`horosa 守卫无法判定 127.0.0.1:${instance.horosaPort}（probe-failed）：不算被占，也不算通过 —— 报告该门为 ok=${horosaOk}，但结论是 unknown。`)
+    const horosaOk = verdict === 'free' || verdict === 'horosa-ready'
+    const unknown = verdict === 'probe-failed' || verdict === undefined
+    if (unknown) {
+      notes.push(`horosa 守卫没验成 127.0.0.1:${instance.horosaPort}（verdict=${verdict ?? '无'}）：checks.horosaGuard.ok=false，但这不是隔离失败 —— 退出码不受它影响（§5.1 R14），结论是 unknown。`)
     }
-    report.checks.horosaGuard = check('horosaGuard', horosaOk, guard?.detail ?? `horosa 守卫没有给出结论（verdict=${verdict}）`, {
-      hint: horosaOk ? undefined : guard?.hint,
-      evidence: { verdict, port: guard?.port ?? instance.horosaPort, url: guard?.url ?? instance.horosaUrl, probe: guard?.evidence ?? {} },
-    })
+    report.checks.horosaGuard = check(
+      'horosaGuard',
+      horosaOk,
+      unknown
+        ? `${guard?.detail ?? `horosa 守卫没有给出结论（verdict=${verdict}）`}（没验成：ok=false，但这不是隔离失败、不改退出码）`
+        : guard?.detail ?? `horosa 守卫没有给出结论（verdict=${verdict}）`,
+      {
+        hint: horosaOk ? undefined : guard?.hint,
+        evidence: {
+          verdict,
+          unknown,
+          port: guard?.port ?? instance.horosaPort,
+          url: guard?.url ?? instance.horosaUrl,
+          portSource: instance.portSources?.horosa,
+          probe: guard?.evidence ?? {},
+        },
+      },
+    )
   }
 
   /* ⑨ 计划：命令 + 环境覆盖（env 模式直接打给 pwsh/CI 用）。 */
@@ -550,7 +654,10 @@ export async function runStartup(options = {}) {
   )
 
   report.exitCode = pickExitCode(report.checks, { probeUnavailable })
-  const ready = CHECK_IDS.every((id) => report.checks[id]?.ok === true)
+  // spawn 前提 = 「没有任何**阻断性**失败」，也就是退出码为 0。
+  // 注意它**不等于**「六门全绿」：probe-failed 的 horosaGuard 是 ok:false 但不阻断（§5.1 R14）。
+  // 若按「全绿」放行，就会出现「退出码 0 但拒绝启动」这种自相矛盾的状态 —— 没人能据此写 CI。
+  const ready = report.exitCode === EXIT.ok
 
   if (dryRun) {
     notes.push('--dry-run：没有 spawn 任何进程、没有写盘；plan.* 就是本次的全部产物')
@@ -629,20 +736,22 @@ export async function runStartup(options = {}) {
     return finish(report)
   }
 
-  /* ⑫ web：全绿才 spawn（stdio inherit），退出码 = 子进程退出码。 */
+  /* ⑫ web：全绿才 spawn，退出码 = 子进程退出码。
+     §5.1 R3：`--json` 时 stdout 只允许一份 JSON，且必须是**终版**报告 —— 所以不预打印；
+     子进程的 stdout/stderr 被转发到**父进程 stderr**（人在终端里照样看得见），
+     子进程退出后才打报告（含真实 exitCode/signal/ms）。代价：`--json` 时日志不是实时的。 */
   if (mode === 'web') {
     if (!ready) {
       notes.push('体检没过：不 spawn（先解决上面 FAIL 的门）')
       return finish(report)
     }
-    report.spawn = { attempted: true }
-    // web 是长驻进程：`--json` 时报告必须在子进程接管 stdout 之前打出去（命令行壳用这个钩子）。
-    if (typeof options.onBeforeSpawn === 'function') options.onBeforeSpawn(report)
-    const outcome = await spawnInherit(process.execPath, [plannedBinJs, ...dshArgs], {
+    const spawnStarted = Date.now()
+    const outcome = await spawnPiped(process.execPath, [plannedBinJs, ...dshArgs], {
       cwd: repoRoot,
       env: { ...env, ...planEnv },
       // 只有显式给了 --timeout-ms 才给长驻进程上闹钟：默认值是用来兜住 headless 的，不是用来掐服务器的。
       killAfterMs: options.timeoutExplicit === true ? timeoutMs : 0,
+      onOutput: options.onChildOutput,
     })
     report.spawn = {
       attempted: true,
@@ -650,9 +759,12 @@ export async function runStartup(options = {}) {
       signal: outcome.signal ?? undefined,
       error: outcome.error,
       timedOut: outcome.timedOut === true ? true : undefined,
-      ms: Date.now() - started,
+      ms: Date.now() - spawnStarted,
+      stdoutTail: tail(outcome.stdout),
+      stderrTail: tail(outcome.stderr),
     }
     notes.push('CLI 已真跑一次（web）：<profile>/cordis.yml 是 DSH 每次启动都重写的运行期产物（profile 已 gitignore），本次已被重写；启动器不清理它。')
+    notes.push('web 的子进程日志是**转发**到父进程 stderr 的（--json 时 stdout 只留终版报告）：终端里看得到，但 `--json` 消费方拿不到实时日志。')
     if (outcome.error !== undefined || outcome.timedOut === true) {
       report.exitCode = EXIT.environment
       report.error = outcome.error ?? `web 子进程超过 ${timeoutMs}ms 未退出，已杀掉`
@@ -664,7 +776,10 @@ export async function runStartup(options = {}) {
 
   /* ⑬ doctor / env：到此为止，绝不 spawn。 */
   report.exitCode = pickExitCode(report.checks, { probeUnavailable })
-  if (mode === 'doctor' && !ready) notes.push('doctor 没过：web 模式会拒绝启动（先解决上面 FAIL 的门）')
+  if (mode === 'doctor' && !ready) {
+    const blocking = CHECK_IDS.filter((id) => report.checks[id]?.ok !== true)
+    notes.push(`doctor 没过（exit ${report.exitCode}）：${blocking.join('、')}；web 模式会拒绝启动。`)
+  }
   if (mode === 'env') notes.push('env 模式只输出计划（plan.env + plan.command），不 spawn、不写盘')
   return finish(report)
 }
@@ -737,15 +852,10 @@ async function main() {
     return
   }
 
-  let printed = false
-  const printJson = (report) => {
-    printed = true
-    process.stdout.write(`${JSON.stringify(report, undefined, 2)}\n`)
-  }
   const report = await runStartup({
     ...options,
-    // web 模式的 stdout 之后归子进程所有：报告要在那之前打出去，否则 JSON 后面会接一坨服务器日志。
-    onBeforeSpawn: options.json ? (pending) => { pending.spawn.pending = true; printJson(pending) } : undefined,
+    // web 的子进程日志转发到**父进程 stderr**：stdout 留给那份唯一的终版 JSON（§5.1 R3）。
+    onChildOutput: (stream, chunk) => process.stderr.write(chunk),
   })
 
   const install = report.checks.profile?.evidence?.install
@@ -754,8 +864,7 @@ async function main() {
   }
 
   if (options.json) {
-    if (!printed) printJson(report)
-    else process.stderr.write(`[isolation] web 子进程已退出：exit ${report.exitCode}\n`)
+    process.stdout.write(`${JSON.stringify(report, undefined, 2)}\n`)
   } else if (options.mode === 'env') {
     process.stdout.write(`${envReport(report)}\n`)
   } else {

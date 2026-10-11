@@ -43,10 +43,11 @@ node scripts/install-profile.mjs --home <dir>    # 或装到隔离的 DSH_HOME�
 pnpm build:client                                # 从 src 重建客户端预编译 bundle
 pnpm verify:assembly                             # 跑装配契约校验
 pnpm doctor:xuanshu                              # 双实例体检（home / CLI / profile / 端口 / horosa 8765）
-pnpm dev:xuanshu                                 # 起被测实例（默认 127.0.0.1:19388；desktop 占 19387）
-pnpm verify:isolation                            # 断言同跑无串扰（含真跑两次 headless）
+pnpm verify:isolation                            # 断言同跑无串扰（含两次真跑 headless + 哨兵）
 pnpm test                                        # 全部测试
 ```
+
+> `pnpm dev:xuanshu`（起 `127.0.0.1:19388` 的 web 实例）**当前会以退出码 2 拒绝**：web 界面要 `@deepseek-ai/dsh-web-app` bundle，按票 01 的装配契约它属票 07（首页替换）。在被测实例上跑自证请用 `node scripts/isolation/startup.mjs --mode headless`；要拿端口/环境去启动别的实例用 `--mode env`。详见 `docs/runbook/dual-instance.md`。
 
 ## 状态
 

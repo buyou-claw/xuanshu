@@ -34,4 +34,5 @@
 - 开发期多一件事：跑玄枢的实例前先跑 `node scripts/isolation/startup.mjs --mode doctor`（体检 + 两道门），或用 `pnpm verify:isolation` 一次性断言 I1~I7。
 - `profile/pnpm-workspace.yaml` 的 `autoInstallPeers: false` 意味着 base/headless 补丁行依赖的那批 provider 包必须**显式**写进 `profile/package.json`（desktop profile 也是这么做的）；否则补丁行解析不到，装配树里会出现 `status:"error"` 的行。本票把这份显式清单补齐，并把 `@deepseek-ai/dsh` 自己装进 profile，让装配测试不再依赖"机器上碰巧有个能用的 CLI"。
 - 票 05（setup 一键安装）与票 06（horosa 集成）沿用这套约定：数据目录、端口、`8765` 守卫都从 `scripts/isolation/defaults.mjs` 取，不再各写一份常量。
+- **web 界面还没接**：起 web 实例要 `@deepseek-ai/dsh-web-app` bundle，而票 01 的装配契约把它划给票 07（首页替换）。本票实测把它提前放进 `dsh.profile.bundles` 会让装配树从 98 行涨到 187 行并多出 4 条 `unrecognized Loader tree carrier`（`preset-standard/ptc/minimal/cordis`），2 个必激活行不激活 → 票 01 的 S1/S2 直接转红。所以本票只把**端口隔离与守卫**做扎实（`--web-port` 被占 → exit 3，有真占端口的断言），`--mode web` 在缺 bundle 时**明确拒绝**（exit 2 + 点名缺哪个包），命令与环境经 `--mode env` 交付。接 bundle 与解决上面那 4 条 carrier 错误是票 07 的事。
 - 回滚：删掉 `<repo>/.dsh-home` 即可回到"只有一个 desktop 实例"的原始状态；启动器不改动 `~/.dsh` 下的任何东西（测试有指纹断言 `no-real-home-write`）。

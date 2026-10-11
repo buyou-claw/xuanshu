@@ -19,57 +19,57 @@ node scripts/isolation/startup.mjs --json          # 机器读（stdout 只有�
 
 | 门 | 查什么 | 失败退出码 |
 |---|---|---|
-| `home` | `$DSH_HOME` 解析结果**不能**在真实 `~/.dsh` 下 | 2 |
+| `home` | 隔离 home 存在、且**不是**真实 `~/.dsh`（指到真实 home 是**用法错误**，不是环境错误） | **1** |
 | `cli` | CLI 必须是 profile 树里那份，且版本 = `dsh-base` 版本 | 2 |
 | `profile` | `$DSH_HOME/profiles/xuanshu` 有 `package.json` + `node_modules`（缺了用 `--install`） | 2 |
-| `webPort` | `127.0.0.1:<web-port>` 没人 LISTEN | 3 |
-| `horosaGuard` | `127.0.0.1:<horosa-port>/mcp` 要么空着、要么是 horosa 自己在答 | 3 |
+| `webPort` | `127.0.0.1:<web-port>` 没人 LISTEN，且不等于 desktop 的 `19387` | 3 |
+| `horosaGuard` | `127.0.0.1:<horosa-port>/mcp` 要么空着、要么是 horosa 自己在答；**只有 `occupied-foreign` 判失败**（`probe-failed` 不改退出码，只记 `unknown`） | 3（仅 foreign） |
 | `stateIsolated` | 七条派生路径（profile/数据目录/sessions/storages/凭据/机器补丁/装配报告）全落在同一个 `$DSH_HOME` 下 | 3 |
 
-退出码不是只有 0/1：**2 = 环境不对（改用法或装 profile），3 = 隔离不成立（腾端口/查谁占了）**，处置完全不同。
+退出码不是只有 0/1：**1 = 用法错（改命令），2 = 环境不对（装 profile / 换 CLI），3 = 隔离不成立（腾端口 / 查谁占了）**，处置完全不同。
 
-## 2. 两条并跑命令
+## 2. 两种跑法
 
 ```powershell
 # ① desktop：照常开应用（Electron 自己管 19387 与 ~/.dsh），下面这条只是"确认它在"
 Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 19387 | Select-Object LocalAddress,LocalPort,OwningProcess
 
-# ② xuanshu：独立 home + 独立端口，在另一个终端里
-node scripts/isolation/startup.mjs --mode web                 # 默认 19388，等价于 dsh --profile xuanshu web --port 19388 --no-open
-
-# 或者：被测实例不开端口（CI / 只想跑一次装配自证）
-node scripts/isolation/startup.mjs --mode headless            # 真跑一次 CLI 启动，断言数据目录里新写出 assembly-report.json
+# ② xuanshu（被测实例）：独立 home，跑一次真启动自证 —— 这是本票可用的跑法
+node scripts/isolation/startup.mjs --mode headless
+#   真跑一次 `dsh --profile xuanshu --help`（boot + dispose + exit 0，不调 LLM、不开端口），
+#   并断言 $DSH_HOME/xuanshu/assembly-report.json 是本次新写出的。
 ```
 
-`--mode env` 不 spawn，只把环境变量与命令打出来，交给别的工具用：
+**`--mode web` 在本票还起不来**（会以退出码 2 明确拒绝，不是静默失败）：web 界面要 `@deepseek-ai/dsh-web-app` bundle，而票 01 的装配契约把它划给**票 07 · 首页替换**（实测提前接进 `dsh.profile.bundles` 会让装配树多出 4 条 `unrecognized Loader tree carrier` 错误行）。命令怎么拼、环境怎么设，用 `--mode env` 取出来交给装了那个 bundle 的实例：
 
 ```powershell
-node scripts/isolation/startup.mjs --mode env
-# → plan.env（含 DSH_HOME=…、DSH_TELEMETRY_DISABLED=1、NO_COLOR=1）与 plan.command
-node scripts/isolation/startup.mjs --mode env --json | ConvertFrom-Json   # 结构化
+node scripts/isolation/startup.mjs --mode env               # 打出一串 $env:... 赋值 + 启动命令
+node scripts/isolation/startup.mjs --mode env --json        # 结构化：plan.command / plan.env / instance.*
 ```
 
-`--` 之后的参数原样透传给 `dsh`（逃生舱，不属于本票验收面）：
+端口隔离本身现在就可以验：`--web-port` 被占时启动器 exit 3（`pnpm test:isolation` 里有真占端口的断言）。`--` 之后的参数原样透传给 `dsh`（逃生舱，不属于本票验收面）：
 
 ```powershell
-node scripts/isolation/startup.mjs --mode web -- --trusted-host xuanshu.test
+node scripts/isolation/startup.mjs --mode env -- --trusted-host xuanshu.test
 ```
 
 ## 3. 三个旋钮
 
-| 旋钮 | 默认 | 命令行 | 环境变量 |
+| 旋钮 | 默认 | 命令行 | 环境变量（按优先级） |
 |---|---|---|---|
-| 隔离 home | `<repo>/.dsh-home` | `--home <dir>` | `XUANSHU_DSH_HOME`（其次才是 `DSH_HOME`） |
-| xuanshu web 端口 | `19388` | `--web-port <n>` | `XUANSHU_WEB_PORT` |
-| horosa 端口 | `8765` | `--horosa-port <n>` | `XUANSHU_HOROSA_PORT`（其次 `HOROSA_SKILL_PORT`） |
+| 隔离 home | `<repo>/.dsh-home` | `--home <dir>` | `XUANSHU_DSH_HOME` → `DSH_HOME` → 默认 |
+| xuanshu web 端口 | `19388` | `--web-port <n>` | `XUANSHU_WEB_PORT` → 默认 |
+| horosa 端口 | `8765` | `--horosa-port <n>` | `XUANSHU_HOROSA_PORT` → `HOROSA_SKILL_PORT` → 默认 |
+| profile 名 | `xuanshu` | `--profile <name>` | `XUANSHU_PROFILE` → 默认 |
+| CLI | profile 树里那份 | `--cli-bin <path>` | `XUANSHU_CLI_BIN` → 自动发现 |
 
-优先级：**显式命令行 > `XUANSHU_*` 环境变量 > 定值**。
-profile 名同理（`--profile` / `XUANSHU_PROFILE`），默认 `xuanshu`。
+优先级一律：**显式命令行 > `XUANSHU_*` > 上游自身变量（如 `HOROSA_SKILL_PORT`）> 定值**。
 
-**有两个端口不能动**：
+`DSH_HOME` 有个坑要知道：**它指向真实 `~/.dsh` 时会被忽略**（在 DSH 会话里跑本脚本时，环境天然带着 desktop 的 `DSH_HOME`），忽略这件事会记进报告的 `notes`；要覆盖就用 `--home` 或 `XUANSHU_DSH_HOME`。
 
-- `19387` —— desktop 的。启动器不会去占它，报告里也会把它标成"desktop 的"。
-- `8765` —— horosa 的默认端点。要换只能**两边一起换**（`serve --port` 与 `--horosa-port`），否则守卫会看到"端口空着"而放行、实际连的是另一个端口。
+**horosa 端口要换就得两边一起换**（`HOROSA_SKILL_PORT` 给 `serve`，`--horosa-port`/`XUANSHU_HOROSA_PORT` 给守卫）：只改一边，守卫会看到"端口空着"而放行、实例却连到另一个端口。
+
+`19387` 不能碰：那是 desktop 的。启动器不会去占它，`--web-port 19387` 直接判失败。
 
 ## 4. `8765` 守卫的四种结论
 
@@ -112,11 +112,13 @@ pnpm test:isolation            # 同一套断言的 vitest 包装
 | I2 | CLI 来自 profile 树、版本 = `dsh-base` 版本，`--cli-bin` 优先 |
 | I3 | web 端口被占 → 退出码 3 且点名端口；空闲 → 通过 |
 | I4 | `8765` 守卫四态判对（真起临时 HTTP 对照组来验） |
-| I5 | 两个隔离 home 各真跑一次 `headless`，各自写出自己的 sessions/storages/装配报告，文件清单不相交 |
+| I5 | 两个隔离 home 各真跑一次 `headless`，各自写出自己的 sessions/storages/装配报告；且做**哨兵断言**：往 A 的 `sessions/`、`storages/`、`.credentials.yaml`、`cordis.patch.yml` 各放一个哨兵，B 跑完后 B 的 home 里一个都找不到（证明"根真的分开"，不止路径字符串不同） |
 | I6 | 跑完测试后用户真实 `~/.dsh` **无新增无删除**、里面不出现 `xuanshu/`、所有运行的 home 都不是真实 home；mtime/size 指纹只作证据（本机 desktop 与我们并发写同一个 `~/.dsh`，指纹无法归因到某一次运行） |
 | I7 | xuanshu 的端口 ≠ `19387` |
 
 CI / 交付前用 `XUANSHU_REQUIRE_ASSEMBLY=1` 把"profile 没装"从 skip 变成硬失败——否则"没装 = 全绿"。
+
+**诚实边界**：一次 `dsh --help` 只走 boot + dispose，不建会话、不写 storages——所以 I5 证明的是"存储根真的分开了"（哨兵法），不是"两个会话互不可见"。真正的会话/凭据串扰要等票 10（问事闭环真建会话）才有行为断言。同理，凭据的**读取路径**隔离由 `credentialsFile` 与哨兵覆盖，凭据的读写行为属后续票。
 
 ### 写这类测试时的一个坑（已踩过）
 
@@ -134,17 +136,23 @@ Remove-Item -Recurse -Force E:\ai_project\XuanShu\.dsh-home    # 只删隔离 ho
 
 启动器与测试**不会**往真实 `~/.dsh` 写任何东西：`home` 解析到真实 home 时直接用法失败（**没有** `--allow-real-home` 这种逃生舱），I6 还会在每次跑测后核对指纹。
 
-## 7. 报错对照表
+## 7. 报错对照表（文案照抄实现，直接按它搜）
 
-| 现象 | 含义 | 处置 |
+| 你会看到的文案（`[门] FAIL 详情`） | 含义 | 处置 |
 |---|---|---|
-| `refusing to run against the user's real DSH home` | `--home`/环境变量指到了 `~/.dsh` | 用默认 `.dsh-home`，或给一个隔离目录 |
-| `web port 19388 is busy (pid …, …)` | 已经有一个 xuanshu 实例在跑（或别的进程占了） | 先关掉那个实例；确认是别人占的就换 `--web-port` |
-| `profile not installed` | `<home>/profiles/xuanshu` 缺 `package.json`/`node_modules` | `node scripts/install-profile.mjs --home <dir>`，或加 `--install` |
-| `cli version mismatch` | profile 树里的 `@deepseek-ai/dsh` 与 `dsh-base` 版本不一致 | 重跑 `pnpm install`（`profile/` 下），别用 PATH 上全局那份（0.1.2-rc.1） |
-| `occupied-foreign` + `hint` | `8765` 被非 horosa 进程占着 | 见 §4 |
-| `probe-failed` | 探针自身出错（网络栈/权限） | 看报告 `evidence.error`；这一条**不算**隔离失败，但别当绿灯 |
-| 端口/路径看着对、数据却混了 | 你可能直接手跑了 `dsh` 而没走启动器 | 一律用 `node scripts/isolation/startup.mjs`；`--mode env` 可以把同一套变量交给别的工具 |
+| `拒绝在用户真实 DSH home 上运行：C:\Users\…\.dsh` | `--home` 或 `XUANSHU_DSH_HOME` 指到了真实 home（**用法错误，退出码 1**） | 用默认 `.dsh-home`，或显式给一个隔离目录 |
+| `隔离 home 不存在：<dir>` | home 目录还没建 | `node scripts/install-profile.mjs --home "<dir>"`，或给启动器加 `--install` |
+| `127.0.0.1:19388 已被占用：xuanshu 需要独立端口才能与 desktop 同跑` | 已经有一个实例在跑（或别的进程占了） | 先关掉那个实例；确认是别人占的就换 `--web-port` |
+| `web 端口 19387 就是 desktop 的端口：xuanshu 必须用独立端口（默认 19388）` | 你把 `--web-port` 指到了 desktop 的端口 | 换端口 |
+| `profile "xuanshu" 没装在 <home>\profiles\xuanshu（缺 node_modules）` | profile 没装 | `node scripts/install-profile.mjs --home "<dir>"` |
+| `找不到 DSH CLI（profile 树 / 同 home 的兄弟 profile / PATH 都没有）` | profile 里没装 `@deepseek-ai/dsh` | 在 `profile/` 下重跑 `pnpm install`（别用 PATH 上全局那份 0.1.2-rc.1） |
+| `CLI v0.1.2-rc.1（…）≠ profile 装的 @deepseek-ai/dsh-base 0.2.0-rc.2：版本不符的 CLI 会去解析别人的 node_modules` | 用错树了 | 同上；或显式 `--cli-bin <profile>\node_modules\@deepseek-ai\dsh\lib\bin.js` |
+| `horosa 守卫：… occupied-foreign` + `hint` | `8765` 被非 horosa 进程占着（**退出码 3**） | 见 §4 |
+| `horosa 守卫无法判定 …（probe-failed）` | 探针没拿到结论（端口有人在听但不应答，或探针自身出错） | **退出码仍是 0，但这一门不是绿灯**：看报告 `evidence`，人工确认 `8765` 上是谁 |
+| `--mode web` 报「缺 `@deepseek-ai/dsh-web-app`」 | 本票还没接 web bundle（属票 07） | 用 `--mode headless` 跑自证，或 `--mode env` 取命令 |
+| 端口/路径看着都对、数据却混了 | 你可能直接手跑了 `dsh` 而没走启动器 | 一律用 `node scripts/isolation/startup.mjs`；`--mode env` 可以把同一套变量交给别的工具 |
+
+**一个例外要说清楚**：环境里那支 `DSH_HOME` 指向真实 `~/.dsh` 时，启动器**忽略它**并改用默认隔离 home（在报告 `notes` 里写明）。这是为了让脚本在 DSH 会话里也能安全地跑——在 DSH 里 `DSH_HOME` 天然是 desktop 的。显式的 `--home` / `XUANSHU_DSH_HOME` 指到真实 home 才是硬拒绝（退出码 1）。
 
 ## 8. 给下一票的接口
 

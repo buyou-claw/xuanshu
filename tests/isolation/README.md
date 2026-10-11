@@ -4,14 +4,15 @@
 会话 / storages / 凭据 / 机器级补丁全隔离，端口不互抢，horosa `8765` 有单占用守卫。
 
 本目录是票 04 的**验收面**：断言的是「隔离行为」，不是实现细节。契约出处
-`.scratch/assembly-foundation/notes/isolation-contract.md` §4.6（CLI 与 check id 定值）、§5（I1~I7）。
+`.scratch/assembly-foundation/notes/isolation-contract.md` §4.6（CLI 与 check id 定值）、§5（I1~I7）、
+§5.1（评审裁决 R1~R18，本目录直接相关的几条在下面单列）。
 
 | 文件 | 作用 |
 |---|---|
 | [`../../scripts/verify-isolation.mjs`](../../scripts/verify-isolation.mjs) | **唯一断言实现**（CLI，`--json` 给机器读，退出码 0/1） |
-| `resolve.test.mjs` | I1/I2 + 环境门 `profile-installed` + 两条不需要 profile 的拒绝路径负例 |
-| `port-guard.test.mjs` | I3/I4：真起对照组服务端验 web 端口门与 horosa 守卫四态 |
-| `dual-instance.test.mjs` | I5/I6/I7：两个隔离 home 各真跑一次 `headless`，比指纹与清单 |
+| `resolve.test.mjs` | I1/I2 + 环境门 `profile-installed` + **端口解析回归（数字形态）** + 启动器 CLI 前提（R2/R3/R12/R17）+ 拒绝路径负例 |
+| `port-guard.test.mjs` | I3/I4：真起对照组服务端验 web 端口门与 horosa 守卫四态（含 R5 的 probe-failed） |
+| `dual-instance.test.mjs` | I5/I6/I7：两个隔离 home 各真跑一次 `headless`，**哨兵法**（R15）+ 指纹 + 清单 |
 | `lib/verifier.mjs` | 公共夹具：环境门（唯一一份）、`spawnSync` 跑验收台、空闲端口 |
 | `lib/fixture-server.mjs` | I4 对照组：**独立进程**的假服务端（为什么必须独立，见文件头） |
 | `.tmp/` | 运行期临时 home（已 gitignore；绿的自动清理，红的留现场） |
@@ -29,9 +30,14 @@ node scripts/verify-isolation.mjs --json --horosa-port 8765 --web-port 19388
 默认隔离 home 是 `<repo>/.dsh-home`（已 gitignore；`profiles/xuanshu` 是指向 `<repo>/profile` 的
 junction，所以「代码共享、状态各归各的」）。可用 `--home` / `XUANSHU_DSH_HOME` 覆盖。
 
+`--web-port` 只收 `1..65535`（它是要拿去 bind 的）；`--horosa-port` **只要求是数字** ——
+越界值（`defaults.INVALID_PROBE_PORT`）交给守卫判 `probe-failed`（§5.1 R6/R14），非数字才是用法错。
+这两个标志只给测试喂对照组端口用，是契约 §4.6 CLI 的**超集**（已在 `--help` 里列出）。
+
 **同源**：三个测试文件都只 spawn 验收台（`--json`）再断言它给出的 checks —— 四态判据、退出码映射、
 路径包含关系全部只实现一次，所以「验收台绿 ⇒ 测试绿」。测试负责造现场（对照组服务端、空闲端口、
-临时 home），验收台负责下判断。
+临时 home），验收台负责下判断。唯一例外是 `resolve.test.mjs` 的「启动器 CLI 前提」那一块：R17 要断言的
+就是**启动器进程自己的退出码与 stdout 形状**，验收台是包在它外面的机器，量不到这两样，所以直接跑它。
 
 ## 环境门（不许假绿）
 
@@ -60,13 +66,48 @@ XUANSHU_REQUIRE_ASSEMBLY=1 pnpm test:isolation          # 交付前验收
 
 另外 `profile-installed` 是环境门本体（profile 装没装 + 装在自己的隔离 home 下）。
 
-## 两处**有意**的例外（都写在证据里）
+## 哨兵法（R15）：I5 的行为证据
 
-1. **I1 的第二个 home** 用纯函数 `resolveInstance()` 对照（不落盘、不 spawn）——契约 §5 对 I1
-   指定的就是这种测法：把同一个 home 的 7 条路径换成另一个 home 再算一遍，必须两两不同。
-2. **I4 的 `probe-failed`** 只能由「探针自身出错」触发：端口号非法时 `resolve.mjs` 会先拒（用法失败），
-   而「连得上的假服务端」按契约一律判 `occupied-foreign`。所以这一态由验收台直接打守卫的**非法端口**
-   分支来钉死（判据是 fail-closed：`ok:false` + hint，探针坏了绝不许静默放行一个被占的 8765）。
+路径断言只证明「算出来的路径不一样」；串扰是**行为**，所以 `dual-instance` 会在 home A 里种四个哨兵，
+跑完 home B 后断言两件事：
+
+| 哨兵位置 | 为什么是它 |
+|---|---|
+| `sessions/<sentinel>` | 会话存储根 |
+| `storages/<sentinel>` | storages 根 |
+| `.credentials.yaml` | 凭据：**路径本身就是隔离对象** |
+| `cordis.patch.yml` | 机器级补丁：同上。内容必须是「标记注释 + `[]`」——空文件/纯注释会让 boot `fatal`（`patches … must be a top-level YAML array of loader patch entries`），`[]` 是空补丁数组，对 DSH 无副作用 |
+
+断言：① B 的 home 里**一个哨兵都找不到**（按文件名 + 按内容两路搜）；② A 的四个哨兵原样还在（mtime/size 未变）；
+③ 哨兵必须真的出现在「B 跑之前」A 的清单里 —— 少了这一条，「找不到」可能只是「没种上」（空转）。
+
+**这条断言的边界（别过度解读）**：它证明的是**存储根真的分开** —— B 的进程按自己的 `$DSH_HOME` 解析后
+不会读到/写到 A 的 sessions、storages、凭据、机器级补丁。它**不**证明「两个会话互不可见」：
+一次 `dsh --help` 不建会话，会话级的可见性要等票 10 有真会话路径才谈得上。
+
+## 几条容易搞错的语义（§5.1 裁决）
+
+- **R14**：`horosaGuard` 门在 `probe-failed` 时 `ok:false`（没验成不许显示成绿灯），但**启动器退出码仍是 0**
+  —— 只有 `occupied-foreign`（真的拿到 HTTP 响应、形态不像 MCP）才是隔离失败（exit 3）。门 ok 与退出码**解耦**。
+  验收台同时钉这两半：`checks['horosa-guard'].evidence.gateOk === false` 且 `...startupExitCode === 0`。
+- **R5**：「有人 LISTEN 但 HTTP 在预算内零响应」（裸 TCP / 慢应答的 horosa）判 `probe-failed`，
+  不再判 `occupied-foreign` —— 那格的真值是「无法判定」，判成「确定被占」会制造假红。
+- **R2/R17**：`--mode web` 在缺 `@deepseek-ai/dsh-web-app` bundle 时**拒绝 spawn**：exit 2、profile 门 detail
+  点名 bundle、报告里**没有** `spawn` 字段、stdout 仍是**单份** JSON。doctor/env/headless 不受它影响。
+- **R12**：没 spawn 就没有 `spawn` 字段（doctor/env 不再塞 `{ attempted: false }`）。
+- **R8/R10**：非法端口只从 `defaults.INVALID_PROBE_PORT` 取；CLI `source` 比较只认 `resolve.CLI_SOURCES`
+  —— 本目录不再出现这些字面量（`--help` 里的示例除外，那是给人敲的命令行）。
+- **端口解析回归**：`resolveInstance({webPort: 7973})`（**数字**，不经 `String()`）必须原样生效。
+  R6 重写曾让数字被 `isBlank()` 当成「未设」而静默退回默认端口 —— 在一个端口隔离工具里这是最危险的一类错，
+  现在由 `resolve.test.mjs` 的「端口解析回归」块钉住（数字 / 字符串 / 未设三种形态 + `runStartup` 路径）。
+
+## 一处**有意**的例外（写在证据里）
+
+**I1 的第二个 home** 用纯函数 `resolveInstance()` 对照（不落盘、不 spawn）——契约 §5 对 I1
+指定的就是这种测法：把同一个 home 的 7 条路径换成另一个 home 再算一遍，必须两两不同。
+
+（I4 的 `probe-failed` 曾经也需要绕开启动器直接调守卫；自 A 把「数字但越界」交给守卫判之后，
+它已经能走真链路，验收台恢复成「内部只调 `runStartup()`」。）
 
 ## 隔离卫生（这个测试台自己的规矩）
 
@@ -89,6 +130,7 @@ XUANSHU_REQUIRE_ASSEMBLY=1 pnpm test:isolation          # 交付前验收
 | 没测的东西 | 为什么 | 依赖 |
 |---|---|---|
 | 真起 horosa 服务（8765 上真的答 MCP） | horosa 还没装；本票只做单占用守卫，用假端点验三条判据 | 票 05/06 |
-| `dsh web` 真监听 `19388` 并跑起来 | 那需要长驻服务 + 端口占用；本票只断言「门」与计划命令 | 票 05+ |
-| 与 desktop **真的同时**长跑互不干扰 | 涉及 GUI 与时间维度；这里用「状态指纹 + 清单不相交 + 端口不撞」逼近 | 手工 runbook（`docs/runbook/dual-instance.md`） |
-| 会话/凭据的真实读写路径（`ctx.sessions.create` 等） | 还没有会创建会话的功能路径（`dsh --help` 不建会话） | 票 10 |
+| `dsh web` 真监听 `19388` 并跑起来 | 缺 `@deepseek-ai/dsh-web-app` bundle（§5.1 R1/R2），本票 `--mode web` **必然** exit 2；这里断言的是「拒绝得对」+ 计划命令 | 票 07（bundle）、票 05+（真跑） |
+| `--mode web` 的终版报告（R3：含真实 `spawn.exitCode`） | 同上：本票 web 起不来，量不到；R3 的报告语义在**会 spawn 的 headless** 上被钉住（单份 JSON + 终版 `spawn.exitCode`） | 票 07 |
+| 会话级互不可见（两个会话看不到对方） | 哨兵法只证「存储根分开」；会话可见性要等有真会话路径 | 票 10 |
+| 与 desktop **真的同时**长跑互不干扰 | 涉及 GUI 与时间维度；这里用「哨兵 + 状态指纹 + 清单不相交 + 端口不撞」逼近 | 手工 runbook（`docs/runbook/dual-instance.md`） |

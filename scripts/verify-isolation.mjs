@@ -15,6 +15,8 @@
  *   web-port             I3  web 端口门：被占 → 启动器退出码 3 且 detail 点名端口；空闲 → 通过
  *   horosa-guard         I4  8765 守卫四态（free / horosa-ready / occupied-foreign / probe-failed）
  *   dual-instance        I5  两个隔离 home 各真跑一次 headless，各自写自己的 sessions/storages/报告
+ *                            （含 §5.1 R15 哨兵法：A 的 sessions/storages/凭据/机器级补丁哨兵，
+ *                             B 跑完一个都不许出现在 B 家、A 家必须原样）
  *   no-crosstalk         I5+I7  B 跑完不动 A 的状态；两份清单不相交；xuanshu 端口 ≠ desktop 19387
  *   no-real-home-write   I6  跑完用户真实 ~/.dsh 无新增无删除（只读指纹）
  *
@@ -23,12 +25,19 @@
  * 与 `port-probe.mjs` 的唯一判据。tests/isolation/*.test.mjs 只跑本 CLI 的 `--json` 并断言 checks，
  * 所以「CLI 绿 ⇒ 测试绿」。
  *
- * 两处**有意**的例外（都写在证据里，不藏着）：
- *   1) I1 的「换 home 后两两不同」按契约 §5 用纯函数 `resolveInstance()` 对照（不落盘、不 spawn），
+ * 一处**有意**的例外（都写在证据里，不藏着）：
+ *   I1 的「换 home 后两两不同」按契约 §5 用纯函数 `resolveInstance()` 对照（不落盘、不 spawn），
  *      这正是契约对 I1 指定的测法。
- *   2) I4 的 `probe-failed` 态无法经由 `runStartup` 触发：`resolve.mjs` 会在端口号非法时先拒（用法错误），
- *      而「连得上的假服务端」按契约一律判 occupied-foreign。于是这一态由本文件直接调守卫的非法端口
- *      分支来钉住（fail-closed：探针坏了必须报错，不能静默放行一个被占的 8765）。
+ *
+ * 引用的定值一律来自唯一来源（评审 §5.1 R8/R10）：非法端口用 `defaults.INVALID_PROBE_PORT`，
+ * CLI `source` 比较用 `resolve.CLI_SOURCES` —— 本文件里不出现这些字面量。
+ *
+ * R14 的两半（horosaGuard 门）：`probe-failed` 时**门的 ok 是 false**（没验成不许显示成绿灯），
+ * 但**启动器退出码仍是 0**（只有 `occupied-foreign` 才是隔离失败）。本文件同时钉这两件事。
+ *
+ * I4 的 `probe-failed` 有两条真跑路径（都能经 `runStartup` 走到，§5.1 R5 + R14）：
+ *   1) 非法端口 —— `--horosa-port <INVALID_PROBE_PORT>`：端口解析只拦**非数字**，越界数字交给守卫判「没验成」；
+ *   2) 有人 LISTEN 但 HTTP 零响应（裸 TCP / 慢应答）—— 这格自 R5 起也是 probe-failed。
  *
  * 三条硬规矩（改代码前先读）：
  *   1) **绝不写用户真实 `~/.dsh`**：只读它的顶层 + sessions/storages 指纹；任何 home 解析结果等于
@@ -40,7 +49,7 @@
  * 仅使用 Node 内置模块，无第三方依赖。ESM。
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import { homedir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
@@ -52,10 +61,9 @@ import {
   DEFAULT_WEB_PORT,
   DESKTOP_WEB_PORT,
   ENV,
-  HOROSA_MCP_PATH,
+  INVALID_PROBE_PORT,
 } from './isolation/defaults.mjs'
-import { checkHorosaPort } from './isolation/horosa-guard.mjs'
-import { isUnderPath, resolveInstance, resolveRepoRoot, samePath } from './isolation/resolve.mjs'
+import { CLI_SOURCES, isUnderPath, resolveInstance, resolveRepoRoot, samePath } from './isolation/resolve.mjs'
 import { runStartup } from './isolation/startup.mjs'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -80,8 +88,17 @@ const DUAL_HOME_A = 'dual-a'
 const DUAL_HOME_B = 'dual-b'
 /** I1 的纯函数对照组 home 名（只用来算路径，不 spawn）。 */
 const ALT_HOME = 'alt-home'
-/** I4 的 probe-failed 子例：非法端口，确定性地打到守卫的「探针无法判定」分支。 */
-const INVALID_PROBE_PORT = 70_000
+/**
+ * 哨兵标记（评审裁决 §5.1 R15）：串扰的**行为证据**，比「路径算对了」强一档。
+ * 一个足够独特的字符串，能在 B 的 home 里按内容搜出来。
+ */
+const SENTINEL_MARKER = 'XUANSHU-ISOLATION-SENTINEL'
+/**
+ * 四个哨兵的相对路径：存储根（sessions / storages）+ 两个**文件本身就是路径**的东西
+ * （凭据、机器级补丁）。为什么挑这四个：契约 §0 说的「会话 / storages / 凭据 / 机器级补丁全隔离」
+ * 就是它们；串扰最可能的表现就是 B 的进程按自己的 home 解析后读到/写到这几个位置。
+ */
+const SENTINEL_FILES = ['sessions', 'storages', '.credentials.yaml', 'cordis.patch.yml']
 /** 桌面端原子写留下的临时名（`.xxx.tmp`）：真实 home 里由 desktop 自己创建/改名，按设计不算「我们写了」。 */
 const TRANSIENT_NAME = /\.tmp$/i
 
@@ -110,11 +127,16 @@ function parseArgs(argv) {
     if (raw === undefined) throw new Error(`${flag} needs a value`)
     return raw
   }
-  const port = (flag, raw) => {
+  const port = (flag, raw, { probe = false } = {}) => {
     const text = value(flag, raw)
     const number = Number(text)
-    if (!Number.isInteger(number) || number < 1 || number > 65535) {
-      throw new Error(`${flag} needs an integer 1..65535 (got ${text})`)
+    const valid = probe
+      // `--horosa-port` 只要求「是数字」：越界值（如 INVALID_PROBE_PORT）交给守卫判 probe-failed（§5.1 R14/R6）。
+      // 非数字仍是用法错 —— 别把 `--horosa-port abc` 变成一句含糊的 unknown。
+      ? Number.isFinite(number)
+      : Number.isInteger(number) && number >= 1 && number <= 65535
+    if (!valid) {
+      throw new Error(`${flag} needs ${probe ? 'a number' : 'an integer 1..65535'} (got ${text})`)
     }
     return number
   }
@@ -125,7 +147,7 @@ function parseArgs(argv) {
     else if (arg === '--profile') opts.profile = value(arg, argv[++i])
     else if (arg === '--dsh-bin') opts.cliBin = value(arg, argv[++i])
     else if (arg === '--web-port') opts.webPort = port(arg, argv[++i])
-    else if (arg === '--horosa-port') opts.horosaPort = port(arg, argv[++i])
+    else if (arg === '--horosa-port') opts.horosaPort = port(arg, argv[++i], { probe: true })
     else if (arg === '--only') {
       opts.only = value(arg, argv[++i]).split(',').map((id) => id.trim().toLowerCase()).filter(Boolean)
       for (const id of opts.only) {
@@ -274,6 +296,72 @@ async function reserveFreePort() {
   return port
 }
 
+/* ───────────────────────────── 哨兵法（R15） ───────────────────────────── */
+
+/**
+ * 在隔离 home 里种四个哨兵，返回它们的相对路径与「种下去时」的指纹。
+ *
+ * 为什么要写进**真实的文件名**（`.credentials.yaml` / `cordis.patch.yml`）而不是另建一个文件：
+ * 凭据与机器级补丁的「路径」本身就是被隔离对象，B 若按自己的 home 解析却读到了 A 的东西，
+ * 一定会在这两个文件上体现出来。
+ *
+ * `cordis.patch.yml` 的哨兵必须写成「标记注释 + `[]`」：实测空文件或纯注释会让 boot 直接 fatal
+ * （`patches … must be a top-level YAML array of loader patch entries`），`[]` 是空补丁数组，
+ * 对 DSH 完全无副作用。`.credentials.yaml` 的注释-only 形式实测无害。
+ */
+function plantSentinels(home) {
+  mkdirSync(join(home, 'sessions'), { recursive: true })
+  mkdirSync(join(home, 'storages'), { recursive: true })
+  const plan = [
+    ['sessions/verify-isolation-sentinel.jsonl', `${JSON.stringify({ marker: SENTINEL_MARKER, scope: 'sessions' })}\n`],
+    ['storages/verify-isolation-sentinel.json', JSON.stringify({ marker: SENTINEL_MARKER, scope: 'storages' })],
+    ['.credentials.yaml', `# ${SENTINEL_MARKER} credentials\n`],
+    ['cordis.patch.yml', `# ${SENTINEL_MARKER} machine-patch\n[]\n`],
+  ]
+  return plan.map(([rel, body]) => {
+    const abs = join(home, rel)
+    writeFileSync(abs, body)
+    const fingerprint = statFingerprint(abs)
+    return { rel, abs, marker: SENTINEL_MARKER, plantedAt: fingerprint }
+  })
+}
+
+/**
+ * 在另一棵 home 里找哨兵：**按文件名 + 按内容**两路。
+ * 只按文件名会漏掉「把内容搬进别的文件」这种串扰，只按内容会漏掉「空哨兵副本」。
+ */
+function findSentinels(root) {
+  const hits = []
+  for (const row of walkTree(root)) {
+    if (/sentinel/i.test(row.path)) {
+      hits.push({ path: row.path, how: 'filename' })
+      continue
+    }
+    let text
+    try {
+      text = readFileSync(row.abs, 'utf8')
+    } catch {
+      continue
+    }
+    if (text.includes(SENTINEL_MARKER)) hits.push({ path: row.path, how: 'content' })
+  }
+  return hits
+}
+
+/** 哨兵「跑完之后」的样子：路径 + 指纹（不见了 → fingerprint undefined）。 */
+function sentinelStates(sentinels) {
+  return sentinels.map((row) => {
+    const after = statFingerprint(row.abs)
+    return {
+      rel: row.rel,
+      exists: after !== undefined,
+      plantedAt: row.plantedAt,
+      after,
+      unchanged: after !== undefined && after.mtimeMs === row.plantedAt?.mtimeMs && after.bytes === row.plantedAt?.bytes,
+    }
+  })
+}
+
 /* ───────────────────────────── 小工具 ───────────────────────────── */
 
 function check(id, ok, detail, extra = {}) {
@@ -389,7 +477,14 @@ async function main() {
   const notes = result.notes
   const runErrors = {}
 
-  /** 统一的 runStartup 包装：启动器不该抛（它自己 abort 成报告），真抛了就记下来让 check 报 FAIL。 */
+  /**
+   * 统一的 runStartup 包装：启动器不该抛（它自己 abort 成报告），真抛了就记下来让 check 报 FAIL。
+   *
+   * 端口**原样**递过去（数字/字符串都行，不做归一化）：`runStartup(options)` 是契约 §4.5 冻结的
+   * 可复用 API，程序化调用方给的天然是数字；「数字被静默忽略、退回默认端口」那个回归（R6 重写引入，
+   * 已修）就是这么发现的 —— 保留数字形态正是为了让这条路径继续被真实覆盖，
+   * 回归断言在 `tests/isolation/resolve.test.mjs`。
+   */
   const run = async (label, options) => {
     try {
       const report = await runStartup({ repoRoot, profile, timeoutMs: opts.timeoutMs, ...options })
@@ -405,6 +500,10 @@ async function main() {
   const realHomeBefore = fingerprintRealHome(realHome)
   const doctor = await run('doctor', { mode: 'doctor', home, webPort: opts.webPort, horosaPort: opts.horosaPort, cliBin: opts.cliBin })
   result.report = doctor
+  // 端口可能来自 `--horosa-port` / `XUANSHU_HOROSA_PORT` / `HOROSA_SKILL_PORT` / 定值（§5.1 R6）：
+  // env 里回填**实际生效**的值，别把「请求值」当成事实展示。
+  if (doctor?.instance?.webPort !== undefined) result.env.webPort = doctor.instance.webPort
+  if (doctor?.instance?.horosaPort !== undefined) result.env.horosaPort = doctor.instance.horosaPort
   const installed = doctor?.checks?.profile?.ok === true
 
   if (!installed) {
@@ -438,12 +537,23 @@ async function main() {
     }
   }
 
+  /* ③b I4 的 probe-failed 子例：**非法端口**走真链路（`--horosa-port <INVALID_PROBE_PORT>` 的 API 形态）。
+     端口解析只拦非数字，越界数字交给守卫判「没验成」（§5.1 R6/R14）—— 所以这一态不再需要
+     绕开启动器直接调守卫，验收台仍然「内部只调 runStartup()」。 */
+  if (installed && selected('horosa-guard')) {
+    await run('horosaInvalid', {
+      mode: 'doctor', home, horosaPort: INVALID_PROBE_PORT, webPort: await reserveFreePort(),
+    })
+  }
+
   /* ④ I5/I7：两个临时 home 各真跑一次 headless；A 的指纹在 B 之前/之后各采一次（B 不许动 A）。 */
   let dual
   if (installed && (selected('dual-instance') || selected('no-crosstalk'))) {
     mkdirSync(tmpRoot, { recursive: true })
     const dirA = makeTmpHome(tmpRoot, DUAL_HOME_A, profile, home)
     const dirB = makeTmpHome(tmpRoot, DUAL_HOME_B, profile, home)
+    // R15 哨兵法：先给 A 种哨兵，再让 A、B 各跑一次 —— A 自己也不许毁掉它们。
+    const sentinels = plantSentinels(dirA)
     const runA = await run('dualA', { mode: 'headless', home: dirA })
     const manifestA1 = walkTree(dirA)
     const runB = await run('dualB', { mode: 'headless', home: dirB })
@@ -454,10 +564,17 @@ async function main() {
     dual = {
       dirA, dirB, runA, runB,
       manifestA1, manifestA2, manifestB,
+      sentinels,
+      sentinelStates: sentinelStates(sentinels),
+      // B 的 home 里有没有 A 的哨兵（按名字 + 按内容两路找）：一个都不许有。
+      sentinelHitsInB: findSentinels(dirB),
+      // 哨兵必须出现在「B 跑之前」的 A 清单里，否则这条断言是空转（vacuous pass）。
+      sentinelsInManifestA: manifestA1.filter((row) => /sentinel/i.test(row.path)
+        || row.path === '.credentials.yaml' || row.path === 'cordis.patch.yml').map((row) => row.path),
       reportA: existsSync(reportFileA) ? JSON.parse(readFileSync(reportFileA, 'utf8')) : undefined,
       reportB: existsSync(reportFileB) ? JSON.parse(readFileSync(reportFileB, 'utf8')) : undefined,
       reportFileA, reportFileB,
-      // 「B 有没有动过 A」：同一棵树的两次指纹必须逐条相同。
+      // 「B 有没有动过 A」：同一棵树的两次指纹必须逐条相同（哨兵也在里面）。
       touchedA: diffTree(manifestA1, manifestA2),
     }
   }
@@ -550,7 +667,8 @@ async function main() {
       const instance = doctor.instance
       const cli = doctor.cli ?? {}
       const explicitRun = runs.explicitCli
-      const expectedSource = opts.cliBin === undefined ? 'profile node_modules' : 'explicit (--cli-bin)'
+      // R10：source 是封闭枚举，比较只认 resolve.mjs 的常量，不写裸字符串。
+      const expectedSource = opts.cliBin === undefined ? CLI_SOURCES.profile : CLI_SOURCES.explicit
       const failed = []
       if (doctor.checks.cli?.ok !== true) failed.push(`cli 门 FAIL：${doctor.checks.cli?.detail}`)
       if (cli.source !== expectedSource) failed.push(`CLI 来源是 ${JSON.stringify(cli.source)}，期望 ${JSON.stringify(expectedSource)}`)
@@ -561,8 +679,8 @@ async function main() {
       }
       if (opts.cliBin === undefined) {
         if (explicitRun === undefined) failed.push(`--cli-bin 优先对照没跑起来：${runErrors.explicitCli ?? '未执行'}`)
-        else if (explicitRun.cli?.source !== 'explicit (--cli-bin)') {
-          failed.push(`显式传 --cli-bin 后 source=${JSON.stringify(explicitRun.cli?.source)}，没体现优先级`)
+        else if (explicitRun.cli?.source !== CLI_SOURCES.explicit) {
+          failed.push(`显式传 --cli-bin 后 source=${JSON.stringify(explicitRun.cli?.source)}，没体现优先级（期望 ${JSON.stringify(CLI_SOURCES.explicit)}）`)
         } else if (explicitRun.cli?.versionMatches !== true) {
           failed.push(`显式 --cli-bin 的版本不符：v${explicitRun.cli?.version} vs ${explicitRun.cli?.wantedVersion}`)
         }
@@ -648,21 +766,44 @@ async function main() {
     } else {
       const failed = []
 
-      // 子例 A：probe-failed（非法端口 → 守卫必须 fail-closed，而不是放行）。
-      let probeFailed
-      try {
-        probeFailed = await checkHorosaPort({ port: INVALID_PROBE_PORT, path: HOROSA_MCP_PATH })
-      } catch (error) {
-        probeFailed = { verdict: `threw: ${error?.message ?? error}` }
+      // 子例 A：probe-failed（非法端口）—— 经 runStartup 真链路，守卫必须 fail-closed 而不是放行。
+      const invalidRun = runs.horosaInvalid
+      const invalidGuard = invalidRun?.checks?.horosaGuard
+      const invalidEvidence = invalidGuard?.evidence ?? {}
+      let probeFailed = {
+        verdict: invalidEvidence.verdict,
+        ok: invalidGuard?.ok,
+        detail: invalidGuard?.detail,
+        hint: invalidGuard?.hint,
+        evidence: invalidEvidence,
+        startupExitCode: invalidRun?.exitCode,
+        unknown: invalidEvidence.unknown,
       }
-      if (probeFailed.verdict !== 'probe-failed') failed.push(`非法端口 ${INVALID_PROBE_PORT} 的判定是 ${probeFailed.verdict}（应为 probe-failed）`)
-      if (probeFailed.ok !== false) failed.push(`probe-failed 时 ok=${probeFailed.ok}（必须 fail-closed）`)
-      if (probeFailed.hint === undefined || probeFailed.hint === '') failed.push('probe-failed 没有给处置 hint')
-      // 「无法判定」是这一态的语义（不是「被占」也不是「空闲」）：detail 必须说清 + 点名端口。
-      if (!/无法/.test(String(probeFailed.detail ?? ''))) failed.push(`probe-failed 的 detail 没说清「无法判定」：${probeFailed.detail}`)
-      if (!String(probeFailed.detail ?? '').includes(String(INVALID_PROBE_PORT))) failed.push(`probe-failed 的 detail 没点名端口 ${INVALID_PROBE_PORT}`)
+      if (invalidRun === undefined) {
+        failed.push(`非法端口 ${INVALID_PROBE_PORT} 的那次 doctor 没跑起来：${runErrors.horosaInvalid ?? '未执行'}`)
+      } else {
+        if (invalidRun.instance?.horosaPort !== INVALID_PROBE_PORT) {
+          failed.push(`非法端口没被透传（instance.horosaPort=${invalidRun.instance?.horosaPort}，期望 ${INVALID_PROBE_PORT}）—— 端口解析不该在这里拦`)
+        }
+        if (probeFailed.verdict !== 'probe-failed') failed.push(`非法端口 ${INVALID_PROBE_PORT} 的判定是 ${probeFailed.verdict}（应为 probe-failed）`)
+        if (probeFailed.ok !== false) failed.push(`probe-failed 时门 ok=${probeFailed.ok}（§5.1 R14：没验成不许绿）`)
+        if (invalidRun.exitCode !== 0) failed.push(`probe-failed 改动了退出码（exit=${invalidRun.exitCode}，应为 0）`)
+        if (probeFailed.hint === undefined || probeFailed.hint === '') failed.push('probe-failed 没有给处置 hint')
+        if (invalidEvidence.unknown !== true) failed.push(`probe-failed 没有在 evidence 里标 unknown=true（实际 ${JSON.stringify(invalidEvidence.unknown)}）`)
+        if (!(invalidRun.notes ?? []).some((note) => /没验成|probe-failed/.test(note))) {
+          failed.push('probe-failed 没有进启动器报告的 notes（结论是 unknown，不能静默）')
+        }
+        // 「无法判定」是这一态的语义（不是「被占」也不是「空闲」）：detail 必须说清 + 点名端口。
+        if (!/无法判定|没验成|无法探测/.test(String(probeFailed.detail ?? ''))) {
+          failed.push(`probe-failed 的 detail 没说清「无法判定」：${probeFailed.detail}`)
+        }
+        if (!String(probeFailed.detail ?? '').includes(String(INVALID_PROBE_PORT))) {
+          failed.push(`probe-failed 的 detail 没点名端口 ${INVALID_PROBE_PORT}`)
+        }
+        probeFailed = { ...probeFailed, detail: String(probeFailed.detail ?? '') }
+      }
 
-      // 子例 B：调用方指定的端口（默认 8765）—— 四态里它落在哪一态，就得按契约给出对应的 ok/hint。
+      // 子例 B：调用方指定的端口（默认 8765）—— 四态里它落在哪一态，就得按契约给出对应的 ok/hint/退出码。
       const guard = doctor.checks.horosaGuard
       const evidence = guard?.evidence ?? {}
       const verdict = evidence.verdict
@@ -675,25 +816,49 @@ async function main() {
         if (!guard.hint) failed.push('occupied-foreign 没有给 hint（人不知道该腾端口还是换端口）')
         if (!String(guard.detail).includes(String(port))) failed.push(`occupied-foreign 的 detail 没点名端口 ${port}`)
       } else if (verdict === 'free' || verdict === 'horosa-ready') {
-        if (guard.ok !== true) failed.push(`${verdict} 时门是 ok=false（契约 §4.5：这两态放行）`)
+        if (guard.ok !== true) failed.push(`${verdict} 时门是 ok=false（§4.3：这两态放行）`)
         if (verdict === 'free' && evidence.probe?.error !== 'ECONNREFUSED') {
           failed.push(`free 的证据不是 ECONNREFUSED（${JSON.stringify(evidence.probe?.error)}）—— 「空闲」不能靠猜`)
         }
       } else if (verdict === 'probe-failed') {
-        if (guard.ok !== true) failed.push('probe-failed 让门 FAIL 了（契约 §4.5：不算被占，进 notes、ok 保持 true）')
-        if (!notes.some((note) => note.includes('probe-failed'))) failed.push('probe-failed 没有进 notes（结论是 unknown，不能静默）')
+        // §5.1 R14：「门不 ok」与「退出码非 0」在这里解耦 —— ok:false 是「没验成」，
+        // 不是「隔离失败」；只有 occupied-foreign 才让启动器 exit 3。
+        if (guard.ok !== false) failed.push('probe-failed 时门显示成绿灯了（§5.1 R14：没验成不许绿）')
+        if (doctor.exitCode !== 0) failed.push(`probe-failed 改动了退出码（启动器 exit=${doctor.exitCode}，应为 0 —— 它不是隔离失败）`)
+        if (evidence.unknown !== true) failed.push(`probe-failed 没在 evidence 里标 unknown=true（实际 ${JSON.stringify(evidence.unknown)}）`)
+        if (!guard.hint) failed.push('probe-failed 没有给 hint（fail-closed 时要告诉人怎么排查）')
+        if (!/无法判定|没验成|无法探测/.test(String(guard.detail))) failed.push(`probe-failed 的 detail 没说清「无法判定」：${guard.detail}`)
+        // 结论是 unknown，必须出现在**启动器报告**的 notes 里（别拿验收台自己的 notes 当证据）。
+        if (!(doctor.notes ?? []).some((note) => /没验成|probe-failed/.test(note))) {
+          failed.push('probe-failed 没有进启动器报告的 notes（结论是 unknown，不能静默）')
+        }
       }
       if (guard === undefined) failed.push('报告里没有 horosaGuard 门')
+      // 端口一致性（R6）：报告里生效的 horosa 端口必须与 plan.env 里给出去的是同一个数。
+      if (doctor.plan?.env?.[ENV.horosaPort] !== undefined && doctor.plan.env[ENV.horosaPort] !== String(port)) {
+        failed.push(`plan.env.${ENV.horosaPort}=${doctor.plan.env[ENV.horosaPort]} ≠ instance.horosaPort=${port}`)
+      }
 
       result.checks['horosa-guard'] = check('horosa-guard', failed.length === 0,
         failed.length === 0
-          ? `127.0.0.1:${port} 判定 ${verdict}（门 ok=${guard.ok}）；probe-failed 子例（非法端口 ${INVALID_PROBE_PORT}）fail-closed 正确`
+          ? `127.0.0.1:${port} 判定 ${verdict}（门 ok=${guard.ok}、启动器 exit=${doctor.exitCode}）；`
+            + `probe-failed 子例（非法端口 ${INVALID_PROBE_PORT}）fail-closed 正确`
           : failed.join('；'),
         {
           hint: failed.length === 0 ? undefined : '这是守卫/启动器的判断错了（不是用法问题）：把 detail 与 evidence 一起报给维护者',
           evidence: {
-            requestedHorosaPort: opts.horosaPort, verdict, port, gate: { ok: guard?.ok, detail: guard?.detail, hint: guard?.hint?.split('\n')[0] },
-            probe: evidence.probe, probeFailed: { verdict: probeFailed.verdict, ok: probeFailed.ok, detail: probeFailed.detail, evidence: probeFailed.evidence },
+            requestedHorosaPort: opts.horosaPort, verdict, port,
+            // gateOk / startupExitCode 是 R14 的两半：ok 可以是 false，而退出码仍是 0。
+            gate: { ok: guard?.ok, detail: guard?.detail, hint: guard?.hint?.split('\n')[0] },
+            gateOk: guard?.ok, startupExitCode: doctor.exitCode, unknown: evidence.unknown,
+            planHorosaPort: doctor.plan?.env?.[ENV.horosaPort], portSource: evidence.portSource,
+            probe: evidence.probe,
+            probeFailed: {
+              verdict: probeFailed.verdict, ok: probeFailed.ok, detail: probeFailed.detail,
+              hint: probeFailed.hint === undefined ? undefined : String(probeFailed.hint).split('\n')[0],
+              startupExitCode: probeFailed.startupExitCode, unknown: probeFailed.unknown,
+              evidence: probeFailed.evidence,
+            },
           },
         })
     }
@@ -763,9 +928,24 @@ async function main() {
         }
       }
 
+      /* R15 哨兵法：A 的四个哨兵（sessions/storages/凭据/机器级补丁）—— B 跑完不许沾到 B 家，A 家必须原样。 */
+      if (dual.sentinelsInManifestA.length !== SENTINEL_FILES.length) {
+        failed.push(`哨兵没种全（B 跑之前 A 的清单里只有 ${dual.sentinelsInManifestA.length}/${SENTINEL_FILES.length} 个：${dual.sentinelsInManifestA.join('、')}）—— 这条断言会空转，先修验收台`)
+      }
+      for (const state of dual.sentinelStates) {
+        if (!state.exists) failed.push(`A 的哨兵不见了：${state.rel}（A 或 B 的运行把它删了）`)
+        else if (!state.unchanged) {
+          failed.push(`A 的哨兵被改动了：${state.rel}（mtime ${state.plantedAt?.mtimeMs}→${state.after.mtimeMs} bytes ${state.plantedAt?.bytes}→${state.after.bytes}）`)
+        }
+      }
+      if (dual.sentinelHitsInB.length > 0) {
+        failed.push(`B 的 home 里出现了 A 的哨兵（串扰）：${dual.sentinelHitsInB.map((hit) => `${hit.path}(${hit.how})`).join('、')}`)
+      }
+
       result.checks['dual-instance'] = check('dual-instance', failed.length === 0,
         failed.length === 0
-          ? `两个隔离 home 各真跑一次 headless 均 exit 0 且本次新写出各自报告；清单 A=${dual.manifestA1.length} 项 / B=${dual.manifestB.length} 项，不相交`
+          ? `两个隔离 home 各真跑一次 headless 均 exit 0 且本次新写出各自报告；清单 A=${dual.manifestA1.length} 项 / B=${dual.manifestB.length} 项，不相交；`
+            + `哨兵法：A 的 ${dual.sentinelStates.length} 个哨兵（sessions/storages/凭据/机器级补丁）原样未动，B 的 home 里一个都找不到`
           : failed.join('；'),
         {
           hint: failed.length === 0 ? undefined : `加 --keep-tmp 重跑以保留现场；临时 home：${dual.dirA} 与 ${dual.dirB}`,
@@ -774,6 +954,10 @@ async function main() {
             manifestA: dual.manifestA1.map((row) => row.path),
             manifestB: dual.manifestB.map((row) => row.path),
             overlap,
+            // R15 哨兵法：这是「存储根真的分开」的行为证据（边界见 tests/isolation/README.md）。
+            sentinels: dual.sentinelStates,
+            sentinelHitsInB: dual.sentinelHitsInB,
+            sentinelMarker: SENTINEL_MARKER,
             // 两个实例共享的是**代码**（profiles/xuanshu 联接到仓库 profile），状态必须各归各的。
             sharedProfileLink: 'profiles/<name> → 仓库 profile（只共享代码，不共享状态）',
           },
