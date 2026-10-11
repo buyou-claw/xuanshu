@@ -246,6 +246,7 @@ DSH 已有的 token 体系是**两层**：**尺度层** `--dsw-static-*`（静�
 1. **`constraint` 族的 token 不得用于装饰**。每个出现处必须能在该屏第 9 节指回 `C<n>`。
 2. **「AI 不可见」（`--xs-constraint-noai-*`）是负面事实** —— 它约束的是**界面上不存在的东西**（藏卡片上**无**摘要 / **无**问答 / **无**「让 AI 看看」）。用 token 表达时只能用于**那句常驻声明行**，不得用来给「AI 动作按钮」上色（那等于承认按钮存在）。→ C3。
 3. **人工闸门的呈现必须是「人点的控件」而非提示文案**：`--xs-constraint-human-gate-*` 只用于**确认弹窗与按钮行**的容器，不用于普通说明文字。→ C4 / C8 / C9。
+   - **一处例外（明确列入合法用法）**：**「一切归你、随时带走」的确认说明**（S15 / S11 / S14 的「整体拷走」段，与 S10 的「写入前先备份」说明）——那里不是「AI 要动你的东西」，而是**人亲手执行的破坏性/搬运动作**，用同一个 `human-gate` 面把「这一步由你亲手做」视觉化。→ C11。
 4. **C10 的审批界面不由玄枢上色**：DSH 审批卡**原样复用**（`conversation.composer` chain 的 composer 顶替，见 [`DSH槽位映射.md`](DSH槽位映射.md) §6.6），**不提供**玄枢自制的「总是允许」开关。`constraint` 族**不定义**审批卡内部 token。→ C10。
 
 ---
@@ -303,7 +304,7 @@ DSH 已有的 token 体系是**两层**：**尺度层** `--dsw-static-*`（静�
 | S12 工作流向导 | `nonpu` | `human-gate`(C8)、`human-gate`○(C10)、`human-gate`○(C11) | `running` / `done` | `card` | `panel-content-max` |
 | S13 底稿面板 | `digao` | `derived`(C2)、`human-gate`○(C11) | `empty` / `stale` | `readonly` / `panel` | `scrollregion-max`、`panel-content-max` |
 | S14 日课 / 定时任务 | `baseplate`（日课属底座 + 时间基准） | `human-gate`○(C10) | `running` / `done` / `error`（投递失败） | `card` | `card-minheight` |
-| S15 管理入口落位 | `nonpu`○ | `noai`○(C3) | — | `sidebar` | `icon-sidebar`、`breakpoint-wide` |
+| S15 管理入口落位 | `nonpu`○ | `noai`○(C3)、**`human-gate`(C11)**（§313 那条「整体拷走」的确认说明处） | — | `sidebar` / **`panel`** | `icon-sidebar`、`breakpoint-wide`、**`panel-content-max`**；**`text-code`**（`~/.dsh/xuanshu/` 与 `~/.dsh/sessions/` 的只读路径展示，C11 的两条主承载之一） |
 
 `○` = README §5 矩阵里该屏为 `○`（若涉及则写）的对应条目。
 

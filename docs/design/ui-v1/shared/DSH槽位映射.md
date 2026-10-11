@@ -90,7 +90,7 @@ label: <可选，string | () => string>
 
 ### 1.6 同一插件里注册多个 `main` key —— **机制成立，实装无先例 → 标「未确认」**
 
-- **已证实**：`main` 是 keyed 槽，cell 按 `key` 分；每个 `ctx.slots.register` 调用**独立**，一次 `ctx.slots.inject('main', function*(){ yield register(A); yield register(B); … })` 可以连续注册多个条目 —— 官方 ui-conversation 在**同一个 inject 回调**里连续 `yield` 了 7 次 `register`（1 个 main + 6 个子槽）。证据：`dsh-client-ui-conversation/lib/client.js:18435-18450`。
+- **已证实**：`main` 是 keyed 槽，cell 按 `key` 分；每个 `ctx.slots.register` 调用**独立**，一次 `ctx.slots.inject('main', function*(){ yield register(A); yield register(B); … })` 可以连续注册多个条目 —— 官方 ui-conversation 在**同一个 inject 回调**里连续 `yield` 了 7 次 `register`（1 个 main + 6 个子槽）。证据：`dsh-client-ui-conversation/lib/client.js:18433-18446`。
 - **未确认**：rc.2 实装里**没有任何一个包在同一插件内注册两个不同的 `main` key**（全库 `name: "main"` 仅 3 处，见 §1.2 占用者表）。因此「玄枢一个插件里注册 `overview` / `consult` / `pus` / `cang` / `workflow` / `digao` 六个 key」是**机制推断，无同插件先例**。
 - **实现票的降险做法**（不改机制、只是组织方式）：每个 key 用**独立的 `ctx.slots.inject('main', …)` 调用**，互不共享 cell；若想让每个面板能声明自己的私有子槽，**必须**在该面板自己的 `register` 里带 `children`（声明即独占，见 §1.4）。
 
@@ -375,7 +375,7 @@ DSH **没有** conversation 作用域的「右栏子槽」；右列是一个**�
 
 | 屏 | 层级 | main key | 主挂载槽 | 次要挂载槽 | 关键宿主/客户端 API | 备选与风险 |
 |---|---|---|---|---|---|---|
-| **S1** 自我总览（四卡首屏） | main 面板 | `overview`（已定，`packages/xuanshu-client/src/client/panel.ts:25`） | `main`（keyed/root）key=`overview` | `sidebar.panellist` id=`overview` order=20（已实现）；`conversation.hero.brand.mark`（**空槽，replaceRisk none**）可作品牌标 | `ctx.layout.selectPanel('overview')`（设为默认面板属票 07） | **风险 1**：`main` 是 root scope，无 `useSession`/`useConversation`，四卡只能走全局座位（`useSessions`/`useSessionStatus`）。**风险 2**：无 Skeleton 原语 ⇒ D2 的卡级骨架必须自研 |
+| **S1** 自我总览（四卡首屏） | main 面板 | `overview`（已定，`packages/xuanshu-client/src/client/panel.ts:21`） | `main`（keyed/root）key=`overview` | `sidebar.panellist` id=`overview` order=20（已实现）；`conversation.hero.brand.mark`（**空槽，replaceRisk none**）可作品牌标 | `ctx.layout.selectPanel('overview')`（设为默认面板属票 07） | **风险 1**：`main` 是 root scope，无 `useSession`/`useConversation`，四卡只能走全局座位（`useSessions`/`useSessionStatus`）。**风险 2**：无 Skeleton 原语 ⇒ D2 的卡级骨架必须自研 |
 | **S1.1** 四卡内部结构 | 面板内区块 | 同 S1 | 同 S1（面板内自研布局） | — | — | 无独立槽；卡片外壳自研（primitives 无 `Card`） |
 | **S2** 命盘卡详情（**抽屉**） | 抽屉（overlay） | 不占用 main key（浮在 S1 上） | `shell.overlay`（list/root，additive，**replaceRisk none**） | — | — | **风险（F2）**：DSH 无抽屉原语 ⇒ `XsPuCardDrawer` 自研；`shell.overlay` 层 click-through，抽屉本体需自行恢复 pointer-events。备选：照 `Modal` 的**形状与行为**自研居中对话框（含焦点与 Escape —— 这是 F4 点名必须保留的行为）。**注意**：不得 `require` primitives，只能照抄形状（F4） |
 | **S3** 八字冷启动向导（5 步） | 会话内 hero + 面板 | 不新开 key（走 `conversation`） | **`conversation.input.dock`**（list/session，additive，**replaceRisk none**） | 若要品牌感：`conversation.hero.brand.mark`（空槽） | `ctx.sessions.create()`（客户端）或 `ctx.uiWorkspace.startSession()` | **风险 1**：`conversation.hero.workspace` / `agentPreset` 是 **single 且已被占用**（ui-workspace / ui-agent-preset），抢槽必须显式更低 priority（同 priority 直接 throw）。**风险 2**：`conversation.input.dock` 是 session 作用域 ⇒ **必须先有会话**；向导的「首次冷启动」若发生在无会话状态，只能落在 `conversation.hero.brand.mark`（root）或改从 S1 面板发起。**风险 3（F4）**：不能 require 任何 Harness Client 包，向导的分段控件、输入、进度都要自研 |

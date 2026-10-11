@@ -1210,7 +1210,7 @@
         "S5"
       ],
       "raw_type": "icon",
-      "usage": "侧栏「库」分区 · 谱入口行（label 库 · 谱）",
+      "usage": "侧栏「库」（分区语义名）· 谱入口行（label 谱）",
       "suggested_format": "SVG（单色，可跟随主题）",
       "size_hint": "图标族一档",
       "notes": ""
@@ -1314,7 +1314,7 @@
         "S6"
       ],
       "raw_type": "icon",
-      "usage": "侧栏「书房」 · 问事入口行（label 书房）",
+      "usage": "侧栏「**问事**」入口行（label 问事；D1 的分区语义名为「书房」，见 S15）",
       "suggested_format": "SVG（单色，可跟随主题）",
       "size_hint": "图标族一档",
       "notes": ""
@@ -1719,7 +1719,7 @@
   "token_handoff": {
     "source": "docs/design/ui-v1/shared/设计token字典.md",
     "values": "票 03 填（本台账不含任何色值/像素）",
-    "count": 91,
+    "count": 93,
     "tokens": [
       {
         "family": "surface",
@@ -2175,6 +2175,16 @@
         "family": "motion",
         "token": "--xs-motion-ease-standard",
         "semantics": "标准缓动"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-nonpu-fg",
+        "semantics": "「不是谱」的实体（藏 / 工作区 / 工作流）在「挂载」与「藏库」语境下的标识文字 / 图标（S8 / S11 / S12 / S15）"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-nonpu-bg",
+        "semantics": "同上，标识底（成对填）"
       }
     ]
   }
