@@ -2,3 +2,6 @@
 .upstream/
 node_modules/
 dist/
+
+# 上游证据摘录（侦察期临时工作文件）
+.scratch/
