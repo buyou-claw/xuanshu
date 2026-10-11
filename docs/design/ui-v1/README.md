@@ -170,6 +170,67 @@
 
 **仍不在本稿**（明确后置）：签（tags）的 UI 启用、四卡视觉精修、语音输入、工作流「测试 / 反向优化 / 复用」细流程。
 
+### 6.1 补定案 D4：多 AI 合参的「否决」是玄枢自有语义（不是上游照抄项）
+
+上游星阙 Best-of-N **只有**「采用 / 合并 / 停止全部」，**没有**「否决」按钮（证据：`shared/星阙交互规格索引.md` §3.1，源码 `src/components/aianalysis/chat/useChatBestOf.js:93-152`）；而玄枢的产品定义与票 11 明确要求「**采用 / 合并 / 否决**」（`CONTEXT.md:83`、`product-definition.md` §三-其上三、`.scratch/assembly-foundation/issues/11-best-of-n.md`）。
+
+**定案 D4**：
+- 「**否决**」= **明确不采用任何候选**并结束本轮合参的状态。点它 → 不跑判官、不调合并槽、`bestOf.adoptedId = null`、`bestOf.rejected = true`，候选全部折叠保留在 `message.candidates`（可展开回看），**历史不带任何候选正文**（与「只带采用稿」一致）。
+- 「停止全部」仍保留为**生成中**的中断动作（abort 共享控制器）；「否决」是**生成已结束**后的终局动作。两者不是同义词，界面上不能互相替代。
+- 三按钮的可见性：生成中 → 只有「停止全部」；有 ≥1 份有效候选 → 「采用（某份）」+「合并」（≥2 份时）+「否决」。
+- 上游的 `rejudge`（重跑判官）玄枢 v1 **不做**（属 N 清单）。
+
+### 6.2 全稿必须遵守的四条「防脏状态」规格（上游修 bug 修出来的）
+
+写稿人若在相应屏里漏掉这四条，等于把上游已经踩过的坑重画一遍：
+
+| # | 规则 | 适用屏 | 上游出处（`astrostudyui/src/`） |
+|---|---|---|---|
+| H1 | 地点/时间弹窗**重开必须复位临时时区覆盖**（否则上一轮的临时覆盖悄悄带到下一次录入） | S3 | `components/amap/GeoCoordModal.js:14,113` |
+| H2 | 新出现的挂载层**默认展开**，而用户**手动收起过的保持收起**（按层记忆，不整块重置） | S8 | `components/aianalysis/AIAnalysisMain.js:1468-1483` |
+| H3 | 多 AI 合参是**旁路**：候选流不写主会话的页面态；主会话的工具调用轨迹不被候选流影响 | S9 | `AIAnalysisMain.js:2438-2440` + `chat/useChatBestOf.js:167-171` |
+| H4 | **判官请求不带挂载数据**（判官只判候选文本，不引入上下文偏见） | S9 | `utils/aiBestOfN.js:87` |
+
+### 6.3 文案对齐（有上游原文的照上游写的）
+
+- 挂载状态栏的**上游原文**是 `挂载 {kept} 字 / {budget}`（`components/aianalysis/chat/ChatStatusBar.js:37-39`），「预算 M 字」只出现在 tooltip 里。本稿正文写「`挂载 N 字 / 预算 M 字`」是**语义写法**；实现在写文案时以上游原文为准，并在该屏注明这处差异。
+- 时间字段的内联微调粒度是**年 / 月 / 天 / 小时 / 四分钟**（`components/comp/DateTimeSelector.js:700-704`，「四分钟」= 1° 经度时差）——**不要**写成「加减分秒」。
+- **多 AI 合参的命令名照抄上游 `/多模型`，不改名**（票 11 与 `docs/specs/001-assembly-foundation.md:72` 钉死；上游 `utils/aiChat/commands.js:28`）。玄枢别名 `/合参`，上游别名 `bestof` 保留。**命令名 ≠ 功能名**：功能在玄枢叫「多 AI 合参」（CONTEXT 定名，界面文案用它），「多模型对比」只是上游实现名，**只在各屏 §7「规格级复用来源」里出现**。`shared/星阙交互规格索引.md` §3.2/§3.3 D21 已按此改齐。
+
+### 6.4 槽位探测四条硬发现带来的定案（D5–D9）
+
+来源：`shared/DSH槽位映射.md`（在 rc.2 全库槽位目录 `@deepseek-ai/dsh-cordis-client-runner/lib/client.js:2365-6076` 上逐条核对）。它们**改变若干屏的画法**，在此定案，屏稿按此执行。
+
+| # | 硬发现 | 定案 |
+|---|---|---|
+| **D5** | `main.key !== 'conversation'` ⇒ 该面板**没有会话绑定**：`conversation.*` 子槽全部不渲染、`ctx.sidebarRight.mounted === undefined`；而 DSH 的审批卡正好注册在 `conversation.composer`（`dsh-client-ui-approval/lib/client.js:344-345`） | **「问事面板」不承载会话正文**。分工：`consult` 面板 = **选谱 / 挂载 / 会话列表（书房门厅）**；一旦「进入会话」→ `ctx.layout.selectPanel(null)` 切回 DSH 原生 conversation 面板承载会话正文（该面板不绑定工作区，`meta.xuanshu` 落在会话上）。理由：这样才拿得到 DSH 全套工具 + 工具轨迹 + **审批卡（C10）**；自研一套会话面等于重造轮子并直接破掉 C10。玄枢自己的会话内插件（勾选谱摘要条 / 挂载账本入口 / 多 AI 合参与沉淀区块）注册进 conversation 的**非会话绑定**子槽（`conversation.composer.above` 等，逐条见槽位映射 §7） |
+| **D6** | `ctx.layout.selectPanel(null)` 的契约是「显示当前会话」，不是「关闭面板」 | 上述切换是一条**受支持的路径**，不是 hack；S6/S7 的跨面板跳转按此写 |
+| **D7** | `sidebar.panellist` **没有分组字段**（只读 `{id, order, label}`，按 order 排序渲染） | D1 的「分区」**降级为**：多行 + `order` 分段 + label 措辞（总览 / 问事 / 谱 / 藏 / 底稿 / 工作日），**不承诺任何分区容器或分隔线**。S15 的骨架线框按此画，别画分组框 |
+| **D8** | DSH **没有抽屉原语**；框架级浮层只有 `shell.overlay`（click-through），primitives 只有居中 Modal | S2（命盘卡详情）与 S8（挂载账本）的抽屉**自研外壳**，但**照上游 Modal 的 markup + 行为**（焦点、遮罩、Esc）与 `--dsw-alias-*` token 引用；类名一律 `--xs-` 前缀 |
+| **D9** | `@deepseek-ai/dsh-agent-preset/skills/cordis-plugin-development/references/practices.md:35` 明文**禁止 require `dsh-client-ui-primitives` 或任何 Harness Client 包** | 全稿第 4 节的写法是「**照 X 形状自研**」，**不是**「用 X 组件」。`shared/DSH槽位映射.md` §5 是**形状参照**，不是依赖清单。另五条适用规则（先选渲染面再写视图 / 不用 iframe / 管理列表照 Plugin Manager 页 / 不往组件外写 DOM / Chat 行的正统注册法）同样约束实现票 |
+
+### 6.5 定时任务：复用 DSH 自带的面板，玄枢只播种「日课」
+
+- DSH 自带 `schedules` main 面板 + `sidebar.panellist` 行（owner 包 `dsh-client-ui-schedule/lib/client.js:6683`）。它是**系统级**的定时任务管理面，属「子系统界面完全复用 DSH」的范围。
+- **定案**：S14 的「定时任务管理」= 复用 DSH `schedules` 面板（玄枢**不另造第二个定时任务面板**，避免双入口）；玄枢的职责是**把日课播种进 `ctx.schedule`**（默认 07:30），并把产物投递到玄枢内部系统会话 + 日课卡。S14 要写清这条分工与 DSH 面板里该任务的可见性。
+- **前置条件（登记为票 13 的硬依赖）**：`ctx.schedule` 服务由**可选 bundle** `@deepseek-ai/dsh-experimental-schedule-bundle` 提供；玄枢分发 profile（`profile/package.json` 的 `dsh.profile.bundles`）当前**只有** `@deepseek-ai/dsh-base` + `@deepseek-ai/dsh-headless`。**不加这个 bundle，票 13 的「定时」半边整体不存在，而且 boot 不会报错**（装配契约测试必须把「schedule 服务存在」断言上）。
+
+### 6.6 三条收口裁决 + 登记为「实现票必须实测」的三条（U 清单）
+
+| # | 项 | 裁决 |
+|---|---|---|
+| R1 | D1 原文把第 70 段写作「工作日」 | **改用 `CONTEXT.md` 的定名「工作流」**（术语表里没有「工作日」）。S15 现稿即为「工作流」，无需回改 |
+| R2 | D1 说「设置菜单放定时任务」 vs §6.5「复用 DSH `schedules` 面板」 | **以 §6.5 为准**：玄枢**不新增**设置页；管理面 = DSH 的 `schedules` 面板。但**允许**在玄枢设置分区（`settings.section` 的「数据与拷走」页）留**一行指路文字**（「定时任务：见左侧『定时』面板」），这是文案不是第二个管理页 |
+| R3 | 文件类「藏」的跳转走 DSH 的 open-in-app 文件路由 | 保留 (需确认)，**回落方案已写进 S11**（回落到「在文件管理器中显示」）。实现票在真机实测后回改 S11 |
+
+以下三条**无法在文档阶段定论**（rc.2 内部接口边界），统一登记，**由实现票实测后回改本稿**（不要在实现里就地偏离）：
+
+| # | 待实测 | 出处 | 不成立时的回落 |
+|---|---|---|---|
+| U2 | `ctx.sessions.scope(id)` 在**客户端根上下文**能否借到 Agent 作用域 | `shared/DSH槽位映射.md` §8.1 | 回落为 `ctx.layout.selectPanel(null)` 切到 conversation 面板后再发（D5/D6 已定的路径） |
+| U3 | 客户端是否有「指定单次调用 provider / model」的公开面（多 AI 合参的核心） | 同上 | 回落为宿主侧 `ctx.llm` 多 adapter 路由 + 客户端只读模型清单 |
+| U7 | `shell.overlay` 上**自研抽屉**的层级与焦点陷阱能力（DSH 无抽屉原语，层本身 click-through） | 同上 §0 F2 | 回落为**居中对话框**（S2 / S8 / S11 / S14 四屏同时降级） |
+
 ---
 
 ## 7. 术语对照（防写偏）
