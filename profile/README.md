@@ -50,6 +50,26 @@ xuanshu-client               # 玄枢客户端插件（自带预编译 bundle；
 改完跑 `pnpm test`（`XUANSHU_REQUIRE_ASSEMBLY=1`）+ `node scripts/verify-assembly.mjs`：
 两个自有包都必须出现在 S1 的行里、S2 的 `fiber.state === 2`、S5 报告的 `plugins` 与 `patchRowIds` 里。
 
+## horosa MCP 行从哪来（版本库里的静态行）
+
+`cordis.patch.yml` 里的 `mcp-horosa` 行（`id: mcp-horosa`、`serverName: horosa`、
+`transport: streamable-http`、`url: http://127.0.0.1:8765/mcp`）是**写在版本库里的静态行**，
+挂法跟 desktop profile 的 `mcp-filesystem` 行同款。它出现在 `dsh --profile xuanshu --dump-config`
+的 `# == <profile>/cordis.patch.yml` 那段（即 profile 补丁层），不是运行期插进去的行。
+缺的 `@deepseek-ai/dsh-mcp-client` 由**安装闭包**提供（它是 `@deepseek-ai/dsh` 的 dependencies 之一，
+而 `@deepseek-ai/dsh` 是本 profile 的直依赖），所以 `package.json` 里不用加依赖。
+
+**为什么市场的删除 UI 碰不到它**：市场那套（`dsh-mcp-connector` / `dshmarket`）管的是运行期的
+「连接记录」——用户点连接时把记录写进 `$DSH_HOME/storages/mcp_connector.json`，删除 UI 删的也是那份记录。
+玄枢**从不写**那个文件，`dsh.profile.bundles` 里也没有市场类插件，所以那里根本没有一条叫 `horosa`
+的连接可供删除。「默认自带、不可删除」是靠**行的来源**保证的：版本库是唯一来源，装了 profile 就带上它。
+
+**非回环不暴露**：这一行的 URL 钉死在回环上，宿主侧接缝库（`packages/xuanshu-host/lib/horosa/**`）
+对非回环 host 一律拒绝启动 serve（`code: 'non-loopback-host'`），spawn 出来的
+`horosa-skill serve --host` 也恒为 `127.0.0.1`。端口/路径这两个定值只出现三处
+（本行 = `scripts/isolation/defaults.mjs` = `packages/xuanshu-host/lib/horosa/constants.mjs`），
+一致性由测试钉住。排障与运行手册见 `docs/runbook/horosa.md`。
+
 ## 安装
 
 ```bash
