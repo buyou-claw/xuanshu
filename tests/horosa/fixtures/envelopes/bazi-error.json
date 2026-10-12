@@ -1,0 +1,43 @@
+{
+  "ok": false,
+  "tool": "bazi_birth",
+  "version": "0.40.1",
+  "input_normalized": {
+    "agent_confirmed_settings": true,
+    "clarification_notes": "xuanshu ticket-06 groundtruth probe (1990-01-01 12:00 +08:00 Shanghai)",
+    "date": "1990-01-01",
+    "gpsLat": 31.233333,
+    "gpsLon": 121.483333,
+    "time": "12:00:00",
+    "zone": "+08:00",
+    "lat": "31n14",
+    "lon": "121e29",
+    "timeAlg": 0,
+    "byLon": false,
+    "phaseType": 0,
+    "ad": 1,
+    "gender": 1
+  },
+  "data": {},
+  "summary": [
+    "工具 `bazi_birth` 已返回结构化结果。",
+    "顶层字段：bazi, compute_sources, export_snapshot, gender, local, snapshot_text, technique_card",
+    "结果包含八字结构。"
+  ],
+  "warnings": [],
+  "memory_ref": null,
+  "trace_id": null,
+  "group_id": null,
+  "error": {
+    "code": "invalid_payload",
+    "message": "field 'date' is required",
+    "details": {
+      "field": "date"
+    }
+  },
+  "code": "invalid_payload",
+  "message": "field 'date' is required",
+  "details": {
+    "field": "date"
+  }
+}

@@ -104,6 +104,8 @@ const result = {
   rowCount: 0,
   rows: [],
   packages: {},
+  tools: [],
+  toolCount: 0,
   fatal: [],
   error: undefined,
   notes: [],
@@ -217,6 +219,14 @@ try {
       : { version: found.version, dir: found.dir, manifestPath: found.manifestPath }
   }
   if (pluginPackages === undefined) result.notes.push("ctx.get('pluginPackages') is undefined: boot() does not mount PluginPackages by itself")
+
+  // --- 4b. 本进程注册的工具名（票 06 的断言素材：`mcp__horosa__*` 是否随装配即注册） ----
+  // 只暴露名字数组：工具 schema 的体积与形状是 DSH 内部事务，装配契约不该钉它。
+  const tools = ctx.get('tools')
+  result.tools = typeof tools?.schemas === 'function'
+    ? tools.schemas().map((schema) => schema?.name).filter((name) => typeof name === 'string' && name !== '').sort()
+    : []
+  result.toolCount = result.tools.length
 
   // --- 5. dispose：干净退出 -----------------------------------------------------
   const fatalBeforeDispose = fatal.length

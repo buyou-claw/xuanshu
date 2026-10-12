@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "version": "__VERSION__",
+  "platform": "win32-x64",
+  "runtime_layout_version": 1,
+  "runtime_payload_version": "__VERSION__",
+  "export_registry_version": 15,
+  "services": {
+    "backend_url": "http://127.0.0.1:9999",
+    "chart_url": "http://127.0.0.1:8899",
+    "start_script": "Horosa-Web/start_horosa_local.ps1",
+    "stop_script": "Horosa-Web/stop_horosa_local.ps1"
+  },
+  "runtimes": {
+    "python": "runtime/windows/python/python.exe",
+    "java": "runtime/windows/java/bin/java.exe",
+    "node": "runtime/windows/node/node.exe"
+  },
+  "artifacts": {
+    "horosa_web_root": "Horosa-Web",
+    "boot_jar": "runtime/windows/bundle/astrostudyboot.jar",
+    "horosa_core_js_root": "horosa-core-js"
+  },
+  "platform_requirements": { "arch": "x86_64", "min_os": "10.0.17763" },
+  "derived_from": { "platform": "darwin-arm64", "version": "__VERSION__" }
+}
