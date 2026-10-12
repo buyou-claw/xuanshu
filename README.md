@@ -17,8 +17,8 @@
 | `docs/architecture-v1.md` | 技术架构 v1（分层、装配清单、机制映射、数据流、Spike 清单） |
 | `docs/pu-spec-v1.md` | 谱规范 v1 |
 | `docs/specs/` | 交付 specs（001 装配基座 = issue #1） |
-| `docs/adr/` | 架构决策记录（0001 装配不 fork / 0002 首页替换 / 0003 藏不上 AI / 0004 钉版 / 0005 谱是信息 / 0006 双实例隔离） |
-| `docs/runbook/` | 操作手册（`dual-instance.md` = desktop + xuanshu 开发期并跑：DSH_HOME / 端口 / horosa 8765 守卫 / 回滚） |
+| `docs/adr/` | 架构决策记录（0001 装配不 fork / 0002 首页替换 / 0003 藏不上 AI / 0004 钉版 / 0005 谱是信息 / 0006 双实例隔离 / 0007 setup 一条命令） |
+| `docs/runbook/` | 操作手册（`setup.md` = 一键安装：钉版取件 / 三项自检 / 退出码 / 升级与回滚；`dual-instance.md` = desktop + xuanshu 开发期并跑：DSH_HOME / 端口 / horosa 8765 守卫 / 回滚） |
 | `docs/research/` | 上游侦察报告（DSH / horosa-skill / 星阙桌面端 / 真太阳时 / 事实核查） |
 | `docs/agents/` | agent 工作流配置（issue tracker / domain docs） |
 
@@ -48,6 +48,14 @@ pnpm test                                        # 全部测试
 ```
 
 > `pnpm dev:xuanshu`（起 `127.0.0.1:19388` 的 web 实例）**当前会以退出码 2 拒绝**：web 界面要 `@deepseek-ai/dsh-web-app` bundle，按票 01 的装配契约它属票 07（首页替换）。在被测实例上跑自证请用 `node scripts/isolation/startup.mjs --mode headless`；要拿端口/环境去启动别的实例用 `--mode env`。详见 `docs/runbook/dual-instance.md`。
+
+## 安装
+
+```bash
+node scripts/setup.mjs --mirror https://gh-proxy.com/https://github.com   # 一条命令：取件 → 校验 → 装 runtime → 装配 profile → 自检
+```
+
+钉版 horosa-skill v0.40.1（SHA256 硬门，不匹配不装）；Windows runtime 落纯 ASCII 根 `C:\horosa`；装完跑三项真实自检（装配可启动 / 8765 健康 / 八字出盘）。网络不可达用 `--wheel`/`--runtime` 喂本地件；直连 GitHub 只有 12–24 KB/s，开发机一律带 `--mirror`。参数族、退出码 0–5、失败处置、升级与回滚见 [docs/runbook/setup.md](docs/runbook/setup.md)。
 
 ## 状态
 
