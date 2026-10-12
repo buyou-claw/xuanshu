@@ -1,5 +1,5 @@
 /**
- * scripts/setup/mirrors.mjs — GitHub 下载 URL 的镜像前缀重写（票 05 契约 §3.4）。
+ * scripts/setup/mirror.mjs — GitHub 下载 URL 的镜像前缀重写（票 05 契约 §3.4）。
  *
  * **语义照抄上游** `.upstream/horosa-skill/horosa-skill/src/horosa_skill/runtime/mirrors.py`：
  *   - `HOROSA_RUNTIME_MIRROR`（或 CLI `--mirror`）是一串逗号分隔的**前缀**，用来替换 `https://github.com`；

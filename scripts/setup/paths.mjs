@@ -11,6 +11,9 @@
  *   - 缓存/根目录之外的 dsh-home 解析走 `scripts/isolation/resolve.mjs::resolveHomeWithSource`
  *     （含 R16 裁决：**环境里带的 `DSH_HOME` 指向真实 `~/.dsh` 时忽略并记 notes**），
  *     否则在一个 DSH 会话里跑 setup 会撞真实 home 门，等于一条命令开箱不可用；
+ *   - 同款裁决也用在数据目录上（A6）：**环境里带的 `HOROSA_SKILL_DATA_DIR` 指向真实 `~/.horosa`
+ *     时忽略并记 notes**（显式 CLI 才是硬门，见 `resolveDataDir`），否则契约 §6 的
+ *     「缺省绝不写真实 `~/.horosa`」只在没人设环境变量时成立；
  *   - 端口解析走 `resolveInstance`（`--horosa-port` ＞ `XUANSHU_HOROSA_PORT` ＞ `HOROSA_SKILL_PORT` ＞ 8765），
  *     本文件**不出现 8765 字面量**。
  *
@@ -62,10 +65,40 @@ export function resolveRuntimeRoot({ runtimeRoot, env = process.env, platform = 
   return { dir: join(homedir(), '.horosa', 'runtime'), source: 'default (~/.horosa/runtime)' }
 }
 
-/** 数据目录：`$HOROSA_SKILL_DATA_DIR` ＞ `<dsh-home>/xuanshu/horosa`（「一切归你」的数据目录）。 */
-export function resolveDataDir({ dshHome, env = process.env } = {}) {
-  if (!isBlank(env?.[DATA_DIR_ENV])) return { dir: resolve(env[DATA_DIR_ENV]), source: DATA_DIR_ENV }
-  return { dir: join(dshHome, DATA_DIR_NAME, 'horosa'), source: `<dsh-home>/${DATA_DIR_NAME}/horosa` }
+/**
+ * 数据目录：`$HOROSA_SKILL_DATA_DIR` ＞ `<dsh-home>/xuanshu/horosa`（「一切归你」的数据目录）。
+ *
+ * 真实 `~/.horosa` 的守卫（A6，与票 04 R16 对 `DSH_HOME` 的裁决同款、同方向）：
+ * 环境里带着的 `HOROSA_SKILL_DATA_DIR` 若**等于**或**落在**真实 `~/.horosa` 里 → **忽略并记一条 note**，
+ * 退回 `<dsh-home>/xuanshu/horosa`。理由与 R16 完全一样：这条变量可能是别的会话/别的工具留在环境里的，
+ * 照单全收就会在「一条命令」里静默写用户真实数据目录 —— 而契约 §6 说死了「数据目录一律
+ * `<dsh-home>/xuanshu/horosa`」。
+ *
+ * 「显式」的 data 目录（CLI）才是硬门：本票参数表里**没有** data 目录的 CLI 开关，所以 `explicit`
+ * 目前恒为 undefined；将来加了就在下面那一支补「指向真实 `~/.horosa` → 要求 `--install`，否则 exit 3」，
+ * 与 `--dsh-home` 的硬门对称（函数签名已经把位置留好）。
+ *
+ * @returns {{ dir: string, source: string, ignored: string[] }}
+ */
+export function resolveDataDir({ dshHome, env = process.env, explicit, realHorosaHome = realHorosaDataHome() } = {}) {
+  const fallback = { dir: join(dshHome, DATA_DIR_NAME, 'horosa'), source: `<dsh-home>/${DATA_DIR_NAME}/horosa` }
+  if (!isBlank(explicit)) return { ...fallback, dir: resolve(explicit), source: '--data-dir（尚未落地）' }
+  if (!isBlank(env?.[DATA_DIR_ENV])) {
+    const candidate = resolve(env[DATA_DIR_ENV])
+    if (samePath(candidate, realHorosaHome) || isUnderPath(realHorosaHome, candidate)) {
+      return {
+        ...fallback,
+        ignored: [`${DATA_DIR_ENV}=${candidate} 指向用户真实 horosa 数据目录（${realHorosaHome}），已忽略（改用 <dsh-home>/${DATA_DIR_NAME}/horosa）`],
+      }
+    }
+    return { dir: candidate, source: DATA_DIR_ENV, ignored: [] }
+  }
+  return { ...fallback, ignored: [] }
+}
+
+/** 本机用户真实 horosa 数据目录（`~/.horosa`）。只用来**拒绝**它，绝不用来写。 */
+export function realHorosaDataHome() {
+  return join(homedir(), '.horosa')
 }
 
 /** 报告文件路径（契约 §7：唯一机器可读产物）。 */
@@ -124,6 +157,8 @@ export function resolveSetupPaths({
     runtimeRootSource: rootResolved.source,
     dataDir: dataResolved.dir,
     dataDirSource: dataResolved.source,
+    // 被忽略的环境覆盖（`DSH_HOME` / `HOROSA_SKILL_DATA_DIR` 指向真实用户目录）：调用方必须写进 report.notes。
+    dataDirIgnored: dataResolved.ignored ?? [],
     horosaPort: instance.horosaPort,
     horosaPortSource: instance.portSources?.horosa ?? 'default',
     horosaHost: host.host,

@@ -44,7 +44,8 @@ node scripts/setup.mjs -h              # 参数表（文件头注释块）
 1. **直连 GitHub 慢到不可用**：本机实测（**2026-10-12**）直连 `objects.githubusercontent.com` 只有 **12–24 KB/s** —— 719 MB 的 runtime 要 **8–16 小时**。加 `--mirror` 后实测 `https://gh-proxy.com/https://github.com` **21.9 MB/s**（719 MB **29.6 秒**下完，SHA256 与 pin 一致）、`https://ghfast.top/https://github.com` **19.3 MB/s**（≈33 秒）。开发机一律带 mirror。证据：`.scratch/assembly-foundation/captures/setup-e2e-groundtruth.md`。
 2. **镜像只换传输，SHA256 门不变**：第三方代理正是需要校验的理由；报告的 `pin.*.url` 记下**实际用过**的 URL，可追查。
 3. **Windows 的 runtime 根必须纯 ASCII**：上游 `runtime.path_not_ascii`（读清单/下载之前就拒），中文路径会挂。默认 `C:\horosa`，需要换根先设 `setx HOROSA_RUNTIME_ROOT C:\horosa`。
-4. **默认绝不写真实 `~/.dsh`**：`--dsh-home` 解析结果**等于**真实 `~/.dsh`、或**落在它里面**（`~/.dsh/profiles/xuanshu` 这种更危险）时，**必须**显式 `--install` 才继续，否则退出码 3 并打印你该跑的命令。默认 home 是 `<repo>/.dsh-home`（已 gitignore）。
+4. **默认绝不写真实 `~/.dsh`**：`--dsh-home` 解析结果**等于**真实 `~/.dsh`、或**落在它里面**（`~/.dsh/profiles/xuanshu` 这种更危险）时，**必须**显式 `--install` 才继续，否则退出码 3 并打印你该跑的命令。默认 home 是 `<repo>/.dsh-home`（已 gitignore）。**同款守卫也在数据目录上**：环境里带的 `HOROSA_SKILL_DATA_DIR` 指向真实 `~/.horosa`（或它的子路径）时**忽略并记一条 note**，数据目录回到 `<dsh-home>/xuanshu/horosa`（与票 04 对 `$DSH_HOME` 的 R16 裁决同款：环境里带的不算你的意图，`--dsh-home` 那种显式意图才走硬门）。
+5. **平台回退不静默**：pin 里没有当前平台一律**退出码 2** 并列出支持的平台；唯一例外是上游自己认可的仿真组合（Windows on ARM → `win32-x64` 载荷），命中时报告里写 `pin.runtime.platformFallback: {from, to}` 并留一条 note —— 不写就没人知道装的是哪份载荷。本机（win32-x64）是**直接命中**，这个字段是 `null`。
 
 ## 3. 参数族
 
@@ -104,6 +105,7 @@ node scripts/setup.mjs -h              # 参数表（文件头注释块）
 ### C1 · 装配可启动（`assembly`）
 
 - **断言**：`node scripts/verify-assembly.mjs --json --dsh-home <home> --profile <name>` → 退出码 0 **且** JSON `ok === true`。
+- **原始输出**：落 `<dsh-home>/xuanshu/logs/verify-assembly.json`（太大，塞不进报告 —— 报告只给路径，见 §9）。
 - **失败处置**：看报告 `checks[assembly].evidence` 里的装配错误行。
   - 缺 `node_modules` → 重装 profile：`node scripts/install-profile.mjs --home "<home>"`；
   - 补丁行 `status:"error"` → 先确认 profile 自己的 CLI 版本（用 profile 树里那份，别用 PATH 上全局的）；
@@ -118,21 +120,23 @@ node scripts/setup.mjs -h              # 参数表（文件头注释块）
 | `free` | — | 起一份 `serve`（日志 `<data-dir>/serve.log`，`<data-dir>` 缺省 = `<dsh-home>/xuanshu/horosa`，可被 `HOROSA_SKILL_DATA_DIR` 改），轮询等到就绪 |
 | `horosa-ready` | — | **复用**已在跑的那份（自己没起，所以不会去 stop 它） |
 | `occupied-foreign` | **3** | 环境门拒绝，**不算**自检失败：腾端口或换端口，**绝不去 kill 别人的进程** |
-| `probe-failed` | 由后续判定 | 没验成 → 也先试一次「复用」（慢应答的 horosa 可能就是它）；复用不成再自起一份 |
+| `probe-failed` | **5**（自检失败） | **无法判定 ≠ 被占**：用**加长预算**（`min(selfcheck-timeout/2, 15s)`，下限 5s）复探一次 —— 慢应答的 horosa 正是这一格的常见成因；复探拿到 MCP 就绪就按「复用」通过，仍不成才 fail-closed。**绝不**在这里起第二份（端口上有 listener，再起必撞），处置见下 |
 
-- **断言**：MCP `initialize` + `tools/list` 成功（`serve` 默认 `streamable-http`，`127.0.0.1:<port>/mcp`）。
+- **断言（唯一判据）**：MCP `initialize` **成功（200 且带响应头 `mcp-session-id`）** + `tools/list` 非空（`serve` 默认 `streamable-http`，`127.0.0.1:<port>/mcp`）。少了 `mcp-session-id` 就是**握手未成立** —— 不算「tools 列表有东西就算过」。
 - **失败处置**：
   ```powershell
   Get-NetTCPConnection -State Listen -LocalPort 8765 | Select-Object LocalAddress,LocalPort,OwningProcess
   Get-Process -Id <OwningProcess> | Select-Object Id,ProcessName,Path
   ```
   常见的 `occupied-foreign` 是上一次 `serve` 没退干净（`Ctrl+C` 后 Java 子进程还挂着）。首启要起 runtime（Java + chart + Node），冷启动慢：把预算调大而不是重跑 —— `--selfcheck-timeout 900000`。
+  `probe-failed`（exit 5）**不是**「端口被占」：先人工复探一次（`node scripts/isolation/horosa-guard.mjs --port 8765 --timeout 5000`）看它到底答不答；确认是慢 horosa 就把 `--selfcheck-timeout` 调大重跑，报告里 `checks[horosa8765].evidence.reprobe` 记着复探那一次的四态与 `mcpReady`。
 
 ### C3 · 八字工具可用（`bazi`）
 
 - **断言**（两步，缺一不可）：
   1. `tools/list` 里含 **`horosa_cn_bazi_birth`**；
   2. `tools/call` 打 `horosa_cn_bazi_birth`（**固定测试出生数据**，写死在 `scripts/horosa/bazi-fixture.json`，不是真人生日：`date:"1990-01-01"`、`time:"12:00"`、`zone:"+08:00"`、`lat:"31n14"`、`lon:"121e29"`、`gender:"1"`，带 `agent_confirmed_settings:true` 与 `clarification_notes`；**不传** `timeAlg`，缺省 `0` = 真太阳时）→ envelope `ok === true` **且** `version === "0.40.1"` **且** `data` 非空（四柱可读）。
+- **期望版本只有一个来源**：`scripts/setup/horosa-pin.json`。pin 读不到（被改名/删掉）时 C3 **直接判失败**并说明「pin 不可读」—— 不拿任何兜底字面量继续跑（那会把「升级后忘了换版本」变成一条永远为真的断言）。
 - **真机实测长什么样**（2026-10-12，证据 `.scratch/assembly-foundation/captures/setup-mcp-probe.json`）：信封 `{ ok: true, tool: "bazi_birth", version: "0.40.1" }`，四柱里 `data.bazi.fourColumns.year.ganzi === "己巳"`。
 - **失败处置**：`version` 不是 `0.40.1` 说明**新树混了旧 runtime** → `node scripts/setup.mjs --force` 重装同版本 runtime，再跑 `node scripts/setup.mjs --verify-only`；envelope 报错就先看 `evidence` 里上游返回的原文，别改 fixture 去凑绿。
 
@@ -190,7 +194,13 @@ Remove-Item -Recurse -Force E:\ai_project\XuanShu\.dsh-home   #    粗暴版：�
 - 缺省**绝不**写真实 `~/.horosa`：数据目录一律 `<dsh-home>/xuanshu/horosa`（`HOROSA_SKILL_DATA_DIR`）。
 - 任何网络动作都能被 `--skip-download` 关掉；`doctor` 一律**不带** `--probe-network`（默认零外网）。
 - 大文件只在 `<cache>` 与 `<runtime-root>`；`.dsh-home` 与版本库里都不会出现 719 MB 的玩意。
-- 报告在 `<dsh-home>/xuanshu/setup-report.json`（schema `xuanshu/setup-report@1`）：`pin.*` 记实际用的 URL 与 sha256、`runtime.action`（`installed` / `already-installed` / `skipped`）、`checks[]` 三条结论（`id` + `ok` + `detail` + `durationMs` + `evidence`；C2 那条还带顶层 `verdict`，通过时是 `horosa-ready`）、`exitCode`。证据只放小字段（截断 ≤ 2KB/项），大输出落 `<dsh-home>/xuanshu/logs/`。**成功与失败都写报告** —— 只有上面那条「真实 home 被拒」是例外。
+- 报告在 `<dsh-home>/xuanshu/setup-report.json`（schema `xuanshu/setup-report@1`）：`pin.*` 记实际用的 URL 与 sha256、`runtime.action`（`installed` / `already-installed` / `skipped`）、`checks[]` 三条结论（`id` + `ok` + `detail` + `durationMs` + `evidence`；C2 那条还带顶层 `verdict`，通过时是 `horosa-ready`）、`exitCode`。**成功与失败都写报告** —— 只有上面那条「真实 home 被拒」是例外。
+  **契约 §7 的键表是下界**，下面这些是**追加键**（有则用、无则略；机器读报告时别把它们当异常）：
+  - `dryRun: true` + `plan[]`（`--dry-run` 的逐步计划：`step` / `action` / `detail`）——干跑**不落报告**，这一份只在 stdout；
+  - `serve: { started, pid, stopped, detail }`——这次自检到底有没有起过 serve、pid 是多少、有没有停掉（`--keep-serve` 时 `stopped: false`）；复用别人的实例时 `started:false, pid:null`（**绝不**去 stop 它）；
+  - `pin.runtime.platformFallback: {from,to} | null`——平台回退显式化（A10，见 §2 第 5 条）；直接命中时是 `null`；
+  - `checks[].evidence.logFile` / `stderrLogFile`（C1）、`runtime.evidence.logs.{doctorBefore,doctorAfter,install}`——**大输出的落点**：`verify-assembly` 的 JSON、`doctor` 的 JSON、`install` 的 JSON 全落在 `<dsh-home>/xuanshu/logs/`，报告里只给路径（证据只放小字段，截断 ≤ 2KB/项）。
+  失败的报告额外带 `error` / `hint` / `evidence`，并且 `notes` 里有一行 **`失败阶段：…`**（不然一份 `ok:false` 的报告读起来像是「取件失败了」——pin/平台解析失败也走这条路）。
 
 **幂等**：重复执行 ① 不再下载（缓存命中）；② 不再重装同版本 runtime（`runtime.action = "already-installed"`）；③ 重复装配 profile 不报错；④ 仍跑自检并写出**新**报告（`generatedAt` 更新）。只有 `--force` 才允许重做 ②。
 
@@ -207,9 +217,12 @@ Remove-Item -Recurse -Force E:\ai_project\XuanShu\.dsh-home   #    粗暴版：�
 | pin 里没有当前平台 | 你的平台不在 pin 的支持列表里（错误信息会列出来） | 按提示在 pin 里补平台条目，或在支持的平台跑 |
 | `--skip-download` 且缓存缺件 | 严格离线模式下没有可用件 | 按提示 `--wheel <path>` / `--runtime <path>`，或先联网跑一次 |
 | 真实 `~/.dsh` 被拒绝 | home 解析到了真实 home（或它的子路径） | 用默认隔离 home，或确认真要写才加 `--install` |
-| `uv` 不在 PATH | 环境门 | 装 `uv`（CLI 走 `uvx --from <wheel> horosa-skill <cmd>`） |
+| `uv` 不在 PATH | 环境门 | 装 `uv`（CLI 走 `uvx --from <wheel> horosa-skill <cmd>`）；只想复看报告就 `--verify-only`（它不跑这道门） |
 | runtime 版本 ≠ pin 版本 | 同版本硬门（禁止新树混旧 runtime） | `node scripts/setup.mjs --force` 重装，再 `--verify-only` |
+| doctor 缺 `runtime_payload_version`（也没有 `freshness.installed_version`） | 版本**取不到** → 退出码 4（不许拿 `manifest_version` 兜底：那是「新清单蒙着旧载荷」的典型症状） | 看 `<dsh-home>/xuanshu/logs/doctor-after.json` 原文；多半装到了别的根/别的树，`--runtime-root` 对齐后重跑 |
+| 报告 `notes` 里出现「HOROSA_SKILL_DATA_DIR=… 指向用户真实 horosa 数据目录，已忽略」 | 环境里带着的变量指向真实 `~/.horosa`（**不是**错误） | 什么都不用做；真要写那儿得用显式意图（本票没有这个开关），或先 `unset` 那个变量 |
 | 8765 `occupied-foreign` | 有进程占着 8765 但不是 horosa | 见 §5 C2 的排查命令；**别**去 kill 别人的进程 |
+| 8765 `probe-failed`（自检 exit 5） | 有人 LISTEN 但预算内没给出 HTTP 响应：**无法判定**，不是「被占」 | 先复探：`node scripts/isolation/horosa-guard.mjs --port 8765 --timeout 5000`；慢 horosa 就把 `--selfcheck-timeout` 调大重跑（报告 `evidence.reprobe` 有复探那一次的四态） |
 
 ## 11. 相关
 

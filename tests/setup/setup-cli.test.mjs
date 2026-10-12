@@ -309,8 +309,20 @@ describe('票 05 · 第 6/9 条：全绿 + 幂等 + 报告 schema', () => {
       expect(report1.pin.version).toBe(PIN_VERSION)
       expect(report1.pin.wheel).toMatchObject({ name: artifacts.wheel.name, sha256: artifacts.wheel.sha256 })
       expect(report1.pin.runtime).toMatchObject({ platform: PLATFORM_KEY, sha256: artifacts.runtime.sha256 })
+      // A10：本机平台键在 pin 里直接命中 → 回退字段必须是 null（**存在**且为 null，不是缺键）。
+      expect(report1.pin.runtime.platformFallback).toBe(null)
       expect(report1.runtime).toMatchObject({ root: sandbox.runtimeRoot, action: 'installed', version: PIN_VERSION })
       expect(report1.runtime.dataDir).toBe(join(sandbox.home, 'xuanshu', 'horosa'))
+      // A11：C1 的原始 JSON 与 doctor 的原始 JSON 都落 `<dsh-home>/xuanshu/logs/`，报告里给路径，且文件真的在。
+      expect(existsSync(report1.checks[0].evidence.logFile), `C1 的 logs 路径不指向真文件：${report1.checks[0].evidence.logFile}`).toBe(true)
+      expect(report1.checks[0].evidence.logFile).toContain(join('xuanshu', 'logs'))
+      const logs = report1.runtime.evidence.logs
+      expect(logs, 'runtime evidence 里没有 logs 段').toBeTypeOf('object')
+      for (const key of ['doctorBefore', 'doctorAfter', 'install']) {
+        expect(logs[key], `logs.${key} 没给路径`).toBeTruthy()
+        expect(existsSync(logs[key]), `logs.${key} 指向的文件不在：${logs[key]}`).toBe(true)
+      }
+      expect(JSON.parse(readFileSync(logs.doctorAfter, 'utf8')).runtime_payload_version).toBe(PIN_VERSION)
       expect(report1.profile).toMatchObject({ name: 'xuanshu', home: sandbox.home, mode: 'link' })
       expect(Date.parse(report1.generatedAt)).not.toBeNaN()
       expect(Array.isArray(report1.notes)).toBe(true)
@@ -417,6 +429,45 @@ describe('票 05 · 第 7 条：退出码表（2/3/4/5 各至少一例）', () =
       const output = `${result.stdout}\n${result.stderr}`
       expect(output).toContain('0.39.9') // doctor 报的那个版本
       expect(output.toLowerCase()).toContain('force') // 处置提示：install --force（契约 §4.3）
+    })
+  })
+
+  /**
+   * A3：版本门的**唯一**取值来源是 `runtime_payload_version`（等价 `freshness.installed_version`）。
+   * 这两条用例把「拿别的键兜底」当场抓出来：
+   *   ① `manifest-only`：doctor 只说清单版本（= pin），载荷版本字段缺席 —— 旧实现会读 manifest_version
+   *      判「已装同版本」→ 跳过安装 → exit 0（假绿）；现在必须 exit 4 且点名缺的两个字段；
+   *   ② `manifest-lies`：清单版本 = pin，载荷版本 = 0.39.9 —— 「新清单蒙着旧载荷」，必须 exit 4。
+   */
+  it('exit 4：doctor 只给 manifest_version（载荷版本字段缺席）→ 取不到版本 → exit 4', async () => {
+    const sandbox = sandboxFor('exit4-manifest-only')
+    const artifacts = writeFixtureArtifacts(sandbox)
+    await withServer(sandbox, downloadRoutes(artifacts), async (server) => {
+      testPin(sandbox, server, artifacts)
+      const result = runSetup(
+        [...baseArgs(sandbox), '--wheel', artifacts.wheel.path, '--runtime', artifacts.runtime.path, '--no-selfcheck'],
+        { env: baseEnv(sandbox, { XUANSHU_FAKE_UVX_MODE: 'manifest-only' }) },
+      )
+      expect(result.status, result.raw()).toBe(4)
+      const output = `${result.stdout}\n${result.stderr}`
+      expect(output).toContain('runtime_payload_version')
+      expect(output).toContain('freshness.installed_version')
+    })
+  })
+
+  it('exit 4：manifest_version 等于 pin 但 runtime_payload_version 是 0.39.9 → exit 4', async () => {
+    const sandbox = sandboxFor('exit4-manifest-lies')
+    const artifacts = writeFixtureArtifacts(sandbox)
+    await withServer(sandbox, downloadRoutes(artifacts), async (server) => {
+      testPin(sandbox, server, artifacts)
+      const result = runSetup(
+        [...baseArgs(sandbox), '--wheel', artifacts.wheel.path, '--runtime', artifacts.runtime.path, '--no-selfcheck'],
+        { env: baseEnv(sandbox, { XUANSHU_FAKE_UVX_MODE: 'manifest-lies' }) },
+      )
+      expect(result.status, result.raw()).toBe(4)
+      const output = `${result.stdout}\n${result.stderr}`
+      expect(output).toContain('0.39.9')
+      expect(output).toContain(PIN_VERSION)
     })
   })
 

@@ -3,7 +3,9 @@
 `node scripts/setup.mjs` 一条命令 = 取件 → 校验 → 装 runtime → 装配 profile → 三项自检。
 本目录是它的**验收面**：断言的全是**外部可观察物** —— 进程退出码 / 报告 JSON（唯一机器可读产物）/
 缓存目录里的字节 / 有没有发起过请求。不 import 实现内部模块做白盒断言（例外：契约 §10 明写「纯单测」的
-两个模块 `scripts/setup/mirror.mjs` 与 `scripts/setup/exit.mjs`）。
+**三个**模块 `scripts/setup/mirror.mjs`（`mirrorCandidates`）/ `scripts/setup/exit.mjs`（`EXIT`）/
+`scripts/setup/args.mjs`（`parseArgs`），外加 `scripts/setup/pin.mjs` 的 `runtimeArtifact()` ——
+本机是 win32-x64，A10 的 `win32-arm64 → win32-x64` 回退**造不出真平台**，只能单测这个纯函数）。
 
 契约出处：`.scratch/assembly-foundation/notes/setup-contract.md`（§2 参数 · §3 取件校验 · §5 自检 ·
 §7 报告 · §8 退出码 · §10 **十条断言面**）+ `.scratch/assembly-foundation/captures/setup-e2e-groundtruth.md`
@@ -11,17 +13,20 @@
 
 | 文件 | 作用 |
 |---|---|
-| `pin.test.mjs` | **第 8 条**：`scripts/setup/horosa-pin.json` 与离线副本（`captures/horosa-SHA256SUMS.txt` + `horosa-runtime-manifest.json`）逐值一致；不许出现 `latest`。纯单测 |
+| `pin.test.mjs` | **第 8 条**：`scripts/setup/horosa-pin.json` 与离线副本（`captures/horosa-SHA256SUMS.txt` + `horosa-runtime-manifest.json`）逐值一致；不许出现 `latest`。纯单测。**A10**：平台回退（`platformFallback`）显式化 + 无平台即 exit 2 |
 | `mirror.test.mjs` | **第 10 条**：`mirrorCandidates` 的候选顺序 / 非 github 原样 / 空列表只回原 URL。纯单测 |
 | `args-exit.test.mjs` | **第 7 条的一部分**：`EXIT` 六个数逐键相等；`--help` 真列参数、未知参数 exit 1 且点名 |
-| `setup-cli.test.mjs` | **第 1–7、9 条**：端到端（离线取件零 HTTP / SHA256 门 / Range 续传 / 两个环境门 / 幂等 / 报告 schema / 退出码表） |
+| `setup-cli.test.mjs` | **第 1–7、9 条**：端到端（离线取件零 HTTP / SHA256 门 / Range 续传 / 两个环境门 / 幂等 / 报告 schema / 退出码表）。**A3**：doctor 的版本门只认 `runtime_payload_version`（≥2 例）。**A10/A11**：报告里 `platformFallback: null` 与 `logs/` 路径（路径都指向真文件） |
+| `selfcheck-branches.test.mjs` | **C2 的两条分流**：**A1**（守卫判 `probe-failed` → 加长预算复探 → 复用通过，且**没有**起第二个进程）、**A2**（`initialize` 不带 `mcp-session-id` → C2 false、exit 5，不许假绿）、**A7**（`structuredContent` 与 `content[].text` 同时存在时，信封必须取自后者） |
+| `report-and-gates.test.mjs` | **A4**（`--verify-only` 在一份没有 uvx 的 PATH 上 exit 0；同一 PATH 真跑 exit 3）、**A5**（失败也写报告 / 真实 home 被拒仍零写入）、**A6**（`HOROSA_SKILL_DATA_DIR` 指向真实 `~/.horosa` → 忽略 + note）、**A11**（C1 的 `evidence.logFile` 指向真文件） |
+| `probe-pin.test.mjs` | **A9**：探针的期望版本只有 pin 一个来源 —— 把 `scripts/horosa/**` 抄进沙箱、`scripts/setup/` 留空，`checkBaziTool()` 必须回 `ok:false`（不猜版本、不发请求） |
 | `fixtures.test.mjs` | **替身自检**：先证明 fixture 自己是对的（计数 server、Range+断连、假 uvx 的 doctor/install/MCP、两个 stub、zip 字节） |
 | `fixtures/bin/uvx.mjs` | **假 uvx**：回放真机形状的 `doctor` / `install` / `runtime status` / `serve`（含真 MCP HTTP） |
 | `fixtures/stubs/install-profile.mjs` | `scripts/install-profile.mjs` 替身（**零 pnpm**） |
 | `fixtures/stubs/verify-assembly.mjs` | `scripts/verify-assembly.mjs` 替身（C1 的 0/1 两态） |
 | `lib/release-server.mjs` | 本地**计数** server（独立进程）：计数 / Range 206 / 「先给半个文件后断连」 |
-| `lib/sandbox.mjs` `lib/fixtures.mjs` `lib/zip.mjs` `lib/sha.mjs` `lib/env.mjs` `lib/setup-run.mjs` `lib/paths.mjs` | 沙箱、fixture 归档与测试 pin、真 zip 构造、SHA256、子进程环境、跑 CLI 的胶水 |
-| `.tmp/` | 运行期沙箱（cache / dsh-home / runtime-root / state 四件套；已 gitignore，绿的留现场便于复盘） |
+| `lib/sandbox.mjs` `lib/fixtures.mjs` `lib/zip.mjs` `lib/sha.mjs` `lib/env.mjs` `lib/setup-run.mjs` `lib/paths.mjs` | 沙箱（cache / dsh-home / runtime-root / state / work 五件套）、fixture 归档与测试 pin、真 zip 构造、SHA256、子进程环境、跑 CLI 的胶水（含 `startFakeHorosa`：C2 分流用例自己起的假 serve） |
+| `.tmp/` | 运行期沙箱（cache / dsh-home / runtime-root / state / work 五件套；已 gitignore，绿的留现场便于复盘） |
 
 ## 跑
 
@@ -29,7 +34,6 @@
 pnpm vitest run tests/setup        # 本目录
 pnpm test:setup                    # 等价（Lead 落地的 npm script）
 pnpm vitest run tests/setup/fixtures.test.mjs   # 只想确认 fixture 没坏
-XUANSHU_SETUP_TESTS_KEEP=0 pnpm vitest run tests/setup   # 跑完清掉 .tmp（默认保留现场）
 ```
 
 ## 十条断言面 ↔ 用例对照
@@ -55,8 +59,12 @@ XUANSHU_SETUP_TESTS_KEEP=0 pnpm vitest run tests/setup   # 跑完清掉 .tmp（�
 | `XUANSHU_UVX_BIN` | `fixtures/bin/uvx.mjs` | 不装真 uvx 环境、不起真 horosa（`.mjs` → `spawn(process.execPath,[bin,...args])`，Windows 上 shell:false 直跑 `.cmd` 会 EINVAL） |
 | `XUANSHU_INSTALL_PROFILE_BIN` | `fixtures/stubs/install-profile.mjs` | 真实现会跑 `pnpm install` —— 「零网络 / 零真实安装」守不住 |
 | `XUANSHU_VERIFY_ASSEMBLY_BIN` | `fixtures/stubs/verify-assembly.mjs` | C1 真跑要起 DSH CLI（分钟级）；替身让 exit 0/5 两态确定可造 |
-| `XUANSHU_SKIP_PREFLIGHT=1` | — | 跳过「`uv` 在不在 PATH」的环境门（本机 PATH 与 CI 不一致，会引入假红） |
-| `XUANSHU_FAKE_UVX_MODE` / `XUANSHU_STUB_MODE` | — | **只在测试侧**：造 exit 4（`fail-install` / `wrong-version`）与 exit 5（`fail-verify`） |
+| `XUANSHU_SKIP_PREFLIGHT=1` | — | 跳过「`uv` 在不在 PATH」的环境门（本机 PATH 与 CI 不一致，会引入假红）。**A4 的用例故意不设它**：那条要验的正是「`--verify-only` 下这道门不该跑」 |
+| `XUANSHU_FAKE_UVX_STATE` | 沙箱的 `state/` 目录 | 假 uvx 的状态与记账目录（`calls.jsonl` / `installed.json` / `serve.json`）——`baseEnv` 设的就是它 |
+| `XUANSHU_FAKE_UVX_MODE` | — | `fail-install` / `wrong-version` / `manifest-only` / `manifest-lies`：造 exit 4 的各种版本门形态（后两个是 A3 的用例） |
+| `XUANSHU_FAKE_UVX_NO_SESSION=1` | — | A2：让假 server **不回** `mcp-session-id` → C2 必须 false |
+| `XUANSHU_FAKE_UVX_GET_DELAY_MS` / `XUANSHU_FAKE_UVX_GET_DELAY_TIMES` | — | A1：让头一次 `GET /mcp` 慢应答（守卫判 `probe-failed`），复探时已经答得出来 |
+| `XUANSHU_STUB_MODE` / `XUANSHU_STUB_LOG` | — | **只在测试侧**：造 exit 4（`fail-profile`）与 exit 5（`fail-verify`），以及两个 stub 的 argv 台账 |
 | `XUANSHU_HOROSA_PORT` | — | 把 C2 的端口顶到一个 OS 分配的空闲端口（**绝不绑真实 8765**；假 uvx 见到 8765 会直接拒绝启动） |
 
 ## 替身回放的就是真机形状（别改「更好看」的版本）
@@ -115,6 +123,24 @@ XUANSHU_SETUP_TESTS_KEEP=0 pnpm vitest run tests/setup   # 跑完清掉 .tmp（�
 | `mirrorCandidates` 的**数组形态与逗号串形态结果相等**（含尾斜杠） | 数组分支没做 `rstrip('/')` → 产出 `https://mirror//owner/repo/...`（一个静默 404 的坏候选）；CLI 路径因为先过 `parseMirrorPrefixes` 而侥幸没事 |
 | （附）`连跑两次全绿` / 第 9 条 | `selfcheck.mjs` 把作用域里不存在的 `env` 传给 `startServe`（ReferenceError）→ **任何带自检的运行都必然 exit 5**，默认路径永远不可能成功 |
 
+## 票 05 复审（A 项）的回归门（同样别删、别放宽）
+
+同一个道理：每条都对应一次**代码 / 契约 / runbook 三处口径不一致**，修的是实现或文档，断言是那次
+「不一致」的探测门。用例名里带 A 编号，便于与 `.scratch/assembly-foundation/notes/setup-review-fixes.md` 对账：
+
+| 断言（用例） | 抓到的真缺陷 |
+|---|---|
+| A1 `selfcheck-branches`：守卫判 `probe-failed` → 加长预算复探 → **复用**通过（`serve.started === false`） | 契约 §5 改成「复探一次、不 spawn」，实现却直接 `return ok:false`（慢应答的 horosa 被冤枉成失败）；runbook 当时还写着第三种口径（「复用不成再自起一份」） |
+| A2 `selfcheck-branches`：假 server 不回 `mcp-session-id` → C2 false、exit 5 | `mcpToolsList().ok` 不看 sessionId，C2 只判 `tools.ok === true` → 判据被弱化（自家 `probe.mjs` 反而要求 sessionId，同票两套口径） |
+| A3 `setup-cli`：doctor 只给 `manifest_version` → exit 4 | 版本门会读 `manifest_version` / `runtime.version` / 顶层 `version`，**从不读**契约 §4.3 的 `runtime_payload_version` → 「新清单蒙着旧载荷」时门假过（还会把已装的同版本误判成「已装」而跳过安装） |
+| A4 `report-and-gates`：没有 uvx 的 PATH 上 `--verify-only` exit 0（同一 PATH 真跑 exit 3） | `preflightUvx()` 跑在 `--verify-only` 分支之前 → 没装 uv 的机器上「只想复看一份报告」也 exit 3，与 runbook 的承诺相反 |
+| A5 `report-and-gates`：pin 没有当前平台（exit 2）也写报告；真实 home 被拒仍零写入 | pin/平台解析失败只打 stdout、不落报告，而 runbook 承诺「成败都写报告，唯一例外是真实 home 被拒」 |
+| A6 `report-and-gates`：`HOROSA_SKILL_DATA_DIR` 指向真实 `~/.horosa` → 忽略 + note | 该环境变量能覆盖数据目录且**没有守卫**，与 §6「数据目录一律 `<dsh-home>/xuanshu/horosa`」及对 `$DSH_HOME` 的 R16 裁决不对称 |
+| A7 `selfcheck-branches`：两处都有信封时 `evidence.callEnvelopeFrom === 'content.text'` | 契约 §9 冻结的顺序是 `result.content[].text` **优先**、`structuredContent` 仅兼容，实现反了 —— 两处都在时由「兼容分支」决定读哪份数据（假 server 的 `structuredContent` 是一份错信封，顺序一乱 C3 必红） |
+| A9 `probe-pin`：pin 读不到 → `checkBaziTool()` 回 `ok:false`（且不是「连接失败」那种形状） | `probe.mjs` 里有 `FALLBACK_VERSION = '0.40.1'`（第二份钉版值）→ pin 读不到时静默退化成陈旧版本，断言的却是去年的版本 |
+| A10 `pin`（单测）/ `setup-cli`（报告键）：`platformFallback` 显式 `{from,to}` 或 `null` | `PLATFORM_FALLBACKS`（win32-arm64 → win32-x64）是**静默**的，绕开 §3.1「pin 无当前平台 → exit 2 并列出平台」的字面 |
+| A11 `report-and-gates` / `setup-cli`：报告里的 `logs/` 路径指向真文件 | 契约 §7 与 runbook 都承诺「大输出落 `logs/`」，但 `logsDir` 是死字段（算了没人用）→ 被 `clipEvidence` 裁掉的 `verify-assembly` / `doctor` 原文无处可寻 |
+
 ## 本票**未**覆盖的边界
 
 | 没测的东西 | 为什么 | 依赖 |
@@ -124,3 +150,5 @@ XUANSHU_SETUP_TESTS_KEEP=0 pnpm vitest run tests/setup   # 跑完清掉 .tmp（�
 | `--mirror` 在真 github 上的吞吐（21.9 MB/s 那种实测） | 真机网络事实，不是代码性质 | `captures/setup-e2e-groundtruth.md` §1 |
 | 真 horosa runtime 的 MCP 120 工具全量面 | 假 uvx 只回放 12 个（含 `horosa_cn_bazi_birth`）；全量面归 `scripts/horosa/**` 的探针 | 票 06 |
 | 8765 被别的进程占用（`occupied-foreign` → exit 3） | 需要先有一个真实占用者；票 04 的四态守卫已在自己的断言台里验过 | `tests/isolation/port-guard.test.mjs` |
+| `win32-arm64 → win32-x64` 回退的**真机**行为（报告字段是与真平台一致的） | 本机是 win32-x64，`process.arch` 造不出 arm64；回退的**选择逻辑**用 `runtimeArtifact()` 单测封住，报告字段用「直接命中 → null」那条用例封住 | 真 ARM 机器（转述给 Lead 时附本行） |
+| C2 自起 serve 的成功路径里「`initialize` 不带 session」以外的不完整形态（如 `tools/list` 空数组） | 需要一份「握手成功但工具表为空」的假 server；`c2Ready` 的两个来源都有这条判据，`probe.mjs` 侧另有单测断言 | 票 06 的探针断言台 |

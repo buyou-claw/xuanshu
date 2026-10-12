@@ -35,14 +35,12 @@ import { fileURLToPath } from 'node:url'
 import { DEFAULT_HOROSA_PORT, HOROSA_MCP_PATH } from '../isolation/defaults.mjs'
 import { checkHorosaPort } from '../isolation/horosa-guard.mjs'
 import { mcpCallTool, mcpToolsList } from './mcp-client.mjs'
-import { debug, truncate } from './shared.mjs'
+import { debug, errorMessage, truncate } from './shared.mjs'
 
 /** C3 的目标工具：MCP 名（`captures/horosa-cli/tool-list.json` 的 `bazi_birth.mcp_name`）。 */
 const BAZI_TOOL = 'horosa_cn_bazi_birth'
 /** CLI/信封里的技法名（信封 `tool` 字段实测是 CLI 名，不是 MCP 名）。 */
 const BAZI_ENVELOPE_TOOL = 'bazi_birth'
-/** 契约 §5 写死的钉版；能读到 `scripts/setup/horosa-pin.json` 时以 pin 为准（升级时只改 pin）。 */
-const FALLBACK_VERSION = '0.40.1'
 /** C2 的默认总预算：端口探针 + MCP 握手（tools/list 在 120 条时约 500KB）。 */
 const DEFAULT_HEALTH_TIMEOUT_MS = 20_000
 /** C3 的默认总预算：tools/list + 一次八字出盘（首调会拉起 runtime，冷启动慢，调用方按 §2 传大值）。 */
@@ -62,16 +60,35 @@ const PILLARS = [
 const DEFAULT_FIXTURE_URL = new URL('./bazi-fixture.json', import.meta.url)
 
 let cachedExpectedVersion
-/** 期望版本：pin 文件是唯一来源，读不到才退契约 §5 的 0.40.1。 */
+/**
+ * 期望版本（C3 断言的 `envelope.version`）：**唯一来源**是 `scripts/setup/horosa-pin.json`。
+ *
+ * A9 修掉的原始缺陷：这里曾有一份 `FALLBACK_VERSION` 兜底字面量 —— 那是**第二份钉版值**
+ * （`pin.mjs` 明令「代码里不许再出现」），pin 读不到时它会静默退化成一份陈旧版本：探针看着正常，
+ * 断言的却是去年那个版本。现在读不到 pin 就**不猜**：返回 `ok:false`，让 C3 响亮地失败
+ * （处置是「把 pin 恢复出来」，不是「拿旧版本凑绿」）。
+ *
+ * @returns {{ ok: boolean, version: string|null, detail: string }}
+ */
 function expectedVersion() {
   if (cachedExpectedVersion) return cachedExpectedVersion
-  cachedExpectedVersion = FALLBACK_VERSION
+  let pinPath
   try {
-    const pinPath = fileURLToPath(new URL('../setup/horosa-pin.json', import.meta.url))
-    const pin = JSON.parse(readFileSync(pinPath, 'utf8'))
-    if (pin && typeof pin.version === 'string' && pin.version.trim()) cachedExpectedVersion = pin.version.trim()
+    pinPath = fileURLToPath(new URL('../setup/horosa-pin.json', import.meta.url))
   } catch {
-    /* pin 不可读（还没落地/被改名）：用契约写死的版本，探针不因此失败 */
+    pinPath = '(scripts/setup/horosa-pin.json)'
+  }
+  try {
+    const pin = JSON.parse(readFileSync(pinPath, 'utf8'))
+    const version = typeof pin?.version === 'string' ? pin.version.trim() : ''
+    if (version === '') throw new Error('缺 version')
+    cachedExpectedVersion = { ok: true, version, detail: `期望版本 v${version}（来自 ${pinPath}）` }
+  } catch (error) {
+    cachedExpectedVersion = {
+      ok: false,
+      version: null,
+      detail: `钉版文件读不到/没有 version（${errorMessage(error)}）：${pinPath}`,
+    }
   }
   return cachedExpectedVersion
 }
@@ -287,7 +304,8 @@ function extractPillars(data) {
 export async function checkBaziTool({ port = DEFAULT_HOROSA_PORT, path = HOROSA_MCP_PATH, timeoutMs = DEFAULT_BAZI_TIMEOUT_MS, fixturePath } = {}) {
   const startedAt = Date.now()
   const budget = Math.max(1000, Number(timeoutMs) || DEFAULT_BAZI_TIMEOUT_MS)
-  const expected = expectedVersion()
+  const expectedRead = expectedVersion()
+  const expected = expectedRead.version
   const fixture = loadFixture(fixturePath)
 
   const fail = (detail, checks = {}, extra = {}) => ({
@@ -301,6 +319,10 @@ export async function checkBaziTool({ port = DEFAULT_HOROSA_PORT, path = HOROSA_
     detail,
   })
 
+  // A9：钉版读不到就**不猜版本**（连一次网络都不发）：C3 的 `version` 断言没有权威值可比。
+  if (!expectedRead.ok) {
+    return fail(`C3 前置失败：${expectedRead.detail} —— 版本期望值只有 scripts/setup/horosa-pin.json 一个来源，读不到就不猜（不拿任何兜底字面量放行）。`, { pin: false })
+  }
   if (!fixture.ok) return fail(fixture.detail, { fixture: false })
 
   /* ---------- 第一步：tools/list 必须含八字工具 ---------- */

@@ -3,10 +3,17 @@
  *
  * 三条**全部真实**，任一条失败 → exit 5（环境门类例外，见下）：
  *   C1 assembly   spawn `node scripts/verify-assembly.mjs --json --dsh-home <home> --profile <name>`，
- *                 要求 exit 0 且 stdout JSON 的 `ok === true`（真机实测 36.8 秒 / 五条 seam 全绿）。
- *   C2 horosa8765 先走票 04 的四态守卫：`occupied-foreign` → **exit 3**（环境门，不是自检失败）；
- *                 `horosa-ready` → **复用**（绝不 stop 别人的 server）；其余 → 起 serve（日志落
- *                 `<dataDir>/serve.log`）再等到 MCP `initialize` + `tools/list` 成功。
+ *                 要求 exit 0 且 stdout JSON 的 `ok === true`（真机实测 36.8 秒 / 五条 seam 全绿）；
+ *                 原始输出落 `<dsh-home>/xuanshu/logs/verify-assembly.json`，报告里给路径（A11）。
+ *   C2 horosa8765 先走票 04 的四态守卫，再按结论分流（判据**只有一条**：`c2Ready` = MCP `initialize`
+ *                 成功且带回 `mcp-session-id` + `tools/list` 非空，见下面的 `c2Ready`）：
+ *                 · `occupied-foreign` → **exit 3**（环境门，不是自检失败）；
+ *                 · 现成实例 MCP 就绪 → **复用**（绝不 stop 别人的 server）；
+ *                 · `free` → 起 serve（日志 `<dataDir>/serve.log`）再等到 MCP 就绪；
+ *                 · `probe-failed`（无法判定）或「`horosa-ready` 但握手不完整」→ **用加长预算复探一次**
+ *                   （`min(selfcheckTimeout/2, 15s)`，下限 5s；慢应答的 horosa 正是这一格的常见成因），
+ *                   仍不成再补一次无副作用的 MCP 握手，两者都不成 → C2 false（exit 5）。
+ *                   **绝不 spawn**：端口上已经有 listener，再起必撞；detail 必须写明「无法判定 ≠ 被占」。
  *   C3 bazi       交给 `scripts/horosa/probe.mjs::checkBaziTool`（tools/list 含 `horosa_cn_bazi_birth`
  *                 + tools/call 的信封 ok 且四柱可读）。
  *
@@ -25,7 +32,7 @@ import { pathToFileURL } from 'node:url'
 
 import { EXIT, SetupError } from './exit.mjs'
 import { runCommand, tailLines } from './proc.mjs'
-import { clipEvidence } from './report.mjs'
+import { clipEvidence, writeLogFile } from './report.mjs'
 
 /** 测试注入口（契约 §10）：把 C1 的断言台换成替身，制造确定性的通过/失败两态。 */
 export const VERIFY_ASSEMBLY_BIN_ENV = 'XUANSHU_VERIFY_ASSEMBLY_BIN'
@@ -39,8 +46,38 @@ export const PROBE_TIMEOUT_MS = 20_000
 /** 健康探针的超时：四态守卫自己是有界时间的（默认 1.5s），但冷启动的 horosa 会答得慢。 */
 export const HEALTH_TIMEOUT_MS = 10_000
 
+/** A1 加长复探的预算上下限：`min(selfcheckTimeout/2, 15s)`，下限 5s。 */
+export const MIN_REPROBE_MS = 5_000
+export const MAX_REPROBE_MS = 15_000
+
 /** 起 serve 后等就绪的轮询间隔。 */
 const READY_POLL_INTERVAL_MS = 3_000
+
+/**
+ * C2 的**唯一判据**（契约 §5）：MCP `initialize` 成功（200 且带响应头 `mcp-session-id`）+ `tools/list` 非空。
+ *
+ * 两个来源都算「同一条判据」：
+ *   - `checkHorosaHealth().mcpReady`（B 的探针内部就是这条：`list.ok && sessionId && tools.length > 0`）；
+ *   - 一次直接的 `mcpToolsList()` —— A2 之后它的 `ok` **同样**含「拿到了 mcp-session-id」，
+ *     所以这条路也不存在「tools 列表非空就算过」的松口。
+ * 「无 sessionId 的假 server」在两处都会判 false（tests/setup 有这条回归用例）。
+ */
+function c2Ready({ health: probeResult, list } = {}) {
+  if (probeResult?.mcpReady === true) return true
+  return list?.ok === true
+    && Array.isArray(list.tools)
+    && list.tools.length > 0
+    && Boolean(list.evidence?.sessionId)
+}
+
+/**
+ * A1 的加长复探预算：`min(selfcheckTimeout/2, 15s)`，下限 5s。
+ * 为什么是「一半预算」：复探之后还要留预算给 C3（八字出盘），把预算一次吃光会把 C2 的问题
+ * 变成 C3 的超时（那是另一种假红）。
+ */
+function reprobeBudget(remainingMs) {
+  return Math.max(MIN_REPROBE_MS, Math.min(Math.floor(Math.max(0, remainingMs) / 2), MAX_REPROBE_MS))
+}
 
 /**
  * 跑三条自检。
@@ -51,7 +88,7 @@ const READY_POLL_INTERVAL_MS = 3_000
 export async function runSelfcheck({
   repoRoot, dshHome, profile, wheelPath, runtimeRoot, dataDir,
   horosaPort, horosaHost, horosaPath, selfcheckTimeoutMs, keepServe = false,
-  env = process.env, log = () => {},
+  env = process.env, log = () => {}, logsDir,
 }) {
   const checks = []
   const deadline = Date.now() + Math.max(1000, Number(selfcheckTimeoutMs) || 0)
@@ -59,7 +96,7 @@ export async function runSelfcheck({
   const serve = { started: false, pid: null, stopped: false, detail: '未起 serve（复用已有实例或未走到启动）' }
 
   // ── C1：装配可启动 ────────────────────────────────────────────────
-  checks.push(await checkAssembly({ repoRoot, dshHome, profile, env, log }))
+  checks.push(await checkAssembly({ repoRoot, dshHome, profile, env, log, logsDir }))
 
   // ── C2 / C3：horosa ──────────────────────────────────────────────
   const modules = await loadHorosaModules(repoRoot, log)
@@ -104,7 +141,7 @@ export async function runSelfcheck({
 
 /* ─────────────────────────────── C1 ─────────────────────────────── */
 
-async function checkAssembly({ repoRoot, dshHome, profile, env, log }) {
+async function checkAssembly({ repoRoot, dshHome, profile, env, log, logsDir }) {
   const started = Date.now()
   const bin = resolveVerifyAssemblyBin({ repoRoot, env })
   const args = ['--json', '--dsh-home', dshHome, '--profile', profile]
@@ -112,6 +149,9 @@ async function checkAssembly({ repoRoot, dshHome, profile, env, log }) {
 
   const run = await runCommand(bin, args, { env, log, timeoutMs: C1_TIMEOUT_MS, label: 'verify-assembly' })
   const parsed = tryParseJson(run.stdout)
+  // A11：原始大输出落 `<dsh-home>/xuanshu/logs/`，报告里只给路径（契约 §7 的「大输出落 logs/」）。
+  const logFile = writeLogFile(logsDir, 'verify-assembly.json', run.stdout)
+  const stderrLogFile = run.stderr.trim() === '' ? null : writeLogFile(logsDir, 'verify-assembly.stderr.txt', run.stderr)
   const evidence = clipEvidence({
     bin,
     exitCode: run.status,
@@ -119,6 +159,8 @@ async function checkAssembly({ repoRoot, dshHome, profile, env, log }) {
     ok: parsed?.ok,
     error: parsed?.error,
     stderrTail: tailLines(run.stderr, 4),
+    logFile,
+    ...(stderrLogFile === null ? {} : { stderrLogFile }),
   })
 
   if (run.error !== null || run.timedOut) {
@@ -163,34 +205,18 @@ async function checkHorosa({ modules, wheelPath, runtimeRoot, dataDir, horosaPor
     )
   }
 
-  // 先试「现成实例」：horosa-ready 直接复用（B 的 `mcpReady` 也认，它是「MCP 端点真的答了」的判据）。
+  /** 最近一次 `tools/list` 的结果（证据里的 toolsCount / serverInfo 优先来自它）。 */
   let tools = null
   let reused = false
+  /** 用于判据的那次「复探/收尾探」：probe-failed 的加长复探，或自起成功后的收尾探。 */
   let healthAfter = null
-  const healthSaysReady = verdict === 'horosa-ready' || health?.mcpReady === true
-  if (healthSaysReady) {
-    tools = await safeCall(() => modules.client.mcpToolsList({ host: horosaHost, port, path, timeoutMs: Math.min(PROBE_TIMEOUT_MS, remaining()) }))
-    reused = tools?.ok === true
-    if (reused) log(`[setup] selfcheck C2：复用已在跑的 horosa（tools=${tools.tools?.length ?? 0}）`)
-  } else if (verdict !== 'free') {
-    // probe-failed / 无 verdict（**无法判定**）：fail-closed —— 只做一次**无副作用**的 MCP 握手
-    // （慢应答的 horosa 可能就是它，握手能过就说明确实就绪），握手不过就**不起任何进程**（票 04 R4/R5 的口径：
-    // 无法判定 ≠ 端口被占，但也不能在这格上贸然 spawn 一个可能与未知占用者抢端口的服务）。
-    tools = await safeCall(() => modules.client.mcpToolsList({ host: horosaHost, port, path, timeoutMs: Math.min(PROBE_TIMEOUT_MS, remaining()) }))
-    reused = tools?.ok === true
-    if (!reused) {
-      const check = makeCheck('horosa8765', false,
-        `四态守卫判「${verdict ?? '无法判定'}」：8765 的状态无法判定，按 fail-closed 处理，未起任何进程。`
-        + `处置：${health?.hint ?? `先复探一次（node scripts/isolation/horosa-guard.mjs --port ${port}），确认后再重跑`}`,
-        clipEvidence({ verdict, mcpReady: health?.mcpReady, evidence: health?.evidence, probe: tools?.detail }), started)
-      check.verdict = verdict ?? 'probe-failed'
-      return check
-    }
-    log(`[setup] selfcheck C2：守卫判「${verdict ?? '无法判定'}」但 MCP 握手成功 → 复用（tools=${tools.tools?.length ?? 0}）`)
-  }
 
-  // 只有「端口空着」这一态才自己起一份（`startServe` 自己的守卫也会再探一次，已在跑则回 started:false）。
-  if (!reused) {
+  if (c2Ready({ health })) {
+    // 现成实例，MCP 也真的就绪 → **复用**（自己没起，所以绝不会去 stop 它）。
+    reused = true
+    log(`[setup] selfcheck C2：复用已在跑的 horosa（guard=${verdict}、mcpReady=true、tools=${health?.mcp?.toolCount ?? 0}）`)
+  } else if (verdict === 'free') {
+    // 只有「端口空着」这一态才自己起一份（`startServe` 自己的守卫也会再探一次，已在跑则回 started:false）。
     if (modules.serve === undefined) {
       const check = makeCheck('horosa8765', false, 'scripts/horosa/serve-lifecycle.mjs 未落地，无法起 serve', clipEvidence({ verdict }), started)
       check.verdict = verdict ?? 'free'
@@ -227,30 +253,70 @@ async function checkHorosa({ modules, wheelPath, runtimeRoot, dataDir, horosaPor
     const readyDeadline = Date.now() + Math.max(1000, remaining() * 0.6)
     while (Date.now() < readyDeadline) {
       tools = await safeCall(() => modules.client.mcpToolsList({ host: horosaHost, port, path, timeoutMs: Math.min(PROBE_TIMEOUT_MS, remaining()) }))
-      if (tools?.ok === true) break
+      if (c2Ready({ list: tools })) break
       if (Date.now() + READY_POLL_INTERVAL_MS >= readyDeadline) break
       await sleep(READY_POLL_INTERVAL_MS)
     }
-    // B 的口径：startServe 自己会等到 horosa-ready；起完**再复探一次**四态守卫，把 mcpReady 一起记进证据
-    // （tools/list 才是 C2 的判据，这一次复探是给排障用的「它当时到底算不算就绪」）。
+    // 收尾复探（B 的 `checkHorosaHealth`）：既服务判据（mcpReady），也把 `mcpReady` 一起记进证据
+    // （排障时最有信息量的一格是「它当时到底算不算就绪」）。
     healthAfter = await safeCall(() => modules.probe.checkHorosaHealth({ port, path, timeoutMs: Math.min(HEALTH_TIMEOUT_MS, remaining()) }))
+  } else {
+    // 剩下两态都走这里（**绝不 spawn**：端口上已经有 listener，再起必撞）：
+    //   - `probe-failed`（守卫说**无法判定**：慢应答的 horosa 是这一格的常见成因）；
+    //   - `horosa-ready` 但 MCP 握手不完整（例如 initialize 没带 `mcp-session-id`）。
+    // 处置（A1）：用加长预算复探一次 `checkHorosaHealth`；拿到 mcpReady 就按「复用」通过；仍不成再补一次
+    // **无副作用**的 MCP 握手（有个别实现只答 POST、不答 GET，守卫因此判不出）；两者都不成才 fail-closed。
+    const budget = reprobeBudget(remaining())
+    log(`[setup] selfcheck C2：守卫判「${verdict ?? '无法判定'}」（不是「被占」）→ 用加长预算复探一次（${budget}ms），不起任何进程`)
+    healthAfter = await safeCall(() => modules.probe.checkHorosaHealth({ port, path, timeoutMs: budget }))
+    log(`[setup] selfcheck C2：复探 verdict=${healthAfter?.verdict ?? '(无 verdict)'} mcpReady=${healthAfter?.mcpReady === true}`)
+    if (c2Ready({ health: healthAfter })) {
+      reused = true
+    } else {
+      tools = await safeCall(() => modules.client.mcpToolsList({ host: horosaHost, port, path, timeoutMs: Math.min(PROBE_TIMEOUT_MS, remaining()) }))
+      if (c2Ready({ list: tools })) {
+        reused = true
+        log(`[setup] selfcheck C2：守卫判不出但 MCP 握手成功（tools=${tools.tools.length}，mcp-session-id 已带回）→ 复用`)
+      } else {
+        const stateNote = verdict === 'horosa-ready'
+          ? '守卫判「horosa-ready」，但 MCP 握手不完整（`initialize` 没带 `mcp-session-id`，或 `tools/list` 为空）'
+          : `四态守卫判「${verdict ?? '无法判定'}」：8765 的状态**无法判定 ≠ 被占**`
+        const check = makeCheck('horosa8765', false,
+          `${stateNote}（加长预算复探一次仍不成：verdict=${healthAfter?.verdict ?? '-'}、`
+          + `mcpReady=${healthAfter?.mcpReady === true}、MCP 握手 ${tools?.detail ?? tools?.error ?? '未成'}）。`
+          + '按 fail-closed 处理，**未起任何进程**（端口上有 listener，再起必撞）。'
+          + `处置：${health?.hint ?? `先人工复探一次（node scripts/isolation/horosa-guard.mjs --port ${port}），确认后再重跑`}`,
+          clipEvidence({
+            verdict,
+            reprobe: { verdict: healthAfter?.verdict, mcpReady: healthAfter?.mcpReady === true, evidence: healthAfter?.evidence },
+            mcpReady: health?.mcpReady,
+            evidence: health?.evidence,
+            probe: tools?.detail,
+          }), started)
+        check.verdict = verdict ?? 'probe-failed'
+        return check
+      }
+    }
   }
 
-  const ok = tools?.ok === true
-  const toolsCount = Array.isArray(tools?.tools) ? tools.tools.length : 0
+  const toolsCount = Array.isArray(tools?.tools) && tools.tools.length > 0
+    ? tools.tools.length
+    : (healthAfter?.mcp?.toolCount ?? health?.mcp?.toolCount ?? 0)
+  const serverInfo = tools?.serverInfo ?? healthAfter?.mcp?.serverInfo ?? health?.mcp?.serverInfo ?? null
+  const ok = c2Ready({ health: healthAfter ?? health, list: tools })
   const detail = ok
-    ? `${reused ? '复用' : '自起'}的 horosa 应答正常：tools/list ${toolsCount} 条，serverInfo=${JSON.stringify(tools?.serverInfo ?? {})}`
-    : `MCP 未就绪：${tools?.detail ?? tools?.error ?? '未知'}（verdict=${verdict ?? '-'}）`
+    ? `${reused ? '复用' : '自起'}的 horosa 应答正常：MCP initialize 带 mcp-session-id、tools/list ${toolsCount} 条，serverInfo=${JSON.stringify(serverInfo ?? {})}`
+    : `MCP 未就绪：${tools?.detail ?? tools?.error ?? healthAfter?.detail ?? '未知'}（verdict=${verdict ?? '-'}）`
   const check = makeCheck('horosa8765', ok, detail, clipEvidence({
     verdict,
     verdictAfter: healthAfter?.verdict,
-    mcpReady: health?.mcpReady ?? healthAfter?.mcpReady,
+    mcpReady: healthAfter?.mcpReady ?? health?.mcpReady,
     reused,
     toolsCount,
-    serverInfo: tools?.serverInfo,
+    serverInfo,
     port,
     path,
-    evidence: tools?.evidence,
+    evidence: tools?.evidence ?? healthAfter?.evidence ?? health?.evidence,
   }), started)
   // 契约 §7 的样例把 `verdict` 放在 check **顶层**：它回答的是「C2 最后是什么归宿」。
   // 通过时一律 `horosa-ready`（复用的现成实例与自起成功是同一个归宿，`evidence.reused` 能区分）；

@@ -1,5 +1,5 @@
 /**
- * scripts/setup/exit-codes.mjs — 票 05 setup 的退出码表与错误类型。
+ * scripts/setup/exit.mjs — 票 05 setup 的退出码表与错误类型。
  *
  * 契约出处：`.scratch/assembly-foundation/notes/setup-contract.md` §8（冻结）。这张表是**对外接口**：
  * runbook、CI、`tests/setup/**` 都拿它判分，所以键名与数值都不许就地魔改。

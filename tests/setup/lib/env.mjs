@@ -6,7 +6,7 @@
  * 而且最坏情况是某个用例把真实 `~/.dsh` 当成目标。所有受管变量一律**先删再按需设**。
  */
 
-/** 被测实现认识的全部环境变量（契约 §2/§3.4/§10 + setup-core 已回报的注入点）。 */
+/** 被测实现认识的全部环境变量（契约 §2/§3.4/§10 + setup-core 已回报的注入点）+ 测试替身自己的旋钮。 */
 export const MANAGED_ENV = [
   'DSH_HOME',
   'HOROSA_RUNTIME_ROOT',
@@ -24,9 +24,16 @@ export const MANAGED_ENV = [
   'XUANSHU_SKIP_PREFLIGHT',
   'XUANSHU_INSTALL_PROFILE_BIN',
   'XUANSHU_VERIFY_ASSEMBLY_BIN',
+  // 替身自己的旋钮（B3：它们以前不在这张表里，于是「先删再设」这句话对它们不成立）：
   'XUANSHU_FAKE_UVX_STATE',
   'XUANSHU_FAKE_UVX_MODE',
   'XUANSHU_FAKE_UVX_VERSION',
+  'XUANSHU_FAKE_UVX_NO_SESSION',
+  'XUANSHU_FAKE_UVX_BOTH_ENVELOPES',
+  'XUANSHU_FAKE_UVX_GET_DELAY_MS',
+  'XUANSHU_FAKE_UVX_GET_DELAY_TIMES',
+  'XUANSHU_STUB_MODE',
+  'XUANSHU_STUB_LOG',
 ]
 
 /**

@@ -110,7 +110,11 @@ async function main(argv) {
     artifacts.wheel.pinVersion = pin.version
     artifacts.runtime.pinVersion = pin.version
   } catch (error) {
-    return failureReport(setupError(error), { opts, paths: undefined, pin: undefined })
+    // A5：路径/钉版解析失败（exit 1/2/3）**也要落报告** —— runbook §9 与契约 §7 的承诺是「成败都写报告，
+    // 唯一例外是真实 home 被拒」。以前这一支只打 stdout（还得带 --json），于是「pin 里没有当前平台」
+    // 这台机器上就没有任何机器可读产物。前提没变：**已经解析出 dsh-home**（没有 paths 就没处写），
+    // 且它**不是**真实 home（拒绝路径仍然一个字节都不写）。
+    return earlyFailure(setupError(error), { opts, paths })
   }
 
   const mirror = resolveMirrorPrefixes({ mirror: opts.mirror })
@@ -121,11 +125,18 @@ async function main(argv) {
   report.profile.mode = opts.profileMode
   report.notes.push(`DSH home：${paths.home}（来源 ${paths.homeSource}）`)
   for (const note of paths.homeIgnored) report.notes.push(note)
+  for (const note of paths.dataDirIgnored) report.notes.push(note)
   report.notes.push(`runtime 根：${paths.runtimeRoot}（来源 ${paths.runtimeRootSource}）`)
   report.notes.push(`缓存目录：${paths.cacheDir}（来源 ${paths.cacheSource}）`)
   report.notes.push(`数据目录：${paths.dataDir}（来源 ${paths.dataDirSource}）`)
   report.notes.push(`horosa 端口：${paths.horosaPort}（来源 ${paths.horosaPortSource}）；host ${paths.horosaHost}（来源 ${paths.horosaHostSource}）`)
-  if (artifacts.runtime.fallback) report.notes.push(`平台 ${artifacts.runtime.hostPlatform} 走 ${artifacts.runtime.platform} 载荷（上游支持的仿真组合）`)
+  // A10：平台回退**不静默** —— 报告里 `pin.runtime.platformFallback` 给机器读，note 给人看。
+  if (artifacts.runtime.platformFallback !== null) {
+    const { from, to } = artifacts.runtime.platformFallback
+    report.notes.push(`平台回退：本机 ${from} 走 pin 里的 ${to} 载荷（上游认可的仿真组合；报告字段 pin.runtime.platformFallback={"from":"${from}","to":"${to}"}）`)
+  } else {
+    report.notes.push('平台回退：无（本机平台键在 pin 里直接命中）')
+  }
   report.notes.push(mirror.prefixes.length > 0
     ? `镜像前缀 ${mirror.prefixes.length} 个（来源 ${mirror.source}）：${mirror.prefixes.join(', ')}`
     : `未配置镜像（来源 ${mirror.source}）—— 本机直连 github 实测只有 12–24 KB/s`)
@@ -140,18 +151,29 @@ async function main(argv) {
   }
 
   /* ── 真跑 ─────────────────────────────────────────────── */
+  // A5：失败的报告必须能回答「**哪一步**失败了」（只给一个 ok:false 等于让人回去翻终端）。
+  // 每次换阶段都更新它，catch 里写进 notes。
+  let stage = '环境门（真实 home / ASCII runtime 根）'
   try {
     if (!realHome.ok) throw new SetupError(realHome.detail, { code: EXIT.environment, hint: realHome.hint })
     if (!ascii.ok) throw new SetupError(ascii.detail, { code: EXIT.environment, hint: ascii.hint })
-    await preflightUvx()
 
     const childEnv = buildChildEnv({ mirror, prefixes: mirror.prefixes, paths })
 
     if (opts.verifyOnly) {
-      report.notes.push('--verify-only：不做取件/安装，只跑自检并写报告（pin 段只反映缓存现状）')
+      stage = '三项自检（--verify-only）'
+      // A4：`--verify-only` 说好「不做取件/安装」，那 uvx 环境门也不该跑 —— 它探的是「能不能起
+      // `uvx --from <wheel> horosa-skill …`」，而这条路径根本不 spawn uvx（只有 C2 自起 serve 才要，
+      // 那时的失败会带着原文响亮地报出来）。原先它跑在 verifyOnly 分支**之前**，于是「没装 uv 的机器上
+      // 只想复看一份报告」会 exit 3 —— 与 runbook 的承诺相反。
+      report.notes.push('--verify-only：不做取件/安装、不跑 uvx 环境门，只跑自检并写报告（pin 段只反映缓存现状）')
       fillPinFromCache({ report, artifacts, cacheDir: paths.cacheDir })
     } else {
+      stage = 'uvx 环境门'
+      await preflightUvx()
+      stage = '取件 / SHA256 校验'
       await acquireAll({ report, artifacts, opts, paths, mirror })
+      stage = '安装 runtime（install --archive + 同版本硬门）'
       const runtimeResult = await setupRuntime({
         wheelPath: report.pin.wheel.path,
         archivePath: report.pin.runtime.path,
@@ -161,6 +183,7 @@ async function main(argv) {
         force: opts.force,
         env: childEnv,
         log,
+        logsDir: paths.logsDir,
       })
       report.runtime.action = runtimeResult.action
       report.runtime.version = runtimeResult.version
@@ -169,8 +192,11 @@ async function main(argv) {
         doctorBefore: runtimeResult.doctorBefore,
         doctorAfter: runtimeResult.doctorAfter,
         install: runtimeResult.install,
+        // A11：doctor / install 的原始 JSON 落 `<logs>/`；报告里给路径（证据只放小字段）。
+        logs: runtimeResult.logs,
       })
 
+      stage = '装配 profile'
       const profileResult = await installProfile({
         repoRoot: REPO_ROOT,
         dshHome: paths.home,
@@ -189,6 +215,7 @@ async function main(argv) {
       report.ok = true
       report.exitCode = EXIT.ok
     } else {
+      stage = '三项自检'
       const selfcheck = await runSelfcheck({
         repoRoot: REPO_ROOT,
         dshHome: paths.home,
@@ -203,6 +230,8 @@ async function main(argv) {
         keepServe: opts.keepServe,
         env: process.env,
         log,
+        // A11：C1 的原始大输出（verify-assembly 的 JSON）落 `<dsh-home>/xuanshu/logs/`。
+        logsDir: paths.logsDir,
       })
       report.checks = selfcheck.checks
       report.serve = selfcheck.serve
@@ -225,6 +254,8 @@ async function main(argv) {
     report.error = setupErr.message
     if (setupErr.hint !== undefined) report.hint = setupErr.hint
     if (setupErr.evidence !== undefined) report.evidence = clipEvidence(setupErr.evidence)
+    // A5：失败的报告必须写明**哪一步**（不然一份 ok:false 读起来像是「取件失败了」）。
+    report.notes.push(`失败阶段：${stage}（退出码 ${setupErr.code}）`)
   }
 
   // 失败时把「错误 + 处置」也写到 **stderr**：`--json` 下报告在 stdout，但操作者看的是终端；
@@ -237,21 +268,34 @@ async function main(argv) {
   // 报告**无论成败都写** —— 唯一的例外是「真实 home 被拒」这条：那时 reportFile 正指向用户的真实
   // `~/.dsh`，而契约 §6 的第一句「缺省绝不写真实 ~/.dsh」**没有例外条款**：拒绝路径恰恰是最需要零副作用
   // 的那条（用户可能只是打错了一个参数）。显式给了 `--install` 就不一样了，那是他要求的。
-  if (realHome.ok) {
-    try {
-      writeReport(paths.reportFile, report)
-      report.notes.push(`报告：${paths.reportFile}`)
-    } catch (error) {
-      log(`[setup] 警告：报告写不进去（${paths.reportFile}）：${error?.message ?? error}`)
-    }
-  } else {
-    report.notes.push(`真实 DSH home 被拒：报告未落盘（只在 stdout/stderr），${paths.reportFile} 一个字节都没动`)
-    log(`[setup] 真实 DSH home 被拒：不写任何文件（含报告）`)
-  }
+  persistReport({ report, paths, realHome, log })
 
   if (opts.json) process.stdout.write(`${JSON.stringify(report, undefined, 2)}\n`)
   else process.stdout.write(`${formatReport(report)}\n`)
   return report.exitCode
+}
+
+/**
+ * 报告落盘（唯一出口，A5）。
+ *
+ * 契约 §7 + runbook §9 的承诺是「成功与失败都写报告」，唯一的例外是「真实 home 被拒」：那条路径要
+ * **零副作用**（用户可能只是打错了一个参数），一个字节都不写 —— 连报告也不落盘。
+ * 写不进去（盘满/权限）只记一条 stderr 警告：报告是排障产物，不该把一次成功的运行判成失败。
+ */
+function persistReport({ report, paths, realHome, log }) {
+  if (!realHome.ok) {
+    report.notes.push(`真实 DSH home 被拒：报告未落盘（只在 stdout/stderr），${paths.reportFile} 一个字节都没动`)
+    log('[setup] 真实 DSH home 被拒：不写任何文件（含报告）')
+    return false
+  }
+  try {
+    writeReport(paths.reportFile, report)
+    report.notes.push(`报告：${paths.reportFile}`)
+    return true
+  } catch (error) {
+    log(`[setup] 警告：报告写不进去（${paths.reportFile}）：${error?.message ?? error}`)
+    return false
+  }
 }
 
 /* ─────────────────────────── 步骤 ─────────────────────────── */
@@ -485,19 +529,40 @@ function usageFailure(error) {
   return setupErr.code
 }
 
-function failureReport(error, { opts, paths, pin }) {
-  const setupErr = setupError(error)
-  process.stderr.write(`setup: ${setupErr.message}\n`)
-  if (setupErr.hint !== undefined) process.stderr.write(`${setupErr.hint}\n`)
-  if (opts?.json === true) {
-    const report = newReport({ pin: pin ?? undefined, paths: paths ?? undefined })
-    report.ok = false
-    report.exitCode = setupErr.code
-    report.error = setupErr.message
-    if (setupErr.hint !== undefined) report.hint = setupErr.hint
-    process.stdout.write(`${JSON.stringify(report, undefined, 2)}\n`)
+/**
+ * 早期失败（**路径/钉版解析阶段**）的统一处置：人读错误走 stderr，报告（若可写）走文件 + stdout。
+ *
+ * A5 的三条边界，一条都不许松：
+ *   1. 只有**已经解析出 dsh-home**（`paths` 存在）才写 —— 参数解析失败（exit 1）连 home 都还没有，
+ *      那就只在终端说，不猜一个门牌写进去；
+ *   2. **真实 home 被拒时一个字节都不写**（用户可能只是打错参数，这条路径要零副作用）；
+ *   3. 报告里必须写清**失败阶段**（notes），否则一份 `ok:false` 的报告读起来像是「取件失败了」。
+ */
+function earlyFailure(error, { opts, paths }) {
+  process.stderr.write(`setup: ${error.message}\n`)
+  if (error.hint !== undefined) process.stderr.write(`${error.hint}\n`)
+
+  const report = newReport({ paths })
+  report.ok = false
+  report.exitCode = error.code
+  report.error = error.message
+  if (error.hint !== undefined) report.hint = error.hint
+  if (error.evidence !== undefined) report.evidence = clipEvidence(error.evidence)
+
+  if (paths !== undefined && opts?.dryRun === true) {
+    // `--dry-run` 的承诺是零副作用（不写报告、不建目录）—— 这条承诺优先于 A5 的「失败也写报告」。
+    report.notes.push('--dry-run：零副作用（报告未落盘，只在 stdout/stderr 给结论）')
+  } else if (paths !== undefined) {
+    report.notes.push(`失败阶段：解析路径 / 加载钉版（退出码 ${error.code}；还没开始取件、没写任何工作目录）`)
+    for (const note of paths.homeIgnored ?? []) report.notes.push(note)
+    for (const note of paths.dataDirIgnored ?? []) report.notes.push(note)
+    const realHome = checkRealHomePolicy({ home: paths.home, install: opts?.install === true })
+    persistReport({ report, paths, realHome, log })
   }
-  return setupErr.code
+
+  if (opts?.json === true) process.stdout.write(`${JSON.stringify(report, undefined, 2)}\n`)
+  else process.stdout.write(`${formatReport(report)}\n`)
+  return error.code
 }
 
 /** 只有作为 CLI 直接跑时才执行；被测试 import 时只导出零件。 */

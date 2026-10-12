@@ -106,7 +106,7 @@ function assertArtifact(label, artifact) {
   }
 }
 
-/** 资产 URL：`<releaseBase>/<name>`（pin 的 URL 是**权威**；镜像只换传输，见 mirrors.mjs）。 */
+/** 资产 URL：`<releaseBase>/<name>`（pin 的 URL 是**权威**；镜像只换传输，见 mirror.mjs）。 */
 export function artifactUrl(pin, artifact) {
   return `${String(pin.releaseBase).replace(/\/+$/, '')}/${artifact.name}`
 }
@@ -114,7 +114,13 @@ export function artifactUrl(pin, artifact) {
 /**
  * 当前平台的 runtime 工件描述。
  *
+ * 回退（`PLATFORM_FALLBACKS`）**不静默**：命中了就把「从哪个平台键、走到哪个平台键」一起回传
+ * （`platformFallback = {from, to}`），调用方必须把它写进报告 `pin.runtime.platformFallback` 与一条 note ——
+ * 契约 §3.1 的字面是「pin 里没有当前平台 → exit 2」，回退是上游认可的唯一例外，那就必须**看得见**
+ * （否则「装的到底是哪份载荷」只能靠人去读 pin 才发现）。
+ *
  * @returns {{ kind: 'runtime', platform: string, hostPlatform: string, fallback: boolean,
+ *             platformFallback: {from: string, to: string}|null,
  *             name: string, sha256: string, size: number, archiveType: string|undefined, url: string }}
  */
 export function runtimeArtifact(pin, { platform = process.platform, arch = process.arch } = {}) {
@@ -140,6 +146,9 @@ export function runtimeArtifact(pin, { platform = process.platform, arch = proce
     platform: key,
     hostPlatform: host,
     fallback,
+    // 契约 §3.1 的字面是「没有当前平台 → exit 2」；唯一的例外是上游认可的仿真组合（win32-arm64 → win32-x64），
+    // 它必须显式进报告，不许当「本来就有这个平台」。
+    platformFallback: fallback ? { from: host, to: key } : null,
     name: artifact.name,
     sha256: String(artifact.sha256).toLowerCase(),
     size: artifact.size,
@@ -156,6 +165,7 @@ export function wheelArtifact(pin) {
     platform: 'any',
     hostPlatform: platformKey(),
     fallback: false,
+    platformFallback: null,
     name: artifact.name,
     sha256: String(artifact.sha256).toLowerCase(),
     size: artifact.size,

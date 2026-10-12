@@ -28,9 +28,13 @@
  *   可能一直挂着不结束 —— 等它关流 = 每次都撞超时，那会造出「真连能过、探针超时」的假红）。
  *
  * `ok` 的语义（**传输层**，唯一的定义处）：
- *   `mcpToolsList().ok === true` ⇔ MCP 握手成功 + `tools/list` 回了非空的工具名数组；
- *   `mcpCallTool().ok === true`  ⇔ 传输成功且**拿到了信封**（`envelope.ok` 是**工具层**结论，另看
+ *   `mcpToolsList().ok === true` ⇔ MCP 握手成功（`initialize` 200 **且带回响应头 `mcp-session-id`**）
+ *     + `tools/list` 回了非空的工具名数组；
+ *   `mcpCallTool().ok === true`  ⇔ 同一套握手成立且**拿到了信封**（`envelope.ok` 是**工具层**结论，另看
  *   `envelope.ok` / `evidence.envelopeOk`，C3 的判据在 `probe.mjs::checkBaziTool`，不在这一层）。
+ *   「initialize 不带 mcp-session-id 也算握手成功」是原始缺陷（同票两套口径）：没有会话 id 就没有
+ *   「MCP 真的建了会话」这回事，契约 §5 把「200 且带 `mcp-session-id`」写成了 C2 判据的一部分，
+ *   所以它落在**握手里**（`handshake()`），`mcpToolsList` 与 `mcpCallTool` 同时受益。
  *   两者都**不抛**：一切失败折算成 `{ ok:false, ... , detail }`（§9 末条）。
  *
  * 本模块**不往 stdout 打印**（`XUANSHU_HOROSA_DEBUG=1` 时才往 stderr 写调试行）。
@@ -325,6 +329,23 @@ async function handshake({ url, token, timeoutMs }) {
   evidence.serverInfo = serverInfo
   evidence.protocolVersion = result.protocolVersion ?? null
 
+  // 契约 §5（A2）：「MCP `initialize`（**必须 200 且带响应头 `mcp-session-id`**）」是 C2 判据的一部分。
+  // 真机实测该头必带（`captures/setup-e2e-groundtruth.md` §4 第一行）；没带就不是「握手成功」——
+  // 放行它会造出「tools 列表非空就算过」的松判据（同票两套口径的原始缺陷）。
+  if (!init.sessionId) {
+    evidence.step = 'initialize'
+    evidence.error = 'no-session-id'
+    return {
+      ok: false,
+      sessionId: null,
+      serverInfo,
+      protocolVersion: result.protocolVersion ?? null,
+      evidence,
+      detail: `${url} 的 MCP initialize 没有带回响应头 mcp-session-id（HTTP ${init.status ?? '-'}${init.contentType ? `，${init.contentType}` : ''}）`
+        + '：契约 §5 要求 200 且带 mcp-session-id，按「握手未成立」处理（没有会话 id，后续 tools/list 只是碰运气）。',
+    }
+  }
+
   // 通知无 id；真机答 202 + 空 body，这是**正常**的（实测）。
   const note = await postJsonRpc({
     url,
@@ -359,6 +380,8 @@ async function handshake({ url, token, timeoutMs }) {
 
 /**
  * 列出 MCP 工具名（C2 用；C3 的「含 horosa_cn_bazi_birth」再据此判）。
+ * `ok === true` ⇔ 握手成立（`initialize` 200 **且带回 `mcp-session-id`**）**且** `tools/list` 非空
+ * —— 即契约 §5 的 C2 判据本身（A2）。
  * @returns {Promise<{ok:boolean,status:number|undefined,tools:string[],serverInfo:object|null,evidence:object,detail:string}>}
  */
 export async function mcpToolsList({
@@ -546,16 +569,15 @@ export async function mcpCallTool({
 
 /**
  * 从 `tools/call` 的 result 里取信封。
- * 真机形状 = `{ content:[{type:'text', text:"<JSON 字符串>"}], isError }`（实测）；
- * `structuredContent` 与「result 自己就是信封」两种也认（不同 SDK 版本/配置下会出现）。
+ *
+ * 顺序**按契约 §9 冻结的那一句**（A7）：`result.content[].text`（JSON 字符串）优先，`structuredContent`
+ * 仅兼容。为什么不反过来：真机形状是
+ * `{ content:[{type:'text', text:"<JSON 字符串>"}], isError }`（实测，`captures/setup-e2e-groundtruth.md` §4），
+ * `structuredContent` 是别的 SDK 版本/配置下才出现的东西 —— 把它放前面，等于让「兼容分支」决定我们
+ * 读的是哪份数据（两处都在时会静默改语义）。
  */
 function extractEnvelope(result) {
   if (!result || typeof result !== 'object') return { envelope: null, from: null }
-
-  const structured = result.structuredContent
-  if (structured && typeof structured === 'object' && !Array.isArray(structured)) {
-    return { envelope: structured, from: 'structuredContent' }
-  }
 
   const content = Array.isArray(result.content) ? result.content : []
   for (const part of content) {
@@ -563,6 +585,12 @@ function extractEnvelope(result) {
     if (part.type !== 'text' || typeof part.text !== 'string') continue
     const parsed = tryJsonParse(part.text)
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { envelope: parsed, from: 'content.text' }
+  }
+
+  // 兼容：不同 SDK/配置会把信封直接放 structuredContent；再退一步，result 自己就是信封。
+  const structured = result.structuredContent
+  if (structured && typeof structured === 'object' && !Array.isArray(structured)) {
+    return { envelope: structured, from: 'structuredContent' }
   }
 
   if ('ok' in result || 'error' in result) return { envelope: result, from: 'result' }

@@ -7,13 +7,17 @@
  * 两条硬约束：
  *   1. `checks[].id` 恰为 `assembly` / `horosa8765` / `bazi`，顺序即打印顺序；
  *   2. 证据只放**小体积**关键字段（单项 ≤ 2KB，超了截断并标 `truncated`）——大输出落
- *      `<dsh-home>/xuanshu/logs/`，报告里只记路径。
+ *      `<dsh-home>/xuanshu/logs/`（`writeLogFile`），报告里只记路径。
+ *
+ * §7 的样例是**下界**，不是完整键表：实现允许**追加** additive 键（`serve` / `plan` / `dryRun` /
+ * `pin.runtime.platformFallback` / `checks[].evidence.logFile` …都属这一类），消费者按「有则用、无则略」
+ * 读；反过来，样例里已有的键**不许**改名或改语义。runbook §9 列了这几个 additive 键的含义。
  *
  * 仅使用 Node 内置模块。ESM。
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { exitLabel } from './exit.mjs'
 
@@ -47,6 +51,8 @@ export function newReport({ pin, paths, now = new Date() } = {}) {
         sha256: pin?.runtime?.sha256 ?? null,
         path: null,
         action: null,
+        // A10：平台回退不静默 —— 命中上游认可的仿真组合（win32-arm64 走 x64）时写 {from,to}，其余一律 null。
+        platformFallback: pin?.runtime?.platformFallback ?? null,
       },
     },
     runtime: {
@@ -103,6 +109,26 @@ export function writeReport(reportFile, report) {
   const body = `${JSON.stringify(report, undefined, 2)}\n`
   writeFileSync(reportFile, body, 'utf8')
   return reportFile
+}
+
+/**
+ * 大输出落盘（契约 §7）：`<logsDir>/<name>`，返回绝对路径（写不进去返回 null，绝不抛）。
+ *
+ * 为什么必须有它：`clipEvidence` 会把超过 2KB 的证据裁掉，而排障时最需要的恰恰是被裁掉的那部分
+ * ——`verify-assembly` 的 JSON 与 `doctor` 的 JSON 都远超 2KB。以前 `logsDir` 算了却没人用（A11），
+ * 契约里「大输出落 logs/」这句就是空的。这里与 `clipEvidence` 配对：**报告只放路径，原文落盘**。
+ * 写盘失败（没权限/盘满）只让调用方拿到 null，不许因此把一次成功的安装判成失败。
+ */
+export function writeLogFile(logsDir, name, text) {
+  if (typeof logsDir !== 'string' || logsDir.trim() === '') return null
+  const file = join(logsDir, name)
+  try {
+    mkdirSync(logsDir, { recursive: true })
+    writeFileSync(file, String(text ?? ''), 'utf8')
+    return file
+  } catch {
+    return null
+  }
 }
 
 /** 人类可读摘要（stdout 走这份；`--json` 时 stdout 只有 JSON）。 */

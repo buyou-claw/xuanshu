@@ -14,7 +14,7 @@ import net from 'node:net'
 import { join } from 'node:path'
 
 import { childEnv } from './env.mjs'
-import { RELEASE_SERVER, REPO_ROOT, SETUP_CLI } from './paths.mjs'
+import { FAKE_UVX, RELEASE_SERVER, REPO_ROOT, SETUP_CLI } from './paths.mjs'
 
 /** 跑一次被测 CLI。 */
 export function runSetup(args, { env = {}, timeoutMs = 120_000, cwd = REPO_ROOT } = {}) {
@@ -70,6 +70,62 @@ export function readCalls(state, file = 'calls.jsonl') {
     .split(/\r?\n/)
     .filter((line) => line.trim() !== '')
     .map((line) => JSON.parse(line))
+}
+
+/**
+ * 起一份**假 horosa serve**（独立进程，不由被测实现托管）。
+ *
+ * 为什么需要它：C2 的两条分流用例（A1「守卫判 probe-failed」/ A2「不带 mcp-session-id」）的前提是
+ * **端口上已经有一个 listener**。让被测实现自己去起，就等于把「被测行为」当成「环境前提」，
+ * 断言从根上就测不到了（而且 A1 的硬规矩之一恰恰是「绝不 spawn」）。
+ *
+ * 就绪判据用一次 **POST** `initialize` 探活（不是 GET）：GET 只来自票 04 的四态守卫，
+ * 而 A1 的 fixture 按「前 N 次 GET 慢应答」计数 —— 探活用 GET 会把那次慢应答提前消耗掉。
+ *
+ * @returns {Promise<{port:number, url:string, stop:()=>Promise<void>}>}
+ */
+export async function startFakeHorosa({ state, env = {}, port, timeoutMs = 10_000 }) {
+  const child = spawn(
+    process.execPath,
+    [FAKE_UVX, 'horosa-skill', 'serve', '--host', '127.0.0.1', '--port', String(port)],
+    { stdio: ['ignore', 'pipe', 'pipe'], env: childEnv({ XUANSHU_FAKE_UVX_STATE: state, ...env }) },
+  )
+  const stderr = []
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', (chunk) => stderr.push(chunk))
+
+  const url = `http://127.0.0.1:${port}/mcp`
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'fixture-ready', version: '1' } } }),
+      })
+      if (response.status === 200) {
+        await response.arrayBuffer()
+        break
+      }
+    } catch (error) {
+      if (Date.now() >= deadline) throw new Error(`假 horosa 没在 ${timeoutMs}ms 内起来：${error?.message ?? error}\n${stderr.join('')}`)
+    }
+    if (Date.now() >= deadline) throw new Error(`假 horosa 没在 ${timeoutMs}ms 内起来（端口 ${port}）\n${stderr.join('')}`)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+
+  return {
+    port,
+    url,
+    /** 停掉这份**测试自己起的**进程（被测实现在这几条用例里不许碰它）。 */
+    async stop() {
+      if (child.exitCode !== null || child.signalCode !== null) return
+      child.kill()
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    },
+    stderrText: () => stderr.join(''),
+  }
 }
 
 /** 找一个空闲端口（先 listen(0) 拿 OS 分配，再关掉）。给 C2 的 `--horosa-port` 用。 */

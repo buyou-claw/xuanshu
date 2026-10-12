@@ -27,9 +27,19 @@
  * 环境变量：
  *   XUANSHU_FAKE_UVX_STATE    状态目录（必需；缺省用 os.tmpdir()/xuanshu-fake-uvx）
  *   XUANSHU_FAKE_UVX_VERSION  回放的版本（缺省 0.40.1）
- *   XUANSHU_FAKE_UVX_MODE     '' | fail-install | wrong-version
+ *   XUANSHU_FAKE_UVX_MODE     '' | fail-install | wrong-version | manifest-only | manifest-lies
  *                                fail-install  = install 返回非 0（第 7 条的 exit 4）
  *                                wrong-version = 装完 doctor 回一个**不等于 pin** 的版本（同版本硬门，exit 4）
+ *                                manifest-only = 已装，但 doctor **只给 manifest_version**，不给
+ *                                                runtime_payload_version / freshness.installed_version
+ *                                                （A3：版本取不到 → exit 4，不许拿清单版本兜底）
+ *                                manifest-lies = manifest_version 等于 pin，而 runtime_payload_version /
+ *                                                freshness.installed_version 是别的版本（A3：门必须看载荷版本）
+ *   XUANSHU_FAKE_UVX_NO_SESSION=1  initialize 响应**不带 mcp-session-id**（A2：C2 必须判 false）
+ *   XUANSHU_FAKE_UVX_BOTH_ENVELOPES=1  tools/call 同时回 `structuredContent`（一份**错的**信封）与
+ *                                  `content[0].text`（真信封）——A7：抽取顺序必须是 content 优先
+ *   XUANSHU_FAKE_UVX_GET_DELAY_MS   前几次 GET 延迟应答（A1：模拟「慢 horosa」→ 守卫判 probe-failed）
+ *   XUANSHU_FAKE_UVX_GET_DELAY_TIMES 有几次 GET 是慢的（缺省 1：慢一次，复探就该成功）
  *
  * ⚠️ 版本默认值**从仓内 `scripts/setup/horosa-pin.json` 派生**（可用 `XUANSHU_FAKE_UVX_VERSION` 覆盖）：
  *   C3 断言的「期望版本」由探针直接读仓内 pin 得到（不认 `XUANSHU_SETUP_PIN`），所以 fixture 必须回放
@@ -59,8 +69,16 @@ function pinnedVersion() {
 const STATE = process.env.XUANSHU_FAKE_UVX_STATE || join(tmpdir(), 'xuanshu-fake-uvx')
 const VERSION = process.env.XUANSHU_FAKE_UVX_VERSION || pinnedVersion()
 const MODE = process.env.XUANSHU_FAKE_UVX_MODE || ''
-/** `wrong-version` 模式回放的「错的版本」：只要求 ≠ pin 版本即可。 */
+/** `wrong-version` / `manifest-lies` 模式回放的「错的版本」：只要求 ≠ pin 版本即可。 */
 const WRONG_VERSION = VERSION === '0.39.9' ? '0.39.8' : '0.39.9'
+/** A2 用例：故意不回 `mcp-session-id`（契约 §5 要求它，缺了就必须判「握手未成立」）。 */
+const NO_SESSION = process.env.XUANSHU_FAKE_UVX_NO_SESSION === '1'
+/** A7 用例：`tools/call` 同时给 `structuredContent`（错的信封）与 `content[0].text`（真信封）。 */
+const BOTH_ENVELOPES = process.env.XUANSHU_FAKE_UVX_BOTH_ENVELOPES === '1'
+/** A1 用例：让前 N 次 GET 慢应答（GET 只来自票 04 的四态守卫 → 制造 `probe-failed`）。 */
+const GET_DELAY_MS = Number(process.env.XUANSHU_FAKE_UVX_GET_DELAY_MS ?? 0) || 0
+const GET_DELAY_TIMES = Number(process.env.XUANSHU_FAKE_UVX_GET_DELAY_TIMES ?? 1) || 0
+let slowGets = 0
 mkdirSync(STATE, { recursive: true })
 
 const INSTALLED_FILE = join(STATE, 'installed.json')
@@ -167,14 +185,14 @@ function readInstalled() {
 function installedVersion() {
   const state = readInstalled()
   if (!state) return null
-  return MODE === 'wrong-version' ? WRONG_VERSION : state.version
+  return MODE === 'wrong-version' || MODE === 'manifest-lies' ? WRONG_VERSION : state.version
 }
 
 function emitJson(value) {
   process.stdout.write(`${JSON.stringify(value, undefined, 2)}\n`)
 }
 
-/** doctor 回放：装好但服务没起时 `ok === false`（真机实测）。 */
+/** doctor 回放：装好但服务没起时 `ok === false`（真机实测）；A3 的两个模式只改「有没有载荷版本字段」。 */
 function doctorReport() {
   const version = installedVersion()
   const runtimeRoot = process.env.HOROSA_RUNTIME_ROOT ?? null
@@ -191,13 +209,26 @@ function doctorReport() {
       endpoints: [],
     }
   }
+  if (MODE === 'manifest-only') {
+    // A3 的地面真值之一：有清单版本、没有载荷版本。拿 manifest_version 当门 = 门假过。
+    return {
+      ok: false,
+      installed: true,
+      status: 'needs_attention',
+      runtime_root: runtimeRoot,
+      manifest_version: VERSION,
+      issues: ['services:not_running'],
+      user_summary: 'The runtime files are installed, but the local Horosa services are not running yet.',
+      endpoints: [],
+    }
+  }
   return {
     ok: false,
     installed: true,
     status: 'needs_attention',
     runtime_root: runtimeRoot,
     runtime_payload_version: version,
-    manifest_version: version,
+    manifest_version: VERSION,
     freshness: { installed_version: version, export_registry_version: { installed: 15, expected: 15, outdated: false } },
     issues: ['services:not_running'],
     user_summary: 'The runtime files are installed, but the local Horosa services are not running yet.',
@@ -237,6 +268,8 @@ function startServe(argv, rest) {
     process.exit(9)
   }
   const sessionId = randomBytes(16).toString('hex')
+  // A2：`XUANSHU_FAKE_UVX_NO_SESSION=1` 时不回 `mcp-session-id` —— 契约 §5 要求它，缺了就**不是**握手成功。
+  const sessionHeaders = NO_SESSION ? {} : { 'mcp-session-id': sessionId }
 
   const server = http.createServer((req, res) => {
     const url = String(req.url ?? '')
@@ -246,8 +279,17 @@ function startServe(argv, rest) {
       return
     }
     if (req.method === 'GET') {
-      res.writeHead(405, { allow: 'POST', 'content-type': 'text/plain' })
-      res.end('Method Not Allowed\n')
+      // A1：慢应答的 horosa —— 前 N 次 GET 拖过守卫的预算（守卫判 `probe-failed`），之后立刻答。
+      // 「405 + allow: POST」是票 04 守卫认的第三条判据（streamable-http 端点对 GET 的典型答复）。
+      const slow = GET_DELAY_MS > 0 && slowGets < GET_DELAY_TIMES
+      if (slow) slowGets += 1
+      const answer = () => {
+        if (res.writableEnded || res.destroyed) return // 探针早就放弃并断开了：别往空气里写
+        res.writeHead(405, { allow: 'POST', 'content-type': 'text/plain' })
+        res.end('Method Not Allowed\n')
+      }
+      if (slow) setTimeout(answer, GET_DELAY_MS)
+      else answer()
       return
     }
     let body = ''
@@ -265,17 +307,17 @@ function startServe(argv, rest) {
       const wantsSse = String(req.headers.accept ?? '').includes('text/event-stream')
       const method = message?.method
       if (typeof method === 'string' && method.startsWith('notifications/')) {
-        res.writeHead(202, { 'content-type': 'application/json', 'mcp-session-id': sessionId })
+        res.writeHead(202, { 'content-type': 'application/json', ...sessionHeaders })
         res.end()
         return
       }
       const reply = (result) => {
         const payload = { jsonrpc: '2.0', id: message?.id ?? null, result }
         if (wantsSse) {
-          res.writeHead(200, { 'mcp-session-id': sessionId, 'content-type': 'text/event-stream', 'cache-control': 'no-store' })
+          res.writeHead(200, { ...sessionHeaders, 'content-type': 'text/event-stream', 'cache-control': 'no-store' })
           res.end(`event: message\ndata: ${JSON.stringify(payload)}\n\n`)
         } else {
-          res.writeHead(200, { 'mcp-session-id': sessionId, 'content-type': 'application/json' })
+          res.writeHead(200, { ...sessionHeaders, 'content-type': 'application/json' })
           res.end(JSON.stringify(payload))
         }
       }
@@ -296,7 +338,13 @@ function startServe(argv, rest) {
         }
         recordCall({ kind: 'tools-call', tool: name, args })
         // 真机形状：信封被 JSON.stringify 塞进 result.content[0].text，**不在** structuredContent 里。
-        reply({ content: [{ type: 'text', text: JSON.stringify(baziEnvelope(args)) }], isError: false })
+        const payload = { content: [{ type: 'text', text: JSON.stringify(baziEnvelope(args)) }], isError: false }
+        if (BOTH_ENVELOPES) {
+          // A7：两处都有时，**必须**读 content[0].text。这份 structuredContent 是错的信封
+          // （ok:false + 别的版本），读它就等于 C3 红 —— 用「错的那份长什么样」把顺序钉死。
+          payload.structuredContent = { ok: false, tool: 'bazi_birth', version: WRONG_VERSION, code: 'fixture.structuredContent_should_be_ignored' }
+        }
+        reply(payload)
         return
       }
       reply({}) // 其它方法（ping 等）：空 result，别把客户端卡住
