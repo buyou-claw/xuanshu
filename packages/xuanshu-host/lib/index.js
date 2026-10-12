@@ -13,8 +13,16 @@
  * 另注册一个不依赖 LLM 的宿主侧可观察物（契约 §3 第 3 条）：斜杠命令
  * `/xuanshu-report`，就地重探并重写报告后把摘要回给人类界面。
  *
- * 硬约束（契约 §3）：不发起 LLM 调用、不联网、不监听端口。本文件只 import 四个
- * node 内置模块；apply 的副作用仅限 mkdir/writeFile 与一次可选命令注册。
+ * 硬约束（契约 §3）：不发起 LLM 调用、不联网、不监听端口。本文件只 import node 内置模块
+ * （`node:fs`/`node:module`/`node:os`/`node:path`/`node:url`）与本包自己的 `./horosa/service.mjs`；
+ * apply 的副作用仅限 mkdir/writeFile、一次可选命令注册，以及票 06 的 horosa 装配
+ * （`installHorosa` 自己**立即返回**：起 serve 是延后 + unref 的后台任务，见 `lib/horosa/service.mjs`）。
+ *
+ * 票 06 追加（本包的另一半能力，全在 `lib/horosa/**`）：horosa 底座 ——
+ * `installHorosa(ctx, config)` 解析 plan → 检查 runtime 同版本 → 四态裁决 → 起/复用本地
+ * serve → 注册 `xuanshuHorosa` 服务（`status/ensure/start/stop/waitReady/baziBirth/snapshot`）
+ * 与 `/xuanshu-horosa` 命令，并把状态写进 `$DSH_HOME/xuanshu/horosa/horosa-status.json`。
+ * 它同样**永不抛**：宿主起不来的失败只落状态文件 + 日志，绝不拖垮整个 profile 装配。
  *
  * 每个 DSH API 调用的出处（本机实装 0.2.0-rc.2，均为只读核对）：
  *   - `ctx.get(name, strict?)`：`@deepseek-ai/cordis/lib/types/reflect.d.ts:16`；
@@ -42,6 +50,8 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { installHorosa } from './horosa/service.mjs';
 
 /** cordis 插件名（= 包名 = 补丁行 id，契约 §0）。 */
 export const name = 'xuanshu-host';
@@ -370,5 +380,14 @@ export function apply(ctx, config) {
   }
   if (registerReportCommand(ctx, config)) {
     log.info('已注册命令 /%s', COMMAND_NAME);
+  }
+
+  // 票 06：horosa 底座（宿主托管的 serve 生命周期 + 八字出盘）。**永不抛**，
+  // 起 serve 由 installHorosa 内部安排成延后 + unref 的后台任务，这里立即返回。
+  try {
+    installHorosa(ctx, config);
+  } catch (error) {
+    // installHorosa 自己已经兜了一层；这里再兜一层，保证「装配报告」那条路永远不因 horosa 失败。
+    log.warn('horosa 底座装配失败（已兜住）：%C', String(error?.message ?? error));
   }
 }
