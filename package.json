@@ -13,6 +13,7 @@
     "build": "pnpm --filter ./packages/xuanshu-client run build",
     "build:client": "pnpm --filter ./packages/xuanshu-client run build",
     "install:profile": "node scripts/install-profile.mjs",
+    "setup:xuanshu": "node scripts/setup.mjs",
     "verify:assembly": "node scripts/verify-assembly.mjs",
     "dev:xuanshu": "node scripts/isolation/startup.mjs --mode web",
     "doctor:xuanshu": "node scripts/isolation/startup.mjs",
@@ -20,6 +21,7 @@
     "test": "vitest run",
     "test:assembly": "vitest run tests/assembly",
     "test:isolation": "vitest run tests/isolation",
+    "test:setup": "vitest run tests/setup",
     "test:watch": "vitest"
   },
   "devDependencies": {
