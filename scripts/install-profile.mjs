@@ -17,6 +17,10 @@
  *     到目标，把自有插件依赖改写成 `link:<仓库绝对路径>`，在目标里 `pnpm install`。
  *     刻意不复制 `cordis.yml`（DSH 每次启动重写的运行期产物，见 installCopy 的注释）。
  *
+ * 无论哪种模式，跑完 `pnpm install` 后都会**逐文件同步自有插件包**（`packages/xuanshu-host`、
+ * `packages/xuanshu-client`）进 profile 的 `node_modules`：pnpm 对 `file:` 依赖不会因为源目录
+ * 变了就刷新拷贝（实测会打印 `Lockfile is up to date` + `reused`，留下旧代码）。见 syncOwnPackages。
+ *
  * 用法：
  *   node scripts/install-profile.mjs                    # link 模式，装到 ~/.dsh/profiles/xuanshu
  *   node scripts/install-profile.mjs --copy             # copy 模式
@@ -185,6 +189,78 @@ function runPnpmInstall(dir) {
   if (result.status !== 0) throw new Error(`pnpm install failed in ${dir} (exit ${result.status})`)
 }
 
+/** 同步自有插件包时跳过的目录（依赖树/版本库元数据不是分发物）。 */
+const SYNC_SKIP_DIRS = new Set(['node_modules', '.git', '.cache'])
+
+/** 递归列出源包里的文件（相对路径，`/` 分隔），跳过 SYNC_SKIP_DIRS。 */
+function listPackageFiles(root, prefix = '') {
+  const files = []
+  for (const entry of readdirSync(join(root, prefix), { withFileTypes: true })) {
+    if (SYNC_SKIP_DIRS.has(entry.name)) continue
+    const rel = prefix === '' ? entry.name : `${prefix}/${entry.name}`
+    if (entry.isDirectory()) files.push(...listPackageFiles(root, rel))
+    else if (entry.isFile()) files.push(rel)
+  }
+  return files
+}
+
+/**
+ * 把仓库里的自有插件包**逐文件同步**进 profile 的 `node_modules/<name>`。
+ *
+ * 为什么必须做（实测，票 06 的验收踩到）：pnpm 对 `file:` 依赖按 lockfile 判定，源目录改了它照样
+ * 打印 `Lockfile is up to date` + `reused N`，留在 `node_modules` 里的是**旧拷贝**——
+ * 实测 11 个文件里 9 个不同、7 个缺失（缺的正是新加的 `lib/horosa/**`），于是「改了插件 → 重跑
+ * install-profile → 启动 DSH」加载的还是旧代码（症状：新功能像没生效，或者插件在半新半旧的状态下跑）。
+ *
+ * 只做「缺了就补、不同就覆盖」：不删多余文件、不动 `package.json` 之外的 pnpm 记账（hoisted 布局下
+ * `node_modules/<name>` 就是包内容本身）。同步后由调用方打印统计，让「有没有真的刷新」在输出里可见。
+ * @returns {Array<{ name: string, copied?: number, same?: number, skipped?: string }>}
+ */
+function syncOwnPackages(installDir) {
+  const report = []
+  for (const name of OWN_PACKAGES) {
+    const from = join(REPO_ROOT, 'packages', name)
+    const to = join(installDir, 'node_modules', name)
+    if (!existsSync(join(from, 'package.json'))) {
+      report.push({ name, skipped: 'source-package-missing' })
+      continue
+    }
+    if (!existsSync(join(to, 'package.json'))) {
+      report.push({ name, skipped: 'not-installed-by-pnpm' })
+      continue
+    }
+    let copied = 0
+    let same = 0
+    for (const rel of listPackageFiles(from)) {
+      const source = readFileSync(join(from, rel))
+      const target = join(to, rel)
+      if (existsSync(target) && readFileSync(target).equals(source)) {
+        same += 1
+        continue
+      }
+      mkdirSync(dirname(target), { recursive: true })
+      writeFileSync(target, source)
+      copied += 1
+    }
+    report.push({ name, copied, same })
+  }
+  return report
+}
+
+function reportSync(report) {
+  for (const entry of report) {
+    if (entry.skipped !== undefined) {
+      process.stdout.write(`[install-profile] own-package ${entry.name}: skipped (${entry.skipped})\n`)
+      continue
+    }
+    process.stdout.write(
+      entry.copied === 0
+        ? `[install-profile] own-package ${entry.name}: 已是最新（${entry.same} 个文件逐一比对相同）\n`
+        : `[install-profile] own-package ${entry.name}: 同步了 ${entry.copied} 个文件（${entry.same} 个已相同）——pnpm 对 file: 依赖不会因源目录变化而刷新拷贝\n`,
+    )
+  }
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2))
   if (!existsSync(join(SOURCE_PROFILE, 'package.json'))) throw new Error(`profile source not found: ${SOURCE_PROFILE}`)
@@ -197,6 +273,8 @@ function main() {
 
   if (opts.install) runPnpmInstall(installDir)
   else process.stdout.write('[install-profile] --skip-install: skipped pnpm install\n')
+  // pnpm 之后**再同步一次自有插件**：`file:` 依赖不会因源目录变化而刷新拷贝（见 syncOwnPackages 的注释）。
+  reportSync(syncOwnPackages(installDir))
   process.stdout.write('[install-profile] done\n')
 }
 

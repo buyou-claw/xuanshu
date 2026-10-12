@@ -47,7 +47,7 @@
  */
 
 import { pathToFileURL } from 'node:url'
-import { DEFAULT_HOROSA_PORT } from './defaults.mjs'
+import { DEFAULT_HOROSA_PORT, HOROSA_MCP_PATH } from './defaults.mjs'
 import { isPortBusy, httpGet, normalizeHeaders } from './port-probe.mjs'
 
 /** 只探本机回环：与 horosa serve 的默认绑定一致（非回环绑定无 token 会拒启，本就不该出现）。 */
@@ -58,7 +58,12 @@ const HOST = '127.0.0.1'
  * 但 `defaults.mjs` 是纯数据模块（不 import 任何东西），ESM 下没有这个问题；两份默认值只会漂移。
  */
 const DEFAULT_PORT = DEFAULT_HOROSA_PORT
-const DEFAULT_PATH = '/mcp'
+/**
+ * 默认路径同理只有 `defaults.mjs` 一处定义（`HOROSA_MCP_PATH`）。
+ * 2026-10-13（票 06 的 code review 抓到）：这一行原先也是自己写的 `'/mcp'` 字面量 ——
+ * 与 `DEFAULT_PORT` 是同一个错误，只是当时只改了端口那一半。现在两边都只认 `defaults.mjs`。
+ */
+const DEFAULT_PATH = HOROSA_MCP_PATH
 const BODY_HEAD_EVIDENCE_LIMIT = 200
 
 /* ------------------------------------------------------------------ *
