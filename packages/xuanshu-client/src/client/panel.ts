@@ -238,8 +238,14 @@ export const RIKKE_ORDER = 100;
  * 面板导航目标（= `main` keyed 槽的 key；`conversation` 特殊：回 DSH 原面板）。
  * 票 08 起多了 `onboarding`（冷启动向导）与 `mingpan`（命盘详情）两个玄枢自有 key；
  * 票 13 多了 `rikke`（日课：看完整日课）。
+ *
+ * **`overview` 也在表里**：向导与命盘详情都有「回总览」的动作，而 `PANEL_ID` 就是它 ——
+ * 联合里漏掉它会让「回总览」在类型层不过（票 08 的三个调用点就这么漏了，
+ * 直到票 13 跑 `tsc --noEmit` 才暴露）。导航目标 = 可被 `navigate()` 指向的 key，
+ * **包含自家总览**，不是「除总览以外的去处」。
  */
 export type PanelNavTarget =
+  | 'overview'
   | 'consult'
   | 'pus'
   | 'digao'
