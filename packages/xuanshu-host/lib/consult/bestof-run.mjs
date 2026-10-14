@@ -200,9 +200,13 @@ export function failureOf(finish) {
 /**
  * 跑一路候选（一次 `stream()` + 采集）。异常一律折算成 `{ok:false, error}`，
  * 让「某一路失败」不拖垮整次合参（S9 §6 的部分失败态）。
+ *
+ * `now` 是**可注入的时钟**（缺省 `Date.now`）：`elapsedMs` 是「这次调用花了多久」的**唯一**证据，
+ * 而拿 `Date.now()` 差值写的断言恒 ≥ 0、永远不会红 —— 断言台要能证否，就得让耗时可控。
+ * 调用方（`bestof.mjs`）把 `config.now` 透传进来，测试注入一个每次 +250ms 的计数时钟。
  */
-export async function runCandidate(ctx, { route, angle, question, signal, onText }) {
-  const started = Date.now()
+export async function runCandidate(ctx, { route, angle, question, signal, onText, now = Date.now }) {
+  const started = now()
   try {
     const result = await collectStream(
       requireLlm(ctx).stream({
@@ -216,11 +220,11 @@ export async function runCandidate(ctx, { route, angle, question, signal, onText
       { onText },
     )
     const failure = failureOf(result.finish)
-    if (failure !== undefined) return { ok: false, error: failure, usage: result.usage, elapsedMs: Date.now() - started }
-    if (result.text === '') return { ok: false, error: '这一路没有产出任何文本。', usage: result.usage, elapsedMs: Date.now() - started }
-    return { ok: true, text: result.text, usage: result.usage, elapsedMs: Date.now() - started }
+    if (failure !== undefined) return { ok: false, error: failure, usage: result.usage, elapsedMs: now() - started }
+    if (result.text === '') return { ok: false, error: '这一路没有产出任何文本。', usage: result.usage, elapsedMs: now() - started }
+    return { ok: true, text: result.text, usage: result.usage, elapsedMs: now() - started }
   } catch (error) {
-    return { ok: false, error: String(error?.message ?? error), elapsedMs: Date.now() - started }
+    return { ok: false, error: String(error?.message ?? error), elapsedMs: now() - started }
   }
 }
 
