@@ -24,6 +24,13 @@ export const PANEL_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', '
  */
 export const EXTRA_REGISTRATIONS = [
   { after: 'cang', names: ['shell.overlay'], cells: ['shell.overlay\u0000xuanshu-cang-drawer'] },
+  // 票 11（多 AI 合参）挂在最后一对（`rikke`）之后：浮层 + 设置开关行，
+  // 两者都不是 main/sidebar 面板；`/多模型` 命令走 `commandUi`，不是槽位，故不在本表。
+  {
+    after: 'rikke',
+    names: ['shell.overlay', 'settings.general.item'],
+    cells: ['shell.overlay\u0000xuanshu-bestof-overlay', 'settings.general.item\u0000xuanshu.bestof'],
+  },
 ]
 
 /** 每个 key 产生的一对注册名（main 面板 + 侧栏行）。 */

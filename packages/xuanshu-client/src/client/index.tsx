@@ -31,6 +31,9 @@ import type { Context } from '@deepseek-ai/cordis';
 
 import { createBaziApi } from './bazi-api.js';
 import { createBaziUiController } from './bazi-controller.js';
+import { createBestofApi } from './bestof-api.js';
+import { createBestofController } from './bestof-model.js';
+import { installBestOf } from './bestof.js';
 import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
 import { createConsultApi } from './consult-api.js';
@@ -165,6 +168,11 @@ export function apply(ctx: Context): void {
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
 
+  // 票 11：多 AI 合参的数据面 + 控制器（浮层与设置行共用一份；`apply` 期一个请求都不发，
+  // 「开始合参」是人点出来的唯一入口）。
+  const bestof = createBestofApi(rpc);
+  const bestofController = createBestofController({ api: bestof });
+
   const injected = (): OverviewInjected => ({
     navigate,
     mainPanels,
@@ -225,4 +233,8 @@ export function apply(ctx: Context): void {
   // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
   installDigao(rpc, { api: digao, navigate });
   installRikke(rpc, { api: rikke, navigate });
+
+  // ⑨ 票 11：多 AI 合参（`shell.overlay` 浮层 + `settings.general.item` 开关行 + `/多模型` 命令
+  //    与别名 `/合参` · `bestof`）。三条注册都是纯加性；浮层无内容时 `return null`（click-through）。
+  installBestOf(ctx, { api: bestof, controller: bestofController });
 }
