@@ -127,7 +127,10 @@ describe('票 11 · 产物（lib/client.js）与注册面', () => {
     expect(BESTOF_OVERLAY_ID).toBe('xuanshu-bestof-overlay')
     expect(settings).toEqual([BESTOF_SETTINGS_ID])
     expect(BESTOF_SETTINGS_ID).toBe('xuanshu.bestof')
-    expect(trigger).toEqual([BESTOF_TRIGGER_ID])
+    // `conversation.composer.dock` 是**共享槽**：票 15 的沉淀入口条也注册在那里。
+    // 所以这里断言「我们那一格在里面」，而**不是**「这个槽只有我们一格」——
+    // 后者会让后加的票无端打红（票 12 的挂载契约就因为同类全局计数断言红过一次）。
+    expect(trigger).toContain(BESTOF_TRIGGER_ID)
     expect(BESTOF_TRIGGER_ID).toBe('xuanshu-bestof-trigger')
 
     expect(commands.map((contribution) => contribution.name).sort()).toEqual([...BESTOF_COMMAND_NAMES].sort())

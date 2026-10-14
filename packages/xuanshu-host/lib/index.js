@@ -35,6 +35,12 @@
  * 定时任务**（日课 07:30 / 底稿刷新 03:30，`ctx.schedule.create` + 玄枢自铸会话 id）。
  * `ctx.schedule` 的提供者不在 shipped 组合里，由本包的 `cordis.patch.yml` 插 schedule 三行带上。
  *
+ * 票 15 追加（`lib/sediment/**`）：沉淀闭环的三条 RPC（`sediment.draft/commit/discard`）
+ * 与内置 skill `xuanshu:sediment`。分工是这一票的全部要点：`draft` 只让那场问事会话产出草稿并
+ * 暂存 `<dataDir>/sediment/<draftId>.json`；`commit` 的第一行检查 `confirmed === true`，
+ * 之后才走票 09 的 `pu.update`（同一套 staging + rename）——**AI 不静默、不自动写谱**。
+ * 面版的客户端半边在 `packages/xuanshu-client/src/client/sediment*.tsx`。
+ *
  * 每个 DSH API 调用的出处（本机实装 0.2.0-rc.2，均为只读核对）：
  *   - `ctx.get(name, strict?)`：`@deepseek-ai/cordis/lib/types/reflect.d.ts:16`；
  *     非严格第二参数 `false` 的官方用法见
@@ -72,6 +78,9 @@ import { createPuMethods, installPuSkill } from './pu/service.mjs';
 import { DEFAULT_TIME_ZONE, installDailyTasks } from './rikke/daily-tasks.mjs';
 import { baseZone, createRikkeMethods } from './rikke/service.mjs';
 import { installRpc } from './rpc.mjs';
+import { createSedimentMethods } from './sediment/service.mjs';
+import { installSedimentSkill } from './sediment/skill.mjs';
+import { createWorkflowMethods } from './workflow/service.mjs';
 
 /** cordis 插件名（= 包名 = 补丁行 id，契约 §0）。 */
 export const name = 'xuanshu-host';
@@ -429,9 +438,14 @@ export function apply(ctx, config) {
   // 面板注册（客户端 `installPuPanel` / `installCangClient` / 票 13 的两张卡）与本处是同一次装配的两半。
   // 数据目录与装配报告同源（`resolveDataDir`），避免报告与数据各写一处。
   let dataDir;
+  let dshHome;
   try {
-    dataDir = resolveDataDir(resolveDshHome(softGet(ctx, 'profileContext'), []), config);
+    dshHome = resolveDshHome(softGet(ctx, 'profileContext'), []);
+    dataDir = resolveDataDir(dshHome, config);
     installPuSkill(ctx);
+    // 票 15：内置 skill `xuanshu:sediment`（把一场问事汇成「更新到谱」的草稿）。
+    // 与票 09 的 create-pu 并列注册；拿不到 skills 服务时它自己静默跳过（主路径不依赖它）。
+    installSedimentSkill(ctx);
     installRpc(ctx, {
       ...createPuMethods(ctx, { dataDir }),
       ...createCangMethods(ctx, { dataDir }),
@@ -446,13 +460,20 @@ export function apply(ctx, config) {
       // 票 13：底稿（纯派生，没有 write/update）与日课（本地黄历 + 底座）。
       ...createDigaoMethods(ctx, { dataDir }),
       ...createRikkeMethods(ctx, { dataDir }),
+      // 票 16：工作流创建向导（新会话 + seed 自动调 `/writing-skills`；导出 skill 落
+      // `<dshHome>/skills/<kebab>/SKILL.md`）。`dshHome` 与数据目录同源，skill 才落对地方。
+      ...createWorkflowMethods(ctx, { dataDir, dshHome }),
+      // 票 15：沉淀闭环（`sediment.draft/commit/discard`）。草稿暂存 `<dataDir>/sediment/`，
+      // 写回只走票 09 的 `pu.update`（同一条 staging + rename），`confirmed !== true` 一律拒收。
+      // 放在最后：它对其它组是纯加性的，且必须排在 pu/consult 之后（复用它们的方法组当读/写面）。
+      ...createSedimentMethods(ctx, { dataDir }),
       // 票 11：多 AI 合参（`bestof.run/state/adopt`）。
       // 候选并发多路 `ctx.llm.stream()`、judge 走单字段工具（ADR-0010），
       // 记录落 `<dataDir>/consult/<sessionId>.bestof.json`；`consult.*` 的六个方法一字不动。
       ...createBestOfMethods(ctx, { dataDir }),
     });
   } catch (error) {
-    log.warn('谱 / 藏 / 八字 / 底稿 / 日课 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
+    log.warn('谱 / 藏 / 八字 / 底稿 / 日课 / 工作流 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
   }
 
   // 票 13：两条 daily 定时任务（日课 07:30 / 底稿刷新 03:30）。
