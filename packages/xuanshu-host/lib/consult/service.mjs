@@ -23,6 +23,7 @@ import { join } from 'node:path'
 import { createBaziMethods, resolveDataDir } from '../bazi/service.mjs'
 import { createPuMethods } from '../pu/service.mjs'
 import { buildConsultContext } from './context.mjs'
+import { consultAgentCapability, createConsultAgent, resumeConsultAgent } from './agent.mjs'
 import { isSessionNotFound, projectConsultMessages } from './history.mjs'
 import { createConsultContextMessage, createConsultQuestionMessage } from './message.mjs'
 import { DEFAULT_CONSULT_TITLE, consultRoot, createConsultStore, isConsultSessionId, newConsultSessionId, normalizePus, normalizeTitle, titleFromQuestion, toConsultSummary } from './store.mjs'
@@ -118,7 +119,7 @@ export function createConsultMethods(ctx, config = {}) {
     if (typeof agents.resume !== 'function') {
       throw new Error(`会话 ${sessionId} 不在本进程活着，且 ctx.agents 不能 resume：先 consult.create 或让 DSH 会话面板打开它。`)
     }
-    const handle = await agents.resume({ resumeSessionId: sessionId })
+    const handle = await resumeConsultAgent(ctx, { sessionId })
     handles.set(sessionId, handle)
     return handle.agent
   }
@@ -189,7 +190,8 @@ export function createConsultMethods(ctx, config = {}) {
      *
      * 会话必须走 `ctx.agents.create()` 而不是 `ctx.sessions.create()`：
      * 后者只造日志对象、不接 agent、不挂 preset，会话跑不起来（`:449-458`）。
-     * `meta` **只给 `cwd`**：rc.2 的 meta 是闭集 7 字段且逐字段挑，多塞的键会静默丢弃（ADR-0009）。
+     * 建会话的完整口径（preset 组合 + 模型选择 + **为什么不能只给 `meta:{cwd}`**）在 `agent.mjs`；
+     * 一句话：preset 是工具能力的来源，provider/model 不给就连第一轮都开不了口。
      */
     'consult.create': async (request) => {
       const source = request && typeof request === 'object' && !Array.isArray(request) ? request : {}
@@ -206,7 +208,7 @@ export function createConsultMethods(ctx, config = {}) {
       // 而 `ctx.agents.create()` 这条路上没人做 —— 自己来，否则真机上会话建不出来。
       mkdirSync(cwd, { recursive: true })
 
-      const handle = await agents.create({ sessionId, meta: { cwd } })
+      const handle = await createConsultAgent(ctx, { sessionId, cwd })
       handles.set(sessionId, handle)
       try {
         return { session: toConsultSummary(store.create({ sessionId, pus })) }
@@ -240,6 +242,11 @@ export function createConsultMethods(ctx, config = {}) {
         if (manifest === null) {
           throw new Error(`问事记录不存在：${sessionId}（列表以旁挂清单为准 —— consult.list 里没有它，就先 consult.create）。`)
         }
+
+        // 发问前的门（Lead 裁定）：preset / 模型服务缺一个，这一轮就一定跑不起来。
+        // 宁可在这里可读地失败，也不许回一个 accepted:true 然后什么都不发生。
+        const capability = consultAgentCapability(ctx)
+        if (!capability.ok) throw new Error(`这次问事发不出去。${capability.detail}`)
 
         const agent = await ensureAgent(sessionId)
         // `turns` 是跨进程的首轮判据（旁挂清单），`injected` 是同进程的去重。

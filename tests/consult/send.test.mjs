@@ -26,6 +26,8 @@ import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/se
 import { CONSULT_MESSAGE_SOURCE_KIND } from '../../packages/xuanshu-host/lib/consult/message.mjs'
 import {
   envelope,
+  fakeAgentDefaultModel,
+  fakeAgentPresets,
   fakeAgents,
   fakeHorosa,
   fakeSessionStore,
@@ -54,7 +56,15 @@ async function scene({ pus = ['紫微笔记'], digao = true, basePu = true } = {
   const sessions = fakeSessionStore()
   const workspaces = fakeWorkspaceRegistry()
   const host = makeHost({
-    services: { xuanshuHorosa: fake.service, agents: agents.service, sessions: sessions.service, workspaceRegistry: workspaces.service },
+    services: {
+      xuanshuHorosa: fake.service,
+      agents: agents.service,
+      sessions: sessions.service,
+      workspaceRegistry: workspaces.service,
+      // 发问前的门要的那两个服务（缺了 send 会可读地拒绝，见 agent.test.mjs）。
+      agentPresets: fakeAgentPresets().service,
+      agentDefaultModel: fakeAgentDefaultModel().service,
+    },
   })
   if (basePu) await seedBasePu(sandbox, host.ctx)
   seedPu(sandbox, ZIWEI)
@@ -237,11 +247,17 @@ describe('consult.send · 会话来源与拒绝路径', () => {
     const { api, agents, session, sandbox } = await scene()
     // 模拟「上一次进程建的会话」：假 registry 里那个 agent 随进程一起没了，新实例手上也没有句柄。
     agents.live.clear()
-    const host2 = makeHost({ services: { agents: agents.service } })
+    const host2 = makeHost({
+      services: {
+        agents: agents.service,
+        agentPresets: fakeAgentPresets().service,
+        agentDefaultModel: fakeAgentDefaultModel().service,
+      },
+    })
     const api2 = createConsultMethods(host2.ctx, { dataDir: sandbox.dataDir })
     await api2['consult.send']({ sessionId: session.sessionId, text: '继续这次问事' })
 
-    expect(agents.resumed).toEqual([{ resumeSessionId: session.sessionId }])
+    expect(agents.resumed.map((options) => options.resumeSessionId)).toEqual([session.sessionId])
     const calls = callsOf(agents, session.sessionId)
     expect(calls.map((call) => call.kind)).toEqual(['inject', 'followup'])
   })

@@ -199,7 +199,7 @@ export function makeHost({ services = {}, wired = false } = {}) {
   return { ctx, lookups, listeners, emit, listenerCount, routes, provided, cleanups, services }
 }
 
-/** 一次注入/发问的记录（假 agent 按调用顺序记，顺序本身也是被验的东西）。 */
+/** 假 agent，按调用顺序记 inject / followup（顺序本身也是被验的东西）。 */
 function fakeAgent(sessionId) {
   const calls = []
   return {
@@ -223,26 +223,41 @@ function fakeAgent(sessionId) {
   }
 }
 
-/** 假 `ctx.agents`：记录 create/get/resume，并按 id 交出可观察的假 agent。 */
+/**
+ * 假 `ctx.agents`：记录 create/get/resume，并按 id 交出可观察的假 agent。
+ *
+ * `create` / `resume` 会像**真工厂**那样先 `await setup(agentCtx, agent)` 再发布
+ * （`dsh-agent/lib/types/index.d.ts:85-103`：setup 在 session/agent 发布之前跑完）——
+ * 票 10 的 preset 就是在这一步挂进 agent scope 的，所以替身必须走同一条路。
+ */
 export function fakeAgents() {
   const created = []
   const resumed = []
   const disposed = []
+  const setups = []
   const live = new Map()
   const make = (sessionId) => {
     const agent = fakeAgent(sessionId)
     live.set(sessionId, agent)
     return agent
   }
+  const runSetup = async (options, agent) => {
+    if (typeof options.setup !== 'function') return
+    const agentCtx = { kind: 'agent-ctx', sessionId: agent.id }
+    setups.push({ sessionId: agent.id, agentCtx })
+    await options.setup(agentCtx, agent)
+  }
   return {
     created,
     resumed,
     disposed,
+    setups,
     live,
     service: {
       async create(options) {
         created.push(options)
         const agent = make(options.sessionId)
+        await runSetup(options, agent)
         return {
           agent,
           async dispose() {
@@ -257,6 +272,7 @@ export function fakeAgents() {
       async resume(options) {
         resumed.push(options)
         const agent = make(options.resumeSessionId)
+        await runSetup(options, agent)
         return {
           agent,
           async dispose() {
@@ -270,25 +286,56 @@ export function fakeAgents() {
 }
 
 /** 假 `ctx.sessionQuery`：只实现 `readSession`，没登记的会话按上游错误码抛。 */
-export function fakeSessionQuery(eventsBySession = {}) {
+export function fakeSessionQuery(eventsBySession = {}, headersBySession = {}) {
   const calls = []
   const events = { ...eventsBySession }
+  const headers = { ...headersBySession }
   return {
     calls,
     /** 会话 id → 事件流（用例里随时登记，模拟「这个会话的日志里有这些事件」）。 */
     events,
+    /** 会话 id → header 覆盖（如 `{agentPreset:'minimal'}`，resume 时认回 preset 要用）。 */
+    headers,
     service: {
       async readSession(sessionId) {
         calls.push(sessionId)
-        if (!Object.hasOwn(events, sessionId)) {
+        if (!Object.hasOwn(events, sessionId) && !Object.hasOwn(headers, sessionId)) {
           const error = new Error(`session "${sessionId}" not found`)
           error.code = 'SESSION_QUERY_SESSION_NOT_FOUND'
           throw error
         }
-        return { session: { id: sessionId, version: 4 }, inheritedEventCount: 0, events: events[sessionId] }
+        return { session: { id: sessionId, version: 4, ...(headers[sessionId] ?? {}) }, inheritedEventCount: 0, events: events[sessionId] ?? [] }
       },
     },
   }
+}
+
+/**
+ * 假 `ctx.agentPresets`（`dsh-agent-preset-registry`）：`resolve()` 不带参数即取 registry 默认。
+ * `mounted` 记下「哪个 agent scope 挂了哪个 preset」—— 票 10 的「工具表非空」就靠这一条。
+ */
+export function fakeAgentPresets({ default: defaultId = 'standard' } = {}) {
+  const resolved = []
+  const mounted = []
+  return {
+    resolved,
+    mounted,
+    service: {
+      async resolve(id) {
+        resolved.push(id)
+        return { id: id ?? defaultId }
+      },
+      async mount(agentCtx, id) {
+        mounted.push({ agentCtx, id })
+        return { id }
+      },
+    },
+  }
+}
+
+/** 假 `ctx.agentDefaultModel`：`currentSelection()` 就是 controller 建会话时用的那一份。 */
+export function fakeAgentDefaultModel(selection = { provider: 'deepseek', model: 'deepseek-chat' }) {
+  return { service: { currentSelection: () => ({ ...selection }) } }
 }
 
 /**

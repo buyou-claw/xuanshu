@@ -21,7 +21,15 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
 import { consultRoot, isConsultSessionId } from '../../packages/xuanshu-host/lib/consult/store.mjs'
-import { fakeAgents, fakeSessionStore, fakeWorkspaceRegistry, makeHost, makeSandbox } from './lib/sandbox.mjs'
+import {
+  fakeAgentDefaultModel,
+  fakeAgentPresets,
+  fakeAgents,
+  fakeSessionStore,
+  fakeWorkspaceRegistry,
+  makeHost,
+  makeSandbox,
+} from './lib/sandbox.mjs'
 
 const roots = []
 afterEach(() => roots.splice(0).forEach((sandbox) => sandbox.cleanup()))
@@ -33,7 +41,16 @@ function scene() {
   const agents = fakeAgents()
   const sessions = fakeSessionStore()
   const workspaces = fakeWorkspaceRegistry()
-  const host = makeHost({ services: { agents: agents.service, sessions: sessions.service, workspaceRegistry: workspaces.service } })
+  const host = makeHost({
+    services: {
+      agents: agents.service,
+      sessions: sessions.service,
+      workspaceRegistry: workspaces.service,
+      // 生产形态的两个服务（preset 名册 + 默认模型）：会话能不能跑一轮全看它们（见 agent.test.mjs）。
+      agentPresets: fakeAgentPresets().service,
+      agentDefaultModel: fakeAgentDefaultModel().service,
+    },
+  })
   const api = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir })
   return { sandbox, agents, sessions, workspaces, host, api }
 }
@@ -51,9 +68,13 @@ describe('consult.create · 会话身份与归属（契约 §1）', () => {
     expect(session).toMatchObject({ title: '未命名问事', pus: ['紫微笔记'], mounts: [], turns: 0 })
     expect(Number.isNaN(Date.parse(session.createdAt))).toBe(false)
 
-    // ① 只能走 ctx.agents.create，且 meta 逐键就是 {cwd}（多一个键就是 ADR-0009 说的静默丢弃）。
+    // ① 只能走 ctx.agents.create；meta 逐键是 `{cwd, agentPreset}`：
+    //    `cwd` 是归属（ADR-0009 第 2 条），`agentPreset` 是**真语义**的 preset 身份
+    //    （不写它，进程重启后 resume 认不回同一个 preset）；**没有别的键** ——
+    //    rc.2 的 meta 是闭集 7 字段且逐字段挑，多塞的键静默丢弃（ADR-0009 第 6 条）。
+    //    组合口径的完整断言在 agent.test.mjs。
     expect(agents.created).toHaveLength(1)
-    expect(agents.created[0]).toEqual({ sessionId: session.sessionId, meta: { cwd: consultRoot(sandbox.dataDir) } })
+    expect(agents.created[0].meta).toEqual({ cwd: consultRoot(sandbox.dataDir), agentPreset: 'standard' })
 
     // ② cwd 目录真的建出来了（agents.create 这条路上没人替我们 mkdir）。
     expect(sandbox.exists('consult')).toBe(true)

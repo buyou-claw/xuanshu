@@ -43,12 +43,17 @@
 | 文件 | 覆盖 |
 |---|---|
 | `defaults.test.mjs` | 底座/底稿恒在场（present 三态 + reason 指向）；可选谱来自 `pu.list()` 且排除 `_base`；坏谱不进列表；一个谱都没有的空态 |
+| `agent.test.mjs` | 会话怎么接上 agent：`meta.agentPreset` + `agentOptions` + `setup` 里 mount 缺省 preset；resume 认回会话 header 存的 preset（名册里没了退回缺省）；软降级；**发问前的能力门**（缺服务 → 可读失败且不注入/不落账） |
 | `create.test.mjs` | id 前缀 / `cwd` / `meta` 逐键 / 返回形状；`ctx.sessions` 与 `workspaceRegistry` **零调用**；旁挂清单逐字段；`pus` 拒绝路径「不建会话、不落盘」；旁挂写失败**回滚会话** |
 | `send.test.mjs` | 注入先于问题、来源 kind；三段来源标记 + 概览/summary/路径且**不含正文**；**非勾选谱不出现**；底稿缺 / 底座缺的文案；一轮只灌一次；首问定标题、改名不被覆盖；并发两问串行；`turn/end` 记账与退订（别的会话 / 别的类型不算）；`agents.resume` 续问；拒绝路径 |
 | `history.test.mjs` | `list` 是旁挂清单权威（没有 `sessionQuery` 也列得出来、坏文件不拖垮）；`read` 投影（工具结果不进消息流、source 带得出、not-found → 空数组、坏日志不吞）；`rename` 落盘与拒绝 |
 | `message.test.mjs` | 注入消息形状与官方 `createUserMessage()` 对照（profile 装了才跑对照，没装整组跳过）、深冻结、两个构造器各带各的 kind |
 | `turn.test.mjs` | `turn/end` 命中与退订、abort、没有 `ctx.on` 时拒绝（不永远挂着） |
-| `wiring.test.mjs` | **真** `installRpc` + **真** `apply()`：`/xuanshu` 通道路径、六个方法逐字可调、与 `pu.*`/`cang.*`/`bazi.*` 合并不覆盖、数据目录同源、`cwd` 与 `config.dataDir` 同源 |
+| `wiring.test.mjs` | **真** `installRpc` + **真** `apply()`：`/xuanshu` 通道路径、六个方法逐字可调、与 `pu.*`/`cang.*`/`bazi.*` 合并不覆盖、数据目录同源、preset 真的挂到 agent scope 上 |
+
+假服务一共五个：`fakeAgents()`（记录 create/resume 入参，并像真工厂那样在发布前 `await setup`）、
+`fakeSessionQuery()`、`fakeAgentPresets()`（resolve/mount）、`fakeAgentDefaultModel()`，以及
+两个「不许被碰」的陷阱替身 `fakeSessionStore()` / `fakeWorkspaceRegistry()`。
 
 ## 跑法
 

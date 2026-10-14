@@ -17,7 +17,16 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { apply } from '../../packages/xuanshu-host/lib/index.js'
-import { fakeAgents, fakeHorosa, fakeSessionQuery, makeHost, makeSandbox, envelope } from './lib/sandbox.mjs'
+import {
+  envelope,
+  fakeAgentDefaultModel,
+  fakeAgentPresets,
+  fakeAgents,
+  fakeHorosa,
+  fakeSessionQuery,
+  makeHost,
+  makeSandbox,
+} from './lib/sandbox.mjs'
 
 const roots = []
 afterEach(() => roots.splice(0).forEach((sandbox) => sandbox.cleanup()))
@@ -29,14 +38,23 @@ function assemble() {
   const agents = fakeAgents()
   const query = fakeSessionQuery()
   const fake = fakeHorosa(envelope('bazi-ok-default'))
+  const presets = fakeAgentPresets()
+  const defaultModel = fakeAgentDefaultModel()
   const host = makeHost({
     wired: true,
-    services: { agents: agents.service, sessionQuery: query.service, xuanshuHorosa: fake.service },
+    services: {
+      agents: agents.service,
+      sessionQuery: query.service,
+      xuanshuHorosa: fake.service,
+      // 生产形态：preset 名册 + 默认模型（会话跑得了一轮的前提，见 agent.test.mjs）。
+      agentPresets: presets.service,
+      agentDefaultModel: defaultModel.service,
+    },
   })
   // autoStart:false：本用例不验 serve 生命周期（票 06 的事），只验接线。
   apply(host.ctx, { dataDir: sandbox.dataDir, autoStart: false })
   expect(host.routes, '总装配没有注册 /xuanshu 通道').toHaveLength(1)
-  return { sandbox, host, agents, query, route: host.routes[0] }
+  return { sandbox, host, agents, query, presets, route: host.routes[0] }
 }
 
 /** 通过 `/xuanshu` 通道调一个方法（rpc.mjs 的返回信封：`{ok, value}` / `{ok:false, error}`）。 */
@@ -84,11 +102,14 @@ describe('票 10 · 六个方法挂在同一条 /xuanshu 通道上（契约 §2�
   })
 
   it('create 走的是 ctx.agents.create，cwd = <dataDir>/consult（数据目录只此一处）', async () => {
-    const { route, agents, sandbox } = assemble()
+    const { route, agents, presets, sandbox } = assemble()
     const created = await call(route, 'consult.create', { pus: [] })
     const sessionId = created.value.session.sessionId
 
-    expect(agents.created).toEqual([{ sessionId, meta: { cwd: sandbox.path('consult') } }])
+    expect(agents.created[0].sessionId).toBe(sessionId)
+    expect(agents.created[0].meta).toEqual({ cwd: sandbox.path('consult'), agentPreset: 'standard' })
+    // preset 是通过 setup 挂进 agent scope 的（工具能力来自这里）。
+    expect(presets.mounted).toEqual([{ agentCtx: { kind: 'agent-ctx', sessionId }, id: 'standard' }])
   })
 
   it('六个方法全在那儿（方法面不许少一个）', async () => {
