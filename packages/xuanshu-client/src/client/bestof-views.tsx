@@ -14,6 +14,7 @@ import {
   canMerge,
   candidateStatusLabel,
   costLabel,
+  deliveryNotice,
   fallbackNotice,
   judgeUnavailable,
   rankTag,
@@ -153,10 +154,26 @@ export function XsBestofRun({ state, actions }: { state: BestofUiState; actions:
       {!running && view.adoptedId !== null && (
         <div className="xs-bestof__warn" data-xs-bestof="adopted">
           <h4>{view.adoptedId === 'merged' ? '已合并为一稿并采用' : `已采用 ${view.adoptedId}`}</h4>
-          <p className="xs-bestof__note">
-            采用只影响这次对话与回看；写进谱要在结束沉淀时由你确认。历史只带这一份采用稿。
-            其余候选已折叠保存在本地合参记录里，需要时展开查看。
-          </p>
+          {/*
+            task-15：投递失败时**不许**还说「历史只带这一份采用稿」—— 那是说了一句没发生的事。
+            成功态（`delivery` 缺席或 `ok !== false`）的这两段文案**逐字未动**。
+          */}
+          {deliveryNotice(state.delivery ?? view.delivery) !== undefined ? (
+            <>
+              <p className="xs-bestof__error" data-xs-bestof="delivery-failed" role="alert">
+                ⚠ {deliveryNotice(state.delivery ?? view.delivery)}
+              </p>
+              <p className="xs-bestof__note">
+                采用只影响这次对话与回看；写进谱要在结束沉淀时由你确认。
+                其余候选已折叠保存在本地合参记录里，需要时展开查看。
+              </p>
+            </>
+          ) : (
+            <p className="xs-bestof__note">
+              采用只影响这次对话与回看；写进谱要在结束沉淀时由你确认。历史只带这一份采用稿。
+              其余候选已折叠保存在本地合参记录里，需要时展开查看。
+            </p>
+          )}
           <p className="xs-bestof__note">合参没有改动本次会话的挂载账本与字数状态（旁路，不写页面态）。</p>
         </div>
       )}

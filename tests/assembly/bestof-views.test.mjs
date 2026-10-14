@@ -152,6 +152,90 @@ describe('票 11 · 回落 / 否决 / 采用三态的可解释文案', () => {
   })
 })
 
+/**
+ * task-15 · 投递回执进界面。
+ *
+ * 硬线：**失败必须说失败**。界面说「历史只带这一份采用稿」而实际没写进去，就是说了一句没发生的事。
+ * 所以这里的第一条断言是**逐字冻结成功态**（task-15 之前渲染出来的那一份，原样贴在下面），
+ * 后面几条才验失败态。
+ */
+const ADOPTED_BLOCK_BEFORE_TASK15 =
+  '<div class="xs-bestof__warn" data-xs-bestof="adopted">' +
+  '<h4>已采用 c1</h4>' +
+  '<p class="xs-bestof__note">采用只影响这次对话与回看；写进谱要在结束沉淀时由你确认。历史只带这一份采用稿。 其余候选已折叠保存在本地合参记录里，需要时展开查看。</p>' +
+  '<p class="xs-bestof__note">合参没有改动本次会话的挂载账本与字数状态（旁路，不写页面态）。</p>' +
+  '</div>'
+
+/** 从整块界面里切出「采用态摘要」那一块（比对逐字冻结的成功态文案）。 */
+function adoptedBlock(html) {
+  const start = html.indexOf('<div class="xs-bestof__warn" data-xs-bestof="adopted">')
+  expect(start, '采用态摘要块没渲染出来').toBeGreaterThanOrEqual(0)
+  const end = html.indexOf('</div>', start) + '</div>'.length
+  return html.slice(start, end)
+}
+
+describe('task-15 · 采用稿投递失败必须说出来（不许说没发生的事）', () => {
+  const adoptedState = (over = {}) => {
+    const base = view({ adoptedId: 'c1' })
+    return state({ phase: 'adopted', ...over, view: { ...base, ...(over.view ?? {}) } })
+  }
+
+  it('成功（delivery.ok=true）：渲染与加这个分支之前**逐字相同**', () => {
+    const html = render(
+      h(XsBestofOverlay, {
+        state: adoptedState({ delivery: { ok: true, candidateId: 'c1', messageId: 'm-1', source: 'xuanshu-bestof-adopted', at: '2026-10-15T00:00:00.000Z' } }),
+        actions,
+      }),
+    )
+    expect(adoptedBlock(html)).toBe(ADOPTED_BLOCK_BEFORE_TASK15)
+  })
+
+  it('老宿主（delivery 字段整个缺席）：按成功态渲染，不崩、也不出现警告', () => {
+    const html = render(h(XsBestofOverlay, { state: adoptedState(), actions }))
+    expect(adoptedBlock(html)).toBe(ADOPTED_BLOCK_BEFORE_TASK15)
+    expect(html).not.toContain('没能写进会话')
+  })
+
+  it('失败：逐字给出原因，且**不再**出现「历史只带这一份采用稿」', () => {
+    const delivery = { ok: false, candidateId: 'c1', error: 'DSH agent 服务（ctx.agents）不可得：这一份采用稿写不进会话。', attemptedAt: '2026-10-15T00:00:00.000Z' }
+    const html = render(h(XsBestofOverlay, { state: adoptedState({ delivery }), actions }))
+
+    // 警告在，且是 role=alert（读屏也要说）。
+    expect(html).toContain('data-xs-bestof="delivery-failed"')
+    expect(html).toContain('role="alert"')
+    expect(html).toContain('⚠ 采用稿没能写进会话：DSH agent 服务（ctx.agents）不可得：这一份采用稿写不进会话。')
+    // 自相矛盾的那一句必须消失。
+    expect(html).not.toContain('历史只带这一份采用稿')
+    // 其余照旧（采用这个动作本身仍然生效、旁路披露仍成立）。
+    expect(html).toContain('已采用 c1')
+    expect(html).toContain('合参没有改动本次会话的挂载账本与字数状态')
+  })
+
+  it('失败原因缺失时也不给空话：「原因未知」兜底', () => {
+    const html = render(h(XsBestofOverlay, { state: adoptedState({ delivery: { ok: false } }), actions }))
+    expect(html).toContain('⚠ 采用稿没能写进会话：原因未知')
+  })
+
+  it('冷读（state 的视图里带 delivery）与点击回执（state.delivery）说同一句话', () => {
+    const delivery = { ok: false, error: '接不回这个会话（模拟：日志被删/宿主换了）' }
+    const fromPoll = render(h(XsBestofOverlay, { state: adoptedState({ view: { adoptedId: 'c1', delivery } }), actions }))
+    const fromClick = render(h(XsBestofOverlay, { state: adoptedState({ delivery }), actions }))
+    expect(fromPoll).toContain('⚠ 采用稿没能写进会话：接不回这个会话（模拟：日志被删/宿主换了）')
+    expect(adoptedBlock(fromPoll)).toBe(adoptedBlock(fromClick))
+  })
+
+  it('合并态同样受这条约束（失败时也不说「历史只带这一份采用稿」）', () => {
+    const merged = view({
+      adoptedId: 'merged',
+      candidates: [...view().candidates, candidate({ id: 'merged', angle: 'merged', angleName: '合并稿', text: '合并稿正文。' })],
+    })
+    const html = render(h(XsBestofOverlay, { state: state({ phase: 'adopted', view: merged, delivery: { ok: false, error: '写不进去' } }), actions }))
+    expect(html).toContain('已合并为一稿并采用')
+    expect(html).toContain('⚠ 采用稿没能写进会话：写不进去')
+    expect(html).not.toContain('历史只带这一份采用稿')
+  })
+})
+
 describe('票 11 · 费用与开关的口径', () => {
   it('没有 costUsd → 「费用未知」；有 → 四位小数', () => {
     const unknown = render(h(XsBestofJudgePanel, { view: view() }))

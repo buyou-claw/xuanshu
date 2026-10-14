@@ -10,7 +10,7 @@
  *      不许假装停了（Lead 2026-10-15 把它钉成产品承诺）。
  *   3. **费用未知就说未知**：宿主不给 `costUsd` 时显示「费用未知」，不许拿 0 糊过去。
  */
-import type { BestofApi, BestofCandidate, BestofDecision, BestofView } from './bestof-api.js';
+import type { BestofApi, BestofCandidate, BestofDecision, BestofDelivery, BestofView } from './bestof-api.js';
 
 /** 主命令名（S9 §1：`/多模型` 逐字照抄上游）。 */
 export const BESTOF_COMMAND_NAME = '多模型';
@@ -151,6 +151,22 @@ export interface BestofUiState {
   error?: string;
   /** 一句提示（停不下来的降级、禁用态等）。 */
   notice?: string;
+  /**
+   * 「采用稿到底有没有写进会话」的回执（task-15）。
+   * 字段缺席 = 还没拍板，或宿主是老版本（没有投递面）→ 界面按成功态渲染。
+   */
+  delivery?: BestofDelivery;
+}
+
+/**
+ * 采用态要不要挂警告（task-15）：只有**明确失败**才挂。
+ *
+ * 为什么 `ok !== false` 一律当成功：`delivery` 缺席是**老宿主**（契约里 `delivery` 是加性字段），
+ * 那时采用稿照旧投递（旧宿主的行为），没有理由把「不知道」渲染成「失败」。
+ */
+export function deliveryNotice(delivery: BestofDelivery | undefined): string | undefined {
+  if (delivery === undefined || delivery.ok !== false) return undefined;
+  return `采用稿没能写进会话：${delivery.error ?? '原因未知'}`;
 }
 
 /** 控制器（浮层与设置行共用一份）。 */
@@ -203,7 +219,8 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
     try {
       const view = await api.state({ runId });
       if (state.view?.runId !== runId) return; // 已经换了另一轮：旧回包丢掉
-      set({ view, phase: bestofPhase(view, { skippedByUser: stoppedByUser }) });
+      // 冷读的视图里宿主会在投递失败时带 `delivery`；成功时带 `deliveredAt` —— 说同一句话。
+      set({ view, phase: bestofPhase(view, { skippedByUser: stoppedByUser }), delivery: view.delivery });
       if (view.finished === true) {
         clearTimer();
         return;
@@ -292,8 +309,8 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
       const view = state.view;
       if (view === undefined) return;
       try {
-        const { bestOf } = await api.adopt(decisionPayload(view.runId, 'adopt', { adoptedId }));
-        set({ view: bestOf, phase: bestofPhase(bestOf), error: undefined });
+        const { bestOf, delivery } = await api.adopt(decisionPayload(view.runId, 'adopt', { adoptedId }));
+        set({ view: bestOf, phase: bestofPhase(bestOf), error: undefined, delivery });
       } catch (error) {
         set({ error: message(error) });
       }
@@ -302,8 +319,8 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
       const view = state.view;
       if (view === undefined) return;
       try {
-        const { bestOf } = await api.adopt(decisionPayload(view.runId, 'merge', { mergedText }));
-        set({ view: bestOf, phase: bestofPhase(bestOf), error: undefined });
+        const { bestOf, delivery } = await api.adopt(decisionPayload(view.runId, 'merge', { mergedText }));
+        set({ view: bestOf, phase: bestofPhase(bestOf), error: undefined, delivery });
       } catch (error) {
         set({ error: message(error) });
       }
@@ -312,8 +329,9 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
       const view = state.view;
       if (view === undefined) return;
       try {
-        const { bestOf } = await api.adopt(decisionPayload(view.runId, 'reject'));
-        set({ view: bestOf, phase: bestofPhase(bestOf), error: undefined });
+        const { bestOf, delivery } = await api.adopt(decisionPayload(view.runId, 'reject'));
+        // 否决不投递：把上一轮可能剩下的回执清掉（否则界面会拿旧警告说新状态）。
+        set({ view: bestOf, phase: bestofPhase(bestOf), error: undefined, delivery });
       } catch (error) {
         set({ error: message(error) });
       }
