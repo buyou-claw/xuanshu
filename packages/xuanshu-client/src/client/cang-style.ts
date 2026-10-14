@@ -1,4 +1,17 @@
-/** DSH-shaped management list, tokens inherited from the profile theme. */
+/**
+ * 票 14 · 藏的样式（面板 + 抽屉共用一张样式表）。
+ *
+ * 三条「为什么」：
+ *   1. **样式随 JS 走**：模块加载时注入一个 `<style>`（与 `style.ts` / 其它面板同款），
+ *      非 DOM 环境（断言台 / SSR）直接返回 —— 组件因此可以在无 jsdom 的 `renderToStaticMarkup` 里渲染；
+ *   2. **颜色全走 `--xs-*` token**，不写死色值：这些 token 由玄枢的主题覆盖层注入
+ *      （本仓 `style.ts` 的 `installOverviewStyle` / token 表；DSH 侧的接口名是 `ctx.theme.overrideTokens`
+ *      —— 证据来自 `node scripts/build-client.mjs` 的自检输出「槽位/面板副作用: overrideTokens(xuanshu-ui-v1×122)」，
+ *      **具体 file:line 未确认**，不编）；
+ *   3. `.xs-cang__boundary` 用 `position:sticky` 钉住顶部：那句「藏永不进 AI」是本屏的**边界声明**，
+ *      滚动时必须一直可见（S15 §C6 的措辞要求 —— 未确认到具体行号）。
+ */
+
 export function installCangStyle() {
   if (typeof document === 'undefined' || document.getElementById('xuanshu-cang-style')) return;
   const style = document.createElement('style'); style.id = 'xuanshu-cang-style';
