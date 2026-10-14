@@ -29,6 +29,8 @@ import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
+import { PANEL_KEYS, expectedCells, expectedRegisterNames } from './lib/panel-surface.mjs'
+
 import { OverviewPanel } from '../../packages/xuanshu-client/src/client/OverviewPanel.tsx'
 import {
   XsDestinyCard,
@@ -241,26 +243,18 @@ describe('票 07 · 首屏 = 自我总览（产物物化）', () => {
     plugin.apply(ctx)
     const registers = calls.filter((call) => call.kind === 'register')
     // 总装配后的完整注册面：overview（票 07）、pus（票 09）、cang（票 14）、
-    // onboarding + mingpan（票 08）+ 藏登记浮层。**只扩容期望数组，断言语义未变**：
-    // 票 08 的两个 key 是纯加性追加（在 cang 之后），不遮蔽、不加 priority、不声明 children。
+    // onboarding + mingpan（票 08）+ 藏登记浮层 + digao + rikke（票 13）。
+    // **只扩容期望数组，断言语义未变**：票 08 的两个 key 是纯加性追加（在 cang 之后），
+    // 票 13 的两个 key 同样是纯加性追加（在 mingpan 之后）——不遮蔽、不加 priority、不声明 children。
     // 顺序有意义：overview 必须仍是**第一个** main 注册（默认面板与 S3 的 `find('main')` 都取首个）。
     const mainKeys = registers.filter((r) => r.name === 'main').map((r) => r.options.key)
     const rowIds = registers.filter((r) => r.name === 'sidebar.panellist').map((r) => r.options.id)
-    // 票 10 追加 `consult`（问事门厅），仍在末尾：**只扩容期望数组，断言语义未变**。
-    // 票 13 客户端半还会各自追加自己的 key —— 合并时的最终顺序由 Lead 在集成分支上收口。
-    expect(mainKeys).toEqual(['overview', 'pus', 'cang', 'onboarding', 'mingpan', 'consult'])
+    // 注册面的**单一事实来源**是 `tests/assembly/lib/panel-surface.mjs`；这里不再手写清单，
+    // 否则每加一个面板都要在两张契约测试里各改一遍（票 07/08/10/13 已经各收过一次税）。
+    expect(mainKeys).toEqual(PANEL_KEYS)
     // 「每个侧栏行 id 必须与某个 main key 同字符串」是行与面板配对的唯一依据。
     expect(rowIds).toEqual(mainKeys)
-    expect(registers.map((r) => r.name)).toEqual([
-      'main', 'sidebar.panellist',
-      'main', 'sidebar.panellist',
-      'main', 'sidebar.panellist',
-      // 藏登记浮层：`installCangClient` 里就挂在 `cang` 那对之后。
-      'shell.overlay',
-      'main', 'sidebar.panellist',
-      'main', 'sidebar.panellist',
-      'main', 'sidebar.panellist',
-    ])
+    expect(registers.map((r) => r.name)).toEqual(expectedRegisterNames())
     expect(registers.some((call) => call.name === 'root'), '不得注册进 root 槽（single 槽会单独占满整页）').toBe(false)
     for (const register of registers) {
       expect(register.options.priority, '新 cell 不需要 priority（加了反而像在遮蔽）').toBeUndefined()
@@ -308,21 +302,7 @@ describe('票 07 · 槽位遮蔽不 fail-loud（加性注册）', () => {
     // 把 register 换成文档语义 registry：任何「同 cell 同 priority」都会抛。
     ctx.slots.register = (options, component) => registry.register(options, component)
     expect(() => plugin.apply(ctx)).not.toThrow()
-    expect([...registry.cells.keys()].sort()).toEqual([
-      'main\u0000cang',
-      'main\u0000consult',
-      'main\u0000mingpan',
-      'main\u0000onboarding',
-      'main\u0000overview',
-      'main\u0000pus',
-      'shell.overlay\u0000xuanshu-cang-drawer',
-      'sidebar.panellist\u0000cang',
-      'sidebar.panellist\u0000consult',
-      'sidebar.panellist\u0000mingpan',
-      'sidebar.panellist\u0000onboarding',
-      'sidebar.panellist\u0000overview',
-      'sidebar.panellist\u0000pus',
-    ])
+    expect([...registry.cells.keys()].sort()).toEqual(expectedCells())
   })
 
   it('registry 的 fail-loud 是活的（自检桩本身）：同 cell 同 priority 二次注册必须 throw', () => {

@@ -35,6 +35,9 @@ import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
 import { createConsultApi } from './consult-api.js';
 import { installConsult } from './consult.js';
+import { createDigaoApi } from './digao-api.js';
+import { createDigaoUiController } from './digao-controller.js';
+import { installDigao } from './digao.js';
 import { installMingpan } from './MingpanPanel.js';
 import { installOnboarding } from './onboarding.js';
 import { OverviewIcon } from './OverviewIcon.js';
@@ -42,6 +45,9 @@ import { OverviewPanel } from './OverviewPanel.js';
 import { PANEL_ID, PANEL_LABEL, PANEL_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
 import { installPuPanel } from './PuPanel.js';
+import { createRikkeApi } from './rikke-api.js';
+import { createRikkeUiController } from './rikke-controller.js';
+import { installRikke } from './rikke.js';
 import type { RpcContext } from './rpc.js';
 import { installOverviewStyle } from './style.js';
 import { THEME_SOURCE, THEME_TOKENS } from './tokens.js';
@@ -152,6 +158,13 @@ export function apply(ctx: Context): void {
         }
       : undefined;
 
+  // 票 13：日课与底稿的数据面 + 各自的「人点才跑」控制器（概览的两张卡与两块面板共用同一份；
+  // 生成 / 刷新只由按钮的 onClick 触发，apply 期一个请求都不发）。
+  const rikke = createRikkeApi(rpc);
+  const rikkeController = createRikkeUiController(rikke);
+  const digao = createDigaoApi(rpc);
+  const digaoController = createDigaoUiController(digao);
+
   const injected = (): OverviewInjected => ({
     navigate,
     mainPanels,
@@ -163,6 +176,12 @@ export function apply(ctx: Context): void {
     onRetry: () => { baziController.invalidate(); },
     bazi,
     baziController,
+    // 票 13：三份数据面与两个控制器都从注入面进概览；`onGenerate` / `onRefresh`
+    // **不在这里给**——概览面板自己用控制器造（保证「人点才跑」只有一条路径）。
+    rikke,
+    rikkeController,
+    digao,
+    digaoController,
   });
 
   // ③ 主面板：keyed 槽按 key 分派；key 必须与侧栏行 id 相同。
@@ -200,5 +219,10 @@ export function apply(ctx: Context): void {
   installCangClient(rpc);
   installOnboarding(rpc, baziDeps);
   installMingpan(rpc, baziDeps);
+  // ⑦ 票 10：问事门厅（`consult`，order 30 = S15 给「书房」预约的那一档）。
   installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
+
+  // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
+  installDigao(rpc, { api: digao, navigate });
+  installRikke(rpc, { api: rikke, navigate });
 }

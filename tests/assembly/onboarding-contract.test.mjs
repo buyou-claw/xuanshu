@@ -21,12 +21,15 @@ import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 import { describe, expect, it } from 'vitest'
 
+import { PANEL_KEYS, expectedCells, expectedRegisterNames } from './lib/panel-surface.mjs'
+
 import { BAZI_ENDPOINTS, createBaziApi } from '../../packages/xuanshu-client/src/client/bazi-api.ts'
 import { createBaziUiController } from '../../packages/xuanshu-client/src/client/bazi-controller.ts'
 import { installMingpan } from '../../packages/xuanshu-client/src/client/MingpanPanel.tsx'
 import { installOnboarding } from '../../packages/xuanshu-client/src/client/onboarding.tsx'
 import {
   CONSULT_ID,
+  DIGAO_ID,
   MINGPAN_ID,
   MINGPAN_LABEL,
   MINGPAN_ORDER,
@@ -35,6 +38,7 @@ import {
   ONBOARDING_ORDER,
   PANEL_ID,
   PANEL_ORDER,
+  RIKKE_ID,
 } from '../../packages/xuanshu-client/src/client/panel.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -45,12 +49,11 @@ const ARTIFACT = join(REPO_ROOT, 'packages', 'xuanshu-client', 'lib', 'client.js
 const DSH_MAIN_KEYS = ['conversation', 'plugins', 'schedules']
 const DSH_SIDEBAR_IDS = ['plugins', 'schedules']
 
-/**
- * 票 08 之后玄枢的全部 main 注册（顺序有意义，见下）。
- * **票 10 追加 `consult`**（问事门厅，仍在末尾）：只扩容期望数组，断言语义未变。
- * 票 13 客户端半还会追加自己的 key —— 合并时的最终顺序由 Lead 在集成分支上收口。
+/*
+ * 玄枢的注册面清单已收口到 `tests/assembly/lib/panel-surface.mjs`（单一事实来源）——
+ * 此前每张票都要在几张契约测试里各改一遍穷举数组，票 07/08/10/13 已经各收过一次税。
+ * 这里只断言「全部注册、纯加性、`overview` 在最前」，清单本体不在此维护。
  */
-const EXPECTED_MAIN_KEYS = ['overview', 'pus', 'cang', ONBOARDING_ID, MINGPAN_ID, CONSULT_ID]
 
 /* ───────────────────────── 产物物化（运行时真实路径） ───────────────────────── */
 
@@ -204,8 +207,8 @@ describe('票 08 · 产物（lib/client.js）与注册面', () => {
     const registers = calls.filter((call) => call.kind === 'register')
     const mainKeys = registers.filter((row) => row.name === 'main').map((row) => row.options.key)
     const rows = registers.filter((row) => row.name === 'sidebar.panellist')
-    expect(mainKeys).toEqual(EXPECTED_MAIN_KEYS)
-    expect(rows.map((row) => row.options.id)).toEqual(EXPECTED_MAIN_KEYS)
+    expect(mainKeys).toEqual(PANEL_KEYS)
+    expect(rows.map((row) => row.options.id)).toEqual(PANEL_KEYS)
     const onboarding = rows.find((row) => row.options.id === ONBOARDING_ID)
     const mingpan = rows.find((row) => row.options.id === MINGPAN_ID)
     expect(onboarding?.options).toMatchObject({ order: ONBOARDING_ORDER, label: ONBOARDING_LABEL })
@@ -274,21 +277,7 @@ describe('票 08 · 槽位不 fail-loud（加性注册）', () => {
     const { ctx } = recordingCtx()
     ctx.slots.register = (options, component) => registry.register(options, component)
     expect(() => plugin.apply(ctx)).not.toThrow()
-    expect([...registry.cells.keys()].sort()).toEqual([
-      'main\u0000cang',
-      'main\u0000consult',
-      'main\u0000mingpan',
-      'main\u0000onboarding',
-      'main\u0000overview',
-      'main\u0000pus',
-      'shell.overlay\u0000xuanshu-cang-drawer',
-      'sidebar.panellist\u0000cang',
-      'sidebar.panellist\u0000consult',
-      'sidebar.panellist\u0000mingpan',
-      'sidebar.panellist\u0000onboarding',
-      'sidebar.panellist\u0000overview',
-      'sidebar.panellist\u0000pus',
-    ])
+    expect([...registry.cells.keys()].sort()).toEqual(expectedCells())
   })
 })
 

@@ -1023,12 +1023,25 @@ var DISABLED_REASON = {
   workflow: "工作流面板还没装配（属票 16 · 工作流创建向导）",
   pus: "谱面板还没装配（属票 09 · 谱管理）",
   digao: "底稿面板还没装配（属票 13 · 底稿与日课）",
+  rikke: "日课面板还没装配（属票 13 · 底稿与日课）",
   onboarding: "八字冷启动向导还没装配（属票 08）",
   generate: "日课生成还没接上（属票 13 · 底稿与日课）",
   refreshDigao: "底稿刷新还没接上（属票 13 · 底稿与日课）",
   openDetail: "命盘详情还没装配（属票 08）",
   retry: "取数重试还没接上（属票 08 / 13）"
 };
+function clockOf(time) {
+  if (time === void 0) return "";
+  const parts = time.split(":");
+  if (parts.length < 2) return time;
+  return `${parts[0]}:${parts[1]}`;
+}
+var DIGAO_ID = "digao";
+var RIKKE_ID = "rikke";
+var DIGAO_LABEL = "底稿";
+var RIKKE_LABEL = "日课";
+var DIGAO_ORDER = 60;
+var RIKKE_ORDER = 100;
 
 // src/client/consult.tsx
 var import_jsx_runtime5 = require("react/jsx-runtime");
@@ -1366,75 +1379,62 @@ function installConsultStyle() {
   document.head.appendChild(style);
 }
 
-// src/client/MingpanPanel.tsx
-var import_react6 = require("react");
-
-// src/client/bazi-style.ts
-function installBaziStyle() {
-  if (typeof document === "undefined" || document.getElementById("xs-bazi-style") !== null) return;
-  const style = document.createElement("style");
-  style.id = "xs-bazi-style";
-  style.textContent = `
-.xs-wizard{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
-.xs-wizard h1,.xs-wizard h2,.xs-wizard h3{font-weight:600}.xs-wizard h2{font-size:1.05rem}.xs-wizard h3{font-size:.95rem;margin:18px 0 6px}
-.xs-wizard__steps{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}
-.xs-wizard__step-list{display:flex;gap:6px;list-style:none;margin:0;padding:0;flex-wrap:wrap}
-.xs-wizard__step{display:flex;gap:6px;align-items:center;padding:4px 10px;border:1px solid var(--xs-edge-card);border-radius:999px;font-size:.8rem;color:var(--xs-text-secondary)}
-.xs-wizard__step--current{border-color:var(--xs-accent);color:var(--xs-text-body)}
-.xs-wizard__step--done{opacity:.75}
-.xs-wizard__cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--xs-space-card-pad)}
-.xs-wizard__aside{color:var(--xs-text-secondary);font-size:.85rem;line-height:1.7}
-.xs-wizard__field{display:block;margin:10px 0}
-.xs-wizard__field>span{display:block;margin-bottom:4px;font-size:.85rem}
-.xs-wizard input,.xs-wizard select,.xs-wizard textarea{font:inherit;color:inherit;background:var(--xs-surface-card);border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:7px;box-sizing:border-box;max-width:100%}
-.xs-wizard textarea{display:block;width:100%;min-height:72px}
-.xs-wizard button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
-.xs-wizard button:disabled{opacity:.5;cursor:not-allowed}
-.xs-btn--primary{background:var(--xs-accent);border-color:var(--xs-accent);color:var(--xs-accent-fg)}
-.xs-wizard__note,.xs-wizard__hint,.xs-wizard__status{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6}
-.xs-wizard__hint{color:var(--xs-text-body)}
-.xs-wizard__nudge,.xs-wizard__manual,.xs-wizard__actions,.xs-wizard__cast{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
-.xs-wizard__nudge-grains{display:inline-flex;gap:4px}
-.xs-chip{font-size:.8rem;padding:3px 8px}
-.xs-chip--on{border-color:var(--xs-accent)}
-.xs-wizard__cities{list-style:none;margin:6px 0;padding:0;max-height:220px;overflow:auto}
-.xs-wizard__cities li{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--xs-edge-card)}
-.xs-wizard__city-region{color:var(--xs-text-secondary);font-size:.8rem;flex:1}
-.xs-wizard__place{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-.xs-wizard__place-coord{font-family:var(--font-mono,monospace);color:var(--xs-text-code)}
-.xs-wizard__zone-value{display:flex;gap:8px;align-items:baseline;font-size:1.05rem}
-.xs-wizard__confirm{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad)}
-.xs-wizard__confirm-list{list-style:none;margin:0;padding:0}
-.xs-wizard__confirm-list li{display:flex;gap:12px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--xs-edge-card)}
-.xs-wizard__confirm-label{min-width:72px;color:var(--xs-text-secondary);font-size:.85rem}
-.xs-wizard__confirm-value{flex:1}
-.xs-wizard__radio{display:block;margin:6px 0}
-.xs-wizard__radio small{margin-left:8px}
-.xs-wizard__check{display:block;margin:6px 0}
-.xs-wizard__check input{margin-right:8px}
-.xs-wizard__reason{padding:12px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);margin-top:8px}
-.xs-wizard__reason-main{color:var(--xs-text-body);line-height:1.7}
-.xs-wizard__gate{padding:12px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);margin:12px 0}
-.xs-wizard__gate-prompt{font-size:1rem;line-height:1.7}
-.xs-wizard__footer{display:flex;gap:8px;align-items:center;margin-top:18px;position:sticky;bottom:0;background:var(--xs-surface-card);padding:10px 0}
-.xs-wizard__footer .xs-wizard__spacer{flex:1}
-.xs-mingpan{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
-.xs-mingpan h1,.xs-mingpan h2{font-weight:600}.xs-mingpan h2{font-size:1rem;margin:18px 0 6px}
-.xs-mingpan button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
-.xs-mingpan button:disabled{opacity:.5;cursor:not-allowed}
-.xs-mingpan__summary p{margin:4px 0}
-.xs-mingpan__coord{font-family:var(--font-mono,monospace);color:var(--xs-text-code)}
-.xs-mingpan__pillars{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.xs-mingpan__pillar{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:10px;text-align:center}
-.xs-mingpan__pillar-name{display:block;font-size:.8rem;color:var(--xs-text-secondary)}
-.xs-mingpan__pillar-value{font-size:1.2rem}
-.xs-mingpan__basis,.xs-mingpan__origin{line-height:1.8}
-.xs-mingpan__confirm{margin-top:12px;padding:12px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card)}
-.xs-mingpan__actions,.xs-mingpan__head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-@media(max-width:1100px){.xs-wizard__cols{grid-template-columns:1fr}.xs-wizard{padding:16px}.xs-mingpan{padding:16px}}
-`;
-  document.head.appendChild(style);
+// src/client/digao-api.ts
+var DIGAO_ENDPOINTS = {
+  status: "digao.status",
+  read: "digao.read",
+  refresh: "digao.refresh"
+};
+function createDigaoApi(ctx) {
+  return {
+    status: (signal) => rpcCall(ctx, DIGAO_ENDPOINTS.status, {}, signal),
+    read: (signal) => rpcCall(ctx, DIGAO_ENDPOINTS.read, {}, signal),
+    refresh: (signal) => rpcCall(ctx, DIGAO_ENDPOINTS.refresh, {}, signal)
+  };
 }
+
+// src/client/digao-controller.ts
+function errorText2(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function createDigaoUiController(api) {
+  let revision = 0;
+  let outcome;
+  let running;
+  const listeners = /* @__PURE__ */ new Set();
+  const notify = () => {
+    for (const listener of [...listeners]) listener();
+  };
+  return {
+    getRevision: () => revision,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    getOutcome: () => outcome,
+    refresh() {
+      if (running !== void 0) return running;
+      running = api.refresh().then(() => {
+        outcome = { ok: true };
+        return outcome;
+      }).catch((error) => {
+        outcome = { ok: false, reason: `刷新失败：${errorText2(error)}` };
+        return outcome;
+      }).then((answer) => {
+        running = void 0;
+        revision += 1;
+        notify();
+        return answer;
+      });
+      return running;
+    }
+  };
+}
+
+// src/client/digao.tsx
+var import_react6 = require("react");
 
 // src/client/glyphs.tsx
 var import_jsx_runtime6 = require("react/jsx-runtime");
@@ -1857,9 +1857,35 @@ function XsDestinyCard({
     }
   );
 }
-function XsRikkeCard({ state = "empty", today, content, navigate, mainPanels, onGenerate, onRetry }) {
+function RikkeLines({ content }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-lines", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-line", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__label", children: "宜" }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__value", children: content?.yi ?? "—" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-line", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__label", children: "忌" }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__value", children: content?.ji ?? "—" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-line", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__label", children: "流日" }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__value", children: content?.liuri ?? "—" })
+    ] })
+  ] });
+}
+function XsRikkeCard({
+  state = "empty",
+  today,
+  content,
+  reason,
+  navigate,
+  mainPanels,
+  onGenerate,
+  onRetry
+}) {
   const available = useAvailable(mainPanels);
   const schedulesReady = isAvailable(available, "schedules");
+  const rikkeReady = isAvailable(available, "rikke");
   const generateDisabled = onGenerate === void 0;
   const retryDisabled = onRetry === void 0;
   return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
@@ -1901,47 +1927,38 @@ function XsRikkeCard({ state = "empty", today, content, navigate, mainPanels, on
             ] })
           }
         ) : null,
-        state === "error" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
-          XsEmptyBlock,
-          {
-            variant: "error",
-            illus: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(IllusCardsError, {}),
-            why: ERROR_COPY.rike,
-            actions: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
-              ActionButton,
-              {
-                action: "retry",
-                disabled: retryDisabled,
-                reason: DISABLED_REASON.retry,
-                onClick: onRetry,
-                children: ACTION_COPY.retry
-              }
-            )
-          }
-        ) : null,
+        state === "error" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+            XsEmptyBlock,
+            {
+              variant: "error",
+              illus: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(IllusCardsError, {}),
+              why: ERROR_COPY.rike,
+              sub: reason,
+              actions: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+                ActionButton,
+                {
+                  action: "retry",
+                  disabled: retryDisabled,
+                  reason: DISABLED_REASON.retry,
+                  onClick: onRetry,
+                  children: ACTION_COPY.retry
+                }
+              )
+            }
+          ),
+          content === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-card__body", "data-xuanshu-ready": "rike", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(RikkeLines, { content }) })
+        ] }) : null,
         state === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-card__body", "data-xuanshu-ready": "rike", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-lines", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-line", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__label", children: "宜" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__value", children: content?.yi ?? "—" })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-line", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__label", children: "忌" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__value", children: content?.ji ?? "—" })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-line", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__label", children: "流日" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__value", children: content?.liuri ?? "—" })
-            ] })
-          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(RikkeLines, { content }),
           /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-card__actions", children: [
             /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               NavLink,
               {
-                target: "schedules",
-                disabled: !schedulesReady,
-                reason: DISABLED_REASON.retry,
-                onClick: () => navigate("schedules"),
+                target: "rikke",
+                disabled: !rikkeReady,
+                reason: DISABLED_REASON.rikke,
+                onClick: () => navigate("rikke"),
                 children: ACTION_COPY.watchFull
               }
             ),
@@ -1965,6 +1982,7 @@ function XsDigaoCard({
   state = "empty",
   summary,
   baseplateEstablished = false,
+  reason,
   navigate,
   mainPanels,
   onRefresh,
@@ -2023,6 +2041,7 @@ function XsDigaoCard({
             variant: "error",
             illus: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(IllusCardsError, {}),
             why: ERROR_COPY.digao,
+            sub: reason,
             actions: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
               /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                 ActionButton,
@@ -2168,6 +2187,377 @@ function XsQuickLinks({
     )) }),
     /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-quicklinks__note", "data-xuanshu-note": "boundary", children: QUICKLINKS_BOUNDARY })
   ] });
+}
+
+// src/client/digao-model.ts
+var KIND_BY_NAME = {
+  谱: "pu",
+  工作区: "workspace",
+  工作流: "workflow"
+};
+var HEADING_RE = /^##\s*来源：\s*(.+?)\s*$/;
+var MARKER_RE = /^【来源：\s*(.+?)\s*】\s*(.*)$/;
+var ORIGIN_RE = /^源自：\s*(.*)$/;
+function kindOf(name) {
+  const exact = KIND_BY_NAME[name];
+  if (exact !== void 0) return exact;
+  for (const [label, kind] of Object.entries(KIND_BY_NAME)) {
+    if (name.startsWith(label)) return kind;
+  }
+  return "other";
+}
+function splitMarker(inner) {
+  const [label = "", ...rest] = inner.split(/\s+/).filter((part) => part !== "");
+  return { label, name: rest.join(" ") };
+}
+function parseDigaoMarkdown(markdown) {
+  const drafts = [];
+  let group;
+  let segment;
+  const closeSegment = () => {
+    if (group === void 0 || segment === void 0) return;
+    const current = segment;
+    const origins = current.bodyLines.map((line) => ORIGIN_RE.exec(line.trim())).filter((match) => match !== null).map((match) => match[1] ?? "");
+    const body = current.bodyLines.filter((line) => ORIGIN_RE.exec(line.trim()) === null).join("\n").trim();
+    group.segments.push({
+      label: current.label,
+      kind: current.kind,
+      name: current.name,
+      body,
+      ...origins.length === 0 ? {} : { origin: origins[origins.length - 1] ?? "" }
+    });
+    segment = void 0;
+  };
+  for (const rawLine of markdown.replace(/\r\n?/g, "\n").split("\n")) {
+    const heading = HEADING_RE.exec(rawLine.trim());
+    if (heading !== null) {
+      closeSegment();
+      const name = heading[1] ?? "";
+      const draft = { kind: kindOf(name), name, noteLines: [], segments: [] };
+      group = draft;
+      drafts.push(draft);
+      continue;
+    }
+    if (group === void 0) continue;
+    const marker = MARKER_RE.exec(rawLine.trim());
+    if (marker !== null) {
+      closeSegment();
+      const { label, name } = splitMarker(marker[1] ?? "");
+      const draft = { label, kind: kindOf(label), name, bodyLines: [] };
+      segment = draft;
+      const trailing = marker[2] ?? "";
+      if (trailing !== "") draft.bodyLines.push(trailing);
+      continue;
+    }
+    if (segment === void 0) group.noteLines.push(rawLine);
+    else segment.bodyLines.push(rawLine);
+  }
+  closeSegment();
+  return drafts.map((draft) => ({
+    kind: draft.kind,
+    name: draft.name,
+    note: draft.noteLines.join("\n").trim(),
+    segments: draft.segments
+  }));
+}
+
+// src/client/digao-style.ts
+function installDigaoStyle() {
+  if (typeof document === "undefined" || document.getElementById("xs-digao-style") !== null) return;
+  const style = document.createElement("style");
+  style.id = "xs-digao-style";
+  style.textContent = `
+.xs-digao{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
+.xs-digao h1,.xs-digao h2{font-weight:600}.xs-digao h1{font-size:1.15rem}.xs-digao h2{font-size:1rem}
+.xs-digao__head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:0;background:var(--xs-surface-card);padding:8px 0;z-index:1}
+.xs-digao__jumps,.xs-digao__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.xs-digao button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-digao button:disabled{opacity:.5;cursor:not-allowed}
+.xs-digao__jumps button{background:transparent;border-color:transparent;text-decoration:underline;padding:2px 4px}
+.xs-digao__note,.xs-digao__origin{color:var(--xs-text-secondary);font-size:.85rem;line-height:1.7}
+.xs-digao__no-edit{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px}
+.xs-digao__group{margin:18px 0;border-left:3px solid var(--xs-edge-card);padding-left:12px}
+.xs-digao__group-head{margin:0 0 6px}
+.xs-digao__segment{margin:10px 0;border-left:2px solid var(--xs-edge-card);padding-left:10px}
+.xs-digao__tag{display:inline-block;padding:1px 6px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);font-size:.8rem;color:var(--xs-text-secondary);margin-right:6px}
+.xs-digao__segment-body{white-space:pre-wrap;line-height:1.8;margin:4px 0}
+.xs-digao__raw{white-space:pre-wrap;font-family:var(--font-mono,monospace);font-size:.85rem;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:10px;overflow:auto;max-height:var(--xs-size-scrollregion-max,420px)}
+.xs-digao__alert{padding:10px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);margin:8px 0}
+@media(max-width:1100px){.xs-digao{padding:16px}}
+`;
+  document.head.appendChild(style);
+}
+
+// src/client/digao.tsx
+var import_jsx_runtime8 = require("react/jsx-runtime");
+var DIGAO_NO_EDIT_NOTE = "本面板没有编辑框、没有保存按钮：内容由「规则骨架 + AI 摘要」生成；改了源头，刷新即变。";
+var DIGAO_JUMP_NOTE = "要改就改源头：";
+var DIGAO_JUMPS = [
+  { target: "pus", label: "改谱 → S5" },
+  { target: "conversation", label: "改工作区 → 工作区" },
+  { target: "workflow", label: "改工作流 → S12" }
+];
+var DIGAO_NEXT_REFRESH_NOTE = "下次刷新：由「自动化任务」面板里的底稿 daily 任务决定（播种默认 03:30，可在那里改或停用）。";
+function initialView(preloaded) {
+  if (preloaded === void 0) return { kind: "loading" };
+  if ("error" in preloaded) return { kind: "error", message: preloaded.error };
+  if (preloaded.status.exists !== true) {
+    return {
+      kind: "empty",
+      meta: preloaded.status.meta,
+      ...preloaded.status.schedule === void 0 ? {} : { schedule: preloaded.status.schedule }
+    };
+  }
+  if (preloaded.read === void 0) return { kind: "error", message: "底稿文件存在但正文没读回来。" };
+  const schedule = preloaded.read.schedule ?? preloaded.status.schedule;
+  return {
+    kind: "ready",
+    meta: preloaded.read.meta ?? preloaded.status.meta,
+    markdown: preloaded.read.markdown,
+    ...schedule === void 0 ? {} : { schedule }
+  };
+}
+function errorText3(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function DigaoPanel({ api, navigate, preloaded, preloadedRawView }) {
+  const seeded = preloaded !== void 0;
+  const [view, setView] = (0, import_react6.useState)(() => initialView(preloaded));
+  const [busy, setBusy] = (0, import_react6.useState)(false);
+  const [raw, setRaw] = (0, import_react6.useState)(preloadedRawView === true);
+  const [note, setNote] = (0, import_react6.useState)(void 0);
+  const sequence = (0, import_react6.useRef)(0);
+  const load = () => {
+    const mine = ++sequence.current;
+    setNote(void 0);
+    void api.status().then(async (status) => {
+      if (mine !== sequence.current) return;
+      if (status.exists !== true) {
+        setView({
+          kind: "empty",
+          meta: status.meta,
+          ...status.schedule === void 0 ? {} : { schedule: status.schedule }
+        });
+        return;
+      }
+      const read = await api.read();
+      if (mine !== sequence.current) return;
+      const schedule2 = read.schedule ?? status.schedule;
+      setView({
+        kind: "ready",
+        meta: read.meta ?? status.meta,
+        markdown: read.markdown,
+        ...schedule2 === void 0 ? {} : { schedule: schedule2 }
+      });
+    }).catch((error) => {
+      if (mine !== sequence.current) return;
+      setView({ kind: "error", message: errorText3(error) });
+    });
+  };
+  (0, import_react6.useEffect)(() => {
+    if (seeded) return;
+    load();
+  }, [api, seeded]);
+  const refresh = () => {
+    const mine = ++sequence.current;
+    setBusy(true);
+    setNote(void 0);
+    void api.refresh().then(async () => {
+      const read = await api.read();
+      if (mine !== sequence.current) return;
+      setView({ kind: "ready", meta: read.meta, markdown: read.markdown });
+    }).catch((error) => {
+      if (mine !== sequence.current) return;
+      setNote(`刷新失败：${errorText3(error)}`);
+    }).finally(() => {
+      if (mine === sequence.current) setBusy(false);
+    });
+  };
+  const meta = view.kind === "empty" || view.kind === "ready" ? view.meta : null;
+  const schedule = view.kind === "empty" || view.kind === "ready" ? view.schedule : void 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("main", { className: "xs-digao", "data-xuanshu-panel": DIGAO_ID, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "xs-digao__head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h1", { children: "底稿" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(XsPureDerivedBadge, {})
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { className: "xs-digao__jumps", "data-xuanshu-note": "source-jumps", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: DIGAO_JUMP_NOTE }),
+      DIGAO_JUMPS.map((jump) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+        "button",
+        {
+          type: "button",
+          "data-xuanshu-nav": jump.target,
+          onClick: () => {
+            navigate(jump.target);
+          },
+          children: jump.label
+        },
+        jump.target
+      ))
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note xs-digao__no-edit", "data-xuanshu-note": "no-edit", children: DIGAO_NO_EDIT_NOTE }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "last-refresh", children: meta?.generatedAt === void 0 ? "上次刷新：（还没有生成过）" : `上次刷新 ${meta.generatedAt}` }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "next-refresh", children: schedule === void 0 ? DIGAO_NEXT_REFRESH_NOTE : `下次刷新 ${clockOf(schedule.time)}（${schedule.timeZone}）· 由「自动化任务」面板里的 daily 任务决定（可在那里改或停用）` }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-digao__actions", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "xs-btn xs-btn--primary",
+          "data-xuanshu-action": "refresh-digao",
+          disabled: busy,
+          onClick: refresh,
+          children: busy ? "刷新中…" : "刷新"
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+        "button",
+        {
+          type: "button",
+          "data-xuanshu-action": "view-md",
+          onClick: () => {
+            setRaw(!raw);
+          },
+          children: raw ? "收起 MD 形态" : "查看 MD 形态"
+        }
+      )
+    ] }),
+    note === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__alert", role: "alert", "data-xuanshu-alert": "refresh", children: note }),
+    view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note", "data-xuanshu-view": "loading", children: "正在读底稿…" }) : null,
+    view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-digao__empty", "data-xuanshu-view": "empty", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: EMPTY_COPY.digaoNeverRefreshed.why }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note", children: "底稿由谱 / 工作区 / 工作流三路来源提炼而成；点一次 [刷新] 就会按三路来源拼出骨架。" })
+    ] }) : null,
+    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-digao__alert", "data-xuanshu-view": "error", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: view.message }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "xs-digao__actions", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "retry", onClick: load, children: "重试" }) })
+    ] }) : null,
+    view.kind === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(DigaoBody, { markdown: view.markdown, meta: view.meta, raw }) : null
+  ] });
+}
+function digestLine(meta) {
+  const digest = meta?.digest;
+  if (digest === "skeleton") {
+    return "生成方式：骨架＝确定性规则 · 摘要＝规则骨架（LLM 不可用或提炼失败，未提炼）";
+  }
+  if (digest === "llm") return "生成方式：骨架＝确定性规则 · 摘要＝AI 提炼";
+  return "生成方式：骨架＝确定性规则 · 摘要＝未标注（meta 里没有 digest 这一位，按未提炼对待）";
+}
+function DigaoBody({ markdown, meta, raw }) {
+  const groups = parseDigaoMarkdown(markdown);
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "digest", children: digestLine(meta) }),
+    raw ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("pre", { className: "xs-digao__raw", "data-xuanshu-raw": "digao", children: markdown }) : null,
+    groups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "shape-mismatch", children: "正文形态不符（没有「## 来源：…」章节）：按原文只读展示，界面不假装解析出来源分组。" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("pre", { className: "xs-digao__raw", "data-xuanshu-raw": "digao-fallback", children: markdown })
+    ] }) : groups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-digao__group", "data-xuanshu-group": group.kind, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { className: "xs-digao__group-head", children: `来源：${group.name}（${group.segments.length} 段）` }),
+      group.note === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note", "data-xuanshu-group-note": group.kind, children: group.note }),
+      group.segments.map((segment, index) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "xs-digao__segment", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { className: "xs-digao__segment-head", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-digao__tag", "data-xuanshu-source-tag": segment.label, children: `[${segment.label}]` }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-digao__segment-name", children: segment.name })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__segment-body", children: segment.body }),
+        segment.origin === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__origin", "data-xuanshu-origin": segment.kind, children: `源自：${segment.origin}` })
+      ] }, `${group.kind}-${String(index)}`))
+    ] }, `${group.kind}-${group.name}`))
+  ] });
+}
+function DigaoIcon({ size = 20 }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M6 3.5h8l4 4V20.5H6z" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M14 3.5v4h4" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M8.5 12h7M8.5 15.5h7" })
+  ] });
+}
+function installDigao(ctx, deps) {
+  installDigaoStyle();
+  ctx.slots.inject(
+    "main",
+    () => ctx.slots.register(
+      { name: "main", key: DIGAO_ID, inject: () => ({ ...deps }) },
+      DigaoPanel
+    )
+  );
+  ctx.slots.inject(
+    "sidebar.panellist",
+    () => ctx.slots.register(
+      { name: "sidebar.panellist", id: DIGAO_ID, order: DIGAO_ORDER, label: DIGAO_LABEL },
+      DigaoIcon
+    )
+  );
+}
+
+// src/client/MingpanPanel.tsx
+var import_react7 = require("react");
+
+// src/client/bazi-style.ts
+function installBaziStyle() {
+  if (typeof document === "undefined" || document.getElementById("xs-bazi-style") !== null) return;
+  const style = document.createElement("style");
+  style.id = "xs-bazi-style";
+  style.textContent = `
+.xs-wizard{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
+.xs-wizard h1,.xs-wizard h2,.xs-wizard h3{font-weight:600}.xs-wizard h2{font-size:1.05rem}.xs-wizard h3{font-size:.95rem;margin:18px 0 6px}
+.xs-wizard__steps{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.xs-wizard__step-list{display:flex;gap:6px;list-style:none;margin:0;padding:0;flex-wrap:wrap}
+.xs-wizard__step{display:flex;gap:6px;align-items:center;padding:4px 10px;border:1px solid var(--xs-edge-card);border-radius:999px;font-size:.8rem;color:var(--xs-text-secondary)}
+.xs-wizard__step--current{border-color:var(--xs-accent);color:var(--xs-text-body)}
+.xs-wizard__step--done{opacity:.75}
+.xs-wizard__cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--xs-space-card-pad)}
+.xs-wizard__aside{color:var(--xs-text-secondary);font-size:.85rem;line-height:1.7}
+.xs-wizard__field{display:block;margin:10px 0}
+.xs-wizard__field>span{display:block;margin-bottom:4px;font-size:.85rem}
+.xs-wizard input,.xs-wizard select,.xs-wizard textarea{font:inherit;color:inherit;background:var(--xs-surface-card);border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:7px;box-sizing:border-box;max-width:100%}
+.xs-wizard textarea{display:block;width:100%;min-height:72px}
+.xs-wizard button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-wizard button:disabled{opacity:.5;cursor:not-allowed}
+.xs-btn--primary{background:var(--xs-accent);border-color:var(--xs-accent);color:var(--xs-accent-fg)}
+.xs-wizard__note,.xs-wizard__hint,.xs-wizard__status{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6}
+.xs-wizard__hint{color:var(--xs-text-body)}
+.xs-wizard__nudge,.xs-wizard__manual,.xs-wizard__actions,.xs-wizard__cast{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.xs-wizard__nudge-grains{display:inline-flex;gap:4px}
+.xs-chip{font-size:.8rem;padding:3px 8px}
+.xs-chip--on{border-color:var(--xs-accent)}
+.xs-wizard__cities{list-style:none;margin:6px 0;padding:0;max-height:220px;overflow:auto}
+.xs-wizard__cities li{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--xs-edge-card)}
+.xs-wizard__city-region{color:var(--xs-text-secondary);font-size:.8rem;flex:1}
+.xs-wizard__place{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.xs-wizard__place-coord{font-family:var(--font-mono,monospace);color:var(--xs-text-code)}
+.xs-wizard__zone-value{display:flex;gap:8px;align-items:baseline;font-size:1.05rem}
+.xs-wizard__confirm{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad)}
+.xs-wizard__confirm-list{list-style:none;margin:0;padding:0}
+.xs-wizard__confirm-list li{display:flex;gap:12px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--xs-edge-card)}
+.xs-wizard__confirm-label{min-width:72px;color:var(--xs-text-secondary);font-size:.85rem}
+.xs-wizard__confirm-value{flex:1}
+.xs-wizard__radio{display:block;margin:6px 0}
+.xs-wizard__radio small{margin-left:8px}
+.xs-wizard__check{display:block;margin:6px 0}
+.xs-wizard__check input{margin-right:8px}
+.xs-wizard__reason{padding:12px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);margin-top:8px}
+.xs-wizard__reason-main{color:var(--xs-text-body);line-height:1.7}
+.xs-wizard__gate{padding:12px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);margin:12px 0}
+.xs-wizard__gate-prompt{font-size:1rem;line-height:1.7}
+.xs-wizard__footer{display:flex;gap:8px;align-items:center;margin-top:18px;position:sticky;bottom:0;background:var(--xs-surface-card);padding:10px 0}
+.xs-wizard__footer .xs-wizard__spacer{flex:1}
+.xs-mingpan{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
+.xs-mingpan h1,.xs-mingpan h2{font-weight:600}.xs-mingpan h2{font-size:1rem;margin:18px 0 6px}
+.xs-mingpan button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-mingpan button:disabled{opacity:.5;cursor:not-allowed}
+.xs-mingpan__summary p{margin:4px 0}
+.xs-mingpan__coord{font-family:var(--font-mono,monospace);color:var(--xs-text-code)}
+.xs-mingpan__pillars{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.xs-mingpan__pillar{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:10px;text-align:center}
+.xs-mingpan__pillar-name{display:block;font-size:.8rem;color:var(--xs-text-secondary)}
+.xs-mingpan__pillar-value{font-size:1.2rem}
+.xs-mingpan__basis,.xs-mingpan__origin{line-height:1.8}
+.xs-mingpan__confirm{margin-top:12px;padding:12px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card)}
+.xs-mingpan__actions,.xs-mingpan__head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media(max-width:1100px){.xs-wizard__cols{grid-template-columns:1fr}.xs-wizard{padding:16px}.xs-mingpan{padding:16px}}
+`;
+  document.head.appendChild(style);
 }
 
 // src/client/onboarding-model.ts
@@ -2403,7 +2793,7 @@ function formatOffsetMinutes(minutes) {
 }
 
 // src/client/MingpanPanel.tsx
-var import_jsx_runtime8 = require("react/jsx-runtime");
+var import_jsx_runtime9 = require("react/jsx-runtime");
 var RERECORD_CONFIRM = "将重新录制出生信息并重新出盘。当前底座谱（~/.dsh/xuanshu/pus/_base/bazi.md）会被新结果原子替换；底稿会在下次刷新时随之更新，需要你手动点刷新。";
 var PILLAR_COLUMNS = [
   { key: "year", label: "年柱" },
@@ -2419,18 +2809,18 @@ function MingpanPanel({
   preloadedSnapshot,
   preloadedError
 }) {
-  const revision = (0, import_react6.useSyncExternalStore)(controller.subscribe, controller.getRevision, controller.getRevision);
+  const revision = (0, import_react7.useSyncExternalStore)(controller.subscribe, controller.getRevision, controller.getRevision);
   const seeded = preloadedError !== void 0 || preloadedSnapshot !== void 0;
-  const [view, setView] = (0, import_react6.useState)(() => {
+  const [view, setView] = (0, import_react7.useState)(() => {
     if (preloadedError !== void 0) return { kind: "error", message: preloadedError };
     if (preloadedSnapshot !== void 0) {
       return preloadedSnapshot === null ? { kind: "empty" } : { kind: "ready", snapshot: preloadedSnapshot };
     }
     return { kind: "loading" };
   });
-  const [confirming, setConfirming] = (0, import_react6.useState)(false);
-  const sequence = (0, import_react6.useRef)(0);
-  (0, import_react6.useEffect)(() => {
+  const [confirming, setConfirming] = (0, import_react7.useState)(false);
+  const sequence = (0, import_react7.useRef)(0);
+  (0, import_react7.useEffect)(() => {
     if (seeded) return;
     const mine = ++sequence.current;
     setView((current) => current.kind === "ready" ? current : { kind: "loading" });
@@ -2443,41 +2833,41 @@ function MingpanPanel({
       setView({ kind: "error", message: ERROR_COPY.mingpan });
     });
   }, [api, revision, seeded]);
-  const backToOverview = /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "back-overview", onClick: () => {
+  const backToOverview = /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "back-overview", onClick: () => {
     navigate("overview");
   }, children: "<- 回总览" });
-  const startOnboarding = /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "start-onboarding", onClick: () => {
+  const startOnboarding = /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "start-onboarding", onClick: () => {
     navigate("onboarding");
   }, children: "开始填写出生信息 ->" });
   const goRerecord = (snapshot) => {
     controller.requestRerecord(draftFromSnapshot(snapshot));
     navigate("onboarding");
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("main", { className: "xs-mingpan", "data-xuanshu-panel": MINGPAN_ID, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "xs-mingpan__head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h1", { children: "命盘卡详情" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(XsReadonlyBadge, {}),
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("main", { className: "xs-mingpan", "data-xuanshu-panel": MINGPAN_ID, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("header", { className: "xs-mingpan__head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h1", { children: "命盘卡详情" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(XsReadonlyBadge, {}),
       backToOverview
     ] }),
-    view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__loading", "data-xuanshu-view": "loading", children: "正在读命盘快照…" }) : null,
-    view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-mingpan__empty", "data-xuanshu-view": "empty", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: "还没有命盘：出生信息还没录" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__hint", children: "命盘是只读快照：填一次出生信息就点亮了。" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "xs-mingpan__actions", children: startOnboarding })
+    view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-mingpan__loading", "data-xuanshu-view": "loading", children: "正在读命盘快照…" }) : null,
+    view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("section", { className: "xs-mingpan__empty", "data-xuanshu-view": "empty", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "还没有命盘：出生信息还没录" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-mingpan__hint", children: "命盘是只读快照：填一次出生信息就点亮了。" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-mingpan__actions", children: startOnboarding })
     ] }) : null,
-    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-mingpan__error", "data-xuanshu-view": "error", role: "alert", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: view.message }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "retry", onClick: () => {
+    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("section", { className: "xs-mingpan__error", "data-xuanshu-view": "error", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: view.message }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-mingpan__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "retry", onClick: () => {
           controller.invalidate();
         }, children: "重试" }),
         startOnboarding,
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord", onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord", onClick: () => {
           setConfirming(true);
         }, children: "去重新录制出生信息" })
       ] })
     ] }) : null,
-    view.kind === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+    view.kind === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
       MingpanBody,
       {
         snapshot: view.snapshot,
@@ -2507,53 +2897,53 @@ function MingpanBody({
   const missingSections = SNAPSHOT_SECTIONS.filter((key) => snapshot[key] === void 0);
   const coords = Number.isFinite(birth.lon) && Number.isFinite(birth.lat) ? formatCoords(birth.lon, birth.lat) : "坐标缺（快照未存）";
   const timeAlg = birth.timeAlg === 1 || birth.timeAlg === 3 ? birth.timeAlg : 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "① 出生信息" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__summary", "data-xuanshu-summary": "birth", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { "data-xuanshu-summary": "clock", children: `${birth.date ?? "—"} ${birth.time ?? "—"} 当地时间` }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { "data-xuanshu-summary": "place", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: placeLabel({ place: birth.place ?? "" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-mingpan__coord", children: ` ${coords}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: `　时区 ${birth.zone === void 0 || birth.zone === "" ? "—" : birth.zone}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: ` ${formatOffsetMinutes(basis.offsetMinutes)}` })
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h2", { children: "① 出生信息" }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-mingpan__summary", "data-xuanshu-summary": "birth", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { "data-xuanshu-summary": "clock", children: `${birth.date ?? "—"} ${birth.time ?? "—"} 当地时间` }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { "data-xuanshu-summary": "place", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: placeLabel({ place: birth.place ?? "" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-mingpan__coord", children: ` ${coords}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: `　时区 ${birth.zone === void 0 || birth.zone === "" ? "—" : birth.zone}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: ` ${formatOffsetMinutes(basis.offsetMinutes)}` })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "② 四柱" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "xs-mingpan__pillars", "data-xuanshu-pillars": "4", children: PILLAR_COLUMNS.map((column) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__pillar", "data-xuanshu-pillar": column.key, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-mingpan__pillar-name", children: column.label }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-mingpan__pillar-value", children: snapshot.pillars?.[column.key] ?? "—" })
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h2", { children: "② 四柱" }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-mingpan__pillars", "data-xuanshu-pillars": "4", children: PILLAR_COLUMNS.map((column) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-mingpan__pillar", "data-xuanshu-pillar": column.key, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-mingpan__pillar-name", children: column.label }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-mingpan__pillar-value", children: snapshot.pillars?.[column.key] ?? "—" })
     ] }, column.key)) }),
-    missingSections.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__hint", "data-xuanshu-note": "partial", children: `部分要点读不出来（${missingSections.join(" / ")}）` }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__hint", "data-xuanshu-note": "schema-scope", children: "本快照（xuanshu/bazi-snapshot@1）只存四柱与口径；藏干 / 十神 / 大运 / 其它要点不在其中（扩 schema 属后续票）。" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "③ 起盘口径（只读）" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__basis", "data-xuanshu-basis": "readonly", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { "data-xuanshu-basis": "time-alg", children: `时间算法 = ${timeAlgLabel(timeAlg)}` }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { "data-xuanshu-basis": "gender", children: [
+    missingSections.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-mingpan__hint", "data-xuanshu-note": "partial", children: `部分要点读不出来（${missingSections.join(" / ")}）` }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-mingpan__hint", "data-xuanshu-note": "schema-scope", children: "本快照（xuanshu/bazi-snapshot@1）只存四柱与口径；藏干 / 十神 / 大运 / 其它要点不在其中（扩 schema 属后续票）。" }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h2", { children: "③ 起盘口径（只读）" }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-mingpan__basis", "data-xuanshu-basis": "readonly", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { "data-xuanshu-basis": "time-alg", children: `时间算法 = ${timeAlgLabel(timeAlg)}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { "data-xuanshu-basis": "gender", children: [
         "性别 = ",
         genderLabel("unknown")
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { "data-xuanshu-basis": "other-knobs", children: "其余旋钮 = 引擎缺省（本盘未改）" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { "data-xuanshu-basis": "two-clocks", children: `真太阳时 ${basis.trueSolar ?? "—"}　钟表时 ${basis.clock ?? "—"}　夏令时 ${basis.dst === true ? "有" : "无"}` })
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { "data-xuanshu-basis": "other-knobs", children: "其余旋钮 = 引擎缺省（本盘未改）" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { "data-xuanshu-basis": "two-clocks", children: `真太阳时 ${basis.trueSolar ?? "—"}　钟表时 ${basis.clock ?? "—"}　夏令时 ${basis.dst === true ? "有" : "无"}` })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "④ 快照来源" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__origin", "data-xuanshu-origin": "snapshot", children: `horosa ${snapshot.horosa?.version ?? "—"} / 出盘于 ${snapshot.generatedAt ?? "—"}` }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "⑤ 重新录制（唯一写操作）" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__hint", children: "改命盘只能重新录制出生信息；本屏不出盘、不写任何文件。" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "xs-mingpan__actions", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord", onClick: onAskRerecord, children: "重新录制出生信息 ->" }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__confirm", "data-xuanshu-confirm": "rerecord", hidden: !confirming, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { "data-xuanshu-confirm-text": "rerecord", children: RERECORD_CONFIRM }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord-cancel", onClick: onCancelRerecord, children: "取消" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord-go", onClick: onConfirmRerecord, children: "去重新录制 ->" })
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h2", { children: "④ 快照来源" }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-mingpan__origin", "data-xuanshu-origin": "snapshot", children: `horosa ${snapshot.horosa?.version ?? "—"} / 出盘于 ${snapshot.generatedAt ?? "—"}` }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h2", { children: "⑤ 重新录制（唯一写操作）" }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-mingpan__hint", children: "改命盘只能重新录制出生信息；本屏不出盘、不写任何文件。" }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-mingpan__actions", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord", onClick: onAskRerecord, children: "重新录制出生信息 ->" }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-mingpan__confirm", "data-xuanshu-confirm": "rerecord", hidden: !confirming, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { "data-xuanshu-confirm-text": "rerecord", children: RERECORD_CONFIRM }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-mingpan__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord-cancel", onClick: onCancelRerecord, children: "取消" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord-go", onClick: onConfirmRerecord, children: "去重新录制 ->" })
       ] })
     ] })
   ] });
 }
 function MingpanIcon({ size = 20 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "12", cy: "12", r: "8" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "12", cy: "12", r: "3" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M12 4v2M12 18v2M4 12h2M18 12h2" })
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("circle", { cx: "12", cy: "12", r: "8" }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("circle", { cx: "12", cy: "12", r: "3" }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M12 4v2M12 18v2M4 12h2M18 12h2" })
   ] });
 }
 function installMingpan(ctx, deps) {
@@ -2575,7 +2965,7 @@ function installMingpan(ctx, deps) {
 }
 
 // src/client/onboarding.tsx
-var import_react8 = require("react");
+var import_react9 = require("react");
 
 // src/client/cities.ts
 var CITY_DEBOUNCE_MS = 180;
@@ -2777,8 +3167,8 @@ function createCityQuery(options) {
 }
 
 // src/client/onboarding-steps.tsx
-var import_react7 = require("react");
-var import_jsx_runtime9 = require("react/jsx-runtime");
+var import_react8 = require("react");
+var import_jsx_runtime10 = require("react/jsx-runtime");
 var STEP_TITLES = [
   "出生日期与钟表时间",
   "出生地（必填：缺经纬度不能出盘）",
@@ -2788,12 +3178,12 @@ var STEP_TITLES = [
 ];
 var STEP_SHORT = ["时间", "出生地", "时区", "口径", "确认"];
 function XsStepBar({ step }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("nav", { className: "xs-wizard__steps", "aria-label": "向导步骤", "data-xuanshu-stepbar": String(step), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__progress", children: `第 ${String(step)} / 5 步` }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ol", { className: "xs-wizard__step-list", children: STEP_TITLES.map((title, index) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("nav", { className: "xs-wizard__steps", "aria-label": "向导步骤", "data-xuanshu-stepbar": String(step), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__progress", children: `第 ${String(step)} / 5 步` }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ol", { className: "xs-wizard__step-list", children: STEP_TITLES.map((title, index) => {
       const number = index + 1;
       const state = number < step ? "done" : number === step ? "current" : "todo";
-      return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+      return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
         "li",
         {
           className: `xs-wizard__step xs-wizard__step--${state}`,
@@ -2801,8 +3191,8 @@ function XsStepBar({ step }) {
           "data-xs-current": number === step ? "true" : void 0,
           "data-xs-state": state,
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__step-index", children: String(number) }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__step-name", children: STEP_SHORT[index] })
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__step-index", children: String(number) }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__step-name", children: STEP_SHORT[index] })
           ]
         },
         title
@@ -2811,32 +3201,32 @@ function XsStepBar({ step }) {
   ] });
 }
 function StepShell({ step, title, hint, children }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("section", { className: "xs-wizard__step-body", "data-xs-step": String(step), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("header", { className: "xs-wizard__step-head", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h2", { children: `第 ${String(step)} / 5 步 · ${title}` }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__cols", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-wizard__form", children }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("aside", { className: "xs-wizard__aside", children: hint })
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "xs-wizard__step-body", "data-xs-step": String(step), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("header", { className: "xs-wizard__step-head", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h2", { children: `第 ${String(step)} / 5 步 · ${title}` }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__cols", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "xs-wizard__form", children }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("aside", { className: "xs-wizard__aside", children: hint })
     ] })
   ] });
 }
 function XsTimeStep({ draft, onChange, onNudge, onNow }) {
-  const [grain, setGrain] = (0, import_react7.useState)("fourMinute");
+  const [grain, setGrain] = (0, import_react8.useState)("fourMinute");
   const empty = draft.date.trim() === "" || draft.time.trim() === "";
   const activeLabel = NUDGE_GRAINS.find((row) => row.id === grain)?.label ?? "四分钟";
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
     StepShell,
     {
       step: 1,
       title: STEP_TITLES[0],
-      hint: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 公历即可；农历换算由底座做。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 「当地时间」是固定小字：你填的是**钟表时间**，不是真太阳时。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 微调粒度里的「四分钟」= 1° 经度时差，与真太阳时的换算粒度同源。" })
+      hint: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 公历即可；农历换算由底座做。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 「当地时间」是固定小字：你填的是**钟表时间**，不是真太阳时。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 微调粒度里的「四分钟」= 1° 经度时差，与真太阳时的换算粒度同源。" })
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "① 日期" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "① 日期" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "input",
             {
               type: "date",
@@ -2848,9 +3238,9 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "② 时间" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "② 时间" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "input",
             {
               type: "time",
@@ -2861,15 +3251,15 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
               }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { className: "xs-wizard__note", "data-xuanshu-note": "local-clock", children: "当地时间" })
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { className: "xs-wizard__note", "data-xuanshu-note": "local-clock", children: "当地时间" })
         ] }),
-        empty ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-hint": "need-birth", children: "先填出生信息：日期与时刻都填上才能往下走（时刻填当地时间即可）。" }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__nudge", "data-xuanshu-nudge": "grains", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "③ 内联微调" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-minus", onClick: () => {
+        empty ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-hint": "need-birth", children: "先填出生信息：日期与时刻都填上才能往下走（时刻填当地时间即可）。" }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__nudge", "data-xuanshu-nudge": "grains", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "③ 内联微调" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-minus", onClick: () => {
             onNudge(grain, -1);
           }, children: "[-]" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__nudge-grains", children: NUDGE_GRAINS.map((row) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__nudge-grains", children: NUDGE_GRAINS.map((row) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "button",
             {
               type: "button",
@@ -2883,40 +3273,40 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
             },
             row.id
           )) }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-plus", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-plus", onClick: () => {
             onNudge(grain, 1);
           }, children: "[+]" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-now", onClick: onNow, children: "此刻" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-apply", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-now", onClick: onNow, children: "此刻" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-apply", onClick: () => {
             onNudge(grain, 0);
           }, children: "确定" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { className: "xs-wizard__note", children: `当前粒度：${activeLabel}` })
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { className: "xs-wizard__note", children: `当前粒度：${activeLabel}` })
         ] })
       ]
     }
   );
 }
 function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onManual }) {
-  const [lonText, setLonText] = (0, import_react7.useState)("");
-  const [latText, setLatText] = (0, import_react7.useState)("");
+  const [lonText, setLonText] = (0, import_react8.useState)("");
+  const [latText, setLatText] = (0, import_react8.useState)("");
   const missing = missingCoordinates(draft);
   const searching = query.trim() !== "";
   const noMatch = searching && results.items.length === 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
     StepShell,
     {
       step: 2,
       title: STEP_TITLES[1],
-      hint: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 断网可用：小库随程序自带，即时出结果。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 有输入后 180ms 才去问大库；大库不在（没装 / 被裁掉）就静默只用小库。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 选城市即带出经纬度；海外与小地名走手输坐标。" })
+      hint: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 断网可用：小库随程序自带，即时出结果。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 有输入后 180ms 才去问大库；大库不在（没装 / 被裁掉）就静默只用小库。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 选城市即带出经纬度；海外与小地名走手输坐标。" })
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "① 通道 A — 离线城市库（推荐）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "搜索城市 / 区县" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "① 通道 A — 离线城市库（推荐）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "搜索城市 / 区县" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "input",
             {
               type: "text",
@@ -2929,20 +3319,20 @@ function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onMan
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "xs-wizard__cities", "data-xuanshu-cities": String(results.items.length), children: results.items.map((city) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-city": city.name, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__city-name", children: city.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__city-region", children: city.region }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "pick-city", onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { className: "xs-wizard__cities", "data-xuanshu-cities": String(results.items.length), children: results.items.map((city) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { "data-xuanshu-city": city.name, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__city-name", children: city.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__city-region", children: city.region }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "pick-city", onClick: () => {
             onPick(city);
           }, children: "选中" })
         ] }, city.name)) }),
-        searching && results.pending ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "city-pending", children: "正在搜更大的城市库（小库结果已经在上面了）…" }) : null,
-        noMatch ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-note": "city-no-match", children: "无匹配城市，可改用手输经纬度" }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "② 通道 B — 手输经纬度（GPS 十进制）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__manual", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "经度（-180 ~ 180）" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        searching && results.pending ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "city-pending", children: "正在搜更大的城市库（小库结果已经在上面了）…" }) : null,
+        noMatch ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-note": "city-no-match", children: "无匹配城市，可改用手输经纬度" }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "② 通道 B — 手输经纬度（GPS 十进制）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__manual", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__field", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "经度（-180 ~ 180）" }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
               "input",
               {
                 type: "text",
@@ -2956,9 +3346,9 @@ function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onMan
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "纬度（-90 ~ 90）" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__field", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "纬度（-90 ~ 90）" }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
               "input",
               {
                 type: "text",
@@ -2972,24 +3362,24 @@ function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onMan
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "apply-manual", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "apply-manual", onClick: () => {
             onManual(lonText, latText);
           }, children: "应用" })
         ] }),
-        manualHint === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-note": "manual-rejected", children: manualHint }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "③ 地名与坐标（同框可见）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { className: "xs-wizard__place", "data-xuanshu-place": placeLabel(draft), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__place-name", children: placeLabel(draft) }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__place-coord", "data-xuanshu-coord": "frame", children: missing.length === 0 && draft.lon !== void 0 && draft.lat !== void 0 ? formatCoords(draft.lon, draft.lat) : `还没定（缺 ${missing.join(" / ")}）` }),
-          draft.place.trim() === "" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("small", { className: "xs-wizard__note", children: [
+        manualHint === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-note": "manual-rejected", children: manualHint }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "③ 地名与坐标（同框可见）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("p", { className: "xs-wizard__place", "data-xuanshu-place": placeLabel(draft), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__place-name", children: placeLabel(draft) }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__place-coord", "data-xuanshu-coord": "frame", children: missing.length === 0 && draft.lon !== void 0 && draft.lat !== void 0 ? formatCoords(draft.lon, draft.lat) : `还没定（缺 ${missing.join(" / ")}）` }),
+          draft.place.trim() === "" ? /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("small", { className: "xs-wizard__note", children: [
             "手输无地名时据实显示「",
             UNNAMED_PLACE,
             "」，不留旧地名"
           ] }) : null
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__status", "data-xuanshu-note": "has-coords", children: `当前：${missing.length === 0 ? "有经纬度" : `无经纬度（缺 ${missing.join(" / ")}）`}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "④ 地图选点" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-map", children: "地图选点：玄枢 v1 不做（无联网依赖）" })
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__status", "data-xuanshu-note": "has-coords", children: `当前：${missing.length === 0 ? "有经纬度" : `无经纬度（缺 ${missing.join(" / ")}）`}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "④ 地图选点" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-map", children: "地图选点：玄枢 v1 不做（无联网依赖）" })
       ]
     }
   );
@@ -2997,34 +3387,34 @@ function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onMan
 function XsZoneStep({ draft, zone, pending, onZone, onAuto }) {
   const unresolved = zone !== void 0 && zone.zone === null;
   const autoZone = zone?.zone ?? "";
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
     StepShell,
     {
       step: 3,
       title: STEP_TITLES[2],
-      hint: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 依据：经纬度 + 出生日期（客户端不自己算时区，一律问底座）。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 自动结果只归并 IANA 名，不写死偏移；夏令时由底座判。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 中国大陆统一北京时间：只把 `Asia/Urumqi` 并入 `Asia/Shanghai`，偏移仍按 IANA 算。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 时区只负责「钟表时间 → UTC」的偏移归一；真太阳时换算在引擎里，录入层不换算。" })
+      hint: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 依据：经纬度 + 出生日期（客户端不自己算时区，一律问底座）。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 自动结果只归并 IANA 名，不写死偏移；夏令时由底座判。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 中国大陆统一北京时间：只把 `Asia/Urumqi` 并入 `Asia/Shanghai`，偏移仍按 IANA 算。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 时区只负责「钟表时间 → UTC」的偏移归一；真太阳时换算在引擎里，录入层不换算。" })
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "① 自动结果" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__zone-auto", "data-xuanshu-zone": "auto", children: [
-          pending === true ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-zone": "pending", children: "重算中…" }) : zone === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", children: "先在第 2 步定下出生地，这里会自动推导。" }) : autoZone === "" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-zone": "unresolved", children: "自动推导失败（坐标越界或该点查不到时区）：请在下面手动指定一个 UTC 偏移，否则不能出盘。" }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { className: "xs-wizard__zone-value", "data-xuanshu-zone": "resolved", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("strong", { children: autoZone }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: formatOffsetMinutes(zone.offsetMinutes) })
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "① 自动结果" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__zone-auto", "data-xuanshu-zone": "auto", children: [
+          pending === true ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-zone": "pending", children: "重算中…" }) : zone === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", children: "先在第 2 步定下出生地，这里会自动推导。" }) : autoZone === "" ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-zone": "unresolved", children: "自动推导失败（坐标越界或该点查不到时区）：请在下面手动指定一个 UTC 偏移，否则不能出盘。" }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("p", { className: "xs-wizard__zone-value", "data-xuanshu-zone": "resolved", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("strong", { children: autoZone }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: formatOffsetMinutes(zone.offsetMinutes) })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", children: `夏令时：${zone.dst === true ? "有" : "无"}` })
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", children: `夏令时：${zone.dst === true ? "有" : "无"}` })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", children: "依据：经纬度 + 出生日期" })
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", children: "依据：经纬度 + 出生日期" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "② 手动覆盖（仅当自动不对）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__zone-manual", "data-xuanshu-zone": "manual", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "固定 UTC 偏移（28 档）" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "② 手动覆盖（仅当自动不对）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__zone-manual", "data-xuanshu-zone": "manual", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__field", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "固定 UTC 偏移（28 档）" }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
               "select",
               {
                 "data-xuanshu-field": "zone-override",
@@ -3033,13 +3423,13 @@ function XsZoneStep({ draft, zone, pending, onZone, onAuto }) {
                   onZone(event.target.value);
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "", children: "跟随自动结果" }),
-                  ZONE_OFFSETS.map((row) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: row.value, children: `${row.value} ${row.label}` }, row.value))
+                  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("option", { value: "", children: "跟随自动结果" }),
+                  ZONE_OFFSETS.map((row) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("option", { value: row.value, children: `${row.value} ${row.label}` }, row.value))
                 ]
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "button",
             {
               type: "button",
@@ -3050,30 +3440,30 @@ function XsZoneStep({ draft, zone, pending, onZone, onAuto }) {
               children: "自动"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "zone-current", children: draft.zoneManual ? `当前：手动指定 ${draft.zone}` : `当前：自动结果 ${draft.zone === "" ? "（未定）" : draft.zone}` })
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "zone-current", children: draft.zoneManual ? `当前：手动指定 ${draft.zone}` : `当前：自动结果 ${draft.zone === "" ? "（未定）" : draft.zone}` })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "③ 时区只负责一步" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "zone-boundary", children: "时区只负责「钟表时间 → UTC」的偏移归一；真太阳时换算在引擎里，录入层不换算。" })
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "③ 时区只负责一步" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "zone-boundary", children: "时区只负责「钟表时间 → UTC」的偏移归一；真太阳时换算在引擎里，录入层不换算。" })
       ]
     }
   );
 }
 function XsTimeAlgStep({ draft, onChange }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
     StepShell,
     {
       step: 4,
       title: STEP_TITLES[3],
-      hint: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 默认档 = 0（真太阳时）：实现上**省略该键**，不写默认值。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 「春分定卯时（= 2）」上游自身未实现 —— 界面上不出现，也不置灰。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 换算发生在**引擎内部**：录入层不换算（界面上没有「真太阳时修正」开关，找不到是设计）。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 其余旋钮玄枢不给：长生 / 神煞 / 晚子时 / 命宫 / 月律分野 / 流派 / 显示区（索引 D4）。" })
+      hint: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 默认档 = 0（真太阳时）：实现上**省略该键**，不写默认值。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 「春分定卯时（= 2）」上游自身未实现 —— 界面上不出现，也不置灰。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 换算发生在**引擎内部**：录入层不换算（界面上没有「真太阳时修正」开关，找不到是设计）。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 其余旋钮玄枢不给：长生 / 神煞 / 晚子时 / 命宫 / 月律分野 / 流派 / 显示区（索引 D4）。" })
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "① 时间算法（timeAlg）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-wizard__radio-group", "data-xuanshu-field": "time-alg", children: TIME_ALG_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__radio", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "① 时间算法（timeAlg）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "xs-wizard__radio-group", "data-xuanshu-field": "time-alg", children: TIME_ALG_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__radio", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "input",
             {
               type: "radio",
@@ -3086,12 +3476,12 @@ function XsTimeAlgStep({ draft, onChange }) {
               }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: option.label }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { className: "xs-wizard__note", children: option.hint })
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: option.label }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { className: "xs-wizard__note", children: option.hint })
         ] }, option.value)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "② 性别（排大运用）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-wizard__radio-group", "data-xuanshu-field": "gender", children: GENDER_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__radio", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "② 性别（排大运用）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "xs-wizard__radio-group", "data-xuanshu-field": "gender", children: GENDER_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__radio", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "input",
             {
               type: "radio",
@@ -3104,13 +3494,13 @@ function XsTimeAlgStep({ draft, onChange }) {
               }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: option.label }),
-          option.hint === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { className: "xs-wizard__note", children: option.hint })
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: option.label }),
+          option.hint === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("small", { className: "xs-wizard__note", children: option.hint })
         ] }, option.value)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "③ 其余旋钮" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-other-knobs", children: "一律由引擎缺省决定，界面不出现：长生 / 神煞查法 / 晚子时四态 / 命宫起法 / 月律分野 / 南半球月令 / 起运精度 / 藏干版本 / 生肖归属 / 断命流派 / 显示区。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "④ 换算发生在哪一层" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-conversion-here", children: "引擎内部；录入层不换算。" })
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "③ 其余旋钮" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-other-knobs", children: "一律由引擎缺省决定，界面不出现：长生 / 神煞查法 / 晚子时四态 / 命宫起法 / 月律分野 / 南半球月令 / 起运精度 / 藏干版本 / 生肖归属 / 断命流派 / 显示区。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "④ 换算发生在哪一层" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-conversion-here", children: "引擎内部；录入层不换算。" })
       ]
     }
   );
@@ -3134,59 +3524,59 @@ function XsConfirmStep({
   const coordinates = missingCoordinates(draft);
   const others = blockers.filter((blocker) => blocker !== "coordinates");
   const ready = blockers.length === 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
     StepShell,
     {
       step: 5,
       title: STEP_TITLES[4],
-      hint: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 五项逐行核对，每行 `[改]` 回跳对应步。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 「不确定项」把「只知道大概」显式化，写进 `clarification_notes`（不是拒绝出盘）。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ `[x] 以上信息我已核对` 是出盘的解锁条件；底座回问就地展开，回答后重出盘。" })
+      hint: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 五项逐行核对，每行 `[改]` 回跳对应步。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ 「不确定项」把「只知道大概」显式化，写进 `clarification_notes`（不是拒绝出盘）。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: "▸ `[x] 以上信息我已核对` 是出盘的解锁条件；底座回问就地展开，回答后重出盘。" })
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("fieldset", { className: "xs-wizard__confirm", "data-xuanshu-busy": busy ? "cast" : void 0, disabled: busy, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("legend", { children: "① 确认你的出生信息" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("ul", { className: "xs-wizard__confirm-list", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-confirm": "time", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-label", children: "出生时间" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-value", children: `${draft.date === "" ? "（未填）" : draft.date} ${draft.time === "" ? "（未填）" : draft.time} 当地时间` }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-1", onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("fieldset", { className: "xs-wizard__confirm", "data-xuanshu-busy": busy ? "cast" : void 0, disabled: busy, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("legend", { children: "① 确认你的出生信息" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("ul", { className: "xs-wizard__confirm-list", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { "data-xuanshu-confirm": "time", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__confirm-label", children: "出生时间" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__confirm-value", children: `${draft.date === "" ? "（未填）" : draft.date} ${draft.time === "" ? "（未填）" : draft.time} 当地时间` }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-1", onClick: () => {
                 onEdit(1);
               }, children: "改" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-confirm": "place", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-label", children: "出生地" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-value", children: `${placeLabel(draft)} ${coordinates.length === 0 && draft.lon !== void 0 && draft.lat !== void 0 ? formatCoords(draft.lon, draft.lat) : `（缺 ${coordinates.join(" / ")}）`}` }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-2", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { "data-xuanshu-confirm": "place", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__confirm-label", children: "出生地" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__confirm-value", children: `${placeLabel(draft)} ${coordinates.length === 0 && draft.lon !== void 0 && draft.lat !== void 0 ? formatCoords(draft.lon, draft.lat) : `（缺 ${coordinates.join(" / ")}）`}` }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-2", onClick: () => {
                 onEdit(2);
               }, children: "改" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-confirm": "zone", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-label", children: "时区" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-value", children: `${draft.zone === "" ? "（未定）" : draft.zone}${draft.zoneManual ? "（手动指定）" : "（自动）"}${zone?.dst === true && !draft.zoneManual ? "，已判 DST" : ""}` }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-3", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { "data-xuanshu-confirm": "zone", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__confirm-label", children: "时区" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__confirm-value", children: `${draft.zone === "" ? "（未定）" : draft.zone}${draft.zoneManual ? "（手动指定）" : "（自动）"}${zone?.dst === true && !draft.zoneManual ? "，已判 DST" : ""}` }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-3", onClick: () => {
                 onEdit(3);
               }, children: "改" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-confirm": "timeAlg", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-label", children: "时间算法" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-value", children: `${timeAlgLabel(draft.timeAlg)}${draft.timeAlg === 0 ? "（缺省省略 = 0）" : ` = ${String(draft.timeAlg)}`}` }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-4", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { "data-xuanshu-confirm": "timeAlg", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__confirm-label", children: "时间算法" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__confirm-value", children: `${timeAlgLabel(draft.timeAlg)}${draft.timeAlg === 0 ? "（缺省省略 = 0）" : ` = ${String(draft.timeAlg)}`}` }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-4", onClick: () => {
                 onEdit(4);
               }, children: "改" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-confirm": "gender", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-label", children: "性别" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-value", children: genderLabel(draft.gender) }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-4", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { "data-xuanshu-confirm": "gender", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__confirm-label", children: "性别" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__confirm-value", children: genderLabel(draft.gender) }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-4", onClick: () => {
                 onEdit(4);
               }, children: "改" })
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "② 不确定项 → clarification_notes" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-wizard__notes", children: NOTE_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__check", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "② 不确定项 → clarification_notes" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "xs-wizard__notes", children: NOTE_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__check", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
               "input",
               {
                 type: "checkbox",
@@ -3197,11 +3587,11 @@ function XsConfirmStep({
                 }
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: option.label })
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: option.label })
           ] }, option.id)) }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "③ 澄清闸" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__check", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "③ 澄清闸" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__check", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
               "input",
               {
                 type: "checkbox",
@@ -3210,16 +3600,16 @@ function XsConfirmStep({
                 onChange: onToggleVerified
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "以上信息我已核对" })
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "以上信息我已核对" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", children: "勾选后才解锁出盘；底座若回问，会在这里就地展开（拦截期间不落谱、不点亮命盘卡）。" }),
-          gate === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__gate", "data-xuanshu-gate": "prompt", role: "alert", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "底座需要你确认" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__gate-prompt", "data-xuanshu-gate": "prompt-text", children: gate.promptToUser }),
-            gate.questions.map((question) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__gate-question", "data-xuanshu-gate": "question", children: question }, question)),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "你的回答（随 clarification_notes 一起给底座）" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", children: "勾选后才解锁出盘；底座若回问，会在这里就地展开（拦截期间不落谱、不点亮命盘卡）。" }),
+          gate === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__gate", "data-xuanshu-gate": "prompt", role: "alert", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { children: "底座需要你确认" }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__gate-prompt", "data-xuanshu-gate": "prompt-text", children: gate.promptToUser }),
+            gate.questions.map((question) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__gate-question", "data-xuanshu-gate": "question", children: question }, question)),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("label", { className: "xs-wizard__field", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "你的回答（随 clarification_notes 一起给底座）" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
                 "textarea",
                 {
                   "data-xuanshu-field": "gate-answer",
@@ -3230,8 +3620,8 @@ function XsConfirmStep({
                 }
               )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__actions", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__actions", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
                 "button",
                 {
                   type: "button",
@@ -3241,14 +3631,14 @@ function XsConfirmStep({
                   children: "回答并重新出盘"
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-birth", onClick: () => {
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "edit-birth", onClick: () => {
                 onEdit(1);
               }, children: "改出生信息" })
             ] })
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__cast", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__cast", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "button",
             {
               type: "button",
@@ -3259,17 +3649,17 @@ function XsConfirmStep({
               children: busy ? "出盘中…" : "确认并出盘"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__status", "data-xuanshu-status": ready ? "ready" : "blocked", children: ready ? "可出盘" : coordinates.length > 0 ? "缺经纬度（禁用）" : "信息未齐（禁用）" })
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__status", "data-xuanshu-status": ready ? "ready" : "blocked", children: ready ? "可出盘" : coordinates.length > 0 ? "缺经纬度（禁用）" : "信息未齐（禁用）" })
         ] }),
-        ready ? null : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__reason", "data-xuanshu-reason": "cast-disabled", children: [
-          coordinates.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__reason-main", children: CAST_MISSING_REASON }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__actions", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "goto-place", onClick: onGotoPlace, children: "去填出生地" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "goto-manual", onClick: onGotoManual, children: "改用手输经纬度" })
+        ready ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__reason", "data-xuanshu-reason": "cast-disabled", children: [
+          coordinates.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__reason-main", children: CAST_MISSING_REASON }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__actions", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "goto-place", onClick: onGotoPlace, children: "去填出生地" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "goto-manual", onClick: onGotoManual, children: "改用手输经纬度" })
             ] })
           ] }),
-          others.map((blocker) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__reason-row", "data-xuanshu-reason-row": blocker, children: CAST_BLOCK_REASON[blocker] }, blocker))
+          others.map((blocker) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__reason-row", "data-xuanshu-reason-row": blocker, children: CAST_BLOCK_REASON[blocker] }, blocker))
         ] })
       ]
     }
@@ -3277,41 +3667,41 @@ function XsConfirmStep({
 }
 
 // src/client/onboarding.tsx
-var import_jsx_runtime10 = require("react/jsx-runtime");
+var import_jsx_runtime11 = require("react/jsx-runtime");
 var MANUAL_REJECTED_HINT = "经纬度不合法，已忽略（经度在前，例如 118.78 / 32.06）";
 function useCityQuery(api, query) {
-  const controller = (0, import_react8.useMemo)(
+  const controller = (0, import_react9.useMemo)(
     () => createCityQuery({
       // 失败**不在这里吞**：让 `bazi.cities` 的拒绝走到调度器里，由它静默回落小库。
       loadFull: (keyword, signal) => api.cities({ query: keyword, limit: CITY_RESULT_LIMIT }, signal).then((result) => result.items)
     }),
     [api]
   );
-  (0, import_react8.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     controller.setQuery(query);
   }, [controller, query]);
-  (0, import_react8.useEffect)(() => () => {
+  (0, import_react9.useEffect)(() => () => {
     controller.dispose();
   }, [controller]);
-  return (0, import_react8.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  return (0, import_react9.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 }
 function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
-  const [draft, setDraft] = (0, import_react8.useState)(() => preloadedDraft ?? defaultDraft());
-  const [step, setStep] = (0, import_react8.useState)(1);
-  const [query, setQuery] = (0, import_react8.useState)("");
-  const [zone, setZone] = (0, import_react8.useState)(void 0);
-  const [zonePending, setZonePending] = (0, import_react8.useState)(false);
-  const [manualHint, setManualHint] = (0, import_react8.useState)(void 0);
-  const [gateAnswer, setGateAnswer] = (0, import_react8.useState)("");
-  const [result, setResult] = (0, import_react8.useState)(void 0);
-  const [busy, setBusy] = (0, import_react8.useState)(false);
-  const castSequence = (0, import_react8.useRef)(0);
-  const zoneSequence = (0, import_react8.useRef)(0);
+  const [draft, setDraft] = (0, import_react9.useState)(() => preloadedDraft ?? defaultDraft());
+  const [step, setStep] = (0, import_react9.useState)(1);
+  const [query, setQuery] = (0, import_react9.useState)("");
+  const [zone, setZone] = (0, import_react9.useState)(void 0);
+  const [zonePending, setZonePending] = (0, import_react9.useState)(false);
+  const [manualHint, setManualHint] = (0, import_react9.useState)(void 0);
+  const [gateAnswer, setGateAnswer] = (0, import_react9.useState)("");
+  const [result, setResult] = (0, import_react9.useState)(void 0);
+  const [busy, setBusy] = (0, import_react9.useState)(false);
+  const castSequence = (0, import_react9.useRef)(0);
+  const zoneSequence = (0, import_react9.useRef)(0);
   const cityResults = useCityQuery(api, query);
   const patch = (next) => {
     setDraft((current) => ({ ...current, ...next }));
   };
-  (0, import_react8.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     const prefill = controller.consumePrefill();
     if (prefill === void 0) return;
     setDraft(prefill);
@@ -3320,7 +3710,7 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
     setGateAnswer("");
   }, [controller]);
   const { lon, lat, date, time, zoneManual } = draft;
-  (0, import_react8.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     if (zoneManual) return;
     if (!Number.isFinite(lon) || !Number.isFinite(lat) || date.trim() === "") {
       setZone(void 0);
@@ -3395,14 +3785,14 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
     });
   };
   const gate = result?.phase === "gate" ? result.gate : void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("main", { className: "xs-wizard", "data-xuanshu-panel": ONBOARDING_ID, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "xs-wizard__head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h1", { children: "八字冷启动向导" }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", children: "填一次出生信息 → 出盘 → 落底座谱 → 点亮命盘卡，之后不再重复录入。" })
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("main", { className: "xs-wizard", "data-xuanshu-panel": ONBOARDING_ID, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("header", { className: "xs-wizard__head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h1", { children: "八字冷启动向导" }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "xs-wizard__note", children: "填一次出生信息 → 出盘 → 落底座谱 → 点亮命盘卡，之后不再重复录入。" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(XsStepBar, { step }),
-    step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(XsTimeStep, { draft, onChange: patch, onNudge: nudge, onNow: useNow }) : null,
-    step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(XsStepBar, { step }),
+    step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(XsTimeStep, { draft, onChange: patch, onNudge: nudge, onNow: useNow }) : null,
+    step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       XsPlaceStep,
       {
         draft,
@@ -3414,7 +3804,7 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
         onManual: applyManual
       }
     ) : null,
-    step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       XsZoneStep,
       {
         draft,
@@ -3428,8 +3818,8 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
         }
       }
     ) : null,
-    step === 4 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(XsTimeAlgStep, { draft, onChange: patch }) : null,
-    step === 5 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    step === 4 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(XsTimeAlgStep, { draft, onChange: patch }) : null,
+    step === 5 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       XsConfirmStep,
       {
         draft,
@@ -3459,42 +3849,42 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
         }
       }
     ) : null,
-    result === void 0 || result.phase === "gate" ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+    result === void 0 || result.phase === "gate" ? null : /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
       "div",
       {
         className: "xs-wizard__cast-result",
         "data-xuanshu-cast": result.phase,
         role: result.phase === "ok" ? "status" : "alert",
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: result.message }),
-          result.phase === "ok" ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__actions", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "cast-retry", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: result.message }),
+          result.phase === "ok" ? null : /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "xs-wizard__actions", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", "data-xuanshu-action": "cast-retry", onClick: () => {
               cast();
             }, children: "重试" }),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "cast-edit", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", "data-xuanshu-action": "cast-edit", onClick: () => {
               gotoStep(1);
             }, children: "改出生信息" })
           ] })
         ]
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("footer", { className: "xs-wizard__footer", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "prev", disabled: step === 1, onClick: () => {
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("footer", { className: "xs-wizard__footer", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", "data-xuanshu-action": "prev", disabled: step === 1, onClick: () => {
         gotoStep(step - 1);
       }, children: "<- 上一步" }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "next", disabled: step === 5, onClick: () => {
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", "data-xuanshu-action": "next", disabled: step === 5, onClick: () => {
         gotoStep(step + 1);
       }, children: "下一步 ->" }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "cancel", onClick: cancel, children: "取消向导" })
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-wizard__spacer" }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", "data-xuanshu-action": "cancel", onClick: cancel, children: "取消向导" })
     ] })
   ] });
 }
 function OnboardingIcon({ size = 20 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("path", { d: "M4 20h16" }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("path", { d: "M6 20V9.5L12 4l6 5.5V20" }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("path", { d: "M9.5 20v-5h5v5" })
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("path", { d: "M4 20h16" }),
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("path", { d: "M6 20V9.5L12 4l6 5.5V20" }),
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("path", { d: "M9.5 20v-5h5v5" })
   ] });
 }
 function installOnboarding(ctx, deps) {
@@ -3516,14 +3906,14 @@ function installOnboarding(ctx, deps) {
 }
 
 // src/client/OverviewIcon.tsx
-var import_jsx_runtime11 = require("react/jsx-runtime");
+var import_jsx_runtime12 = require("react/jsx-runtime");
 function OverviewIcon({ size = 20 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-overview-icon", "data-xuanshu-panel": PANEL_ID, children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(GlyphOverview, { className: "xs-overview-icon__glyph", size }) });
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-overview-icon", "data-xuanshu-panel": PANEL_ID, children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(GlyphOverview, { className: "xs-overview-icon__glyph", size }) });
 }
 
 // src/client/OverviewPanel.tsx
-var import_react9 = require("react");
-var import_jsx_runtime12 = require("react/jsx-runtime");
+var import_react10 = require("react");
+var import_jsx_runtime13 = require("react/jsx-runtime");
 function localDate(now = /* @__PURE__ */ new Date()) {
   const pad = (value) => String(value).padStart(2, "0");
   return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -3559,11 +3949,11 @@ function destinyStateFromStatus(status) {
 function useBaziStatus(options) {
   const { api, controller, preloaded } = options;
   const active = controller ?? NO_CONTROLLER;
-  const revision = (0, import_react9.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
-  const [status, setStatus] = (0, import_react9.useState)(
+  const revision = (0, import_react10.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
+  const [status, setStatus] = (0, import_react10.useState)(
     preloaded ?? (api === void 0 ? { state: "empty" } : void 0)
   );
-  (0, import_react9.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (preloaded !== void 0) {
       setStatus(preloaded);
       return;
@@ -3587,12 +3977,124 @@ function useBaziStatus(options) {
   if (status === void 0) return { state: "loading" };
   return { ...destinyStateFromStatus(status), reason: status.reason };
 }
+function rikkeStateFromStatus(status, outcome) {
+  const base = { content: status.content, date: status.date };
+  if (outcome?.ok === false) {
+    return { state: "error", ...base, reason: outcome.reason };
+  }
+  if (status.exists !== true) return { state: "empty", ...base, reason: void 0 };
+  if (status.content === void 0) {
+    return { state: "error", ...base, reason: "当日日课文件在，但内容没读回来（content 缺失）。" };
+  }
+  return { state: "ready", ...base, reason: void 0 };
+}
+function digaoStateFromStatus(status, outcome) {
+  const summary = status.meta === null ? void 0 : {
+    segments: status.meta.segments ?? 0,
+    sources: status.meta.sources ?? 0,
+    ...status.meta.generatedAt === void 0 ? {} : { updatedAt: status.meta.generatedAt }
+  };
+  if (outcome?.ok === false) return { state: "error", summary, reason: outcome.reason };
+  if (status.exists !== true) return { state: "empty", summary, reason: void 0 };
+  if (status.meta === null) {
+    return { state: "error", summary, reason: "底稿文件在，但元数据没读回来（meta 缺失）。" };
+  }
+  return { state: "ready", summary, reason: void 0 };
+}
+function useRikkeStatus(options) {
+  const { api, controller, preloaded, preloadedOutcome } = options;
+  const active = controller ?? NO_RIKKE_CONTROLLER;
+  const revision = (0, import_react10.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
+  const [status, setStatus] = (0, import_react10.useState)(
+    preloaded ?? (api === void 0 ? { date: "", exists: false } : void 0)
+  );
+  (0, import_react10.useEffect)(() => {
+    if (preloaded !== void 0) {
+      setStatus(preloaded);
+      return;
+    }
+    if (api === void 0) {
+      setStatus({ date: "", exists: false });
+      return;
+    }
+    let alive = true;
+    void api.status().then((answer) => {
+      if (alive) setStatus(answer);
+    }).catch((error) => {
+      if (alive) setStatus({ date: "", exists: false, reason: error instanceof Error ? error.message : ERROR_COPY.rike });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [api, preloaded, revision]);
+  const outcome = preloadedOutcome ?? active.getOutcome();
+  if (status === void 0) return { state: "loading" };
+  const mapped = rikkeStateFromStatus(status, outcome);
+  return status.reason === void 0 ? mapped : { ...mapped, state: "error", reason: status.reason };
+}
+function useDigaoStatus(options) {
+  const { api, controller, preloaded, preloadedOutcome } = options;
+  const active = controller ?? NO_DIGAO_CONTROLLER;
+  const revision = (0, import_react10.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
+  const [status, setStatus] = (0, import_react10.useState)(
+    preloaded ?? (api === void 0 ? { exists: false, meta: null } : void 0)
+  );
+  (0, import_react10.useEffect)(() => {
+    if (preloaded !== void 0) {
+      setStatus(preloaded);
+      return;
+    }
+    if (api === void 0) {
+      setStatus({ exists: false, meta: null });
+      return;
+    }
+    let alive = true;
+    void api.status().then((answer) => {
+      if (alive) setStatus(answer);
+    }).catch((error) => {
+      if (alive) {
+        setStatus({
+          exists: false,
+          meta: null,
+          reason: error instanceof Error ? error.message : ERROR_COPY.digao
+        });
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [api, preloaded, revision]);
+  const outcome = preloadedOutcome ?? active.getOutcome();
+  if (status === void 0) return { state: "loading" };
+  const mapped = digaoStateFromStatus(status, outcome);
+  return status.reason === void 0 ? mapped : { ...mapped, state: "error", reason: status.reason };
+}
+var NO_RIKKE_CONTROLLER = {
+  subscribe: () => () => {
+  },
+  getRevision: () => 0,
+  getOutcome: () => void 0
+};
+var NO_DIGAO_CONTROLLER = {
+  subscribe: () => () => {
+  },
+  getRevision: () => 0,
+  getOutcome: () => void 0
+};
 function OverviewPanel({
   navigate,
   mainPanels,
   bazi,
   baziController,
   preloadedBaziStatus,
+  rikke,
+  rikkeController,
+  digao,
+  digaoController,
+  preloadedRikkeStatus,
+  preloadedRikkeOutcome,
+  preloadedDigaoStatus,
+  preloadedDigaoOutcome,
   today,
   baseplateReady,
   onStartOnboarding,
@@ -3603,34 +4105,78 @@ function OverviewPanel({
 }) {
   const date = today ?? localDate();
   const destiny = useBaziStatus({ api: bazi, controller: baziController, preloaded: preloadedBaziStatus });
-  const injected = { navigate, mainPanels, onStartOnboarding, onOpenDetail, onGenerate, onRefresh, onRetry };
-  const quicklinkReady = baseplateReady ?? destiny.state === "ready";
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "xs-overview", "data-xuanshu-panel": PANEL_ID, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("header", { className: "xs-overview__header", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("h1", { className: "xs-overview__title", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-overview__home", children: PANEL_HOME }),
+  const rikkeState = useRikkeStatus({
+    api: rikke,
+    controller: rikkeController,
+    preloaded: preloadedRikkeStatus,
+    preloadedOutcome: preloadedRikkeOutcome
+  });
+  const digaoState = useDigaoStatus({
+    api: digao,
+    controller: digaoController,
+    preloaded: preloadedDigaoStatus,
+    preloadedOutcome: preloadedDigaoOutcome
+  });
+  const baseplate = baseplateReady ?? destiny.state === "ready";
+  const generateRikke = rikkeController === void 0 ? onGenerate : () => {
+    void rikkeController.generate();
+  };
+  const refreshDigao = digaoController === void 0 ? onRefresh : () => {
+    void digaoController.refresh();
+  };
+  const injected = {
+    navigate,
+    mainPanels,
+    onStartOnboarding,
+    onOpenDetail,
+    onGenerate: generateRikke,
+    onRefresh: refreshDigao,
+    onRetry
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "xs-overview", "data-xuanshu-panel": PANEL_ID, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("header", { className: "xs-overview__header", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("h1", { className: "xs-overview__title", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-overview__home", children: PANEL_HOME }),
         " · ",
         PANEL_TITLE
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-overview__localnote", "data-xuanshu-note": "local-data", children: PANEL_LOCAL_NOTE })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "xs-overview__localnote", "data-xuanshu-note": "local-data", children: PANEL_LOCAL_NOTE })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "xs-overview__grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(XsDestinyCard, { state: destiny.state, snapshot: destiny.snapshot, ...injected }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(XsRikkeCard, { state: "empty", today: date, ...injected }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(XsDigaoCard, { state: "empty", ...injected }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(XsQuickLinks, { baseplateReady: quicklinkReady, navigate, mainPanels })
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "xs-overview__grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(XsDestinyCard, { state: destiny.state, snapshot: destiny.snapshot, ...injected }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+        XsRikkeCard,
+        {
+          state: rikkeState.state,
+          today: rikkeState.date === void 0 || rikkeState.date === "" ? date : rikkeState.date,
+          content: rikkeState.content,
+          reason: rikkeState.reason,
+          ...injected
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+        XsDigaoCard,
+        {
+          state: digaoState.state,
+          summary: digaoState.summary,
+          reason: digaoState.reason,
+          baseplateEstablished: baseplate,
+          ...injected
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(XsQuickLinks, { baseplateReady: baseplate, navigate, mainPanels })
     ] })
   ] });
 }
 
 // src/client/PuPanel.tsx
-var import_react10 = require("react");
-var import_jsx_runtime13 = require("react/jsx-runtime");
+var import_react11 = require("react");
+var import_jsx_runtime14 = require("react/jsx-runtime");
 var pendingJob;
 var pendingView = "create";
 var pendingSelected;
 var blank = { name: "", level: "optional", description: "", body: "# 概览\n", summary: "" };
-var errorText2 = (error) => error instanceof Error ? error.message : String(error);
+var errorText4 = (error) => error instanceof Error ? error.message : String(error);
 async function fileData(file) {
   const data = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -3641,21 +4187,21 @@ async function fileData(file) {
   return { name: file.name, data };
 }
 function PuPanel({ ctx }) {
-  const [rows, setRows] = (0, import_react10.useState)([]);
-  const [loading, setLoading] = (0, import_react10.useState)(true);
-  const [query, setQuery] = (0, import_react10.useState)("");
-  const [level, setLevel] = (0, import_react10.useState)("");
-  const [source, setSource] = (0, import_react10.useState)("");
-  const [view, setView] = (0, import_react10.useState)(pendingJob ? pendingView : "list");
-  const [step, setStep] = (0, import_react10.useState)(pendingJob ? 3 : 1);
-  const [job, setJob] = (0, import_react10.useState)(pendingJob);
-  const [text, setText] = (0, import_react10.useState)("");
-  const [files, setFiles] = (0, import_react10.useState)([]);
-  const [draft, setDraft] = (0, import_react10.useState)(pendingJob && pendingView === "detail" && pendingSelected ? pendingSelected : blank);
-  const [selected, setSelected] = (0, import_react10.useState)(pendingSelected);
-  const [original, setOriginal] = (0, import_react10.useState)(pendingSelected ? JSON.stringify(pendingSelected) : "");
-  const [error, setError] = (0, import_react10.useState)("");
-  const [busy, setBusy] = (0, import_react10.useState)(false);
+  const [rows, setRows] = (0, import_react11.useState)([]);
+  const [loading, setLoading] = (0, import_react11.useState)(true);
+  const [query, setQuery] = (0, import_react11.useState)("");
+  const [level, setLevel] = (0, import_react11.useState)("");
+  const [source, setSource] = (0, import_react11.useState)("");
+  const [view, setView] = (0, import_react11.useState)(pendingJob ? pendingView : "list");
+  const [step, setStep] = (0, import_react11.useState)(pendingJob ? 3 : 1);
+  const [job, setJob] = (0, import_react11.useState)(pendingJob);
+  const [text, setText] = (0, import_react11.useState)("");
+  const [files, setFiles] = (0, import_react11.useState)([]);
+  const [draft, setDraft] = (0, import_react11.useState)(pendingJob && pendingView === "detail" && pendingSelected ? pendingSelected : blank);
+  const [selected, setSelected] = (0, import_react11.useState)(pendingSelected);
+  const [original, setOriginal] = (0, import_react11.useState)(pendingSelected ? JSON.stringify(pendingSelected) : "");
+  const [error, setError] = (0, import_react11.useState)("");
+  const [busy, setBusy] = (0, import_react11.useState)(false);
   const call = (method, payload) => rpcCall(ctx, method, payload);
   const reload = async () => {
     setLoading(true);
@@ -3663,15 +4209,15 @@ function PuPanel({ ctx }) {
     try {
       setRows(await call("pu.list"));
     } catch (e) {
-      setError(errorText2(e));
+      setError(errorText4(e));
     } finally {
       setLoading(false);
     }
   };
-  (0, import_react10.useEffect)(() => {
+  (0, import_react11.useEffect)(() => {
     void reload();
   }, []);
-  (0, import_react10.useEffect)(() => {
+  (0, import_react11.useEffect)(() => {
     if (job?.status !== "running") return;
     let disposed = false;
     let timer;
@@ -3690,7 +4236,7 @@ function PuPanel({ ctx }) {
           void poll();
         }, 1200);
       } catch (e) {
-        if (!disposed) setError(errorText2(e));
+        if (!disposed) setError(errorText4(e));
       }
     };
     void poll();
@@ -3699,7 +4245,7 @@ function PuPanel({ ctx }) {
       clearTimeout(timer);
     };
   }, [job?.id, job?.status]);
-  (0, import_react10.useEffect)(() => {
+  (0, import_react11.useEffect)(() => {
     if (job?.status === "ready" && job.draft && step === 3 && view === "create") {
       setDraft(job.draft);
       setStep(4);
@@ -3711,7 +4257,7 @@ function PuPanel({ ctx }) {
     try {
       await operation();
     } catch (e) {
-      setError(errorText2(e));
+      setError(errorText4(e));
     } finally {
       setBusy(false);
     }
@@ -3729,30 +4275,30 @@ function PuPanel({ ctx }) {
     setError("");
   };
   const field = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
-  const levels = /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
+  const levels = /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
     "级别 ",
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { value: draft.level, onChange: (e) => field("level", e.target.value), children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "base", children: "基础输入级 base" }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "optional", children: "可选输入级 optional" })
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("select", { value: draft.level, onChange: (e) => field("level", e.target.value), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "base", children: "基础输入级 base" }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "optional", children: "可选输入级 optional" })
     ] })
   ] });
-  const preview = /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "xs-pu-detail", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
+  const preview = /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "xs-pu-detail", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
       "名称",
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { value: draft.name, onChange: (e) => field("name", e.target.value) })
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("input", { value: draft.name, onChange: (e) => field("name", e.target.value) })
     ] }),
     levels,
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
       "描述（manifest 概览，AI 优先读）",
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("textarea", { value: draft.description, onChange: (e) => field("description", e.target.value) })
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("textarea", { value: draft.description, onChange: (e) => field("description", e.target.value) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
       "细节（Markdown 一级标题分节，须含概览）",
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("textarea", { className: "xs-pu-body", value: draft.body, onChange: (e) => field("body", e.target.value) })
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("textarea", { className: "xs-pu-body", value: draft.body, onChange: (e) => field("body", e.target.value) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
       "汇总 summary.md（AI 快速定位，人可改）",
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("textarea", { value: draft.summary, onChange: (e) => field("summary", e.target.value) })
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("textarea", { value: draft.summary, onChange: (e) => field("summary", e.target.value) })
     ] })
   ] });
   const generate = () => void run(async () => {
@@ -3766,103 +4312,103 @@ function PuPanel({ ctx }) {
   const filtered = rows.filter((p) => (!level || p.level === level) && (!source || p.source === source) && (!query || `${p.name}
 ${p.description}
 ${p.body}`.toLowerCase().includes(query.toLowerCase())));
-  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("main", { className: "xs-pu", "aria-label": "谱管理", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("header", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h1", { children: view === "create" ? "创建新谱" : view === "detail" ? `谱管理 / ${selected?.name}` : "谱管理" }),
-      view !== "list" && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: back, children: "← 返回列表" })
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("main", { className: "xs-pu", "aria-label": "谱管理", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("header", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h1", { children: view === "create" ? "创建新谱" : view === "detail" ? `谱管理 / ${selected?.name}` : "谱管理" }),
+      view !== "list" && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: back, children: "← 返回列表" })
     ] }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { role: "alert", children: [
+    error && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { role: "alert", children: [
       error,
       " ",
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => void reload(), children: "重试" }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "数据目录：$DSH_HOME/xuanshu/pus/" })
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => void reload(), children: "重试" }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "数据目录：$DSH_HOME/xuanshu/pus/" })
     ] }),
-    view === "list" && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "xs-pu-toolbar", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { "aria-label": "搜索谱", placeholder: "搜索 名称 / 描述 / 正文", value: query, onChange: (e) => setQuery(e.target.value) }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { "aria-label": "级别筛选", value: level, onChange: (e) => setLevel(e.target.value), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "", children: "全部级别" }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "base", children: "基础输入级" }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "optional", children: "可选输入级" })
+    view === "list" && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "xs-pu-toolbar", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("input", { "aria-label": "搜索谱", placeholder: "搜索 名称 / 描述 / 正文", value: query, onChange: (e) => setQuery(e.target.value) }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("select", { "aria-label": "级别筛选", value: level, onChange: (e) => setLevel(e.target.value), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "", children: "全部级别" }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "base", children: "基础输入级" }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "optional", children: "可选输入级" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { "aria-label": "来源筛选", value: source, onChange: (e) => setSource(e.target.value), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "", children: "全部来源" }),
-          ["manual", "ai-assisted", "sediment", "workflow"].map((s) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { children: s }, s))
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("select", { "aria-label": "来源筛选", value: source, onChange: (e) => setSource(e.target.value), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "", children: "全部来源" }),
+          ["manual", "ai-assisted", "sediment", "workflow"].map((s) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { children: s }, s))
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => {
           setView("create");
           setStep(pendingJob ? 3 : 1);
           setJob(pendingJob);
           if (!pendingJob) setDraft(blank);
         }, children: "＋ 创建新谱" })
       ] }),
-      loading ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { role: "status", children: "正在读取谱…" }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("h2", { children: [
+      loading ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { role: "status", children: "正在读取谱…" }) : /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("h2", { children: [
             "基础输入级 base · ",
             filtered.filter((p) => p.level === "base").length,
             " 个"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。" }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。" }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { children: [
             "🔒 底座（八字） · 只读 · 由出生信息与底座生成 · 默认在场 · 不可关 ",
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => window.alert("底座默认在场、不可关；要修改，请重新录制出生信息并确认。"), children: "打开" })
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => window.alert("底座默认在场、不可关；要修改，请重新录制出生信息并确认。"), children: "打开" })
           ] })
         ] }),
-        ["base", "optional"].map((group) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { children: [
-          group === "optional" && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("h2", { children: [
+        ["base", "optional"].map((group) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { children: [
+          group === "optional" && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("h2", { children: [
               "可选输入级 optional · ",
               filtered.filter((p) => p.level === group).length,
               " 个"
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "底稿不采 · 问事时按需追加" })
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "底稿不采 · 问事时按需追加" })
           ] }),
-          filtered.filter((p) => p.level === group || group === "optional" && p.error).map((p) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("article", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("strong", { children: p.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: p.description }),
-              /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("small", { children: [
+          filtered.filter((p) => p.level === group || group === "optional" && p.error).map((p) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("article", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("strong", { children: p.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: p.description }),
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("small", { children: [
                 p.source,
                 " · ",
                 p.updatedAt,
                 p.stale && " · 汇总可能过期"
               ] }),
-              p.error && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { role: "alert", children: p.error })
+              p.error && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { role: "alert", children: p.error })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: !!p.error || busy, onClick: () => open(p.slug), children: "打开 / 编辑" })
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { disabled: !!p.error || busy, onClick: () => open(p.slug), children: "打开 / 编辑" })
           ] }, p.slug))
         ] }, group)),
-        !filtered.length && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: rows.length ? "没有匹配的谱" : "还没有可选谱：谱由你积累，非必填、不阻塞使用。" }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => {
+        !filtered.length && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: rows.length ? "没有匹配的谱" : "还没有可选谱：谱由你积累，非必填、不阻塞使用。" }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => {
             setQuery("");
             setLevel("");
             setSource("");
           }, children: "清空筛选" })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "本列表只收谱。工作区 / 工作流与谱并列独立、不是谱。你自己的本地文件在藏库里，永不进 AI。" })
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "本列表只收谱。工作区 / 工作流与谱并列独立、不是谱。你自己的本地文件在藏库里，永不进 AI。" })
     ] }),
-    view === "detail" && selected && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+    view === "detail" && selected && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
       preview,
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { children: [
         draft.level === "base" ? "本谱是底稿提炼源（进底稿）" : "底稿不采；问事时按需追加",
         " · 级别变更下次底稿刷新生效。"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { children: [
         "元信息：spec pu/1 · source ",
         selected.source,
         " · updated_at ",
         selected.updatedAt,
         " · 签：预留字段，暂不启用"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { children: [
         "数据目录：$DSH_HOME/xuanshu/pus/",
         selected.slug,
         "/"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: busy, onClick: () => void run(async () => {
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { disabled: busy, onClick: () => void run(async () => {
         if (draft.body !== selected.body && draft.summary !== selected.summary && !window.confirm(`正文与汇总均改变。${draft.level === "base" ? "会影响底稿提炼源。" : "只在问事按需追加。"}确认保存这些事实？`)) return;
         const saved = await call("pu.update", { slug: selected.slug, draft, confirmed: true });
         setSelected(saved);
@@ -3870,7 +4416,7 @@ ${p.body}`.toLowerCase().includes(query.toLowerCase())));
         setOriginal(JSON.stringify(saved));
         await reload();
       }), children: "保存" }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: busy || job?.status === "running", onClick: () => void run(async () => {
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { disabled: busy || job?.status === "running", onClick: () => void run(async () => {
         const created = await call("pu.generate", { name: draft.name, level: draft.level, text: `# 当前谱
 ${draft.description}
 ${draft.body}`, summaryOnly: true });
@@ -3879,57 +4425,57 @@ ${draft.body}`, summaryOnly: true });
         pendingSelected = { ...selected, ...draft };
         setJob(created);
       }), children: "重建 summary（AI 提炼）" }),
-      job?.status === "ready" && job.draft && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => {
+      job?.status === "ready" && job.draft && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => {
         field("summary", job.draft.summary);
         pendingJob = void 0;
         setJob(void 0);
       }, children: "采用候选汇总（保存后落盘）" })
     ] }),
-    view === "create" && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { "aria-label": "创建步骤", children: "① 给资料 → ② 定义谱名 → ③ AI 转换中 → ④ 生成预览 → ⑤ 确认落盘" }),
-      step === 1 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
+    view === "create" && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { "aria-label": "创建步骤", children: "① 给资料 → ② 定义谱名 → ③ AI 转换中 → ④ 生成预览 → ⑤ 确认落盘" }),
+      step === 1 && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
           "资料文字",
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("textarea", { value: text, onChange: (e) => setText(e.target.value), placeholder: "把你知道的先写进来" })
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("textarea", { value: text, onChange: (e) => setText(e.target.value), placeholder: "把你知道的先写进来" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
           "附件（MD / PDF / 任意文件）",
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { type: "file", multiple: true, onChange: (e) => setFiles(Array.from(e.target.files ?? [])) })
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("input", { type: "file", multiple: true, onChange: (e) => setFiles(Array.from(e.target.files ?? [])) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("ul", { children: files.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("li", { children: f.name }, i)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "语音输入 v2 再做。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: !text.trim() && !files.length, onClick: () => setStep(2), children: "下一步" })
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("ul", { children: files.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("li", { children: f.name }, i)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "语音输入 v2 再做。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { disabled: !text.trim() && !files.length, onClick: () => setStep(2), children: "下一步" })
       ] }),
-      step === 2 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
+      step === 2 && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { children: [
           "谱名",
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { value: draft.name, onChange: (e) => field("name", e.target.value) })
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("input", { value: draft.name, onChange: (e) => field("name", e.target.value) })
         ] }),
         levels,
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "谱名唯一 · 目录名小写、- 连接、可含中文。所有谱均非必填。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "谱名唯一 · 目录名小写、- 连接、可含中文。所有谱均非必填。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { children: [
           "预览：pus/",
           draft.name.trim().normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}-]+/gu, "-").replace(/^-+|-+$/g, ""),
           "/"
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => setStep(1), children: "返回改资料" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: busy || !draft.name.trim(), onClick: generate, children: "开始转换" })
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => setStep(1), children: "返回改资料" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { disabled: busy || !draft.name.trim(), onClick: generate, children: "开始转换" })
       ] }),
-      step === 3 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { role: "status", children: [
+      step === 3 && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { role: "status", children: [
         job?.status === "running" ? "AI 正在读取资料、分节并提炼汇总。" : job?.error ?? "转换已中断，可重新开始。",
         " 借用 DSH coding 工具；中断不落盘。",
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: job?.status !== "running", onClick: () => void run(async () => {
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { disabled: job?.status !== "running", onClick: () => void run(async () => {
           const canceled = await call("pu.cancel", { id: job?.id });
           setJob(canceled);
           pendingJob = void 0;
         }), children: "中断" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => setStep(2), children: "返回改" })
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => setStep(2), children: "返回改" })
       ] }),
-      step === 4 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+      step === 4 && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
         preview,
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "这一步只是预览，pus/ 下还没有任何文件。落盘后会出现在谱列表。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => setStep(2), children: "返回改" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: busy || job?.status !== "ready", onClick: () => void run(async () => {
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "这一步只是预览，pus/ 下还没有任何文件。落盘后会出现在谱列表。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => setStep(2), children: "返回改" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { disabled: busy || job?.status !== "ready", onClick: () => void run(async () => {
           await call("pu.confirm", { id: job?.id, draft, level: draft.level, confirmed: true });
           pendingJob = void 0;
           setJob(void 0);
@@ -3937,31 +4483,352 @@ ${draft.body}`, summaryOnly: true });
           await reload();
         }), children: "确认落盘" })
       ] }),
-      step === 5 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "已落盘：manifest.md + content.md + summary.md" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: back, children: "回谱列表" })
+      step === 5 && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "已落盘：manifest.md + content.md + summary.md" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: back, children: "回谱列表" })
       ] })
     ] }),
-    job?.status === "running" && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
+    job?.status === "running" && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { children: [
       "审批由 DSH 决定，玄枢不自建审批。",
-      ctx.uiWorkspace && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => ctx.uiWorkspace?.openSession(job.sessionId), children: "在会话里看审批" }),
-      view === "detail" && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => void run(async () => {
+      ctx.uiWorkspace && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => ctx.uiWorkspace?.openSession(job.sessionId), children: "在会话里看审批" }),
+      view === "detail" && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => void run(async () => {
         const canceled = await call("pu.cancel", { id: job.id });
         setJob(canceled);
         pendingJob = void 0;
       }), children: "中断汇总提炼（不落盘）" }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { children: "返回「谱」可继续查看生成预览。" })
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { children: "返回「谱」可继续查看生成预览。" })
     ] })
   ] });
 }
 function installPuPanel(ctx) {
   ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: "pus", inject: () => ({ ctx }) }, PuPanel));
-  ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: "pus", order: 40, label: "谱" }, () => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { "aria-hidden": "true", children: "谱" })));
+  ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: "pus", order: 40, label: "谱" }, () => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { "aria-hidden": "true", children: "谱" })));
   if (typeof document === "undefined" || document.getElementById("xs-pu-style")) return;
   const style = document.createElement("style");
   style.id = "xs-pu-style";
   style.textContent = `.xs-pu{padding:24px;overflow:auto;height:100%;color:var(--dsw-alias-text-primary);background:var(--dsw-alias-bg-canvas)}.xs-pu header,.xs-pu-toolbar,.xs-pu article{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.xs-pu article{justify-content:space-between;padding:12px;border-bottom:1px solid var(--dsw-alias-border-default)}.xs-pu label{display:block;margin:12px 0}.xs-pu input,.xs-pu select,.xs-pu textarea,.xs-pu button{color:inherit;background:var(--dsw-alias-bg-surface);border:1px solid var(--dsw-alias-border-default);border-radius:8px;padding:8px;font:inherit}.xs-pu button{cursor:pointer;margin:4px}.xs-pu button:disabled{opacity:.5;cursor:default}.xs-pu textarea{display:block;width:100%;min-height:100px;box-sizing:border-box}.xs-pu .xs-pu-body{min-height:220px;font-family:monospace}.xs-pu-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px}.xs-pu section{margin:24px 0}.xs-pu [role=alert]{padding:12px;border:1px solid var(--dsw-alias-border-danger)}@media(max-width:1100px){.xs-pu-detail{grid-template-columns:1fr}.xs-pu{padding:16px}}`;
   document.head.appendChild(style);
+}
+
+// src/client/rikke-api.ts
+var RIKKE_ENDPOINTS = {
+  status: "rikke.status",
+  generate: "rikke.generate",
+  setTime: "rikke.setTime"
+};
+function createRikkeApi(ctx) {
+  return {
+    status: (payload, signal) => rpcCall(ctx, RIKKE_ENDPOINTS.status, payload ?? {}, signal),
+    generate: (payload, signal) => rpcCall(ctx, RIKKE_ENDPOINTS.generate, payload ?? {}, signal),
+    setTime: (payload, signal) => rpcCall(ctx, RIKKE_ENDPOINTS.setTime, payload, signal)
+  };
+}
+
+// src/client/rikke-controller.ts
+function errorText5(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function createRikkeUiController(api) {
+  let revision = 0;
+  let outcome;
+  let running;
+  const listeners = /* @__PURE__ */ new Set();
+  const notify = () => {
+    for (const listener of [...listeners]) listener();
+  };
+  const settle = (answer) => {
+    const next = { ok: answer?.ok === true };
+    if (answer?.date !== void 0) next.date = answer.date;
+    if (next.ok !== true) {
+      next.reason = answer?.reason ?? "日课生成失败：宿主没有给出理由。";
+    }
+    outcome = next;
+    return next;
+  };
+  return {
+    getRevision: () => revision,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    getOutcome: () => outcome,
+    generate(date) {
+      if (running !== void 0) return running;
+      running = api.generate(date === void 0 ? {} : { date }).then(settle).catch((error) => {
+        outcome = { ok: false, reason: errorText5(error) };
+        return outcome;
+      }).then((answer) => {
+        running = void 0;
+        revision += 1;
+        notify();
+        return answer;
+      });
+      return running;
+    },
+    async setTime(time) {
+      const answer = await api.setTime({ time });
+      revision += 1;
+      notify();
+      return answer;
+    }
+  };
+}
+
+// src/client/rikke.tsx
+var import_react12 = require("react");
+
+// src/client/rikke-style.ts
+function installRikkeStyle() {
+  if (typeof document === "undefined" || document.getElementById("xs-rikke-style") !== null) return;
+  const style = document.createElement("style");
+  style.id = "xs-rikke-style";
+  style.textContent = `
+.xs-rikke{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
+.xs-rikke h1,.xs-rikke h2{font-weight:600}.xs-rikke h1{font-size:1.15rem}.xs-rikke h2{font-size:1rem;margin:18px 0 6px}
+.xs-rikke__head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.xs-rikke__basis,.xs-rikke__note{line-height:1.8}
+.xs-rikke__note{color:var(--xs-text-secondary);font-size:.85rem}
+.xs-rikke__no-network{color:var(--xs-text-body)}
+.xs-rikke__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.xs-rikke button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-rikke button:disabled{opacity:.5;cursor:not-allowed}
+.xs-rikke input[type=time]{font:inherit;color:inherit;background:var(--xs-surface-card);border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:6px}
+.xs-rikke__time-edit{border:1px solid var(--xs-constraint-human-gate-fg,var(--xs-edge-card));border-radius:var(--xs-radius-card);padding:10px;margin:8px 0}
+.xs-rikke__confirm{border:1px solid var(--xs-constraint-human-gate-fg,var(--xs-edge-card));border-radius:var(--xs-radius-card);padding:10px;margin:8px 0}
+.xs-rikke__alert{padding:10px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);margin:8px 0}
+@media(max-width:1100px){.xs-rikke{padding:16px}}
+`;
+  document.head.appendChild(style);
+}
+
+// src/client/rikke.tsx
+var import_jsx_runtime15 = require("react/jsx-runtime");
+var RIKKE_NO_NETWORK_NOTE = "不联网取外部资讯：本次内容只用底座 + 上面的时间基准。";
+var RIKKE_REGENERATE_CONFIRM = "将覆盖今天的日课，继续？";
+function errorText6(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function initialView2(preloaded) {
+  if (preloaded === void 0) return { kind: "loading" };
+  if ("error" in preloaded) return { kind: "error", message: preloaded.error };
+  if (preloaded.exists !== true) return { kind: "empty", status: preloaded };
+  if (preloaded.content === void 0) {
+    return { kind: "error", message: "当日日课文件在，但内容没读回来（content 缺失）。", status: preloaded };
+  }
+  return { kind: "ready", status: preloaded };
+}
+function RikkePanel({ api, navigate, preloaded, preloadedTimeEdit }) {
+  const seeded = preloaded !== void 0;
+  const [view, setView] = (0, import_react12.useState)(() => initialView2(preloaded));
+  const [busy, setBusy] = (0, import_react12.useState)(false);
+  const [confirming, setConfirming] = (0, import_react12.useState)(false);
+  const [editing, setEditing] = (0, import_react12.useState)(preloadedTimeEdit === true);
+  const [timeDraft, setTimeDraft] = (0, import_react12.useState)(
+    () => clockOf(preloaded !== void 0 && !("error" in preloaded) ? preloaded.schedule?.time : void 0)
+  );
+  const [note, setNote] = (0, import_react12.useState)(void 0);
+  const sequence = (0, import_react12.useRef)(0);
+  const load = () => {
+    const mine = ++sequence.current;
+    void api.status().then((status2) => {
+      if (mine !== sequence.current) return;
+      setView(initialView2(status2));
+      setTimeDraft(clockOf(status2.schedule?.time));
+    }).catch((error) => {
+      if (mine !== sequence.current) return;
+      setView({ kind: "error", message: errorText6(error) });
+    });
+  };
+  (0, import_react12.useEffect)(() => {
+    if (seeded) return;
+    load();
+  }, [api, seeded]);
+  const generate = () => {
+    setConfirming(false);
+    setBusy(true);
+    setNote(void 0);
+    const mine = ++sequence.current;
+    void api.generate().then(async (answer) => {
+      if (mine !== sequence.current) return;
+      if (answer?.ok !== true) {
+        setView({
+          kind: "error",
+          message: answer?.reason ?? "日课生成失败：宿主没有给出理由。",
+          ...view.kind === "ready" ? { status: view.status } : {}
+        });
+        return;
+      }
+      const status2 = await api.status();
+      if (mine !== sequence.current) return;
+      setView(initialView2(status2));
+      setTimeDraft(clockOf(status2.schedule?.time));
+    }).catch((error) => {
+      if (mine !== sequence.current) return;
+      setView({ kind: "error", message: errorText6(error) });
+    }).finally(() => {
+      if (mine === sequence.current) setBusy(false);
+    });
+  };
+  const saveTime = () => {
+    if (timeDraft === "") return;
+    setBusy(true);
+    setNote(void 0);
+    void api.setTime({ time: timeDraft }).then((answer) => {
+      setNote(`已改时刻：每天 ${clockOf(answer.schedule.time)}（${answer.schedule.timeZone}）`);
+      setEditing(false);
+    }).catch((error) => {
+      setNote(`改时刻失败：${errorText6(error)}`);
+    }).finally(() => {
+      setBusy(false);
+    });
+  };
+  const status = view.kind === "empty" || view.kind === "ready" ? view.status : view.kind === "error" ? view.status : void 0;
+  const date = status?.date ?? "—";
+  const schedule = status?.schedule;
+  const content = status?.content;
+  const openGenerate = view.kind === "empty" ? "立即生成（今天）" : "重新生成（今天）";
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("main", { className: "xs-rikke", "data-xuanshu-panel": RIKKE_ID, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("header", { className: "xs-rikke__head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h1", { children: `日课 · ${date}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "xs-rikke__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今日日课已到" : view.kind === "empty" ? "今天还没有生成日课" : view.kind === "error" ? "生成失败" : "读取中…" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-rikke__basis", "data-xuanshu-note": "time-basis", children: `时间基准：${date} ${status?.generatedAt ?? "（生成时刻未回传）"} · ${status?.zone ?? "（时区未回传）"} · 本机时钟` }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-rikke__basis xs-rikke__no-network", "data-xuanshu-note": "no-network", children: RIKKE_NO_NETWORK_NOTE }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "schedule", children: schedule === void 0 ? "计划时刻：宿主未回传（在「自动化任务」面板里看这条 daily 任务）" : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用` }),
+    status?.huangli === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "engine", children: `黄历引擎：${status.huangli.tool ?? "huangli"} ${status.huangli.version ?? "（版本未回传）"}（本地，不联网）` }),
+    status?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "generated-at", children: `生成于 ${status.generatedAt}` }),
+    view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-view": "loading", children: "正在读今天的日课…" }) : null,
+    view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "xs-rikke__empty", "data-xuanshu-view": "empty", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { children: EMPTY_COPY.rike.why }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-rikke__note", children: EMPTY_COPY.rike.sub })
+    ] }) : null,
+    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "xs-rikke__alert", "data-xuanshu-view": "error", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { "data-xuanshu-reason": "generate", children: view.message }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "xs-rikke__actions", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+        "button",
+        {
+          type: "button",
+          "data-xuanshu-action": "retry",
+          onClick: () => {
+            load();
+          },
+          children: "重试"
+        }
+      ) })
+    ] }) : null,
+    content === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "xs-lines", "data-xuanshu-content": "rikke", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "xs-line", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "xs-line__label", children: "宜" }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "xs-line__value", children: content.yi })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "xs-line", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "xs-line__label", children: "忌" }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "xs-line__value", children: content.ji })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "xs-line", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "xs-line__label", children: "流日" }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "xs-line__value", children: content.liuri })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "xs-rikke__actions", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "xs-btn xs-btn--primary",
+          "data-xuanshu-action": "generate-rikke",
+          disabled: busy,
+          onClick: () => {
+            setConfirming(true);
+          },
+          children: busy ? "生成中…" : openGenerate
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+        "button",
+        {
+          type: "button",
+          "data-xuanshu-action": "edit-time",
+          onClick: () => {
+            setEditing(!editing);
+          },
+          children: "改时刻"
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+        "button",
+        {
+          type: "button",
+          "data-xuanshu-nav": "schedules",
+          onClick: () => {
+            navigate("schedules");
+          },
+          children: "打开自动化任务面板"
+        }
+      )
+    ] }),
+    note === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-rikke__note", role: "status", "data-xuanshu-note": "time-result", children: note }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "xs-rikke__confirm", "data-xuanshu-confirm": "regenerate", hidden: !confirming, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { "data-xuanshu-confirm-text": "regenerate", children: RIKKE_REGENERATE_CONFIRM }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "xs-rikke__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+          "button",
+          {
+            type: "button",
+            "data-xuanshu-action": "regenerate-cancel",
+            onClick: () => {
+              setConfirming(false);
+            },
+            children: "取消"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", "data-xuanshu-action": "regenerate-go", onClick: generate, children: "继续生成 ->" })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "xs-rikke__time-edit", "data-xuanshu-time-edit": "rikke", hidden: !editing, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { children: [
+        "日课时刻",
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+          "input",
+          {
+            type: "time",
+            value: timeDraft,
+            onChange: (event) => {
+              setTimeDraft(event.target.value);
+            }
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "xs-rikke__note", children: `时区 ${schedule?.timeZone ?? "（未回传）"}（IANA，不手改）` }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "xs-rikke__actions", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", "data-xuanshu-action": "save-time", disabled: busy, onClick: saveTime, children: "保存" }) })
+    ] })
+  ] });
+}
+function RikkeIcon({ size = 20 }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("rect", { x: "3.5", y: "5", width: "17", height: "15", rx: "2" }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("path", { d: "M3.5 10h17M8 3.5v3M16 3.5v3" }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("path", { d: "M8 14h4" })
+  ] });
+}
+function installRikke(ctx, deps) {
+  installRikkeStyle();
+  ctx.slots.inject(
+    "main",
+    () => ctx.slots.register(
+      { name: "main", key: RIKKE_ID, inject: () => ({ ...deps }) },
+      RikkePanel
+    )
+  );
+  ctx.slots.inject(
+    "sidebar.panellist",
+    () => ctx.slots.register(
+      { name: "sidebar.panellist", id: RIKKE_ID, order: RIKKE_ORDER, label: RIKKE_LABEL },
+      RikkeIcon
+    )
+  );
 }
 
 // src/client/style.ts
@@ -4860,6 +5727,10 @@ function apply(ctx) {
   const refreshSessions = typeof sessionCatalog?.refresh === "function" ? async () => {
     await sessionCatalog.refresh?.();
   } : void 0;
+  const rikke = createRikkeApi(rpc);
+  const rikkeController = createRikkeUiController(rikke);
+  const digao = createDigaoApi(rpc);
+  const digaoController = createDigaoUiController(digao);
   const injected = () => ({
     navigate,
     mainPanels,
@@ -4876,7 +5747,13 @@ function apply(ctx) {
       baziController.invalidate();
     },
     bazi,
-    baziController
+    baziController,
+    // 票 13：三份数据面与两个控制器都从注入面进概览；`onGenerate` / `onRefresh`
+    // **不在这里给**——概览面板自己用控制器造（保证「人点才跑」只有一条路径）。
+    rikke,
+    rikkeController,
+    digao,
+    digaoController
   });
   ctx.slots.inject("main", () => {
     const dispose = ctx.slots.register(
@@ -4898,6 +5775,8 @@ function apply(ctx) {
   installOnboarding(rpc, baziDeps);
   installMingpan(rpc, baziDeps);
   installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
+  installDigao(rpc, { api: digao, navigate });
+  installRikke(rpc, { api: rikke, navigate });
 }
 		// 包体中途执行过 module.exports = __toCommonJS(...)，上面的 exports 已过期；
 		// 必须重新读取 module.exports，逐个补拷会漏掉将来的新导出。

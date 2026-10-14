@@ -17,6 +17,8 @@ import type { ReactNode } from 'react';
 
 import type { BaziApi } from './bazi-api.js';
 import type { BaziUiController } from './bazi-controller.js';
+import type { DigaoApi } from './digao-api.js';
+import type { DigaoUiController } from './digao-controller.js';
 import {
   ACTION_COPY,
   BADGE_DERIVED,
@@ -44,6 +46,8 @@ import {
 } from './glyphs.js';
 import type { MainPanelsWatch } from './watch.js';
 import { useMainPanels } from './watch.js';
+import type { RikkeApi } from './rikke-api.js';
+import type { RikkeUiController } from './rikke-controller.js';
 
 /* ───────────────────────── 共用：导航与可用性 ───────────────────────── */
 
@@ -70,6 +74,16 @@ export interface OverviewInjected {
   bazi?: BaziApi;
   /** 命盘取数代次 / 重录预填（票 08）：出盘成功后概览据此重取快照（不重新出盘）。 */
   baziController?: BaziUiController;
+  /**
+   * 日课数据面与控制器（票 13）：同样是**面板级**注入，四卡不消费 ——
+   * `OverviewPanel` 用 `rikke.status` 决定日课卡四态，`rikkeController.generate()` 是
+   * 「人点 [立即生成]」的唯一落点（`onGenerate` 由概览自己造，不从注入面来）。
+   */
+  rikke?: RikkeApi;
+  rikkeController?: RikkeUiController;
+  /** 底稿数据面与控制器（票 13）：`digao.status` 决定底稿卡四态，`refresh()` 是「人点 [刷新]」的落点。 */
+  digao?: DigaoApi;
+  digaoController?: DigaoUiController;
 }
 
 /** 订阅 main 面板键（卡片渲染期判定 fail-soft）。 */
@@ -358,12 +372,44 @@ export interface XsRikkeCardProps extends OverviewInjected {
   /** 当日日期（YYYY-MM-DD）；缺省由面板注入本机日期。 */
   today: string;
   content?: RikkeContent;
+  /** 失败理由（票 13：生成失败 / 底座未立时必须看得见，不许静默）。 */
+  reason?: string;
+}
+
+/** 宜 / 忌 / 流日三行（ready 与 error 两态共用：失败时已有内容照常可读）。 */
+function RikkeLines({ content }: { content?: RikkeContent }) {
+  return (
+    <div className="xs-lines">
+      <p className="xs-line">
+        <span className="xs-line__label">宜</span>
+        <span className="xs-line__value">{content?.yi ?? '—'}</span>
+      </p>
+      <p className="xs-line">
+        <span className="xs-line__label">忌</span>
+        <span className="xs-line__value">{content?.ji ?? '—'}</span>
+      </p>
+      <p className="xs-line">
+        <span className="xs-line__label">流日</span>
+        <span className="xs-line__value">{content?.liuri ?? '—'}</span>
+      </p>
+    </div>
+  );
 }
 
 /** 日课卡：当日产物三行 + 「看完整日课 / 立即生成」（S1 §3.1②）。 */
-export function XsRikkeCard({ state = 'empty', today, content, navigate, mainPanels, onGenerate, onRetry }: XsRikkeCardProps) {
+export function XsRikkeCard({
+  state = 'empty',
+  today,
+  content,
+  reason,
+  navigate,
+  mainPanels,
+  onGenerate,
+  onRetry,
+}: XsRikkeCardProps) {
   const available = useAvailable(mainPanels);
   const schedulesReady = isAvailable(available, 'schedules');
+  const rikkeReady = isAvailable(available, 'rikke');
   const generateDisabled = onGenerate === undefined;
   const retryDisabled = onRetry === undefined;
 
@@ -403,44 +449,42 @@ export function XsRikkeCard({ state = 'empty', today, content, navigate, mainPan
         />
       ) : null}
       {state === 'error' ? (
-        <XsEmptyBlock
-          variant="error"
-          illus={<IllusCardsError />}
-          why={ERROR_COPY.rike}
-          actions={
-            <ActionButton
-              action="retry"
-              disabled={retryDisabled}
-              reason={DISABLED_REASON.retry}
-              onClick={onRetry}
-            >
-              {ACTION_COPY.retry}
-            </ActionButton>
-          }
-        />
+        <>
+          <XsEmptyBlock
+            variant="error"
+            illus={<IllusCardsError />}
+            why={ERROR_COPY.rike}
+            // 票 13：失败理由（宿主给的可读理由 / RPC 拒绝原因）逐字展示。
+            sub={reason}
+            actions={
+              <ActionButton
+                action="retry"
+                disabled={retryDisabled}
+                reason={DISABLED_REASON.retry}
+                onClick={onRetry}
+              >
+                {ACTION_COPY.retry}
+              </ActionButton>
+            }
+          />
+          {/* 失败时若还有上一份内容，照常可读（S14 §6 error 行：保留上一份，不给空白）。 */}
+          {content === undefined ? null : (
+            <div className="xs-card__body" data-xuanshu-ready="rike">
+              <RikkeLines content={content} />
+            </div>
+          )}
+        </>
       ) : null}
       {state === 'ready' ? (
         <div className="xs-card__body" data-xuanshu-ready="rike">
-          <div className="xs-lines">
-            <p className="xs-line">
-              <span className="xs-line__label">宜</span>
-              <span className="xs-line__value">{content?.yi ?? '—'}</span>
-            </p>
-            <p className="xs-line">
-              <span className="xs-line__label">忌</span>
-              <span className="xs-line__value">{content?.ji ?? '—'}</span>
-            </p>
-            <p className="xs-line">
-              <span className="xs-line__label">流日</span>
-              <span className="xs-line__value">{content?.liuri ?? '—'}</span>
-            </p>
-          </div>
+          <RikkeLines content={content} />
           <div className="xs-card__actions">
+            {/* [看完整日课 ->] 进票 13 的 `rikke` main 面板（S14 日课与定时任务）。 */}
             <NavLink
-              target="schedules"
-              disabled={!schedulesReady}
-              reason={DISABLED_REASON.retry}
-              onClick={() => navigate('schedules')}
+              target="rikke"
+              disabled={!rikkeReady}
+              reason={DISABLED_REASON.rikke}
+              onClick={() => navigate('rikke')}
             >
               {ACTION_COPY.watchFull}
             </NavLink>
@@ -473,6 +517,8 @@ export interface XsDigaoCardProps extends OverviewInjected {
   summary?: DigaoSummary;
   /** 底座是否已立：决定空态取 (a) 底座未立 还是 (b) 从未刷新（S1 §6 ③）。 */
   baseplateEstablished?: boolean;
+  /** 失败理由（票 13：刷新失败 / 读不出来时必须看得见，不许静默）。 */
+  reason?: string;
 }
 
 /** 底稿卡：纯派生标记 + 三源头跳转 + 「打开底稿 / 刷新」（S1 §3.1③、§9 C2）。 */
@@ -480,6 +526,7 @@ export function XsDigaoCard({
   state = 'empty',
   summary,
   baseplateEstablished = false,
+  reason,
   navigate,
   mainPanels,
   onRefresh,
@@ -536,6 +583,8 @@ export function XsDigaoCard({
           variant="error"
           illus={<IllusCardsError />}
           why={ERROR_COPY.digao}
+          // 票 13：刷新失败 / 读不出来的理由逐字展示（不静默）。
+          sub={reason}
           actions={
             <>
               <ActionButton

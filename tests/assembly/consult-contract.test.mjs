@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 import { describe, expect, it } from 'vitest'
 
+import { PANEL_KEYS, expectedCells, expectedRegisterNames } from './lib/panel-surface.mjs'
+
 import { createConsultApi } from '../../packages/xuanshu-client/src/client/consult-api.ts'
 import { ConsultPanel, installConsult } from '../../packages/xuanshu-client/src/client/consult.tsx'
 import { CONSULT_ID, CONSULT_LABEL, CONSULT_ORDER, PANEL_ID, PANEL_ORDER } from '../../packages/xuanshu-client/src/client/panel.ts'
@@ -31,7 +33,6 @@ const DSH_MAIN_KEYS = ['conversation', 'plugins', 'schedules']
 const DSH_SIDEBAR_IDS = ['plugins', 'schedules']
 
 /** 票 10 之后玄枢的全部 main 注册（顺序有意义，见下）。 */
-const EXPECTED_MAIN_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', CONSULT_ID]
 
 const REACT_STUB = {
   Fragment: Symbol.for('react.fragment'),
@@ -120,8 +121,8 @@ describe('票 10 · 产物（lib/client.js）与注册面', () => {
     const registers = calls.filter((call) => call.kind === 'register')
     const mainKeys = registers.filter((row) => row.name === 'main').map((row) => row.options.key)
     const rows = registers.filter((row) => row.name === 'sidebar.panellist')
-    expect(mainKeys).toEqual(EXPECTED_MAIN_KEYS)
-    expect(rows.map((row) => row.options.id)).toEqual(EXPECTED_MAIN_KEYS)
+    expect(mainKeys).toEqual(PANEL_KEYS)
+    expect(rows.map((row) => row.options.id)).toEqual(PANEL_KEYS)
     const consult = rows.find((row) => row.options.id === CONSULT_ID)
     expect(consult?.options).toMatchObject({ order: CONSULT_ORDER, label: CONSULT_LABEL })
     expect(CONSULT_ID).toBe('consult')
@@ -188,21 +189,7 @@ describe('票 10 · 槽位不 fail-loud（加性注册）', () => {
     const { ctx } = recordingCtx()
     ctx.slots.register = (options, component) => registry.register(options, component)
     expect(() => plugin.apply(ctx)).not.toThrow()
-    expect([...registry.cells.keys()].sort()).toEqual([
-      'main\u0000cang',
-      'main\u0000consult',
-      'main\u0000mingpan',
-      'main\u0000onboarding',
-      'main\u0000overview',
-      'main\u0000pus',
-      'shell.overlay\u0000xuanshu-cang-drawer',
-      'sidebar.panellist\u0000cang',
-      'sidebar.panellist\u0000consult',
-      'sidebar.panellist\u0000mingpan',
-      'sidebar.panellist\u0000onboarding',
-      'sidebar.panellist\u0000overview',
-      'sidebar.panellist\u0000pus',
-    ])
+    expect([...registry.cells.keys()].sort()).toEqual(expectedCells())
   })
 })
 
