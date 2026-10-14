@@ -24,6 +24,8 @@ export const PANEL_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', '
  */
 export const EXTRA_REGISTRATIONS = [
   { after: 'cang', names: ['shell.overlay'], cells: ['shell.overlay\u0000xuanshu-cang-drawer'] },
+  // 票 12：挂载账本抽屉（S8）——挂在 `consult` 那一对之后（票 12 的 install 排在票 10 之后）。
+  { after: 'consult', names: ['shell.overlay'], cells: ['shell.overlay\u0000xuanshu-mounts-drawer'] },
 ]
 
 /** 每个 key 产生的一对注册名（main 面板 + 侧栏行）。 */
