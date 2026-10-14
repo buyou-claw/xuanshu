@@ -19,7 +19,7 @@
  *
  * 四种模式：
  *   doctor（默认） 算清一切 + 跑 webPort/horosaGuard 两道门 + 断言派生路径都在 home 下，只报告不 spawn；
- *   web            前提全绿后 spawn `dsh --profile <p> web --port <n> --no-open`，退出码 = 子进程退出码。
+ *   web            前提全绿后 spawn `dsh --profile <p> --port <n> --no-open`，退出码 = 子进程退出码。
  *                  **票 04 时这条必然跑不起来**：`dsh web` 由 `@deepseek-ai/dsh-web-app` bundle 提供，
  *                  而票 04 不接它（评审裁决 §5.1 R1：接进 `dsh.profile.bundles` 会让装配树多出 4 条
  *                  error 行，属票 07 首页替换）。缺它时 CLI 会以 `error: unknown option '--port'` exit 1，
@@ -604,7 +604,7 @@ export async function runStartup(options = {}) {
 
   /* ⑨ 计划：命令 + 环境覆盖（env 模式直接打给 pwsh/CI 用）。 */
   const webArgs = [
-    'web', '--port', String(instance.webPort), '--no-open',
+    '--port', String(instance.webPort), '--no-open',
     ...(options.host === undefined ? [] : ['--host', String(options.host)]),
     ...((options.trustedHosts ?? []).flatMap((authority) => ['--trusted-host', String(authority)])),
     ...(options.extraArgs ?? []),
@@ -617,6 +617,7 @@ export async function runStartup(options = {}) {
     DSH_HOME: home,
     DSH_TELEMETRY_DISABLED: '1',
     NO_COLOR: '1',
+    XUANSHU_SURFACE: mode === 'headless' ? 'headless' : 'web',
     [ENV.profile]: instance.profile,
     [ENV.webPort]: String(instance.webPort),
     [ENV.horosaPort]: String(instance.horosaPort),

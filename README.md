@@ -47,7 +47,7 @@ pnpm verify:isolation                            # 断言同跑无串扰（含�
 pnpm test                                        # 全部测试
 ```
 
-> `pnpm dev:xuanshu`（起 `127.0.0.1:19388` 的 web 实例）**当前会以退出码 2 拒绝**：web 界面要 `@deepseek-ai/dsh-web-app` bundle，按票 01 的装配契约它属票 07（首页替换）。在被测实例上跑自证请用 `node scripts/isolation/startup.mjs --mode headless`；要拿端口/环境去启动别的实例用 `--mode env`。详见 `docs/runbook/dual-instance.md`。
+`pnpm dev:xuanshu` 启动 `127.0.0.1:19388` 的隔离 web 实例，首屏为自我总览。启动器选择 web 解析器；`--mode headless` 选择 headless 解析器，两个 bundle 不同时解析启动参数。直接启动使用 `dsh --profile xuanshu --port 19388 --no-open`。详见 [双实例 runbook](docs/runbook/dual-instance.md)。
 
 ## 安装
 
@@ -74,7 +74,9 @@ node scripts/horosa/bazi-contract.mjs --json    # 直打回环，验信封结构
 - 产品与架构已定稿；Spec 001（装配基座：setup → 冷启动八字 → 自我总览四卡 → 问事闭环 → 谱）已发布为 [issue #1](https://github.com/buyou-claw/xuanshu/issues/1)（ready-for-agent）。
 - **票 01（空壳立起）已实现**：分发包骨架三件套齐备、客户端预编译构建管线跑通、headless 启动 `xuanshu` profile 成功、装配契约测试台绿。
 - **票 04（开发期双实例隔离）已实现**（[issue #5](https://github.com/buyou-claw/xuanshu/issues/5)）：`scripts/isolation/` 启动器 + `docs/runbook/dual-instance.md` + `tests/isolation/`。顺带修好票 01 测试台的两处环境依赖（profile 未自持 CLI、补丁行缺 provider 包），`pnpm verify:assembly` 现在五条 seam 全绿。
-- 后续按 S1（客户端构建管线，已完成）→ S2（票 07 · 首页替换）→ S3（票 06 · horosa 集成 + 八字出盘）→ S4（票 10 · 问事闭环）逐票实现。
+- 票 02/03（设计稿与素材）、05（setup）、06（horosa）已有实现提交，相关 GitHub PR 尚未合并。
+- 票 07（自我总览四卡）已接入 web；四卡/构建/隔离 web 冒烟通过。完整装配测试的 S1 仍报告上游 `dsh-agent-preset` carrier 不受 schema 导出器支持；S2–S5 通过，未将该失败隐藏。
+- 继续开发的 ticket、验证证据与上游限制见 [开发进度](docs/development-status.md)。
 
 ## 许可
 
