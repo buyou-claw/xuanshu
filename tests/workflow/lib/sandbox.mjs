@@ -9,23 +9,20 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { pruneStaleDirs } from '../../lib/sandbox-prune.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const TMP_ROOT = join(HERE, '..', '.tmp')
 
-const STALE_MS = 6 * 60 * 60 * 1000
-
+/**
+ * 清理上一次运行留下的旧沙箱（超过 `SANDBOX_STALE_MS`）。
+ *
+ * 实现收在 `tests/lib/sandbox-prune.mjs`（**单一来源**）：这段逻辑曾经在 6 个域的沙箱里各抄一份，
+ * 然后漂移了 —— bazi / consult 两处把比较写反（删的是**刚建**的沙箱、旧件永不清，并发跑还会互删现场）。
+ * 共享文件头部记了这件事的来龙去脉与判据。
+ */
 function pruneStale() {
-  if (!existsSync(TMP_ROOT)) return
-  const now = Date.now()
-  for (const entry of readdirSync(TMP_ROOT, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue
-    try {
-      if (now - statSync(join(TMP_ROOT, entry.name)).mtimeMs > STALE_MS) rmSync(join(TMP_ROOT, entry.name), { recursive: true, force: true })
-    } catch {
-      /* Windows 上偶发 EBUSY：临时区是 gitignore 的，留着无害 */
-    }
-  }
+  return pruneStaleDirs(TMP_ROOT)
 }
 
 /** 一个一次性 dshHome（`<dshHome>/xuanshu` 是 dataDir，`<dshHome>/skills` 是 skill 扫描根）。 */

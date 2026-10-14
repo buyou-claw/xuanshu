@@ -200,9 +200,13 @@ export function failureOf(finish) {
 /**
  * 跑一路候选（一次 `stream()` + 采集）。异常一律折算成 `{ok:false, error}`，
  * 让「某一路失败」不拖垮整次合参（S9 §6 的部分失败态）。
+ *
+ * `now` 是**可注入的时钟**（缺省 `Date.now`）：`elapsedMs` 是「这次调用花了多久」的**唯一**证据，
+ * 而拿 `Date.now()` 差值写的断言恒 ≥ 0、永远不会红 —— 断言台要能证否，就得让耗时可控。
+ * 调用方（`bestof.mjs`）把 `config.now` 透传进来，测试注入一个每次 +250ms 的计数时钟。
  */
-export async function runCandidate(ctx, { route, angle, question, signal, onText }) {
-  const started = Date.now()
+export async function runCandidate(ctx, { route, angle, question, signal, onText, now = Date.now }) {
+  const started = now()
   try {
     const result = await collectStream(
       requireLlm(ctx).stream({
@@ -216,24 +220,33 @@ export async function runCandidate(ctx, { route, angle, question, signal, onText
       { onText },
     )
     const failure = failureOf(result.finish)
-    if (failure !== undefined) return { ok: false, error: failure, usage: result.usage, elapsedMs: Date.now() - started }
-    if (result.text === '') return { ok: false, error: '这一路没有产出任何文本。', usage: result.usage, elapsedMs: Date.now() - started }
-    return { ok: true, text: result.text, usage: result.usage, elapsedMs: Date.now() - started }
+    if (failure !== undefined) return { ok: false, error: failure, usage: result.usage, elapsedMs: now() - started }
+    if (result.text === '') return { ok: false, error: '这一路没有产出任何文本。', usage: result.usage, elapsedMs: now() - started }
+    return { ok: true, text: result.text, usage: result.usage, elapsedMs: now() - started }
   } catch (error) {
-    return { ok: false, error: String(error?.message ?? error), elapsedMs: Date.now() - started }
+    return { ok: false, error: String(error?.message ?? error), elapsedMs: now() - started }
   }
 }
 
 /**
  * 从 judge 的一次返回里取判定（工具调用优先，正文 JSON 是降级路径）。
- * @returns {{mode: 'tool'|'prompt-json', raw?: string, error?: string}}
+ *
+ * **三种来源，三种说法**（ADR-0010：`mode` 记录的是**这次判定到底怎么来的**）：
+ *   - `'tool'` —— 模型真的调了 `submit_judgement`；
+ *   - `'prompt-json'` —— 没调工具，但正文里有可解析的 JSON（ADR-0010 的降级路径）；
+ *   - `'failed'` —— **既没调工具、正文也没有 JSON**：这次判定**没有来源**。
+ * 第三个档曾经报成 `'tool'`（`raw` 为空、`error` 写着「既没有调用…」），那是在记录里说一件
+ * 没发生的事 —— 与「打桩值不许写成实测值」同一条硬线。`'failed'` 本来就在客户端的联合类型里
+ * （`packages/xuanshu-client/src/client/bestof-api.ts:38`），所以不需要动接口面。
+ *
+ * @returns {{mode: 'tool'|'prompt-json'|'failed', raw?: string, error?: string}}
  */
 export function extractJudgementPayload(result) {
   const call = result.toolCalls?.find((entry) => entry.name === JUDGE_TOOL_NAME) ?? result.toolCalls?.[0]
   if (call !== undefined) return { mode: 'tool', raw: call.arguments ?? '' }
   const json = extractJsonObject(result.text ?? '')
   if (json === undefined) {
-    return { mode: 'tool', error: '模型既没有调用 submit_judgement，正文里也没有可解析的 JSON 对象。' }
+    return { mode: 'failed', error: '模型既没有调用 submit_judgement，正文里也没有可解析的 JSON 对象（这次判定没有来源，不按 tool 记）。' }
   }
   return { mode: 'prompt-json', raw: json }
 }
@@ -292,7 +305,10 @@ export function validateJudgement(parsed, ids) {
 export function judgeFrom(result, completionOrder) {
   const ids = [...completionOrder]
   const fallback = {
-    mode: 'tool',
+    // 这个 `mode` 是**兜底默认**，下面四条返回路径无一例外用 `payload.mode` 覆盖它
+    // （工具 / 正文 JSON / 没有来源 三种来源都要如实记）。缺省取最诚实的那个值：
+    // 「判官不可用」不是一次工具调用。
+    mode: 'failed',
     adoptedId: ids[0] ?? null,
     ranking: ids,
     error: '判官不可用，已按完成顺序排前。',

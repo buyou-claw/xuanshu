@@ -20,13 +20,27 @@ import type { SedimentApi, SedimentDraft, SedimentDraftAnswer, SedimentPuView, S
 export const CONSULT_SESSION_PREFIX = 'session-xs-consult-';
 
 /**
+ * 问事会话 id 的**完整判据**（与宿主**同源**：`packages/xuanshu-host/lib/consult/store.mjs`
+ * 的 `isConsultSessionId` 用的是同一条正则）。
+ *
+ * 为什么不能只判前缀：两份实现各判一半，就等于**没有判据** —— 「客户端认作问事会话、服务端拒绝」
+ * 的 id 可以存在（`session-xs-consult-a b`、`…/../`、`…%20` 这类都会让界面把沉淀按钮亮起来，
+ * 点下去才被服务端拒绝）。两边是独立产物（宿主包 / 客户端包），不共享代码，
+ * 所以靠**parity 用例**互锁：`tests/assembly/consult-session-id-parity.test.mjs`
+ * 拿同一组边界样例喂两边，断言逐例结论相同。
+ *
+ * **改动这条规则时，必须同步改宿主那一份并跑 parity 用例。**
+ */
+const CONSULT_SESSION_ID_RE = /^session-xs-consult-[A-Za-z0-9._-]+$/u;
+
+/**
  * 是不是问事会话。
- * 判据只有这一条：自铸 id 前缀。`meta` 里读不到分类（rc.2 的 meta 是闭集 7 字段，
+ * 判据只有这一条：自铸 id 的形状。`meta` 里读不到分类（rc.2 的 meta 是闭集 7 字段，
  * 额外键静默丢弃，`dsh-session/lib/index.js:1697-1710`），也不要为此新增会话事件类型
  * （会话会打不开，ADR-0009 第 6 条）。
  */
 export function isConsultSessionId(value: unknown): boolean {
-  return typeof value === 'string' && value.startsWith(CONSULT_SESSION_PREFIX) && value.length > CONSULT_SESSION_PREFIX.length;
+  return typeof value === 'string' && CONSULT_SESSION_ID_RE.test(value);
 }
 
 /* ───────────────────────── 2. 字数 ───────────────────────── */

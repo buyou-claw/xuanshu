@@ -30,9 +30,9 @@ const CANDIDATE_TEXTS = ['经典派：先看大方向。', '审慎派：先核�
 
 /**
  * 起一套宿主：consult（建会话）+ bestof（本票）+ 假 llm。
- * @param {object} options `judgePlan` 覆盖 judge 那一次调用的剧本
+ * @param {object} options `judgePlan` 覆盖 judge 那一次调用的剧本；`now` 注入候选耗时用的时钟
  */
-async function scene({ judgePlan, plans, price } = {}) {
+async function scene({ judgePlan, plans, price, now } = {}) {
   const sandbox = makeSandbox('bestof')
   roots.push(sandbox)
   const agents = fakeAgents()
@@ -60,7 +60,7 @@ async function scene({ judgePlan, plans, price } = {}) {
   })
   const consult = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir })
   const { session } = await consult['consult.create']({ pus: [] })
-  const bestof = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir, prices: price })
+  const bestof = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir, prices: price, now })
   return { sandbox, host, llm, consult, bestof, session }
 }
 
@@ -143,11 +143,27 @@ describe('bestof.run · 2 路并行（票面「首版 2 路并列流式，不带
     expect(record.rejected).toBe(false)
   })
 
-  it('两路 usage 各自记着（打桩值，不当实测值）', async () => {
-    const { bestof, session } = await scene()
+  it('两路 usage 各自记着（打桩值，不当实测值）+ 耗时由**注入时钟**确定', async () => {
+    // 原来的断言是 `elapsedMs >= 0` —— `Date.now()` 差恒非负，**永远不会红**，等于没断言。
+    // 改成：注入一个每次读数 +250ms 的计数时钟，耗时就变成可算的确定值。
+    // 调用次序是确定的：`record.candidates.map(async …)` 同步发起两路 → 两次 `now()` 记起点，
+    // 两次记终点（哪一路先结束都不影响「终点晚于两个起点」这个事实）→ 两路各读到 2 个刻度。
+    const STEP = 250
+    let clock = 0
+    const readings = []
+    const now = () => { clock += STEP; readings.push(clock); return clock }
+
+    const { bestof, session } = await scene({ now })
     const { state } = await runToEnd(bestof, { sessionId: session.sessionId, question: QUESTION })
+
     expect(state.candidates[0].usage).toEqual(STUB_USAGE)
     expect(state.candidates[1].usage).toEqual({ inputTokens: 800, outputTokens: 400, totalTokens: 1200 })
-    expect(state.candidates[0].elapsedMs).toBeGreaterThanOrEqual(0)
+
+    // 耗时的**确定性**期望值：2 个 STEP（值写死，不由被测实现反推 —— 否则又是恒真断言）。
+    expect(state.candidates[0].elapsedMs).toBe(2 * STEP)
+    expect(state.candidates[1].elapsedMs).toBe(2 * STEP)
+    // 并且确实是从注入的时钟读的（真钟不可能正好落在这个刻度序列上）。
+    expect(readings.length).toBeGreaterThanOrEqual(4)
+    expect(readings.every((value) => value % STEP === 0)).toBe(true)
   })
 })

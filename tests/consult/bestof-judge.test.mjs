@@ -66,8 +66,11 @@ describe('judge 负路径 · 回落完成顺序第一份（ADR-0010 第 2 条）
     const { bestof, session, sandbox } = await scene({ judgePlan: { text: '我觉得第一份更好一些。' } })
     const state = await runToEnd(bestof, session.sessionId)
 
-    expect(state.judge.mode).toBe('tool')
+    // 来源如实：**没有来源就报没有来源**（这条断言原来写的是 'tool' —— 它记录的是一次
+    // 没发生过的工具调用；ADR-0010 说 mode 记的是这次判定到底怎么来的）。
+    expect(state.judge.mode).toBe('failed')
     expect(state.judge.error).toMatch(/没有调用 submit_judgement/u)
+    expect(state.judge.error).toMatch(/没有来源/u)
     expect(state.judge.ranking).toEqual(['c1', 'c2'])
     expect(state.judge.adoptedId).toBe('c1')
     // C9：判官不给结论 ≠ 系统替人拍板。
@@ -124,6 +127,10 @@ describe('judge 负路径 · 回落完成顺序第一份（ADR-0010 第 2 条）
 
     expect(state.judge.ranking).toEqual(['c2', 'c1'])
     expect(state.judge.adoptedId).toBe('c2')
+    // 来源如实（ADR-0010：`mode` 记的是这次判定**到底怎么来的**）：既没调工具、正文也没有 JSON
+    // → 不能报 'tool'（那是说一件没发生的事），报 'failed' 并说明「没有来源」。
+    expect(state.judge.mode).toBe('failed')
+    expect(state.judge.error).toMatch(/没有来源/u)
   })
 })
 

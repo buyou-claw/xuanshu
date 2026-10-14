@@ -105,14 +105,33 @@ export function dateInZone(zone, now = new Date()) {
   return now.toISOString().slice(0, 10)
 }
 
+/**
+ * `Intl` 给的小时值 → `0..23`；认不出 → `null`。
+ *
+ * 为什么要单独一个函数：`hour12: false` 在某些 ICU/Node 组合上把**午夜给成 `"24"`**
+ * （与 `"0"` 是同一时刻）。原来那句话写成 `if (hour >= 0 && hour <= 23) return hour === 24 ? 0 : hour`，
+ * 那个 `hour === 24` **永远走不到** —— 判据里留一个不执行的表达式比缺一条还糟：
+ * 它看起来像「24 点已经处理过了」，而实际会掉到 UTC 兜底分支（本地 0 点被当成 UTC 0 点）。
+ * 拆出来之后这个分支可以被直接断言（`tests/rikke/store.test.mjs`）。
+ */
+export function normalizeHour(raw) {
+  // 「拿不到这个字段」与「字段是 0 点」不是一回事：`Number(null)`/`Number('')` 都是 0，
+  // 不挡住就会把「没读到小时」说成「本地 0 点」。空值一律 null，交给调用方的兜底分支。
+  if (raw === null || raw === undefined || raw === '') return null
+  const hour = Number(raw)
+  if (!Number.isInteger(hour)) return null
+  if (hour === 24) return 0
+  return hour >= 0 && hour <= 23 ? hour : null
+}
+
 /** 某个时区里的当前小时（0..23，整数；黄历的 `hour` 参数要的就是它）。认不出 → UTC 小时。 */
 export function hourInZone(zone, now = new Date()) {
   const fixed = parseFixedOffsetZone(zone)
   if (fixed !== null) return new Date(now.getTime() + fixed * 60_000).getUTCHours()
   try {
     const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: '2-digit', hour12: false }).formatToParts(now)
-    const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? '')
-    if (Number.isInteger(hour) && hour >= 0 && hour <= 23) return hour === 24 ? 0 : hour
+    const hour = normalizeHour(parts.find((part) => part.type === 'hour')?.value ?? '')
+    if (hour !== null) return hour
   } catch {
     /* 时区名不合法：落到 UTC */
   }

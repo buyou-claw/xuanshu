@@ -169,6 +169,8 @@ function addUsage(total, usage) {
 export function createBestOfMethods(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
   const prices = config.prices
+  // 候选耗时的时钟：缺省真钟；断言台注入计数时钟，好让 `elapsedMs` 能被证否（见 bestof-run.mjs）。
+  const now = typeof config.now === 'function' ? config.now : Date.now
   const consultStore = createConsultStore(dataDir)
   const store = createBestofStore(dataDir)
   /** 活记录（轮询读它）；进程重启后由 `store.findByRunId()` 冷查。 */
@@ -268,6 +270,7 @@ export function createBestOfMethods(ctx, config = {}) {
           angle: resolveAngles([candidate.angle])[0],
           question,
           signal,
+          now,
           // 流式回填：界面轮询 `bestof.state` 就能看到半成品（写盘节流在下面）。
           onText: (text) => {
             candidate.text = text
