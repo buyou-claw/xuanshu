@@ -24,10 +24,14 @@ export const PANEL_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', '
  */
 export const EXTRA_REGISTRATIONS = [
   { after: 'cang', names: ['shell.overlay'], cells: ['shell.overlay\u0000xuanshu-cang-drawer'] },
+  // 票 12：挂载账本抽屉（S8）——挂在 `consult` 那一对之后（票 12 的 install 排在票 10 之后）。
+  { after: 'consult', names: ['shell.overlay'], cells: ['shell.overlay\u0000xuanshu-mounts-drawer'] },
   {
     // 票 15（沉淀闭环）：**会话内区块**，不新增 main key / 侧栏行（S10 §1 D5 / F1）。
     // 入口在收尾条、草稿卡在 `turnTail`、通知落框架浮层 —— 三处都是加性 cell。
-    after: 'rikke',
+    // `after: 'workflow'`（不是 `rikke`）：`installSediment` 排在**最后**，
+    // 而票 16 的 workflow 那一对插在 rikke 之后 —— 顺序不符会被 `expectedRegisterNames()` 抓到。
+    after: 'workflow',
     names: ['conversation.composer.dock', 'conversation.chat.turnTail', 'shell.overlay'],
     cells: [
       'conversation.composer.dock\u0000xuanshu.sediment-entry',

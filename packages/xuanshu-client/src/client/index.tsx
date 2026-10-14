@@ -32,6 +32,7 @@
  * `createSedimentApi` + `createSedimentController`；写谱只在确认弹窗的 `[确认更新]` 之后发生。
  */
 import type { Context } from '@deepseek-ai/cordis';
+import { createElement as h } from 'react';
 
 import { createBaziApi } from './bazi-api.js';
 import { createBaziUiController } from './bazi-controller.js';
@@ -43,6 +44,8 @@ import { createDigaoApi } from './digao-api.js';
 import { createDigaoUiController } from './digao-controller.js';
 import { installDigao } from './digao.js';
 import { installMingpan } from './MingpanPanel.js';
+import { createMountsApi, createWorkspaceCatalog } from './mounts-api.js';
+import { createMountsController, installMounts, MountsSectionFor } from './mounts.js';
 import { installOnboarding } from './onboarding.js';
 import { OverviewIcon } from './OverviewIcon.js';
 import { OverviewPanel } from './OverviewPanel.js';
@@ -167,6 +170,16 @@ export function apply(ctx: Context): void {
         }
       : undefined;
 
+  // 票 12：临时挂载。数据面走宿主唯一新增的方法 `consult.setMounts`（含 `preview:true` 的只算不写）；
+  // 工作区清单走 DSH **客户端**服务 `ctx.workspaces.list`（只读投影，不新建 / 不改名 / 不删除）。
+  const mountsApi = createMountsApi(rpc);
+  const workspaceCatalog = createWorkspaceCatalog(ctx);
+  const mountsController = createMountsController({
+    api: mountsApi,
+    workspaces: () => workspaceCatalog.list(),
+    workspaceAvailable: workspaceCatalog.available,
+  });
+
   // 票 13：日课与底稿的数据面 + 各自的「人点才跑」控制器（概览的两张卡与两块面板共用同一份；
   // 生成 / 刷新只由按钮的 onClick 触发，apply 期一个请求都不发）。
   const rikke = createRikkeApi(rpc);
@@ -238,7 +251,19 @@ export function apply(ctx: Context): void {
   installOnboarding(rpc, baziDeps);
   installMingpan(rpc, baziDeps);
   // ⑦ 票 10：问事门厅（`consult`，order 30 = S15 给「书房」预约的那一档）。
-  installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
+  //    票 12 的挂载区作为**插槽**进这门厅（S8 §1：门厅的挂载入口开同一个抽屉），
+  //    所以门厅那边一行注册都不用改（`mountSlot` 缺席时退回票 10 的占位说明）。
+  installConsult(rpc, {
+    api: consultApi,
+    navigate,
+    openSession,
+    refreshSessions,
+    mountSlot: (session) => h(MountsSectionFor, { controller: mountsController, session }),
+  });
+  // ⑨ 票 12：挂载账本抽屉（S8）——`shell.overlay` 上的**一个** cell（没有面板、没有侧栏行）。
+  //    紧跟在 `installConsult` 之后：它是问事面的伴生抽屉，注册序与 `panel-surface.mjs` 的
+  //    `EXTRA_REGISTRATIONS`（after: 'consult'）一致。
+  installMounts(rpc, { api: mountsApi, workspaces: () => workspaceCatalog.list(), workspaceAvailable: workspaceCatalog.available });
 
   // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
   installDigao(rpc, { api: digao, navigate });
