@@ -1,0 +1,91 @@
+/**
+ * packages/xuanshu-host/lib/digao/llm.mjs — 底稿的**唯一** LLM 用途：把多段压成一段精简汇总（契约 §1）。
+ *
+ * 契约把边界写得很死：**LLM 只做「把多段压成一段精简汇总」这一步，骨架与来源标记不经过 LLM**。
+ * 所以这里只产出一段文本，产出后由 `skeleton.mjs` 放进 `## 摘要` 节；失败一律回落
+ * `{ok:false, reason}`，调用方据此标 `digest:'skeleton'`（契约 §4：降级必须可观察）。
+ *
+ * 形状出处（本机实装 0.2.0-rc.2，只读核对）：
+ *   - `ctx.llm.listProviders(): LlmProviderInfo[]`：`dsh-llm/lib/types/index.d.ts:272`；
+ *   - `ctx.llm.listModels(provider): Promise<LlmModelInfo[]>`：同文件 `:350`；
+ *   - `ctx.llm.stream(options): AsyncIterable<StreamChunk>`：同文件 `:412`；
+ *   - `GenerateOptions.messages: RequestMessage[]`，其中 `RequestUserInput = { role:'user', content, id?:never, source?:never }`
+ *     ——类型注释原文「a hand-built one-shot may include identity-free user inputs」
+ *     （`dsh-llm/lib/types/types.d.ts:468-475,489-501`），所以这里手搓一条**无身份**的 user 输入即可；
+ *   - `StreamChunk` 的文本增量为 `{ type:'text-delta', index, text }`（同文件 `:421-424`）。
+ */
+
+/** 摘要的长度上限（底稿是精简汇总；截断而不是超长占用）。 */
+const DIGEST_LIMIT = 600
+
+/** 精简汇总的提示词：只让它压缩，不让它发挥（输出直接进人读的底稿）。 */
+export const DIGEST_SYSTEM = '你是玄枢的底稿压缩器。把用户给的若干段自述压成一段中文精简汇总，'
+  + '只保留事实与人称一致的信息，不要新增、不要推测、不要分点、不要标题，长度不超过 200 字。'
+
+/** 拼给模型的素材：每段带来源标记（与正文同一套标记，便于模型知道哪句来自哪里）。 */
+export function digestPrompt(segments) {
+  return segments.map((segment) => `【来源：${segment.source} ${segment.name}】\n${segment.text}`).join('\n\n')
+}
+
+/** 从一个 zone 名挑首个可用 provider/model；挑不出 → null。 */
+async function pickRoute(llm) {
+  if (typeof llm.listProviders !== 'function' || typeof llm.listModels !== 'function') return null
+  let providers
+  try {
+    providers = llm.listProviders()
+  } catch {
+    return null
+  }
+  for (const provider of Array.isArray(providers) ? providers : []) {
+    const id = typeof provider?.id === 'string' ? provider.id : typeof provider === 'string' ? provider : ''
+    if (id === '') continue
+    try {
+      const models = await llm.listModels(id)
+      const model = Array.isArray(models) ? models.find((entry) => typeof entry?.id === 'string' && entry.id !== '') : undefined
+      if (model !== undefined) return { provider: id, model: model.id }
+    } catch {
+      /* 这条路由问不出模型：试下一条 */
+    }
+  }
+  return null
+}
+
+/**
+ * 调 LLM 压一段。
+ *
+ * **绝不抛**：`ctx.llm` 不在场 / 没路由 / 流里报错 / 返回空文本 —— 全都折算成 `{ok:false, reason}`，
+ * 由调用方标 `digest:'skeleton'`（契约 §4）。这里**不自旋、不重试**（底稿每天有一次定时刷新，
+ * 重试留给下一次刷新更诚实）。
+ *
+ * @param {object} ctx 宿主上下文
+ * @param {{segments: object[]}} input 已摊平的段（`{source,name,text}`）
+ * @returns {Promise<{ok: boolean, text: string, reason: string|null, route?: object}>}
+ */
+export async function condenseWithLlm(ctx, { segments }) {
+  const llm = ctx?.llm
+  if (!llm || typeof llm.stream !== 'function') return { ok: false, text: '', reason: 'ctx.llm 不可得（宿主没装 LLM 服务）' }
+  if (!Array.isArray(segments) || segments.length === 0) return { ok: false, text: '', reason: '没有可压缩的段' }
+
+  const route = await pickRoute(llm)
+  if (route === null) return { ok: false, text: '', reason: 'ctx.llm 里没有可用的 provider/model 路由' }
+
+  let collected = ''
+  try {
+    const stream = llm.stream({
+      provider: route.provider,
+      model: route.model,
+      system: DIGEST_SYSTEM,
+      messages: [{ role: 'user', content: [{ type: 'text', text: digestPrompt(segments) }] }],
+    })
+    for await (const chunk of stream) {
+      if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') collected += chunk.text
+      if (chunk?.type === 'error') return { ok: false, text: '', reason: `LLM 流报错：${String(chunk.error ?? chunk.message ?? '未知')}`, route }
+    }
+  } catch (error) {
+    return { ok: false, text: '', reason: `LLM 调用失败：${String(error?.message ?? error)}`, route }
+  }
+
+  const collapsed = collected.replace(/\s+/g, ' ').trim()
+  if (collapsed === '') return { ok: false, text: '', reason: 'LLM 返回了空文本', route }
+  return { ok: true, text: collapsed.length > DIGEST_LIMIT ? `${collapsed.slice(0, DIGEST_LIMIT)}…` : collapsed, reason: null, route }
+}

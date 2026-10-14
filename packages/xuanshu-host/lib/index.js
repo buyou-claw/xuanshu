@@ -29,6 +29,12 @@
  * 出盘只走上面那个 `xuanshuHorosa` 服务的 `baziBirth()`，落 `<dataDir>/bazi/snapshot.json`
  * 与 `<dataDir>/pus/_base/{manifest.md,bazi.md,summary.md}`（契约 §1 的文件契约）。
  *
+ * 票 13 追加（`lib/digao/**` + `lib/rikke/**`）：底稿（纯派生、**无** write/update：`digao.refresh`
+ * 整文件原子重写，LLM 只压一段、失败标 `digest:'skeleton'`）与日课（`rikke.generate` 只走本地
+ * horosa 的 `horosa_cn_huangli`，落 `<dataDir>/rikke/<YYYY-MM-DD>.json`），外加**两条 daily
+ * 定时任务**（日课 07:30 / 底稿刷新 03:30，`ctx.schedule.create` + 玄枢自铸会话 id）。
+ * `ctx.schedule` 的提供者不在 shipped 组合里，由本包的 `cordis.patch.yml` 插 schedule 三行带上。
+ *
  * 每个 DSH API 调用的出处（本机实装 0.2.0-rc.2，均为只读核对）：
  *   - `ctx.get(name, strict?)`：`@deepseek-ai/cordis/lib/types/reflect.d.ts:16`；
  *     非严格第二参数 `false` 的官方用法见
@@ -59,8 +65,11 @@ import { fileURLToPath } from 'node:url';
 import { createBaziMethods } from './bazi/service.mjs';
 import { createCangMethods } from './cang/service.mjs';
 import { createConsultMethods } from './consult/service.mjs';
+import { createDigaoMethods } from './digao/service.mjs';
 import { installHorosa } from './horosa/service.mjs';
 import { createPuMethods, installPuSkill } from './pu/service.mjs';
+import { DEFAULT_TIME_ZONE, installDailyTasks } from './rikke/daily-tasks.mjs';
+import { baseZone, createRikkeMethods } from './rikke/service.mjs';
 import { installRpc } from './rpc.mjs';
 
 /** cordis 插件名（= 包名 = 补丁行 id，契约 §0）。 */
@@ -381,6 +390,9 @@ function registerReportCommand(ctx, config) {
  * 插件主体：建数据目录 + 写装配报告 + 注册报告命令。
  * 任何失败都只记日志，绝不抛出——装配失败会让整个 profile 起不来，
  * 而本插件的失败不该有那种权重（契约 §6 隔离与卫生）。
+ *
+ * 自票 13 起本函数仍是**同步立刻返回**（票 01 的纪律）：两条 daily 定时任务走
+ * `ctx.inject(['schedule'], …)` 注册 —— 依赖就绪才回调，注册失败最多记一条 warn，绝不拖垮装配。
  * @param ctx - cordis 宿主上下文。
  * @param config - 补丁行的 config；可选 `dataDir` 覆盖数据目录（测试用）。
  */
@@ -411,12 +423,13 @@ export function apply(ctx, config) {
     log.warn('horosa 底座装配失败（已兜住）：%C', String(error?.message ?? error));
   }
 
-  // 总装配：把宿主侧能力挂到同一条 `/xuanshu` RPC 通道上（票 09 谱 / 票 14 藏 / 票 08 八字）。
-  // 这三组方法各自的**实现**与断言台早就落地了，缺的只是「有人把它们接上」这一步——
-  // 面板注册（客户端 `installPuPanel` / `installCangClient`）与本处是同一次装配的两半。
+  // 总装配：把宿主侧能力挂到同一条 `/xuanshu` RPC 通道上（票 09 谱 / 票 14 藏 / 票 08 八字 / 票 13 底稿·日课）。
+  // 这四组方法各自的**实现**与断言台早就落地了，缺的只是「有人把它们接上」这一步——
+  // 面板注册（客户端 `installPuPanel` / `installCangClient` / 票 13 的两张卡）与本处是同一次装配的两半。
   // 数据目录与装配报告同源（`resolveDataDir`），避免报告与数据各写一处。
+  let dataDir;
   try {
-    const dataDir = resolveDataDir(resolveDshHome(softGet(ctx, 'profileContext'), []), config);
+    dataDir = resolveDataDir(resolveDshHome(softGet(ctx, 'profileContext'), []), config);
     installPuSkill(ctx);
     installRpc(ctx, {
       ...createPuMethods(ctx, { dataDir }),
@@ -429,8 +442,53 @@ export function apply(ctx, config) {
       // 会话走 `ctx.agents.create` + 自铸 id 前缀 + 专用 cwd（`<dataDir>/consult`），
       // 清单落旁挂文件；底座谱/可选谱的读面分别只走票 08 的 `bazi.basePu` 与票 09 的 `pu.*`。
       ...createConsultMethods(ctx, { dataDir }),
+      // 票 13：底稿（纯派生，没有 write/update）与日课（本地黄历 + 底座）。
+      ...createDigaoMethods(ctx, { dataDir }),
+      ...createRikkeMethods(ctx, { dataDir }),
     });
   } catch (error) {
-    log.warn('谱 / 藏 / 八字 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
+    log.warn('谱 / 藏 / 八字 / 底稿 / 日课 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
+  }
+
+  // 票 13：两条 daily 定时任务（日课 07:30 / 底稿刷新 03:30）。
+  //
+  // **为什么用 `ctx.inject(['schedule'], …)` 而不是在这里直接 await**：
+  // `schedule` 行由本包的 `cordis.patch.yml` 插进树里，它在运行时树中的**挂载时刻晚于本行** ——
+  // apply 里直接 `ctx.get('schedule')` 会拿到 `undefined`（本票最恶劣的失败形态：boot 不报错、
+  // 任务永远没建，而界面只是「未回传」）。`ctx.inject` 是 cordis 的「依赖就绪再回调」，
+  // 它**不会**让本行 pending（票 01 那条 `inject = []` 的纪律仍然成立：拿不到 schedule 也只是少两条任务）。
+  //
+  // 注册本身是异步的（建会话 + 建任务都是 Promise 面），所以这里不阻塞 apply 返回；
+  // 装配完成的判据是「树挂完」，而注入回调就在这一波里触发。
+  if (dataDir !== undefined) {
+    try {
+      if (typeof ctx.inject === 'function') {
+        ctx.inject(['schedule'], (scoped) => {
+          const timeZone = safeBaseZone(dataDir);
+          installDailyTasks({ ctx: scoped, dataDir, timeZone })
+            .then((daily) => {
+              log.info('票13 定时任务：日课=%s（%s）、底稿刷新=%s（%s）',
+                daily.rikke.ok ? daily.rikke.task.id : '未建', daily.rikke.reused ? '复用' : '新建',
+                daily.digao.ok ? daily.digao.task.id : '未建', daily.digao.reused ? '复用' : '新建');
+              for (const note of daily.notes) log.warn('票13 %s', note);
+            })
+            .catch((error) => log.warn('票13 定时任务注册失败（已兜住）：%C', String(error?.message ?? error)));
+          return () => {};
+        });
+      } else {
+        log.warn('票13 ctx.inject 不可得：跳过两条 daily 定时任务的注册（其余装配不受影响）。');
+      }
+    } catch (error) {
+      log.warn('票13 定时任务注册失败（已兜住）：%C', String(error?.message ?? error));
+    }
+  }
+}
+
+/** 底座里登记的时区（读快照；任何异常都退回缺省，只是「今天是哪一天」的兜底，不影响主流程）。 */
+function safeBaseZone(dataDir) {
+  try {
+    return baseZone(dataDir);
+  } catch {
+    return DEFAULT_TIME_ZONE;
   }
 }
