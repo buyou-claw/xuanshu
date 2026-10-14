@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 
 import type { ConsultApi, ConsultDefaults, ConsultMessage, ConsultSummary, MountRef } from './consult-api.js';
-import { contextSummary, initialSelection, nudgeNeeded, shortConsultId, toggleSelection } from './consult-model.js';
+import { contextSummary, initialSelection, nudgeNeeded, openConsultSession, shortConsultId, toggleSelection } from './consult-model.js';
 import type { HistoryRange } from './consult-model.js';
 import {
   XsConsultAsk,
@@ -47,6 +47,12 @@ export interface ConsultInstallDeps {
   /** 面板导航（去谱管理 / 回总览）。 */
   navigate: (target: PanelNavTarget) => void;
   /**
+   * `ctx.sessions.refresh()` —— 打开宿主建的会话**之前**刷一次客户端会话目录
+   * （`ISessions.refresh`，幂等、单飞）。为什么必须先刷：见 `openConsultSession` 的文档。
+   * 不可用时给 `undefined`（界面按可读失败处理）。
+   */
+  refreshSessions?: () => Promise<void>;
+  /**
    * `ctx.uiWorkspace.openSession(sessionId)` —— **只导航、不创建**（`dsh-api-facts.md` §6.2）。
    * 不可用时给 `undefined`：界面照实说明「DSH 会话面板不可用」并把 sessionId 显示出来，
    * 而不是假装切过去了。
@@ -73,7 +79,7 @@ function errorText(error: unknown): string {
  * @param props - 数据面、导航与静态预置。
  * @returns 门厅 / 历史子页节点。
  */
-export function ConsultPanel({ api, navigate, openSession, preloaded }: ConsultPanelProps) {
+export function ConsultPanel({ api, navigate, openSession, refreshSessions, preloaded }: ConsultPanelProps) {
   const [view, setView] = useState<'lobby' | 'history'>(preloaded?.view ?? 'lobby');
   const [defaults, setDefaults] = useState<Loadable<ConsultDefaults>>(
     preloaded?.defaults === undefined ? { kind: 'loading' } : { kind: 'ready', value: preloaded.defaults },
@@ -88,7 +94,8 @@ export function ConsultPanel({ api, navigate, openSession, preloaded }: ConsultP
   const [busy, setBusy] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>(undefined);
   const [nudge, setNudge] = useState(false);
-  const [pendingOpen, setPendingOpen] = useState<string | undefined>(undefined);
+  /** 「打开那个会话」失败的可读原因（不可用 / 目录刷新失败 / 导航抛错）——绝不静默。 */
+  const [openError, setOpenError] = useState<string | undefined>(undefined);
   const [reader, setReader] = useState<ReaderState>({ kind: 'idle' });
   const [query, setQuery] = useState('');
   const [range, setRange] = useState<HistoryRange>('all');
@@ -133,10 +140,17 @@ export function ConsultPanel({ api, navigate, openSession, preloaded }: ConsultP
   const mountsNow: MountRef[] = [];
   const summary = contextSummary({ selected, mounts: mountsNow });
 
-  /** 进入正式对话：切到 DSH 原生 `conversation` 面板（只导航）。 */
+  /**
+   * 进入正式对话：**先刷客户端会话目录、再切到 DSH 原生 `conversation` 面板**（只导航）。
+   *
+   * 二者顺序不可颠倒、失败也不许静默 —— 编排在 `openConsultSession`（可单测），
+   * 这里只负责把结果搬进界面（失败时给可读错误条）。
+   */
   const enterConversation = (sessionId: string): void => {
-    setPendingOpen(sessionId);
-    openSession?.(sessionId);
+    setOpenError(undefined);
+    void openConsultSession({ sessionId, refresh: refreshSessions, open: openSession }).then((result) => {
+      if (!result.ok) setOpenError(result.message);
+    });
   };
 
   /** 开一次问事：create →（有话才）send → openSession。 */
@@ -212,6 +226,12 @@ export function ConsultPanel({ api, navigate, openSession, preloaded }: ConsultP
         </button>
       </header>
 
+      {openError === undefined ? null : (
+        <div className="xs-consult__error" data-xuanshu-error="open-session" role="alert">
+          <p>{openError}</p>
+        </div>
+      )}
+
       {view === 'lobby' ? (
         <>
           <section className="xs-consult__block" data-xuanshu-block="landing">
@@ -274,12 +294,6 @@ export function ConsultPanel({ api, navigate, openSession, preloaded }: ConsultP
               onContinue={() => { enterConversation(latest.sessionId); }}
               onHistory={() => { setView('history'); }}
             />
-          )}
-
-          {pendingOpen === undefined || openSession !== undefined ? null : (
-            <p className="xs-consult__note" data-xuanshu-note="open-session-unavailable">
-              {`DSH 会话面板不可用：会话已建好（${shortConsultId(pendingOpen)}），请在侧栏工作区里打开它。`}
-            </p>
           )}
         </>
       ) : null}

@@ -175,3 +175,60 @@ export function filterHistory(
 export function roleLabel(role: 'user' | 'assistant'): string {
   return role === 'user' ? '你' : 'AI';
 }
+
+/** 打开会话的结果：`ok` 或一份**可读失败**（界面必须显示出来，不许静默）。 */
+export type OpenSessionResult =
+  | { ok: true }
+  | { ok: false; reason: 'unavailable' | 'refresh-failed' | 'open-failed'; message: string };
+
+/**
+ * 「打开那个会话」的编排：**先刷目录、再导航**，失败一律返回可读原因。
+ *
+ * 为什么不是一句 `openSession(id)` 就完事（实证见 `dsh-api-facts.md` 附录 F）：
+ *   - `openSession(id)` 内部直接 `retain(id, {source:'mainView'})`，**没有 try/catch**
+ *     （`dsh-client-ui-workspace/lib/client.js:821-823,973`）；
+ *   - `retain` 对**不在客户端会话目录里**的 id **同步抛** `unknown session`
+ *     （`dsh-api-session-controller/.../sessions/manager.js:63-71`）；
+ *   - 我们的会话是**宿主半**用 `ctx.agents.create` 建的，它只靠 `api-session/added` 推送进目录，
+ *     而**推送与 RPC 回包的到达顺序没有被证明有序** —— 所以「RPC 一返回就开」不可靠。
+ * 先 `refresh()`（幂等、单飞，拉一次 `session.list`，含还没落盘的活会话）再开，是官方同款做法
+ * （`dsh-client-ui-schedule/lib/client.js:6762-6764` 打开宿主建的会话前先确认它在目录里）。
+ *
+ * @param options - 会话 id + 两个注入面（都可缺席：缺席按可读失败处理，不假装成功）。
+ * @returns `{ok:true}` 或 `{ok:false, reason, message}`；**不抛**。
+ */
+export async function openConsultSession(options: {
+  sessionId: string;
+  refresh?: () => Promise<void>;
+  open?: (sessionId: string) => void;
+}): Promise<OpenSessionResult> {
+  const { sessionId, refresh, open } = options;
+  // 失败文案一律带上短 id：会话是**已经建好**的，人要能自己找到它（回不到会话 ≠ 白建）。
+  const tail = `会话已建好（${shortConsultId(sessionId)}）`;
+  if (open === undefined) {
+    return { ok: false, reason: 'unavailable', message: `${tail}，但 DSH 会话面板不可用：请在侧栏工作区里打开它。` };
+  }
+  if (refresh !== undefined) {
+    try {
+      await refresh();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        reason: 'refresh-failed',
+        message: `${tail}，但刷新 DSH 会话目录失败：${reason}。请重试，或在侧栏工作区里打开它。`,
+      };
+    }
+  }
+  try {
+    open(sessionId);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      reason: 'open-failed',
+      message: `${tail}，但 DSH 会话面板没能打开：${reason}。请重试，或在侧栏工作区里打开它。`,
+    };
+  }
+  return { ok: true };
+}

@@ -581,6 +581,36 @@ function filterHistory(items, query, range = "all", now = /* @__PURE__ */ new Da
 function roleLabel(role) {
   return role === "user" ? "你" : "AI";
 }
+async function openConsultSession(options) {
+  const { sessionId, refresh, open } = options;
+  const tail = `会话已建好（${shortConsultId(sessionId)}）`;
+  if (open === void 0) {
+    return { ok: false, reason: "unavailable", message: `${tail}，但 DSH 会话面板不可用：请在侧栏工作区里打开它。` };
+  }
+  if (refresh !== void 0) {
+    try {
+      await refresh();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        reason: "refresh-failed",
+        message: `${tail}，但刷新 DSH 会话目录失败：${reason}。请重试，或在侧栏工作区里打开它。`
+      };
+    }
+  }
+  try {
+    open(sessionId);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      reason: "open-failed",
+      message: `${tail}，但 DSH 会话面板没能打开：${reason}。请重试，或在侧栏工作区里打开它。`
+    };
+  }
+  return { ok: true };
+}
 
 // src/client/consult-views.tsx
 var import_react3 = require("react");
@@ -1005,7 +1035,7 @@ var import_jsx_runtime5 = require("react/jsx-runtime");
 function errorText(error) {
   return error instanceof Error ? error.message : String(error);
 }
-function ConsultPanel({ api, navigate, openSession, preloaded }) {
+function ConsultPanel({ api, navigate, openSession, refreshSessions, preloaded }) {
   const [view, setView] = (0, import_react4.useState)(preloaded?.view ?? "lobby");
   const [defaults, setDefaults] = (0, import_react4.useState)(
     preloaded?.defaults === void 0 ? { kind: "loading" } : { kind: "ready", value: preloaded.defaults }
@@ -1020,7 +1050,7 @@ function ConsultPanel({ api, navigate, openSession, preloaded }) {
   const [busy, setBusy] = (0, import_react4.useState)(false);
   const [createError, setCreateError] = (0, import_react4.useState)(void 0);
   const [nudge, setNudge] = (0, import_react4.useState)(false);
-  const [pendingOpen, setPendingOpen] = (0, import_react4.useState)(void 0);
+  const [openError, setOpenError] = (0, import_react4.useState)(void 0);
   const [reader, setReader] = (0, import_react4.useState)({ kind: "idle" });
   const [query, setQuery] = (0, import_react4.useState)("");
   const [range, setRange] = (0, import_react4.useState)("all");
@@ -1054,8 +1084,10 @@ function ConsultPanel({ api, navigate, openSession, preloaded }) {
   const mountsNow = [];
   const summary = contextSummary({ selected, mounts: mountsNow });
   const enterConversation = (sessionId) => {
-    setPendingOpen(sessionId);
-    openSession?.(sessionId);
+    setOpenError(void 0);
+    void openConsultSession({ sessionId, refresh: refreshSessions, open: openSession }).then((result) => {
+      if (!result.ok) setOpenError(result.message);
+    });
   };
   const start = (plain = false) => {
     const text = question.trim();
@@ -1127,6 +1159,7 @@ function ConsultPanel({ api, navigate, openSession, preloaded }) {
         }
       )
     ] }),
+    openError === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-consult__error", "data-xuanshu-error": "open-session", role: "alert", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { children: openError }) }),
     view === "lobby" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "landing", children: [
         /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { "data-xuanshu-note": "lobby-what", children: "一次问事 = 勾选谱 → 说事 →（可选）多 AI 合参 → 结束沉淀" }),
@@ -1198,8 +1231,7 @@ function ConsultPanel({ api, navigate, openSession, preloaded }) {
             setView("history");
           }
         }
-      ),
-      pendingOpen === void 0 || openSession !== void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "open-session-unavailable", children: `DSH 会话面板不可用：会话已建好（${shortConsultId(pendingOpen)}），请在侧栏工作区里打开它。` })
+      )
     ] }) : null,
     view === "history" && reader.kind === "idle" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
       XsConsultHistoryList,
@@ -4821,8 +4853,12 @@ function apply(ctx) {
   const baziDeps = { api: bazi, controller: baziController, navigate };
   const consultApi = createConsultApi(rpc);
   const uiWorkspace = ctx.uiWorkspace;
+  const sessionCatalog = ctx.sessions;
   const openSession = typeof uiWorkspace?.openSession === "function" ? (sessionId) => {
     uiWorkspace.openSession(sessionId);
+  } : void 0;
+  const refreshSessions = typeof sessionCatalog?.refresh === "function" ? async () => {
+    await sessionCatalog.refresh?.();
   } : void 0;
   const injected = () => ({
     navigate,
@@ -4861,7 +4897,7 @@ function apply(ctx) {
   installCangClient(rpc);
   installOnboarding(rpc, baziDeps);
   installMingpan(rpc, baziDeps);
-  installConsult(rpc, { api: consultApi, navigate, openSession });
+  installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
 }
 		// 包体中途执行过 module.exports = __toCommonJS(...)，上面的 exports 已过期；
 		// 必须重新读取 module.exports，逐个补拷会漏掉将来的新导出。

@@ -126,14 +126,29 @@ export function apply(ctx: Context): void {
   const baziDeps = { api: bazi, controller: baziController, navigate };
 
   // 票 10：问事门厅的数据面 + 「进入正式对话」的导航面。
-  // `openSession` 只**导航**（`dsh-api-facts.md` §6.2：它不创建）；
-  // 拿不到 `uiWorkspace` 时给 `undefined`，门厅照实说明并把 sessionId 显示出来（fail-soft）。
+  // `openSession` 只**导航**（`dsh-api-facts.md` §6.2：它不创建）；拿不到 `uiWorkspace` 时给
+  // `undefined`，门厅照实说明并给可读失败（fail-soft，不假装切过去了）。
+  //
+  // **先刷目录、再导航**：`openSession(id)` 内部直接 `retain(id)` 且没有 try/catch
+  // （`dsh-client-ui-workspace/lib/client.js:821-823,973`），而 `retain` 对不在客户端会话目录里的
+  // id 同步抛 `unknown session`（`dsh-api-session-controller/.../sessions/manager.js:63-71`）；
+  // 宿主建的会话只靠 `api-session/added` 推送进目录，推送与 RPC 回包的到达顺序**未被证明有序**。
+  // `ISessions.refresh()` 幂等、单飞，拉一次 `session.list`（含未落盘的活会话）。
+  // 客户端 `ctx.sessions` 是 `ISessions`，与宿主 `SessionStore` **同名不同物**（facts §6.3）——
+  // 类型桩里还没有这一面，故在此就地收窄一个最小形状（不动 `types/shims.d.ts`，那是作用域外）。
   const consultApi = createConsultApi(rpc);
   const uiWorkspace = ctx.uiWorkspace;
+  const sessionCatalog = (ctx as unknown as { sessions?: { refresh?: () => Promise<void> } }).sessions;
   const openSession =
     typeof uiWorkspace?.openSession === 'function'
       ? (sessionId: string): void => {
           uiWorkspace.openSession(sessionId);
+        }
+      : undefined;
+  const refreshSessions =
+    typeof sessionCatalog?.refresh === 'function'
+      ? async (): Promise<void> => {
+          await sessionCatalog.refresh?.();
         }
       : undefined;
 
@@ -185,5 +200,5 @@ export function apply(ctx: Context): void {
   installCangClient(rpc);
   installOnboarding(rpc, baziDeps);
   installMingpan(rpc, baziDeps);
-  installConsult(rpc, { api: consultApi, navigate, openSession });
+  installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
 }

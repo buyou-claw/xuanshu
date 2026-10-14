@@ -21,6 +21,7 @@ import {
   initialSelection,
   isConsultSession,
   nudgeNeeded,
+  openConsultSession,
   roleLabel,
   shortConsultId,
   toggleSelection,
@@ -156,5 +157,78 @@ describe('票 10 · 历史列表的分组、过滤与元信息（S7 §2.1 / §3�
   it('消息角色标签：user → 你，assistant → AI（S7 §2.2 的正文行）', () => {
     expect(roleLabel('user')).toBe('你')
     expect(roleLabel('assistant')).toBe('AI')
+  })
+})
+
+/* ───────────────────────── 「打开那个会话」的编排（不许静默失败） ───────────────────────── */
+
+describe('票 10 · 打开宿主建的会话：先 refresh 再 openSession，失败要可读', () => {
+  /**
+   * 为什么这条编排值得单独成函数并逐条断言（`dsh-api-facts.md` 附录 F 的实证）：
+   * `openSession(id)` 内部直接 `retain(id)` 且**没有 try/catch**（`dsh-client-ui-workspace/lib/client.js:821-823,973`），
+   * 而 `retain` 对不在客户端会话目录里的 id **同步抛** `unknown session`
+   * （`dsh-api-session-controller/.../sessions/manager.js:63-71`）；宿主建的会话只靠
+   * `api-session/added` 推送进目录，推送与 RPC 回包的到达顺序**没有被证明有序**。
+   * 所以「RPC 一返回就 openSession」不可靠，而失败又绝不能静默 —— 用户会以为按钮坏了。
+   */
+  const sessionId = 'session-xs-consult-9f8e7d6c-0000-4000-8000-000000000000'
+
+  it('顺序：refresh 必须在 openSession **之前**被调用（各恰一次），成功即 ok', async () => {
+    const order = []
+    const result = await openConsultSession({
+      sessionId,
+      refresh: async () => { order.push('refresh') },
+      open: (id) => { order.push(`open:${id}`) },
+    })
+    expect(order).toEqual(['refresh', `open:${sessionId}`])
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('refresh 失败：不硬闯 openSession，返回可读失败（含短 id，让用户能自己找到会话）', async () => {
+    const order = []
+    const result = await openConsultSession({
+      sessionId,
+      refresh: async () => { throw new Error('session.list 超时') },
+      open: () => { order.push('open') },
+    })
+    expect(order, 'refresh 失败时不该再调 openSession（那正是 unknown session 抛错的那条路）').toEqual([])
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('refresh-failed')
+    expect(result.message).toContain('session.list 超时')
+    expect(result.message).toContain('#consult-9f8e7d6c')
+  })
+
+  it('openSession 抛 unknown session：返回可读失败而不是静默吞掉', async () => {
+    const result = await openConsultSession({
+      sessionId,
+      refresh: async () => {},
+      open: () => { throw new Error('sessions.retain: unknown session session-xs-consult-9f8e7d6c') },
+    })
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('open-failed')
+    expect(result.message).toContain('unknown session')
+    expect(result.message).toContain('#consult-9f8e7d6c')
+  })
+
+  it('DSH 会话面板不可用（open 缺席）：仍给可读失败 + 短 id，且不去刷目录', async () => {
+    const order = []
+    const result = await openConsultSession({
+      sessionId,
+      refresh: async () => { order.push('refresh') },
+    })
+    expect(order).toEqual([])
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('unavailable')
+    expect(result.message).toContain('#consult-9f8e7d6c')
+  })
+
+  it('客户端不自己造 id：open 拿到的就是传进来的那一个', async () => {
+    const seen = []
+    await openConsultSession({
+      sessionId: 'session-xs-consult-abc',
+      refresh: async () => {},
+      open: (id) => { seen.push(id) },
+    })
+    expect(seen).toEqual(['session-xs-consult-abc'])
   })
 })

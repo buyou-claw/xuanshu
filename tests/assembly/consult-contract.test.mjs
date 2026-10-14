@@ -230,7 +230,13 @@ describe('票 10 · 安装函数在无 document 的 Node 里安全', () => {
     }
   }
 
-  const deps = () => ({ api: createConsultApi({ connection: { rpc: { async call() { return { ok: true, value: {} } } } } }), navigate: () => {}, openSession: () => {} })
+  const deps = () => ({
+    api: createConsultApi({ connection: { rpc: { async call() { return { ok: true, value: {} } } } } }),
+    navigate: () => {},
+    openSession: () => {},
+    // 打开宿主建的会话前要刷一次客户端会话目录（顺序由 consult-model 的用例钉住）。
+    refreshSessions: async () => {},
+  })
 
   it('当前环境确实没有 document（证明这条断言不是在 jsdom 里空转）', () => {
     expect(typeof document).toBe('undefined')
@@ -243,7 +249,8 @@ describe('票 10 · 安装函数在无 document 的 Node 里安全', () => {
       { name: 'main', key: CONSULT_ID, id: undefined, order: undefined, label: undefined },
       { name: 'sidebar.panellist', key: undefined, id: CONSULT_ID, order: CONSULT_ORDER, label: CONSULT_LABEL },
     ])
-    expect(Object.keys(registrations[0].inject()).sort()).toEqual(['api', 'navigate', 'openSession'])
+    // 注入面必须把「打开会话」那两件事都带上：refreshSessions（刷目录）+ openSession（只导航）。
+    expect(Object.keys(registrations[0].inject()).sort()).toEqual(['api', 'navigate', 'openSession', 'refreshSessions'])
   })
 
   it('`openSession` 可以缺席（DSH 工作区面不可用）：安装仍成立，由界面据实说明', () => {
