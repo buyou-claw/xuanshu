@@ -6185,9 +6185,9 @@ function createSedimentApi(ctx) {
 }
 
 // src/client/sediment-model.ts
-var CONSULT_SESSION_PREFIX2 = "session-xs-consult-";
+var CONSULT_SESSION_ID_RE = /^session-xs-consult-[A-Za-z0-9._-]+$/u;
 function isConsultSessionId(value) {
-  return typeof value === "string" && value.startsWith(CONSULT_SESSION_PREFIX2) && value.length > CONSULT_SESSION_PREFIX2.length;
+  return typeof value === "string" && CONSULT_SESSION_ID_RE.test(value);
 }
 function countWords(text) {
   return String(text ?? "").replace(/\s+/gu, "").length;
