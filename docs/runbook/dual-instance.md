@@ -40,7 +40,9 @@ node scripts/isolation/startup.mjs --mode headless
 #   并断言 $DSH_HOME/xuanshu/assembly-report.json 是本次新写出的。
 ```
 
-**`--mode web` 在本票还起不来**（会以退出码 2 明确拒绝，不是静默失败）：web 界面要 `@deepseek-ai/dsh-web-app` bundle，而票 01 的装配契约把它划给**票 07 · 首页替换**（实测提前接进 `dsh.profile.bundles` 会让装配树多出 4 条 `unrecognized Loader tree carrier` 错误行）。命令怎么拼、环境怎么设，用 `--mode env` 取出来交给装了那个 bundle 的实例：
+票 07 已接入 `@deepseek-ai/dsh-web-app`：`node scripts/isolation/startup.mjs --mode web` 启动浏览器实例。`plan.env.XUANSHU_SURFACE` 选择 web/headless；profile 补丁仅启用对应的启动解析器。CLI 的 `web` 位置参数是 profile 名的快捷写法，所以自定义 profile 必须使用 `dsh --profile xuanshu --port 19388 --no-open`，不能追加 `web`。真实 web 冒烟验证认证跳转、cookie 和含 `__DSH_BOOT__` 的 HTTP 200 页面。完整装配 S1 仍有四条上游 preset carrier schema 错误，记录在开发进度中。
+
+命令和环境可通过 env 模式取出：
 
 ```powershell
 node scripts/isolation/startup.mjs --mode env               # 打出一串 $env:... 赋值 + 启动命令

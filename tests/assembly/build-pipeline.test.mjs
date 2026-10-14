@@ -16,7 +16,7 @@
  *   # 写盘只发生在**全部自检通过之后**（见 scripts/build-client.mjs 的 main 与文件头「写盘时序」）。
  */
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -69,8 +69,13 @@ describe('build-client（预编译产物管线）', () => {
     cpSync(join(REPO_ROOT, 'packages', 'xuanshu-client'), pkgDir, {
       recursive: true,
       // node_modules 是 pnpm 的符号链接丛林：只带 esbuild 一条解析路径，不要整棵树
-      filter: (src) => !src.includes('node_modules') || /node_modules[\\/](\.pnpm|esbuild)$/.test(src),
+      filter: (src) => !src.includes('node_modules'),
     })
+    // pnpm links are relative to the source package; copying them into this
+    // fixture would point at a non-existent .pnpm tree. Link the resolved tool.
+    mkdirSync(join(pkgDir, 'node_modules'), { recursive: true })
+    symlinkSync(realpathSync(join(REPO_ROOT, 'packages', 'xuanshu-client', 'node_modules', 'esbuild')),
+      join(pkgDir, 'node_modules', 'esbuild'), 'junction')
     // 票 07 起客户端源码**直接引用** docs 下的 token 取值（assets README §4 的「接线」，
     // 不复制第二份）：这个脚手架模拟的是「仓库根」，所以必须把那条相对路径也摆出来，
     // 否则构建会先死在解析失败上、测不到「产物与源码不同步」这条断言。

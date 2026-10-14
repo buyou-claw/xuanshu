@@ -46,6 +46,11 @@ const BIN_NAME = 'xuanshu'
 const NO_APP_OVERLAY = [
   { id: 'headless-runner', disabled: true },
   { id: 'headless-startup', disabled: true },
+  // The browser parser's --help does not provide webStartup. This probe
+  // measures the service tree without binding a browser server.
+  { id: 'web-startup', disabled: true },
+  { id: 'webserver', disabled: true },
+  { id: 'connection', disabled: true },
 ]
 
 function parseArgs(argv) {

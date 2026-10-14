@@ -3,6 +3,7 @@
 
 # 依赖与构建产物
 node_modules/
+.pnpm-store/
 dist/
 
 # profile 在仓库内就地安装产生的依赖树（分发包只提交 package.json / cordis.patch.yml / lockfile）

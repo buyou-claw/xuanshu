@@ -256,7 +256,7 @@ withProfileGate('玄枢隔离验收 · 启动器 CLI 前提（web 模式 / 单�
     // spawn 前拒绝（exit 2、点名缺哪个 bundle）。票 07 把它接进 bundles（首页替换 = 自我总览），
     // 这条前提的**真值翻了**：同一个 `--mode web` 必须放行 —— profile 门 ok、webBundle.available=true、
     // 顶层退出码不再等于环境门。断言翻转的是真值，不是把断言删掉（不然「接没接上」就没人看了）。
-    const result = runStartupCli([...base, '--mode', 'web', '--timeout-ms', '30000'])
+    const result = runStartupCli([...base, '--mode', 'web', '--dry-run'])
     expectSingleJsonDoc(result)
     expect(result.json.exitCode, `--mode web 不再该以环境门（2）退出\n${result.raw()}`).not.toBe(2)
     const profile = result.json.checks.profile
@@ -269,11 +269,13 @@ withProfileGate('玄枢隔离验收 · 启动器 CLI 前提（web 模式 / 单�
     // 其余环境门不受它影响。
     expect(result.json.checks.home.ok).toBe(true)
     expect(result.json.checks.cli.ok).toBe(true)
-    // 到了真 spawn 那一步：报告里必须有 spawn 字段（R3 的报告语义在 web 路径上也成立）。
-    // 命令形态的已知缺口（`--profile <name> web …` 会被 CLI 根解析器拒成 too many arguments）见
-    // 下面那条 test；这里只钉「preflight 不再替 CLI 拒绝」，不把 CLI 自己的退出码当环境门。
-    expect(result.json.spawn, '放行后必须真的尝试 spawn 一次').toBeDefined()
-    expect(result.json.spawn.attempted).toBe(true)
+    // This test observes preflight. The next smoke test starts the actual server;
+    // a bounded long-running server exits with the timeout environment code.
+    expect(result.json.spawn).toBeUndefined()
+    expect(result.json.plan.command).toContain('--profile')
+    expect(result.json.plan.command).toContain(PROFILE)
+    expect(result.json.plan.command).not.toContain('web')
+    expect(result.json.plan.env.XUANSHU_SURFACE).toBe('web')
   }, 300_000)
 
   it('web 真起冒烟：真 CLI 起 web → HTTP 200 + HTML 含 __DSH_BOOT__ 注入标记（票 07 装配级）', () => {
