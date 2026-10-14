@@ -15,12 +15,12 @@ GitHub issue/PR 的 open 状态不等于未实现：票 01–06 的代码在本�
 | 05 setup 一键安装 | —（PR #7） | 实现完成 |
 | 06 horosa 集成 + 八字出盘 | #8（PR #9） | 实现完成 |
 | 07 首页替换 = 自我总览四卡 | #10 | 实现完成 |
-| 08 八字冷启动向导 + 底座谱 + 命盘卡点亮 | #11 | **实现中**（宿主半 / 客户端半并行） |
+| 08 八字冷启动向导 + 底座谱 + 命盘卡点亮 | #11 | 实现完成（宿主半 + 客户端半已并入集成分支） |
 | 09 谱管理（创建/查看/编辑/级别） | #12 | 实现完成，总装配接线已收口 |
-| 10 问事闭环 | #13 | 待 08 |
+| 10 问事闭环 | #13 | **实现中**（宿主半 / 客户端半并行） |
 | 11 多 AI 合参（Best-of-N） | #14 | 待 10 |
 | 12 临时挂载（预算裁剪披露） | #15 | 待 10 |
-| 13 底稿 + 日课（定时任务） | #16 | 待 08、09 |
+| 13 底稿 + 日课（定时任务） | #16 | **实现中**（宿主半 / 客户端半并行） |
 | 14 藏库（指针 + 签 + 跳转） | #17 | 实现完成，总装配接线已收口 |
 | 15 沉淀闭环（导出汇总 → 确认写谱） | #18 | 待 09、10 |
 | 16 工作流创建向导 | #19 | 待 10 |
@@ -63,6 +63,32 @@ GitHub issue/PR 的 open 状态不等于未实现：票 01–06 的代码在本�
 （该 bundle 只有三行 `time-context` / `schedule` / `ui-schedule`；base/web/headless 三份 shipped patch 里全无这三个 id）；
 S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带来的新行不会被判失败。
 
+### 4. 票 08 落地（宿主半 + 客户端半）
+
+两个实现者各在自己的 worktree / 分支上并行，按 `.scratch/notes/t08-contract.md` 冻结的接口面工作，
+完成后合并进集成分支（`c1ba8d4` / `4cd5eb7`）。
+
+- **宿主半**：`lib/bazi/{constants,timezone,cities,snapshot,base-pu,cast,service}.mjs` 六个 `bazi.*` 方法；
+  城市大库 6792 条 / 664 KB（从上游 `citiesFull.json` 裁剪，生成脚本 + 来源留档）；
+  `pu/repository.mjs` 新增底座保留路径 `readBase`/`writeBase`（用户 slug 语义一字未动）；
+  `tz-lookup`（**CC0-1.0**）作为运行时依赖。`tests/bazi` 67 条，零网络零真实 horosa。
+- **客户端半**：`onboarding.tsx` / `onboarding-steps.tsx` / `MingpanPanel.tsx` / `cities.ts` / `bazi-api.ts` /
+  `bazi-controller.ts` 等；概览四卡改**数据驱动**（命盘卡按 `bazi.status` 给四态 + 快照）；
+  `tests/assembly/onboarding-*.test.mjs` 67 条。
+
+**Lead 补的两处（跨票/冻结面，属集成分支）**：
+
+1. **真太阳时口径行**：票 06 的接缝只回传分类结果，`basis.trueSolar` 一直缺席。该版本信封**没有**结构化的
+   真太阳时字段 —— 看起来像的 `data.bazi.directTime` 的时间部分**随 `timeAlg` 变**（实测 0 档 `12:02:34` /
+   1 档 `12:00:00` / 3 档 `12:05:56`），拿它当真太阳时会在 2/3 的口径选择下报出一个**不是**真太阳时的值。
+   真太阳时只在口径文本的 `真太阳时：<时间戳>` 行里，且三档恒为同一值。故新增
+   `extractTrueSolarTime`（锚定该行，读不出返回 `null`）并串到 `buildBasis`/`buildSnapshot`/`cast`/底座谱。
+   **绝不拿经度自己算**（「录入层不换算」是 spec 明文）。反证与三条负路径已进 `tests/horosa/p4`。
+2. **`xuanshuHorosa.callTool(name, args, options)`**：票 06 的服务面只有 `baziBirth` 一个业务方法，
+   而票 13 的日课要 `horosa_cn_huangli` —— 缺这一口，日课就只能去走「自己起 serve / 直连 8765」
+   那条被明令禁止的第二通道。新方法语义与 `baziBirth` 同族（取端点 → `mcpCallTool` → 原样回信封，
+   **不替你起 serve**），`ok` = 「调用走到了信封」而非「业务成功」。
+
 ## 验证边界
 
 完整装配五条 seam 的当前结果：S2（进程内启动）、S3（客户端产物）、S4（上游行基线）、S5（真实 CLI 报告）通过；
@@ -75,11 +101,23 @@ S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带�
 当前全仓基线（`node ./node_modules/vitest/vitest.mjs run`）：
 
 ```
-Test Files  1 failed | 31 passed | 1 skipped (33)
-Tests       2 failed | 310 passed | 8 skipped (320)
+Test Files  1 failed | 39 passed | 1 skipped (41)
+Tests       2 failed | 448 passed | 8 skipped (458)
 ```
 
-那 2 条失败即上述 S1。**基线之外的红色一律是本轮引入的回归。**
+那 2 条失败即上述 S1（`S1 装配树` 与由它连带的 `CLI 退出码为 0`）。**基线之外的红色一律是本轮引入的回归。**
+
+**S5 的面依赖（已修）**：票 07 在 profile 补丁层加了三行 `disabled` 开关后，web 面（`XUANSHU_SURFACE` 未设）
+由 `web-startup` 拥有 cmdlineArgs，它把 `--help` 当自己的用法打印后**在挂载插件树之前就 exit 0** ——
+于是 apply 根本没跑、报告写不出来，S5 判红。同一 profile 同一命令只差这一个环境变量：未设 → FAIL；
+headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → 插件 apply → 报告写出」，所以
+`checkS5` 的探针**显式取 headless 面**（`runCli` 增 `extraEnv` 形参），web 面的启动本身由
+`tests/isolation` 的 web 冒烟覆盖。**这是修探针口径，不是放宽断言。**
+
+**首次冷启动的 serve 会慢到分钟级**（uv 首次要装 46 个包）：那段时间里 `baziBirth` / `callTool`
+会拿到 `ECONNREFUSED`（`code:'mcp-call-failed'`）。宿主侧**刻意不在业务方法里自旋等 serve**
+（避免与 autostart 抢着起、也避免把服务的生命周期职责漏进业务层）——失败如实回报，由界面给可读理由。
+热启动实测 ≈ 22s（票 06 数据），属正常路径。
 
 本机 PATH 中的 `pnpm` shim 指向已不存在的 executable。所有构建 / vitest / tsc 通过现有 Node 直接执行；
 需要 pnpm 时照 `scripts/install-profile.mjs` 内部的调用方式走。未修改机器全局配置。
