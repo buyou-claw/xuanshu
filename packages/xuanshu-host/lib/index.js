@@ -71,6 +71,7 @@ import { createPuMethods, installPuSkill } from './pu/service.mjs';
 import { DEFAULT_TIME_ZONE, installDailyTasks } from './rikke/daily-tasks.mjs';
 import { baseZone, createRikkeMethods } from './rikke/service.mjs';
 import { installRpc } from './rpc.mjs';
+import { createWorkflowMethods } from './workflow/service.mjs';
 
 /** cordis 插件名（= 包名 = 补丁行 id，契约 §0）。 */
 export const name = 'xuanshu-host';
@@ -428,8 +429,10 @@ export function apply(ctx, config) {
   // 面板注册（客户端 `installPuPanel` / `installCangClient` / 票 13 的两张卡）与本处是同一次装配的两半。
   // 数据目录与装配报告同源（`resolveDataDir`），避免报告与数据各写一处。
   let dataDir;
+  let dshHome;
   try {
-    dataDir = resolveDataDir(resolveDshHome(softGet(ctx, 'profileContext'), []), config);
+    dshHome = resolveDshHome(softGet(ctx, 'profileContext'), []);
+    dataDir = resolveDataDir(dshHome, config);
     installPuSkill(ctx);
     installRpc(ctx, {
       ...createPuMethods(ctx, { dataDir }),
@@ -445,9 +448,12 @@ export function apply(ctx, config) {
       // 票 13：底稿（纯派生，没有 write/update）与日课（本地黄历 + 底座）。
       ...createDigaoMethods(ctx, { dataDir }),
       ...createRikkeMethods(ctx, { dataDir }),
+      // 票 16：工作流创建向导（新会话 + seed 自动调 `/writing-skills`；导出 skill 落
+      // `<dshHome>/skills/<kebab>/SKILL.md`）。`dshHome` 与数据目录同源，skill 才落对地方。
+      ...createWorkflowMethods(ctx, { dataDir, dshHome }),
     });
   } catch (error) {
-    log.warn('谱 / 藏 / 八字 / 底稿 / 日课 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
+    log.warn('谱 / 藏 / 八字 / 底稿 / 日课 / 工作流 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
   }
 
   // 票 13：两条 daily 定时任务（日课 07:30 / 底稿刷新 03:30）。

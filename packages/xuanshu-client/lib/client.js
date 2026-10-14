@@ -4831,6 +4831,250 @@ function installRikke(ctx, deps) {
   );
 }
 
+// src/client/workflow/workflow-api.ts
+var WORKFLOW_ENDPOINTS = {
+  create: "workflow.create",
+  list: "workflow.list",
+  exportSkill: "workflow.exportSkill"
+};
+function createWorkflowApi(ctx) {
+  return {
+    create: (payload, signal) => rpcCall(ctx, WORKFLOW_ENDPOINTS.create, payload ?? {}, signal),
+    list: (signal) => rpcCall(ctx, WORKFLOW_ENDPOINTS.list, {}, signal),
+    exportSkill: (payload, signal) => rpcCall(ctx, WORKFLOW_ENDPOINTS.exportSkill, payload, signal)
+  };
+}
+
+// src/client/workflow/WorkflowPanel.tsx
+var import_react13 = require("react");
+
+// src/client/workflow/workflow-model.ts
+var WORKFLOW_ID = "workflow";
+var WORKFLOW_LABEL = "工作流";
+var WORKFLOW_ORDER = 70;
+var WORKFLOW_BOUNDARY_NOTE = "工作流不是谱：它不会出现在谱列表里；它是可复用的 skill 与一次跑通过的会话。";
+var WORKFLOW_EXPORT_HINT = "导出一个 skill，落点由宿主决定：<DSH home>/skills/<工作流名>/SKILL.md（无需你指定路径）。";
+var WORKFLOW_HUMAN_JUDGE_NOTE = "跑没跑通由你判定 —— 玄枢不显示通过 / 失败，也不给评分。";
+var WORKFLOW_OUT_OF_SCOPE_NOTE = "「测试 / 反向优化 / 复用」的细流程不在本次范围。";
+var WORKFLOW_LOCAL_NOTE = "产物与会话都在本地：数据目录与 DSH 的 skills / sessions 目录，可整体拷走。";
+function splitWorkflows(items) {
+  const running = [];
+  const exported = [];
+  for (const item of items ?? []) {
+    if (typeof item?.exportedAt === "string" && item.exportedAt !== "") exported.push(item);
+    else running.push(item);
+  }
+  return { running, exported };
+}
+function exportBlockers(draft) {
+  const blockers = [];
+  const name = (draft?.name ?? "").trim();
+  const description = (draft?.description ?? "").trim();
+  const content = (draft?.content ?? "").trim();
+  if (name === "") blockers.push("给这个工作流起一个名字（kebab-case，例如 weekly-industry-digest）。");
+  else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(name)) blockers.push("名字要 kebab-case：小写字母、数字、单连字符（中文名请另给一个英文名）。");
+  if (description === "") blockers.push("写一句 description（DSH 把它当必填，缺了会忽略这个 skill）。");
+  if (content === "") blockers.push("把会话里跑通的那套步骤写进正文。");
+  return blockers;
+}
+function workflowSubtitle(item) {
+  if (typeof item.exportedAt === "string" && item.exportedAt !== "") return `已导出 · ${item.exportedAt.slice(0, 10)}`;
+  return "进行中（等你判定）";
+}
+
+// src/client/workflow/WorkflowPanel.tsx
+var import_jsx_runtime16 = require("react/jsx-runtime");
+function errorText7(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function initialView3(preloaded) {
+  if (preloaded === void 0) return { kind: "loading" };
+  if (Array.isArray(preloaded)) return preloaded.length === 0 ? { kind: "empty" } : { kind: "ready", items: preloaded };
+  return { kind: "error", message: preloaded.error };
+}
+function WorkflowPanel({ api, navigate, preloaded }) {
+  const seeded = preloaded !== void 0;
+  const [view, setView] = (0, import_react13.useState)(() => initialView3(preloaded));
+  const [busy, setBusy] = (0, import_react13.useState)(false);
+  const [createError, setCreateError] = (0, import_react13.useState)(void 0);
+  const [draft, setDraft] = (0, import_react13.useState)({ sessionId: "", name: "", description: "", content: "" });
+  const [exportError, setExportError] = (0, import_react13.useState)(void 0);
+  const [exported, setExported] = (0, import_react13.useState)(void 0);
+  (0, import_react13.useEffect)(() => {
+    if (seeded) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const listed = await api.list();
+        if (cancelled) return;
+        setView(listed.items.length === 0 ? { kind: "empty" } : { kind: "ready", items: listed.items });
+      } catch (error) {
+        if (!cancelled) setView({ kind: "error", message: errorText7(error) });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [api, seeded]);
+  const onCreate = () => {
+    setBusy(true);
+    setCreateError(void 0);
+    void (async () => {
+      try {
+        const created = await api.create({ seed: draft.content.trim() === "" ? void 0 : draft.content.trim() });
+        setDraft((current) => ({ ...current, sessionId: created.sessionId }));
+        navigate("conversation");
+      } catch (error) {
+        setCreateError(errorText7(error));
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+  const blockers = exportBlockers(draft);
+  const onExport = () => {
+    setBusy(true);
+    setExportError(void 0);
+    setExported(void 0);
+    void (async () => {
+      try {
+        const result = await api.exportSkill({
+          sessionId: draft.sessionId,
+          name: draft.name.trim(),
+          description: draft.description.trim(),
+          content: draft.content.trim()
+        });
+        setExported(result);
+      } catch (error) {
+        setExportError(errorText7(error));
+      } finally {
+        setBusy(false);
+      }
+    })();
+  };
+  const { running, exported: exportedItems } = splitWorkflows(view.kind === "ready" ? view.items : []);
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "xs-workflow", "aria-label": WORKFLOW_LABEL, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("header", { className: "xs-workflow__head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h1", { className: "xs-workflow__title", children: WORKFLOW_LABEL }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", className: "xs-workflow__create", onClick: onCreate, disabled: busy, children: busy ? "创建中…" : "创建工作流" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-workflow__note", children: WORKFLOW_BOUNDARY_NOTE }),
+    createError !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("p", { className: "xs-workflow__error", role: "alert", children: [
+      "创建工作流失败：",
+      createError
+    ] }) : null,
+    view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-workflow__hint", children: "正在读工作流列表…" }) : null,
+    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("p", { className: "xs-workflow__error", role: "alert", children: [
+      "工作流列表读不出来：",
+      view.message
+    ] }) : null,
+    view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-workflow__hint", children: "还没有工作流：点上面的「创建工作流」说清要求，用会话里的 coding 工具真跑一遍，你觉得跑通了再来导出。" }) : null,
+    running.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-workflow__group", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h2", { className: "xs-workflow__groupTitle", children: "进行中" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("ul", { className: "xs-workflow__list", children: running.map((item) => /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("li", { className: "xs-workflow__item", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "xs-workflow__name", children: item.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "xs-workflow__sub", children: workflowSubtitle(item) }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", className: "xs-workflow__open", onClick: () => {
+          setDraft((current) => ({ ...current, sessionId: item.sessionId }));
+          navigate("conversation");
+        }, children: "打开会话" }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", className: "xs-workflow__pick", onClick: () => setDraft((current) => ({ ...current, sessionId: item.sessionId, name: current.name })), children: "选它导出" })
+      ] }, item.id)) })
+    ] }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-workflow__group", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h2", { className: "xs-workflow__groupTitle", children: "判定与导出" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-workflow__rule", children: WORKFLOW_HUMAN_JUDGE_NOTE }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-workflow__hint", children: WORKFLOW_EXPORT_HINT }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "xs-workflow__field", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "会话" }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("input", { value: draft.sessionId, onChange: (event) => setDraft((current) => ({ ...current, sessionId: event.target.value })), placeholder: "session-xs-workflow-…" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "xs-workflow__field", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "名字" }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("input", { value: draft.name, onChange: (event) => setDraft((current) => ({ ...current, name: event.target.value })), placeholder: "weekly-industry-digest" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "xs-workflow__field", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "description" }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("input", { value: draft.description, onChange: (event) => setDraft((current) => ({ ...current, description: event.target.value })), placeholder: "一句话说清这个工作流做什么" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "xs-workflow__field", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "正文" }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("textarea", { value: draft.content, onChange: (event) => setDraft((current) => ({ ...current, content: event.target.value })), rows: 6, placeholder: "把会话里跑通的那套步骤写进来（SKILL.md 的正文）" })
+      ] }),
+      blockers.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("ul", { className: "xs-workflow__blockers", children: blockers.map((reason) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("li", { children: reason }, reason)) }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", className: "xs-workflow__export", onClick: onExport, disabled: busy || blockers.length > 0, children: "我认为跑通了 → 导出 skill" }),
+      exportError !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("p", { className: "xs-workflow__error", role: "alert", children: [
+        "导出失败：",
+        exportError
+      ] }) : null,
+      exported !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("p", { className: "xs-workflow__done", children: [
+        "已导出 ",
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("code", { children: exported.name }),
+        " → ",
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("code", { children: exported.path }),
+        "（在 DSH 技能中心里可见，来源 user-dsh）"
+      ] }) : null
+    ] }),
+    exportedItems.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-workflow__group", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h2", { className: "xs-workflow__groupTitle", children: "已导出" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("ul", { className: "xs-workflow__list", children: exportedItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("li", { className: "xs-workflow__item", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "xs-workflow__name", children: item.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "xs-workflow__sub", children: workflowSubtitle(item) })
+      ] }, item.id)) })
+    ] }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-workflow__note", children: WORKFLOW_OUT_OF_SCOPE_NOTE }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-workflow__note", children: WORKFLOW_LOCAL_NOTE })
+  ] });
+}
+function WorkflowIcon({ size = 20 }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("rect", { x: "3.5", y: "4", width: "7", height: "6", rx: "1.5" }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("rect", { x: "13.5", y: "14", width: "7", height: "6", rx: "1.5" }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("path", { d: "M7 10v4a3 3 0 0 0 3 3h3.5" })
+  ] });
+}
+function installWorkflowStyle() {
+  if (typeof document === "undefined") return;
+  const id = "xuanshu-workflow-style";
+  if (document.getElementById(id) !== null) return;
+  const style = document.createElement("style");
+  style.id = id;
+  style.textContent = [
+    ".xs-workflow{padding:20px 24px;color:var(--dsh-text-primary,inherit);font:inherit}",
+    ".xs-workflow__head{display:flex;align-items:center;justify-content:space-between;gap:12px}",
+    ".xs-workflow__title{margin:0;font-size:18px}",
+    ".xs-workflow__note,.xs-workflow__hint,.xs-workflow__rule{margin:8px 0;opacity:.8;font-size:13px}",
+    ".xs-workflow__error{color:var(--dsh-danger,#c33)}",
+    ".xs-workflow__group{margin-top:18px;border-top:1px solid var(--dsh-border,#0002);padding-top:12px}",
+    ".xs-workflow__groupTitle{margin:0 0 8px;font-size:14px;opacity:.85}",
+    ".xs-workflow__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}",
+    ".xs-workflow__item{display:flex;align-items:center;gap:10px}",
+    ".xs-workflow__sub{opacity:.7;font-size:12px}",
+    ".xs-workflow__field{display:flex;gap:8px;align-items:center;margin:6px 0}",
+    ".xs-workflow__field input,.xs-workflow__field textarea{flex:1}",
+    ".xs-workflow__blockers{margin:6px 0;padding-left:18px;font-size:12px;opacity:.85}",
+    ".xs-workflow__done{margin:8px 0;font-size:13px}"
+  ].join("\n");
+  document.head.appendChild(style);
+}
+function installWorkflowPanel(ctx, deps) {
+  installWorkflowStyle();
+  ctx.slots.inject(
+    "main",
+    () => ctx.slots.register(
+      { name: "main", key: WORKFLOW_ID, inject: () => ({ ...deps }) },
+      WorkflowPanel
+    )
+  );
+  ctx.slots.inject(
+    "sidebar.panellist",
+    () => ctx.slots.register(
+      { name: "sidebar.panellist", id: WORKFLOW_ID, order: WORKFLOW_ORDER, label: WORKFLOW_LABEL },
+      WorkflowIcon
+    )
+  );
+}
+
 // src/client/style.ts
 var STYLE_TAG_ID = "xuanshu-client/overview.css";
 var OVERVIEW_CSS = `
@@ -5731,6 +5975,7 @@ function apply(ctx) {
   const rikkeController = createRikkeUiController(rikke);
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
+  const workflow = createWorkflowApi(rpc);
   const injected = () => ({
     navigate,
     mainPanels,
@@ -5777,6 +6022,7 @@ function apply(ctx) {
   installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
   installDigao(rpc, { api: digao, navigate });
   installRikke(rpc, { api: rikke, navigate });
+  installWorkflowPanel(rpc, { api: workflow, navigate });
 }
 		// 包体中途执行过 module.exports = __toCommonJS(...)，上面的 exports 已过期；
 		// 必须重新读取 module.exports，逐个补拷会漏掉将来的新导出。
