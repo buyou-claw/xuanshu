@@ -238,9 +238,14 @@ describe('票 12 · 注册面单一事实来源（panel-surface.mjs）', () => {
     expect(names.indexOf('shell.overlay'), '藏抽屉应在挂载抽屉之前').toBeLessThan(pairEnd)
     expect(names[pairEnd], '挂载抽屉必须紧跟 consult 那一对').toBe('shell.overlay')
     expect(names[pairEnd - 1]).toBe('sidebar.panellist')
-    // 两个 shell.overlay cell 并存，谁也没挤掉谁
-    expect(names.filter((name) => name === 'shell.overlay')).toHaveLength(2)
+    // `shell.overlay` 是**共享槽**：藏抽屉、挂载账本、票 15 的沉淀通知、票 11 的合参浮层都在上面。
+    // 所以只断言「我们那一格在、且在正确的相对位置」，不数**全局**个数
+    // （全局计数会被后加的票无端打红 —— 票 11/15 合并时就发生过一次）。
+    expect(names[pairEnd]).toBe('shell.overlay')
+    expect(expectedCells()).toContain('shell.overlay\u0000xuanshu-mounts-drawer')
     expect(expectedCells()).toContain('shell.overlay\u0000xuanshu-cang-drawer')
+    const mountsCell = 'shell.overlay\u0000xuanshu-mounts-drawer'
+    expect(expectedCells().filter((cell) => cell === mountsCell)).toHaveLength(1)
   })
 
   it('产出的 `lib/client.js` 里真有这个 cell 与边界句（不是只改了源码）', () => {
