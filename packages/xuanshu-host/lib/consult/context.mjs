@@ -20,6 +20,14 @@ import { join } from 'node:path'
 export const SOURCE_MARK_BASE_PU = '【来源：底座谱】'
 export const SOURCE_MARK_DIGAO = '【来源：底稿】'
 
+/** 临时挂载的段标记（票 12）：`【来源：挂载 工作区「打印车间」】`。 */
+export function sourceMarkMount(label) {
+  return `【来源：挂载 ${label}】`
+}
+
+/** 挂载披露块的标记（S8 §5 步骤 7：注入内容里必须能看到「砍了多少、为什么砍」）。 */
+export const SOURCE_MARK_MOUNT_DISCLOSURE = '【来源：临时挂载·披露】'
+
 /** 勾选谱的段标记：`【来源：谱 <name>】`。 */
 export function sourceMarkPu(name) {
   return `【来源：谱 ${name}】`
@@ -53,10 +61,15 @@ function summaryLine(summary) {
 
 /**
  * 装配首轮注入的正文（纯函数）。
- * @param {{dataDir: string, basePu: object|null, digao: string|null, selected?: Array<{slug: string, pu?: object, error?: string}>}} input
+ *
+ * `mounts`（票 12）是 `buildMountPreview()` 的产物：**已经在读 + 裁之后**，这里只负责装文本。
+ * `mounts` 缺省 / 没有层时**一个字符都不加** —— 没有挂载的会话，注入文本与票 10 逐字节相同。
+ *
+ * @param {{dataDir: string, basePu: object|null, digao: string|null,
+ *          selected?: Array<{slug: string, pu?: object, error?: string}>, mounts?: object}} input
  * @returns {string}
  */
-export function buildConsultContext({ dataDir, basePu, digao, selected = [] }) {
+export function buildConsultContext({ dataDir, basePu, digao, selected = [], mounts }) {
   const blocks = [
     [
       '【玄枢·问事上下文】',
@@ -115,5 +128,51 @@ export function buildConsultContext({ dataDir, basePu, digao, selected = [] }) {
     ].join('\n'))
   }
 
+  // ④ 临时挂载（票 12）：**只在真有挂载时**才追加 —— 没有挂载的会话输出与票 10 逐字节相同。
+  for (const block of buildMountBlocks(mounts)) blocks.push(block)
+
   return `${blocks.join('\n\n')}\n`
+}
+
+/**
+ * 挂载段的文本装配（票 12；S8 §2.1④ / §5 步骤 7）。
+ *
+ * 两块：
+ *   1. **披露块**：这次挂了几层、共多少字、预算多少、纳入几层、裁了多少、为什么 ——
+ *      「砍了多少、为什么砍」必须在文本里能读到，不能只留在界面上；
+ *   2. **逐层正文**：只装**纳入了的段**；被裁掉的段按设计稿补一行「此处裁去 N 字」，
+ *      整层丢弃的层只出现在披露块里（**不静默截断、也不静默消失**）。
+ *
+ * @param {object|undefined} mounts - `buildMountPreview()` 的结果。
+ * @returns {string[]} 块（每块之间空一行）。
+ */
+function buildMountBlocks(mounts) {
+  const layers = Array.isArray(mounts?.layers) ? mounts.layers : []
+  if (layers.length === 0) return []
+  const out = []
+
+  const lines = [
+    SOURCE_MARK_MOUNT_DISCLOSURE,
+    mounts.notice,
+    ...(Array.isArray(mounts.notes) ? mounts.notes.map((note) => `· ${note}`) : []),
+  ]
+  for (const layer of layers) {
+    const kept = layer.kept ? `已纳入 ${layer.keptChars} / ${layer.chars} 字` : '未纳入本次上下文'
+    lines.push(`· ${layer.head ?? layer.label}：${kept}${layer.clipped ? '（已按段边界裁剪）' : ''}${layer.reason === undefined ? '' : ` —— ${layer.reason}`}`)
+  }
+  out.push(lines.join('\n'))
+
+  for (const layer of layers) {
+    if (!layer.kept) continue
+    const parts = [sourceMarkMount(layer.head ?? layer.label)]
+    if (typeof layer.hint === 'string' && layer.hint !== '') parts.push(layer.hint)
+    for (const segment of layer.segments ?? []) {
+      parts.push(`── ${segment.label} ──`, String(segment.text).trimEnd())
+    }
+    const cut = (layer.droppedSegments ?? []).filter((item) => item.reason === '超预算未纳入')
+    const cutChars = cut.reduce((sum, item) => sum + (Number.isFinite(item.chars) ? item.chars : 0), 0)
+    if (cutChars > 0) parts.push(`（此处裁去 ${cutChars} 字：${cut.map((item) => item.label).join('、')}）`)
+    out.push(parts.join('\n'))
+  }
+  return out
 }
