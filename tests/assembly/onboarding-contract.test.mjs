@@ -26,6 +26,7 @@ import { createBaziUiController } from '../../packages/xuanshu-client/src/client
 import { installMingpan } from '../../packages/xuanshu-client/src/client/MingpanPanel.tsx'
 import { installOnboarding } from '../../packages/xuanshu-client/src/client/onboarding.tsx'
 import {
+  DIGAO_ID,
   MINGPAN_ID,
   MINGPAN_LABEL,
   MINGPAN_ORDER,
@@ -34,6 +35,7 @@ import {
   ONBOARDING_ORDER,
   PANEL_ID,
   PANEL_ORDER,
+  RIKKE_ID,
 } from '../../packages/xuanshu-client/src/client/panel.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -44,8 +46,13 @@ const ARTIFACT = join(REPO_ROOT, 'packages', 'xuanshu-client', 'lib', 'client.js
 const DSH_MAIN_KEYS = ['conversation', 'plugins', 'schedules']
 const DSH_SIDEBAR_IDS = ['plugins', 'schedules']
 
-/** 票 08 之后玄枢的全部 main 注册（顺序有意义，见下）。 */
-const EXPECTED_MAIN_KEYS = ['overview', 'pus', 'cang', ONBOARDING_ID, MINGPAN_ID]
+/**
+ * 票 08 之后玄枢的全部 main 注册（顺序有意义，见下）。
+ *
+ * 票 13 机械扩容：底稿（`digao`）与日课（`rikke`）两个 key 追加在 `mingpan` 之后，
+ * **断言语义未变**（仍是「全部注册、纯加性、`overview` 在最前」）。
+ */
+const EXPECTED_MAIN_KEYS = ['overview', 'pus', 'cang', ONBOARDING_ID, MINGPAN_ID, DIGAO_ID, RIKKE_ID]
 
 /* ───────────────────────── 产物物化（运行时真实路径） ───────────────────────── */
 
@@ -271,16 +278,20 @@ describe('票 08 · 槽位不 fail-loud（加性注册）', () => {
     expect(() => plugin.apply(ctx)).not.toThrow()
     expect([...registry.cells.keys()].sort()).toEqual([
       'main\u0000cang',
+      'main\u0000digao',
       'main\u0000mingpan',
       'main\u0000onboarding',
       'main\u0000overview',
       'main\u0000pus',
+      'main\u0000rikke',
       'shell.overlay\u0000xuanshu-cang-drawer',
       'sidebar.panellist\u0000cang',
+      'sidebar.panellist\u0000digao',
       'sidebar.panellist\u0000mingpan',
       'sidebar.panellist\u0000onboarding',
       'sidebar.panellist\u0000overview',
       'sidebar.panellist\u0000pus',
+      'sidebar.panellist\u0000rikke',
     ])
   })
 })
