@@ -105,7 +105,7 @@ try {
   // 命令形态是 `dsh web --port <n> --no-open`（**不是** `--profile xuanshu web`）：
   // `dsh <name>` 那条捷径把 `web` 展开成 `--profile web`，而 `--profile <name> web`
   // 会让根解析器把 `web` 当多余的位置参数（实测 `error: too many arguments`）。见本票报告。
-  child = spawn(process.execPath, [binJs, 'web', '--port', String(port), '--no-open'], {
+  child = spawn(process.execPath, [binJs, '--profile', opts.profile, '--port', String(port), '--no-open'], {
     cwd: opts.cwd,
     env: { ...process.env, DSH_HOME: opts.home, DSH_TELEMETRY_DISABLED: '1', NO_COLOR: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],

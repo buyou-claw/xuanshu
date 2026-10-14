@@ -1147,25 +1147,25 @@
       "order": 180
     },
     {
-      "id": "standard",
+      "id": "preset-standard",
       "name": "@deepseek-ai/dsh-agent-preset",
       "layer": "@deepseek-ai/dsh-web-app",
       "order": 181
     },
     {
-      "id": "ptc",
+      "id": "preset-ptc",
       "name": "@deepseek-ai/dsh-agent-preset",
       "layer": "@deepseek-ai/dsh-web-app",
       "order": 182
     },
     {
-      "id": "minimal",
+      "id": "preset-minimal",
       "name": "@deepseek-ai/dsh-agent-preset",
       "layer": "@deepseek-ai/dsh-web-app",
       "order": 183
     },
     {
-      "id": "cordis",
+      "id": "preset-cordis",
       "name": "@deepseek-ai/dsh-agent-preset",
       "layer": "@deepseek-ai/dsh-web-app",
       "order": 184

@@ -17,6 +17,15 @@
 # = packages/xuanshu-host/lib/horosa/constants.mjs，一致性由测试钉住（契约 §2.4）。
 # 非回环不暴露：这一行的 URL 钉死在回环上；spawn serve 的 --host 也恒为 127.0.0.1，
 # 宿主侧对非回环配置一律拒绝启动（契约 §2.3 / §3.2 R6）。
+# Both bundles may be installed, but only one app may parse cmdlineArgs.
+# Default to the browser; the isolation headless probe explicitly selects headless.
+- id: headless-startup
+  disabled: !!js "process.env.XUANSHU_SURFACE !== 'headless'"
+- id: headless-runner
+  disabled: !!js "process.env.XUANSHU_SURFACE !== 'headless'"
+- id: web-startup
+  disabled: !!js "process.env.XUANSHU_SURFACE === 'headless'"
+
 - insert:
     - id: mcp-horosa
       name: '@deepseek-ai/dsh-mcp-client'
