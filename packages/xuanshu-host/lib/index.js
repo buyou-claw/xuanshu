@@ -69,6 +69,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createBaziMethods } from './bazi/service.mjs';
+import { createBestOfMethods } from './consult/bestof.mjs';
 import { createCangMethods } from './cang/service.mjs';
 import { createConsultMethods } from './consult/service.mjs';
 import { createDigaoMethods } from './digao/service.mjs';
@@ -466,6 +467,10 @@ export function apply(ctx, config) {
       // 写回只走票 09 的 `pu.update`（同一条 staging + rename），`confirmed !== true` 一律拒收。
       // 放在最后：它对其它组是纯加性的，且必须排在 pu/consult 之后（复用它们的方法组当读/写面）。
       ...createSedimentMethods(ctx, { dataDir }),
+      // 票 11：多 AI 合参（`bestof.run/state/adopt`）。
+      // 候选并发多路 `ctx.llm.stream()`、judge 走单字段工具（ADR-0010），
+      // 记录落 `<dataDir>/consult/<sessionId>.bestof.json`；`consult.*` 的六个方法一字不动。
+      ...createBestOfMethods(ctx, { dataDir }),
     });
   } catch (error) {
     log.warn('谱 / 藏 / 八字 / 底稿 / 日课 / 工作流 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));

@@ -50,6 +50,17 @@
 | `message.test.mjs` | 注入消息形状与官方 `createUserMessage()` 对照（profile 装了才跑对照，没装整组跳过）、深冻结、两个构造器各带各的 kind |
 | `turn.test.mjs` | `turn/end` 命中与退订、abort、没有 `ctx.on` 时拒绝（不永远挂着） |
 | `wiring.test.mjs` | **真** `installRpc` + **真** `apply()`：`/xuanshu` 通道路径、六个方法逐字可调、与 `pu.*`/`cang.*`/`bazi.*` 合并不覆盖、数据目录同源、preset 真的挂到 agent scope 上 |
+| `bestof-run.test.mjs` | 票 11：2 路并行（各带视角 directive、**候选不带工具**）；judge 单字段工具成功路径；记录落 `xuanshu/bestof@1`；两路 usage 各自记着 |
+| `bestof-judge.test.mjs` | 票 11：judge **三条负路径**（没调工具 / 参数非法 JSON / 参数不合 schema）+ prompt-json 降级 + 回落按**完成顺序** + 判官调用本身失败 + 只有一份候选不跑判官 |
+| `bestof-adopt.test.mjs` | 票 11：`state` 冷读（进程重启后按 runId 读回来）/ 采用 / 否决 / 合并（宿主总编调用与人手合并）/ `cancel`（停止全部）/ 费用（有价表才算，没价表整个键缺席）/ 路由与能力门 |
+| `bestof-assembler.test.mjs` | 票 11：自己收的 chunk 与官方 `BlockAssembler` 逐项对照（文本 / usage / finish；profile 装了才跑） |
+| `bestof-wiring.test.mjs` | 票 11：**真** `installRpc` + **真** `apply()` 下三个 `bestof.*` 可调、与既有方法合并不覆盖、记录落同一个 dataDir、采用稿在这条路上也投进会话 |
+| `bestof-history.test.mjs` | task-14：**采用稿进会话历史**（`user/message` + `source.kind=xuanshu-bestof-adopted`）、落选候选**逐字搜不到**、adopt 前后日志**只多那一处**、否决不写、合并写合并稿、改选写第二条、进程重启走后 resume、投递失败如实回执 |
+| `bestof-history-real.test.mjs` | task-14：用**真** `dsh-session` 的 `SessionStore`/`Session` 证明这条载体合法（`append` 不抛、事件在册、投影带我们的 source、header 没动、只多已登记的事件类型）；profile 装了才跑 |
+
+票 11 的假 `ctx.llm` 在 `lib/bestof-llm.mjs`：按 **7 分支 chunk 契约**回放
+（`block-start`/`text-delta`/`tool-call-delta`/`block-end`/`usage`/`finish`），
+`arguments` 保持「未解析的原始 JSON 字符串」，支持 `delay`（完成顺序）与 `hold`（吐完正文但这一路还挂着）。
 
 假服务一共五个：`fakeAgents()`（记录 create/resume 入参，并像真工厂那样在发布前 `await setup`）、
 `fakeSessionQuery()`、`fakeAgentPresets()`（resolve/mount）、`fakeAgentDefaultModel()`，以及

@@ -29,14 +29,26 @@ export const EXTRA_REGISTRATIONS = [
   {
     // 票 15（沉淀闭环）：**会话内区块**，不新增 main key / 侧栏行（S10 §1 D5 / F1）。
     // 入口在收尾条、草稿卡在 `turnTail`、通知落框架浮层 —— 三处都是加性 cell。
-    // `after: 'workflow'`（不是 `rikke`）：`installSediment` 排在**最后**，
-    // 而票 16 的 workflow 那一对插在 rikke 之后 —— 顺序不符会被 `expectedRegisterNames()` 抓到。
+    // `after: 'workflow'`（不是 `rikke`）：`installSediment` 排在最后，而票 16 的 workflow 那一对
+    // 插在 rikke 之后 —— 顺序不符会被 `expectedRegisterNames()` 抓到。
     after: 'workflow',
     names: ['conversation.composer.dock', 'conversation.chat.turnTail', 'shell.overlay'],
     cells: [
       'conversation.composer.dock\u0000xuanshu.sediment-entry',
       'conversation.chat.turnTail\u0000xuanshu.sediment-draft',
       'shell.overlay\u0000xuanshu.sediment-notice',
+    ],
+  },
+  {
+    // 票 11（多 AI 合参）：同样挂在 `workflow` 那一对之后，**排在票 15 之后**
+    // （`installBestOf` 是 `index.tsx` 里最后一个 install）——靠本数组顺序分先后。
+    // 三者都不是 main/sidebar 面板；`/多模型` 命令走 `commandUi`，不是槽位，故不在本表。
+    after: 'workflow',
+    names: ['shell.overlay', 'settings.general.item', 'conversation.composer.dock'],
+    cells: [
+      'shell.overlay\u0000xuanshu-bestof-overlay',
+      'settings.general.item\u0000xuanshu.bestof',
+      'conversation.composer.dock\u0000xuanshu-bestof-trigger',
     ],
   },
 ]

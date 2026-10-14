@@ -36,6 +36,9 @@ import { createElement as h } from 'react';
 
 import { createBaziApi } from './bazi-api.js';
 import { createBaziUiController } from './bazi-controller.js';
+import { createBestofApi } from './bestof-api.js';
+import { createBestofController } from './bestof-model.js';
+import { installBestOf } from './bestof.js';
 import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
 import { createConsultApi } from './consult-api.js';
@@ -196,6 +199,11 @@ export function apply(ctx: Context): void {
   const sediment = createSedimentApi(rpc);
   const sedimentController = createSedimentController(sediment);
 
+  // 票 11：多 AI 合参的数据面 + 控制器（浮层与设置行共用一份；`apply` 期一个请求都不发，
+  // 「开始合参」是人点出来的唯一入口）。
+  const bestof = createBestofApi(rpc);
+  const bestofController = createBestofController({ api: bestof });
+
   const injected = (): OverviewInjected => ({
     navigate,
     mainPanels,
@@ -276,4 +284,24 @@ export function apply(ctx: Context): void {
   // `shell.overlay` 通知）。**不新增 main key、不新增侧栏行** —— 沉淀是会话内区块，
   // 只在 DSH 原生 `conversation` 面板在屏时渲染（S10 §1 D5 / F1）。放在最后，纯加性。
   installSediment(rpc, { api: sediment, controller: sedimentController, navigate });
+
+  // ⑪ 票 11：多 AI 合参（`shell.overlay` 浮层 + `settings.general.item` 开关行 + `/多模型` 命令
+  //    与别名 `/合参` · `bestof` + 会话 composer 旁的触发按钮）。四条注册都是纯加性；
+  //    浮层无内容时 `return null`（click-through）。
+  //    命令面能给当前 sessionId；**按钮给不了**，所以由回调退到「最近一次问事会话」
+  //    （`consult.list` 按 createdAt 倒序，门厅里显示的就是它）。
+  //    **注册序**：`panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 里 sediment 与 bestof 都挂在
+  //    `workflow` 那一对之后，靠**数组顺序**分先后 —— 这里谁在后，那边谁就在后。
+  installBestOf(ctx, {
+    api: bestof,
+    controller: bestofController,
+    resolveSessionId: async () => {
+      try {
+        const { items } = await consultApi.list();
+        return items[0]?.sessionId;
+      } catch {
+        return undefined;
+      }
+    },
+  });
 }
