@@ -178,6 +178,55 @@ describe('bestof.adopt · 合并（S9 §5 步骤 8 的总编语义）', () => {
   })
 })
 
+describe('bestof.cancel · 停止全部（S9 §5 步骤 10；契约 §1 的 additive 方法）', () => {
+  it('停下来：未完成的标 stopped、已产出的文字保留、不跑判官、不自动采用', async () => {
+    const { bestof, session, llm, sandbox } = await scene({
+      // c1：正文已经吐完、这一路还挂着（模拟人看着流式按停止）；c2：还没开始吐。
+      plans: [{ text: '先产出的一段话。', hold: 300, pieces: 1 }, { text: '更慢的一份', delay: 400 }, JUDGE_PLAN],
+    })
+    const started = await bestof['bestof.run']({ sessionId: session.sessionId, question: QUESTION })
+    const callsAtRun = llm.calls.length
+
+    // 等第一路真的吐了点东西再停（此时它还在跑：hold 300ms）。
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    const { bestOf } = await bestof['bestof.cancel']({ runId: started.runId })
+
+    expect(bestOf.finished).toBe(true)
+    expect(bestOf.candidates.map((candidate) => candidate.status)).toEqual(['stopped', 'stopped'])
+    expect(bestOf.candidates[0].text).toBe('先产出的一段话。') // 看到的东西不许被抹掉
+    expect(bestOf.judge.mode).toBe('skipped')
+    expect(bestOf.judge.error).toMatch(/已停止/u)
+    expect(bestOf.adoptedId).toBeNull()
+    expect(llm.calls.length).toBe(callsAtRun) // 停下之后不再发起任何新调用（尤其不发起判官）
+    expect(sandbox.json('consult', `${session.sessionId}.bestof.json`).judge.mode).toBe('skipped')
+
+    // 停下来的那一轮照样能拍板（已产出的那份可用）。
+    const adopted = await bestof['bestof.adopt']({ runId: started.runId, decision: 'adopt', adoptedId: 'c1' })
+    expect(adopted.bestOf.adoptedId).toBe('c1')
+  })
+
+  it('已经结束的 run 再 cancel：幂等，不改采用态', async () => {
+    const { bestof, session } = await scene()
+    const { started } = await runToEnd(bestof, session.sessionId)
+    await bestof['bestof.adopt']({ runId: started.runId, decision: 'adopt', adoptedId: 'c2' })
+
+    const { bestOf } = await bestof['bestof.cancel']({ runId: started.runId })
+    expect(bestOf.adoptedId).toBe('c2')
+    expect(bestOf.candidates.map((candidate) => candidate.status)).toEqual(['done', 'done'])
+    expect(bestOf.judge.ranking).toEqual(['c1', 'c2'])
+  })
+
+  it('cancel 之后 state 稳定（轮询不会看到又变回 running）', async () => {
+    const { bestof, session } = await scene({ plans: [{ text: '慢', delay: 200 }, { text: '也慢', delay: 200 }, JUDGE_PLAN] })
+    const started = await bestof['bestof.run']({ sessionId: session.sessionId, question: QUESTION })
+    await bestof['bestof.cancel']({ runId: started.runId })
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    const state = await bestof['bestof.state']({ runId: started.runId })
+    expect(state.finished).toBe(true)
+    expect(state.candidates.every((candidate) => candidate.status === 'stopped')).toBe(true)
+  })
+})
+
 describe('费用：有价表才算，没价表就是「未知」（ADR-0010 Consequences）', () => {
   it('有价表：按 input/output 单价逐项累计（打桩 usage × 样例价表）', async () => {
     const price = { 'deepseek/deepseek-chat': { inputPerMTok: 1, outputPerMTok: 2 } }

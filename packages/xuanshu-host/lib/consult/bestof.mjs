@@ -100,6 +100,11 @@ export async function resolveRoutes(ctx, { profileIds, count }) {
   return routes
 }
 
+/** 可用候选：跑完的，或**被人停下来但已经产出了文字**的（S9 §6「已停止」中间态照样能采用）。 */
+function usableCandidates(record) {
+  return record.candidates.filter((candidate) => (candidate.status === 'done' || candidate.status === 'stopped') && candidate.text !== '')
+}
+
 /** 记录 → RPC 响应（契约 §1 的 `{runId, candidates, judge}` + 界面要用的采用态/费用）。 */
 function view(record) {
   return {
@@ -141,6 +146,8 @@ export function createBestOfMethods(ctx, config = {}) {
   const store = createBestofStore(dataDir)
   /** 活记录（轮询读它）；进程重启后由 `store.findByRunId()` 冷查。 */
   const live = new Map()
+  /** 每个 run 一个中断开关：`bestof.cancel` 用它真的把 N 路流掐掉（S9「停止全部」）。 */
+  const aborts = new Map()
 
   function findRecord(runId) {
     const inMemory = live.get(runId)
@@ -193,7 +200,11 @@ export function createBestOfMethods(ctx, config = {}) {
             }
           },
         })
-        if (result.ok === true) {
+        if (signal.aborted) {
+          // 人点了「停止全部」：已产出的文字**保留**并标「已停止」（S9 §5 步骤 10）。
+          candidate.status = 'stopped'
+          delete candidate.error
+        } else if (result.ok === true) {
           candidate.status = 'done'
           candidate.text = result.text
         } else {
@@ -208,7 +219,16 @@ export function createBestOfMethods(ctx, config = {}) {
       }),
     )
 
-    const usable = record.candidates.filter((candidate) => candidate.status === 'done' && candidate.text !== '')
+    if (signal.aborted) {
+      // 不跑判官、不自动采用任何一份：停下来的那一轮等人自己点（S9 §5 步骤 10）。
+      record.completionOrder = [...completionOrder]
+      record.judge = { mode: 'skipped', skipped: true, adoptedId: null, ranking: [], error: '已停止：这一轮没有跑完，判官不会给出排序。' }
+      record.finishedAt = new Date().toISOString()
+      persist(record)
+      return
+    }
+
+    const usable = usableCandidates(record)
     record.completionOrder = [...completionOrder]
     // 回落口径是**完成顺序**（ADR-0010 第 2 条），不是路由顺序 —— 所以这里按完成顺序过滤。
     const completionOfUsable = completionOrder.filter((id) => usable.some((candidate) => candidate.id === id))
@@ -310,17 +330,51 @@ export function createBestOfMethods(ctx, config = {}) {
       }
       live.set(record.runId, record)
       persist(record)
+      // 每个 run 一个中断开关：「停止全部」靠它把 N 路流真的掐掉（契约 §1 的 additive `bestof.cancel`）。
+      const controller = new AbortController()
+      aborts.set(record.runId, controller)
       // 后台跑：不 await（见文件头第 1 条）。失败已折进记录，这里只兜住「连记录都没写成」。
-      void execute(record, { question, routes }).catch((error) => {
-        record.finishedAt = new Date().toISOString()
-        record.judge = { mode: 'failed', adoptedId: null, ranking: [], error: `合参执行失败：${String(error?.message ?? error)}` }
-        try {
-          persist(record)
-        } catch {
-          /* 落盘失败也无处可报：调用方靠 state 看到 failed */
-        }
-      })
+      void execute(record, { question, routes, signal: controller.signal })
+        .catch((error) => {
+          record.finishedAt = new Date().toISOString()
+          record.judge = { mode: 'failed', adoptedId: null, ranking: [], error: `合参执行失败：${String(error?.message ?? error)}` }
+          try {
+            persist(record)
+          } catch {
+            /* 落盘失败也无处可报：调用方靠 state 看到 failed */
+          }
+        })
+        .finally(() => {
+          aborts.delete(record.runId)
+        })
       return view(record)
+    },
+
+    /**
+     * 「停止全部」（S9 §5 步骤 10；契约 §1 的 **additive** 方法，Lead 2026-10-15 批准）。
+     *
+     * 语义：abort 这一轮的 N 路 stream —— 未完成的候选标 `stopped`、**已产出的文字保留**、
+     * **不跑判官、不自动采用任何一份**，界面进「已停止」中间态等人点。
+     * 已经结束的 run 调用它是幂等的（返回当前记录），不报错。
+     */
+    'bestof.cancel': async (request) => {
+      const source = request && typeof request === 'object' && !Array.isArray(request) ? request : {}
+      const runId = requireText(source.runId, 'runId')
+      const record = findRecord(runId)
+      if (record === undefined) throw new Error(`合参记录不存在：${runId}。`)
+      const controller = aborts.get(runId)
+      if (controller !== undefined) controller.abort()
+      if (record.finishedAt === undefined) {
+        // abort 之后 `execute` 会把在跑的那几路收尾；这里先把「还挂着」的标成已停止，
+        // 免得轮询在收尾完成前看到一个自相矛盾的状态。
+        for (const candidate of record.candidates) {
+          if (candidate.status === 'running') candidate.status = 'stopped'
+        }
+        record.judge = { mode: 'skipped', skipped: true, adoptedId: null, ranking: [], error: '已停止：这一轮没有跑完，判官不会给出排序。' }
+        record.finishedAt = new Date().toISOString()
+        persist(record)
+      }
+      return { bestOf: view(record) }
     },
 
     /** 轮询 / 回看（契约 §1）：内存里的活记录优先，进程重启后按 runId 冷查旁挂文件。 */
@@ -347,7 +401,7 @@ export function createBestOfMethods(ctx, config = {}) {
       if (record === undefined) throw new Error(`合参记录不存在：${runId}。`)
       if (record.finishedAt === undefined) throw new Error('候选还在生成中：等这一轮跑完再拍板（或先点「停止全部」）。')
 
-      const usable = record.candidates.filter((candidate) => candidate.status === 'done' && candidate.text !== '')
+      const usable = usableCandidates(record)
       if (decision === 'adopt') {
         const id = requireText(source.adoptedId, 'adoptedId')
         const candidate = usable.find((entry) => entry.id === id)

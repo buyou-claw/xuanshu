@@ -55,10 +55,14 @@ export function planChunks(plan = {}) {
 }
 
 /** 一个会抛的流（模拟 adapter 抛错被 `stream()` 归一成 error finish 之外的情形）。 */
-async function* drain(chunks, delayMs = 0) {
+async function* drain(chunks, { delayMs = 0, holdMs = 0 } = {}) {
   // `delay` 让「完成顺序」与「路由顺序」不同——回落口径就是按完成顺序排前。
   if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
-  for (const chunk of chunks) yield chunk
+  for (const chunk of chunks) {
+    // `hold` = 正文已经吐完、但这一路还没结束（模拟「人看着流式按了停止全部」）。
+    if (chunk.type === 'finish' && holdMs > 0) await new Promise((resolve) => setTimeout(resolve, holdMs))
+    yield chunk
+  }
 }
 
 /**
@@ -80,7 +84,7 @@ export function fakeLlm(plans = [{}]) {
         const plan = typeof list[0] === 'function'
           ? list[0](options, index)
           : (list[index] ?? list[list.length - 1])
-        return drain(planChunks(plan), plan.delay ?? 0)
+        return drain(planChunks(plan), { delayMs: plan.delay ?? 0, holdMs: plan.hold ?? 0 })
       },
     },
   }
