@@ -54,7 +54,9 @@
 | `bestof-judge.test.mjs` | 票 11：judge **三条负路径**（没调工具 / 参数非法 JSON / 参数不合 schema）+ prompt-json 降级 + 回落按**完成顺序** + 判官调用本身失败 + 只有一份候选不跑判官 |
 | `bestof-adopt.test.mjs` | 票 11：`state` 冷读（进程重启后按 runId 读回来）/ 采用 / 否决 / 合并（宿主总编调用与人手合并）/ `cancel`（停止全部）/ 费用（有价表才算，没价表整个键缺席）/ 路由与能力门 |
 | `bestof-assembler.test.mjs` | 票 11：自己收的 chunk 与官方 `BlockAssembler` 逐项对照（文本 / usage / finish；profile 装了才跑） |
-| `bestof-wiring.test.mjs` | 票 11：**真** `installRpc` + **真** `apply()` 下三个 `bestof.*` 可调、与既有方法合并不覆盖、记录落同一个 dataDir |
+| `bestof-wiring.test.mjs` | 票 11：**真** `installRpc` + **真** `apply()` 下三个 `bestof.*` 可调、与既有方法合并不覆盖、记录落同一个 dataDir、采用稿在这条路上也投进会话 |
+| `bestof-history.test.mjs` | task-14：**采用稿进会话历史**（`user/message` + `source.kind=xuanshu-bestof-adopted`）、落选候选**逐字搜不到**、adopt 前后日志**只多那一处**、否决不写、合并写合并稿、改选写第二条、进程重启走后 resume、投递失败如实回执 |
+| `bestof-history-real.test.mjs` | task-14：用**真** `dsh-session` 的 `SessionStore`/`Session` 证明这条载体合法（`append` 不抛、事件在册、投影带我们的 source、header 没动、只多已登记的事件类型）；profile 装了才跑 |
 
 票 11 的假 `ctx.llm` 在 `lib/bestof-llm.mjs`：按 **7 分支 chunk 契约**回放
 （`block-start`/`text-delta`/`tool-call-delta`/`block-end`/`usage`/`finish`），

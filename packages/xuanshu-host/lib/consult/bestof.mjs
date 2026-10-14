@@ -10,9 +10,12 @@
  *    界面按 `bestof.state` 轮询 —— 这也正是契约给 `bestof.state` 的用途（「供界面轮询/回看」）。
  * 2. **能力门**：`ctx.llm` 或 provider/model 缺一个，当场可读地失败（与票 10 `consult.send` 同一条纪律）。
  *    合参是**多花几倍钱**的动作，绝不能回一个假的「开始合参」然后什么都不发生。
+ * 3. **采用稿进历史**（task-14）：人点「采用 / 合并」时，把**那一份**文本作为一条
+ *    `user/message`（`source.kind = xuanshu-bestof-adopted`）投递进会话 —— 后续轮次看得见它；
+ *    **落选候选永远不进日志**（旁挂 `bestof` 记录是候选的唯一权威）。`reject` 什么都不写。
  */
 import { resolveDataDir } from '../bazi/service.mjs'
-import { defaultModelSelection } from './agent.mjs'
+import { defaultModelSelection, resumeConsultAgent } from './agent.mjs'
 import { BESTOF_SCHEMA, createBestofStore, newRunId } from './bestof-store.mjs'
 import {
   collectStream,
@@ -26,6 +29,7 @@ import {
   resolveAngles,
   runCandidate,
 } from './bestof-run.mjs'
+import { BESTOF_ADOPTED_SOURCE_KIND, createBestofAdoptedMessage } from './message.mjs'
 import { createConsultStore, isConsultSessionId } from './store.mjs'
 
 /** 非严格读一个 cordis service（拿不到就 undefined，绝不抛）。 */
@@ -105,6 +109,23 @@ function usableCandidates(record) {
   return record.candidates.filter((candidate) => (candidate.status === 'done' || candidate.status === 'stopped') && candidate.text !== '')
 }
 
+/**
+ * 会话日志里那一条采用稿的**出生证明**（响应与旁挂记录都带它）。
+ *
+ * `deliveries` 是 append-only 的：改选一次就多一条（每一次都是人点的），
+ * 而**落选候选一条都不会有**。`deliveryError` 记最后那次的失败原因。
+ */
+function deliveryOf(record) {
+  const last = Array.isArray(record.deliveries) && record.deliveries.length > 0 ? record.deliveries[record.deliveries.length - 1] : undefined
+  if (last !== undefined && record.deliveryError === undefined) {
+    return { ok: true, candidateId: last.candidateId, messageId: last.messageId, source: BESTOF_ADOPTED_SOURCE_KIND, at: last.at }
+  }
+  if (record.deliveryError !== undefined) {
+    return { ok: false, candidateId: last?.candidateId ?? record.adoptedId, error: record.deliveryError, attemptedAt: record.deliveryAttemptedAt }
+  }
+  return undefined
+}
+
 /** 记录 → RPC 响应（契约 §1 的 `{runId, candidates, judge}` + 界面要用的采用态/费用）。 */
 function view(record) {
   return {
@@ -119,6 +140,12 @@ function view(record) {
     ...(record.usage === undefined ? {} : { usage: { ...record.usage } }),
     ...(record.costUsd === undefined ? {} : { costUsd: record.costUsd, costUsdComplete: record.costUsdComplete === true }),
     ...(record.mergedBy === undefined ? {} : { mergedBy: { ...record.mergedBy } }),
+    // 采用稿到底有没有进会话：`state` 也要说同一句话（冷读/刷新后界面不能又变回「已写进历史」）。
+    ...(Array.isArray(record.deliveries) && record.deliveries.length > 0
+      ? { deliveredAt: record.deliveries[record.deliveries.length - 1].at, delivery: deliveryOf(record) }
+      : record.deliveryError === undefined
+        ? {}
+        : { delivery: deliveryOf(record) }),
   }
 }
 
@@ -161,6 +188,50 @@ export function createBestOfMethods(ctx, config = {}) {
   function persist(record) {
     store.write(record)
     return record
+  }
+
+  /** 解析官方 `@deepseek-ai/dsh-llm/message` 的锚点顺序（与 `consult.send` 同一条：profile 目录优先）。 */
+  function messageSearchDirs() {
+    const profile = softGet(ctx, 'profileContext')
+    return [typeof profile?.dir === 'string' ? profile.dir : null, process.cwd()].filter((dir) => typeof dir === 'string' && dir !== '')
+  }
+
+  /** 取（必要时接上）会话的 agent：本进程活着就直接用，进程重启过就 `agents.resume`。 */
+  async function sessionAgent(sessionId) {
+    const agents = softGet(ctx, 'agents')
+    if (typeof agents?.get !== 'function' && typeof agents?.resume !== 'function') {
+      throw new Error('DSH agent 服务（ctx.agents）不可得：这一份采用稿写不进会话。')
+    }
+    const live = typeof agents.get === 'function' ? agents.get(sessionId) : undefined
+    if (live !== undefined && live !== null) return live
+    const handle = await resumeConsultAgent(ctx, { sessionId })
+    return handle?.agent
+  }
+
+  /**
+   * 把**被采用的那一份**投递进会话历史（task-14）。
+   *
+   * 载体是 `user/message` + `source.kind = xuanshu-bestof-adopted`（ADR-0009 第 5 条的合并点）：
+   * `user/message` 是**已登记**的事件类型（不新增 type、不碰 `meta`），自定义 source kind 让它在
+   * 轨迹里显示成一条「注入」行而不是用户原话。落选候选**不走**这条路 —— 它们只活在旁挂记录里。
+   *
+   * 失败**不上抛**：采用这个决定已经落盘（人是真点了），但**必须如实回来**
+   * （`delivery.ok=false` + 原因），绝不能让界面以为「已经写进历史了」。
+   */
+  async function deliverAdopted(record, view, { merged }) {
+    const candidate = view.candidates.find((entry) => entry.id === view.adoptedId)
+    const text = typeof candidate?.text === 'string' ? candidate.text.trim() : ''
+    if (text === '') throw new Error(`采用稿是空的（${String(view.adoptedId)}）：没有可写进会话的文本。`)
+    const message = await createBestofAdoptedMessage(text, { searchDirs: messageSearchDirs(), merged })
+    const agent = await sessionAgent(record.sessionId)
+    if (typeof agent?.followup !== 'function') {
+      throw new Error('这个会话的 agent 不能 followup：采用稿写不进会话（宿主 DSH 版本不同？）。')
+    }
+    agent.followup(message)
+    const entry = { candidateId: view.adoptedId, messageId: message.id, source: BESTOF_ADOPTED_SOURCE_KIND, at: new Date().toISOString() }
+    record.deliveries = [...(Array.isArray(record.deliveries) ? record.deliveries : []), entry]
+    delete record.deliveryError
+    return entry
   }
 
   /** 记账：一路候选的 usage / 费用。 */
@@ -444,7 +515,20 @@ export function createBestOfMethods(ctx, config = {}) {
         delete record.mergedBy
       }
       persist(record)
-      return { bestOf: view(record) }
+
+      // 采用 / 合并 = 人点了「这一份就是定稿」→ 把**它**写进会话历史（只写这一份；落选候选永不进日志）。
+      // 否决什么都不写。投递失败不上抛（决定已经落盘），但如实回 `delivery.ok=false`。
+      if (decision === 'reject') return { bestOf: view(record) }
+      const snapshot = view(record)
+      try {
+        await deliverAdopted(record, snapshot, { merged: decision === 'merge' })
+      } catch (error) {
+        record.deliveryError = String(error?.message ?? error)
+        record.deliveryAttemptedAt = new Date().toISOString()
+      }
+      persist(record)
+      const delivered = deliveryOf(record)
+      return { bestOf: view(record), ...(delivered === undefined ? {} : { delivery: delivered }) }
     },
   }
 }

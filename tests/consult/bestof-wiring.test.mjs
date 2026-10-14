@@ -56,7 +56,7 @@ const CONTRACT_METHODS = ['bestof.run', 'bestof.state', 'bestof.adopt']
 
 describe('票 11 · 三个方法挂在同一条 /xuanshu 通道上（契约 §1）', () => {
   it('三个方法逐字可调，且与 consult.* / pu.* / cang.* / bazi.* 合并而不是互相覆盖', async () => {
-    const { route, sandbox } = assemble()
+    const { route, sandbox, agents } = assemble()
     expect(route.path).toBe('/xuanshu')
 
     const created = await call(route, 'consult.create', { pus: [] })
@@ -78,6 +78,15 @@ describe('票 11 · 三个方法挂在同一条 /xuanshu 通道上（契约 §1�
     const adopted = await call(route, 'bestof.adopt', { runId, decision: 'adopt', adoptedId: 'c1' })
     expect(adopted.ok).toBe(true)
     expect(adopted.value.bestOf.adoptedId).toBe('c1')
+
+    // task-14：走**真** `apply()` + 真 `installRpc` 的这条路上，采用稿同样投进会话
+    // （假 agent 的 `followup` 记账就是「日志里多了那一条」的判据）。
+    expect(adopted.value.delivery?.ok, JSON.stringify(adopted.value.delivery)).toBe(true)
+    const delivered = [...agents.live.values()].flatMap((agent) => agent.calls).filter((entry) => entry.kind === 'followup')
+    expect(delivered).toHaveLength(1)
+    expect(delivered[0].message.source).toEqual({ kind: 'xuanshu-bestof-adopted' })
+    expect(delivered[0].message.content[0].text).toContain('第一份。')
+    expect(JSON.stringify(delivered)).not.toContain('第二份。') // 落选候选没被投进去
 
     // 合并（不是覆盖）：票 08 / 09 / 10 / 14 的方法仍在。
     for (const method of ['pu.list', 'cang.list', 'bazi.basePu', 'consult.defaults']) {
