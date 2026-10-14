@@ -120,12 +120,24 @@ function scanLiterals(files) {
 
 describe('P2 · 定值单源（生产代码的定义处唯一 + 8765 / /mcp 三方一致）', () => {
   const patch = parseYaml(readFileSync(join(REPO_ROOT, 'profile', 'cordis.patch.yml'), 'utf8'))
-  const row = patch?.[0]?.insert?.find?.((entry) => entry.id === 'mcp-horosa')
+  // 顶层条目**不止** `insert` 一种（票 07 在补丁层加了 headless/web 三行 `disabled` 顶条目），
+  // 所以「mcp-horosa 行在第 0 个条目里」是错的假设：必须遍历所有条目的 `insert` 列表去取。
+  // 与 P5 同款写法（`tests/horosa/p5-static-mount.test.mjs` 的 `rows`）。
+  const rows = (patch ?? []).flatMap((entry) => entry?.insert ?? [])
+  const horosaRows = rows.filter((entry) => entry?.id === 'mcp-horosa')
+  const row = horosaRows[0]
 
   it('profile/cordis.patch.yml 解析出来就是那个 insert 行（YAML 真解析，不是正则）', () => {
     expect(Array.isArray(patch), 'profile 补丁的顶层必须是数组').toBe(true)
     expect(row, 'profile 补丁里找不到 id=mcp-horosa 的 insert 行').toBeTruthy()
-    expect(Array.isArray(patch[0].insert), 'insert 必须是数组').toBe(true)
+    expect(
+      horosaRows,
+      'mcp-horosa 只能声明一次（重复声明同一个 id 会让 Loader 启动失败）',
+    ).toHaveLength(1)
+    expect(
+      patch.some((entry) => Array.isArray(entry?.insert)),
+      '补丁层里至少要有条目带 insert 数组',
+    ).toBe(true)
   })
 
   it('三方端口逐字相等：YAML url ↔ defaults.mjs ↔ constants.mjs', () => {
