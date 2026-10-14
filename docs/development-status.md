@@ -192,12 +192,14 @@ S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带�
 当前全仓基线（`node ./node_modules/vitest/vitest.mjs run`）：
 
 ```
-Test Files  1 failed | 93 passed | 1 skipped (95)
-Tests       2 failed | 992 passed | 8 skipped (1002)
+Test Files  1 failed | 96 passed | 1 skipped (98)
+Tests       2 failed | 1020 passed | 8 skipped (1030)
 ```
 
 那 2 条失败即上述 S1（`S1 装配树` 与由它连带的 `CLI 退出码为 0`）。**基线之外的红色一律是本轮引入的回归。**
-（历史：票 08 后 448 passed；票 10/13 后 684；票 11/12/15/16 后 992。）
+（历史：票 08 后 448 passed；票 10/13 后 684；票 11/12/15/16 后 992；code-review 修复后 1020。）
+同一时刻的装配五 seam：**S2 / S3 / S4（185 行基线全命中）/ S5 PASS，S1 FAIL**；`tsc --noEmit` exit 0；
+`build-client --check` in sync（386169 B）。
 
 **S5 的面依赖（已修）**：票 07 在 profile 补丁层加了三行 `disabled` 开关后，web 面（`XUANSHU_SURFACE` 未设）
 由 `web-startup` 拥有 cmdlineArgs，它把 `--help` 当自己的用法打印后**在挂载插件树之前就 exit 0** ——
