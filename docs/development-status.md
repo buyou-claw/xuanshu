@@ -17,13 +17,13 @@ GitHub issue/PR 的 open 状态不等于未实现：票 01–06 的代码在本�
 | 07 首页替换 = 自我总览四卡 | #10 | 实现完成 |
 | 08 八字冷启动向导 + 底座谱 + 命盘卡点亮 | #11 | 实现完成（宿主半 + 客户端半已并入集成分支） |
 | 09 谱管理（创建/查看/编辑/级别） | #12 | 实现完成，总装配接线已收口 |
-| 10 问事闭环 | #13 | **实现中**（宿主半 / 客户端半并行） |
-| 11 多 AI 合参（Best-of-N） | #14 | 待 10 |
-| 12 临时挂载（预算裁剪披露） | #15 | 待 10 |
-| 13 底稿 + 日课（定时任务） | #16 | **实现中**（宿主半 / 客户端半并行） |
+| 10 问事闭环 | #13 | 实现完成（宿主半 + 客户端半已并入集成分支） |
+| 11 多 AI 合参（Best-of-N） | #14 | **实现中** |
+| 12 临时挂载（预算裁剪披露） | #15 | **实现中** |
+| 13 底稿 + 日课（定时任务） | #16 | 实现完成（宿主半 + 客户端半已并入集成分支） |
 | 14 藏库（指针 + 签 + 跳转） | #17 | 实现完成，总装配接线已收口 |
-| 15 沉淀闭环（导出汇总 → 确认写谱） | #18 | 待 09、10 |
-| 16 工作流创建向导 | #19 | 待 10 |
+| 15 沉淀闭环（导出汇总 → 确认写谱） | #18 | **实现中** |
+| 16 工作流创建向导 | #19 | **实现中** |
 
 ## 本轮（2026-10-15）
 
@@ -89,6 +89,32 @@ S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带�
    那条被明令禁止的第二通道。新方法语义与 `baziBirth` 同族（取端点 → `mcpCallTool` → 原样回信封，
    **不替你起 serve**），`ok` = 「调用走到了信封」而非「业务成功」。
 
+### 5. 票 10 / 票 13 落地（各分两半并行）
+
+四张票（含 08）都按「先冻结跨半契约 → 两半各在自己的 worktree/分支实现 → 合并」的方式推进。
+契约：`.scratch/notes/t08-contract.md`、`t10-contract.md`、`t13-contract.md`；后四票：`t11-16-contracts.md`。
+
+**票 10（问事闭环）**：宿主 `lib/consult/**` 六个 RPC + 旁挂清单 `xuanshu/consult@1` + 首轮上下文注入 +
+`turn/end` 记账；客户端门厅（`consult` main key，侧栏 order 30）+ 历史回看子页。两个落地前逮住的坑：
+① 裸 `ctx.agents.create` 的会话**跑不起来**（缺 provider/model，且工具来自 preset 挂载的 scope）；
+② `openSession(宿主建的 id)` 会**同步抛** `unknown session` → 唯一打开路径写成 `await ctx.sessions.refresh()` → `openSession(id)`。
+两坑的 file:line 证据进了契约与 ADR-0009 体系。
+
+**票 13（底稿 + 日课）**：`lib/digao/**`（纯派生 + 确定性骨架 + 来源标记 + LLM 降级如实标注，**没有** write/update）、
+`lib/rikke/**`（`horosa_cn_huangli` → `{yi,ji,liuri}`）、两条 daily（日课 07:30 / 底稿 03:30）。
+`ctx.schedule` 的提供者不在 shipped 组合里 → 在本包 `cordis.patch.yml` 插 `time-context`/`schedule`/`ui-schedule` 三行
+（id 与 shipped bundle 逐字一致；S4 基线 185 行仍全命中，树 188→191）。**真机 `dsh web` 实测**：
+`storages/schedule.json` 里恰好 2 条 daily、再启一次仍是 2 条（幂等）。另一处真机发现：
+`apply` 里直接 `ctx.get('schedule')` 是 `undefined`（三行挂在本行之后）→ 改 `ctx.inject(['schedule'], …)`。
+
+### 6. 收掉一处结构债：注册面清单收成单一事实来源
+
+票 07/08/10/13 各加了自己的面板，于是**四张契约测试**各写了一份「穷举注册面快照」，而顺序还取决于
+`index.tsx` 的 install 调用次序 —— 两张票并行时必然在同一处冲突（本轮合并就在 4 个文件上冲突）。
+现收成 **`tests/assembly/lib/panel-surface.mjs`**：`PANEL_KEYS`（顺序 = install 真实次序）+ 派生的
+`expectedRegisterNames()` / `expectedCells()`，四张测试都从它取。**以后新增面板只改这一处。**
+构建输出可逐项复核注册顺序（`node scripts/build-client.mjs` 会打印副作用序列）。
+
 ## 验证边界
 
 完整装配五条 seam 的当前结果：S2（进程内启动）、S3（客户端产物）、S4（上游行基线）、S5（真实 CLI 报告）通过；
@@ -101,11 +127,12 @@ S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带�
 当前全仓基线（`node ./node_modules/vitest/vitest.mjs run`）：
 
 ```
-Test Files  1 failed | 39 passed | 1 skipped (41)
-Tests       2 failed | 448 passed | 8 skipped (458)
+Test Files  1 failed | 63 passed | 1 skipped (65)
+Tests       2 failed | 684 passed | 8 skipped (694)
 ```
 
 那 2 条失败即上述 S1（`S1 装配树` 与由它连带的 `CLI 退出码为 0`）。**基线之外的红色一律是本轮引入的回归。**
+（历史：票 08 后 448 passed；票 10/13 合并后 684 passed。）
 
 **S5 的面依赖（已修）**：票 07 在 profile 补丁层加了三行 `disabled` 开关后，web 面（`XUANSHU_SURFACE` 未设）
 由 `web-startup` 拥有 cmdlineArgs，它把 `--help` 当自己的用法打印后**在挂载插件树之前就 exit 0** ——
