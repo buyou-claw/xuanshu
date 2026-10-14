@@ -24,6 +24,11 @@
  * 与 `/xuanshu-horosa` 命令，并把状态写进 `$DSH_HOME/xuanshu/horosa/horosa-status.json`。
  * 它同样**永不抛**：宿主起不来的失败只落状态文件 + 日志，绝不拖垮整个 profile 装配。
  *
+ * 票 08 追加（`lib/bazi/**`）：八字冷启动的宿主半边 —— 六个 `bazi.*` 方法并进同一条 `/xuanshu`
+ * 通道（`createBaziMethods`）：`status`/`snapshot`/`basePu`/`cities`/`timezone`/`cast`。
+ * 出盘只走上面那个 `xuanshuHorosa` 服务的 `baziBirth()`，落 `<dataDir>/bazi/snapshot.json`
+ * 与 `<dataDir>/pus/_base/{manifest.md,bazi.md,summary.md}`（契约 §1 的文件契约）。
+ *
  * 每个 DSH API 调用的出处（本机实装 0.2.0-rc.2，均为只读核对）：
  *   - `ctx.get(name, strict?)`：`@deepseek-ai/cordis/lib/types/reflect.d.ts:16`；
  *     非严格第二参数 `false` 的官方用法见
@@ -51,6 +56,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createBaziMethods } from './bazi/service.mjs';
 import { createCangMethods } from './cang/service.mjs';
 import { installHorosa } from './horosa/service.mjs';
 import { createPuMethods, installPuSkill } from './pu/service.mjs';
@@ -404,8 +410,8 @@ export function apply(ctx, config) {
     log.warn('horosa 底座装配失败（已兜住）：%C', String(error?.message ?? error));
   }
 
-  // 总装配：把宿主侧能力挂到同一条 `/xuanshu` RPC 通道上（票 09 谱 / 票 14 藏）。
-  // 这两组方法各自的**实现**与断言台早就落地了，缺的只是「有人把它们接上」这一步——
+  // 总装配：把宿主侧能力挂到同一条 `/xuanshu` RPC 通道上（票 09 谱 / 票 14 藏 / 票 08 八字）。
+  // 这三组方法各自的**实现**与断言台早就落地了，缺的只是「有人把它们接上」这一步——
   // 面板注册（客户端 `installPuPanel` / `installCangClient`）与本处是同一次装配的两半。
   // 数据目录与装配报告同源（`resolveDataDir`），避免报告与数据各写一处。
   try {
@@ -414,8 +420,12 @@ export function apply(ctx, config) {
     installRpc(ctx, {
       ...createPuMethods(ctx, { dataDir }),
       ...createCangMethods(ctx, { dataDir }),
+      // 票 08：八字出盘 / 快照 / 底座谱 / 城市库 / 时区（契约 §2 的六个 bazi.* 方法）。
+      // 出盘只走票 06 装出来的 `xuanshuHorosa` 服务（上面 installHorosa 已 provide 它），
+      // 所以这一组必须排在 installHorosa 之后装配 —— 顺序是接线的一部分。
+      ...createBaziMethods(ctx, { dataDir }),
     });
   } catch (error) {
-    log.warn('谱 / 藏 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
+    log.warn('谱 / 藏 / 八字 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
   }
 }
