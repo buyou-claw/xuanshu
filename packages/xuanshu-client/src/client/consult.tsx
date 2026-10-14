@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 
-import type { ConsultApi, ConsultDefaults, ConsultMessage, ConsultSummary } from './consult-api.js';
+import type { ConsultApi, ConsultDefaults, ConsultMessage, ConsultSummary, MountRef } from './consult-api.js';
 import { contextSummary, initialSelection, nudgeNeeded, shortConsultId, toggleSelection } from './consult-model.js';
 import type { HistoryRange } from './consult-model.js';
 import {
@@ -125,7 +125,12 @@ export function ConsultPanel({ api, navigate, openSession, preloaded }: ConsultP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seeded]);
 
-  const mountsNow = items.kind === 'ready' ? (items.value[0]?.mounts ?? []) : [];
+  /**
+   * 本次问事的挂载恒为空：`consult.create` 的请求体只有 `pus`（契约 §2），
+   * 挂载是**建会话之后**由票 12 的账本加进去的。这里绝不能借用「最近一次会话」的挂载数 ——
+   * 那会让摘要行与无源引导判定都算在别人的账上（最近一次的挂载数在摘要卡里显示）。
+   */
+  const mountsNow: MountRef[] = [];
   const summary = contextSummary({ selected, mounts: mountsNow });
 
   /** 进入正式对话：切到 DSH 原生 `conversation` 面板（只导航）。 */

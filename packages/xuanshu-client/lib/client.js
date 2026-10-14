@@ -1019,7 +1019,7 @@ function ConsultPanel({ api, navigate, openSession, preloaded }) {
     reloadDefaults();
     reloadItems();
   }, [seeded]);
-  const mountsNow = items.kind === "ready" ? items.value[0]?.mounts ?? [] : [];
+  const mountsNow = [];
   const summary = contextSummary({ selected, mounts: mountsNow });
   const enterConversation = (sessionId) => {
     setPendingOpen(sessionId);
