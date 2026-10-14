@@ -36,6 +36,11 @@ export const CONSULT_TITLE_MAX_CHARS = 40
 /** 可勾选谱的数量上限：谱 slug 本身限 80 字符（票 09），这里只防一条畸形的超长清单。 */
 export const CONSULT_MAX_PUS = 200
 
+/** 挂载对象的两个种类（票 10 冻结的 `MountRef.kind`；`项目` 与 workspace 同义，不另开第三种）。 */
+export const MOUNT_KINDS = ['workspace', 'workflow']
+/** 一次挂载的数量上限：挂载是「临时」把**一个具体对象**引进来，不是批量导入。 */
+export const CONSULT_MAX_MOUNTS = 20
+
 /** 全部问事会话共用的 `cwd`（也是旁挂根）。 */
 export function consultRoot(dataDir) {
   return resolve(dataDir, CONSULT_DIR)
@@ -88,6 +93,47 @@ export function normalizePus(input) {
     }
     if (canonical !== slug) throw new Error(`勾选谱 slug 不是规范形式：${JSON.stringify(value)}（规范形是 ${JSON.stringify(canonical)}）。`)
     if (!out.includes(slug)) out.push(slug)
+  }
+  return out
+}
+
+/**
+ * 归一挂载清单（票 12；`MountRef = {kind,id,label}` 是票 10 冻结的形状）。
+ *
+ * 三条口径：
+ *   - **只收 `workspace` / `workflow`**：`项目` 与 workspace 同义（facts §5.4 的读法），
+ *     不另开第三种 kind —— 多一种 kind 就多一处「注入时读不出来」；
+ *   - **同 kind+id 去重且保序**：`workspace:x` 与 `workflow:x` 是两回事，但同一个工作区挂两次不是；
+ *   - `label` 空串回落到 `id`：界面上宁可显示一个冷 id，也不显示空标签。
+ *
+ * 这里**不做存在性校验**（那要看 registry，属于 service 的事）：store 只管形状，
+ * 于是「预览/写入」两条路径共用同一份校验（契约修订：少一处漂移）。
+ *
+ * @param {unknown} input 请求里的 `mounts`（可为 `undefined` = 空清单）。
+ * @returns {Array<{kind: string, id: string, label: string}>} 归一后的清单。
+ */
+export function normalizeMounts(input) {
+  if (input === undefined || input === null) return []
+  if (!Array.isArray(input)) throw new Error('挂载清单（mounts）必须是数组。')
+  if (input.length > CONSULT_MAX_MOUNTS) {
+    throw new Error(`一次最多挂载 ${CONSULT_MAX_MOUNTS} 个对象（收到 ${input.length} 个）：挂载是临时把一个具体对象引进来，不是批量导入。`)
+  }
+  const out = []
+  const seen = new Set()
+  for (const value of input) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('挂载项必须是 {kind,id,label} 对象。')
+    const kind = typeof value.kind === 'string' ? value.kind.trim() : ''
+    if (!MOUNT_KINDS.includes(kind)) {
+      throw new Error(`挂载项 kind 只能是 ${MOUNT_KINDS.join(' / ')}（收到 ${JSON.stringify(value.kind)}）：工作区 / 工作流**不是谱**，谱走 pus。`)
+    }
+    const id = typeof value.id === 'string' ? value.id.trim() : ''
+    if (id === '') throw new Error(`挂载项的 id 不能为空（kind=${kind}）。`)
+    if (value.label !== undefined && typeof value.label !== 'string') throw new Error('挂载项的 label 必须是字符串。')
+    const label = typeof value.label === 'string' && value.label.trim() !== '' ? value.label.trim() : id
+    const key = `${kind}\u0000${id}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ kind, id, label })
   }
   return out
 }
@@ -226,7 +272,10 @@ export function createConsultStore(dataDir) {
       return out.sort((a, b) => (a.createdAt === b.createdAt ? (a.sessionId < b.sessionId ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1))
     },
 
-    /** 只允许改这几样：`pus` 是开会话时的选择（本票没有改选择的 RPC），`mounts` 归票 12。 */
+    /**
+     * 只允许改这几样：`pus` 是开会话时的选择（本票没有改选择的 RPC），
+     * `mounts` 归票 12（`consult.setMounts` —— 走同一份旁挂清单，不另开权威）。
+     */
     update(sessionId, patch = {}) {
       const current = read(sessionId)
       if (current === null) return null
@@ -234,6 +283,7 @@ export function createConsultStore(dataDir) {
       if (Object.hasOwn(patch, 'title')) next.title = patch.title
       if (Object.hasOwn(patch, 'turns')) next.turns = patch.turns
       if (Object.hasOwn(patch, 'lastTurnAt')) next.lastTurnAt = patch.lastTurnAt
+      if (Object.hasOwn(patch, 'mounts')) next.mounts = normalizeMounts(patch.mounts)
       return write(next)
     },
   }

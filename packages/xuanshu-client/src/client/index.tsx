@@ -26,11 +26,19 @@
  * （槽位声明排他，`main.conversation` 已由 ui-conversation 声明）、
  * 不加 priority（`overview` / `pus` / `cang` / `onboarding` / `mingpan` 都是新 cell，
  * 纯加性、不遮蔽任何既有占用者）。
+ *
+ * 票 15 追加（沉淀闭环）：三处**会话内**贡献 —— `conversation.composer.dock`（`[导出汇总]` 入口）、
+ * `conversation.chat.turnTail`（草稿卡）、`shell.overlay`（结果通知）。三者共用一份
+ * `createSedimentApi` + `createSedimentController`；写谱只在确认弹窗的 `[确认更新]` 之后发生。
  */
 import type { Context } from '@deepseek-ai/cordis';
+import { createElement as h } from 'react';
 
 import { createBaziApi } from './bazi-api.js';
 import { createBaziUiController } from './bazi-controller.js';
+import { createBestofApi } from './bestof-api.js';
+import { createBestofController } from './bestof-model.js';
+import { installBestOf } from './bestof.js';
 import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
 import { createConsultApi } from './consult-api.js';
@@ -39,6 +47,8 @@ import { createDigaoApi } from './digao-api.js';
 import { createDigaoUiController } from './digao-controller.js';
 import { installDigao } from './digao.js';
 import { installMingpan } from './MingpanPanel.js';
+import { createMountsApi, createWorkspaceCatalog } from './mounts-api.js';
+import { createMountsController, installMounts, MountsSectionFor } from './mounts.js';
 import { installOnboarding } from './onboarding.js';
 import { OverviewIcon } from './OverviewIcon.js';
 import { OverviewPanel } from './OverviewPanel.js';
@@ -51,6 +61,9 @@ import { installRikke } from './rikke.js';
 import { createWorkflowApi } from './workflow/workflow-api.js';
 import { installWorkflowPanel } from './workflow/WorkflowPanel.js';
 import type { RpcContext } from './rpc.js';
+import { createSedimentApi } from './sediment-api.js';
+import { createSedimentController } from './sediment-model.js';
+import { installSediment } from './sediment-views.js';
 import { installOverviewStyle } from './style.js';
 import { THEME_SOURCE, THEME_TOKENS } from './tokens.js';
 import { EMPTY_MAIN_PANELS, createMainPanelsWatch } from './watch.js';
@@ -160,6 +173,16 @@ export function apply(ctx: Context): void {
         }
       : undefined;
 
+  // 票 12：临时挂载。数据面走宿主唯一新增的方法 `consult.setMounts`（含 `preview:true` 的只算不写）；
+  // 工作区清单走 DSH **客户端**服务 `ctx.workspaces.list`（只读投影，不新建 / 不改名 / 不删除）。
+  const mountsApi = createMountsApi(rpc);
+  const workspaceCatalog = createWorkspaceCatalog(ctx);
+  const mountsController = createMountsController({
+    api: mountsApi,
+    workspaces: () => workspaceCatalog.list(),
+    workspaceAvailable: workspaceCatalog.available,
+  });
+
   // 票 13：日课与底稿的数据面 + 各自的「人点才跑」控制器（概览的两张卡与两块面板共用同一份；
   // 生成 / 刷新只由按钮的 onClick 触发，apply 期一个请求都不发）。
   const rikke = createRikkeApi(rpc);
@@ -169,6 +192,17 @@ export function apply(ctx: Context): void {
 
   // 票 16：工作流门厅的数据面（创建 / 列表 / 导出三件事都**只由人点**触发，apply 期不发请求）。
   const workflow = createWorkflowApi(rpc);
+
+  // 票 15：沉淀闭环的数据面 + 跨槽共享控制器（入口条与草稿卡是两棵独立的 React 树）。
+  // 这一层也是「人点才跑」的结构保证：造控制器不发任何请求，写谱只在 `commit()` 里发生，
+  // 而它只由确认弹窗的 `[确认更新]` 调用（`confirmed` 由数据面写死为 true）。
+  const sediment = createSedimentApi(rpc);
+  const sedimentController = createSedimentController(sediment);
+
+  // 票 11：多 AI 合参的数据面 + 控制器（浮层与设置行共用一份；`apply` 期一个请求都不发，
+  // 「开始合参」是人点出来的唯一入口）。
+  const bestof = createBestofApi(rpc);
+  const bestofController = createBestofController({ api: bestof });
 
   const injected = (): OverviewInjected => ({
     navigate,
@@ -225,7 +259,19 @@ export function apply(ctx: Context): void {
   installOnboarding(rpc, baziDeps);
   installMingpan(rpc, baziDeps);
   // ⑦ 票 10：问事门厅（`consult`，order 30 = S15 给「书房」预约的那一档）。
-  installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
+  //    票 12 的挂载区作为**插槽**进这门厅（S8 §1：门厅的挂载入口开同一个抽屉），
+  //    所以门厅那边一行注册都不用改（`mountSlot` 缺席时退回票 10 的占位说明）。
+  installConsult(rpc, {
+    api: consultApi,
+    navigate,
+    openSession,
+    refreshSessions,
+    mountSlot: (session) => h(MountsSectionFor, { controller: mountsController, session }),
+  });
+  // ⑨ 票 12：挂载账本抽屉（S8）——`shell.overlay` 上的**一个** cell（没有面板、没有侧栏行）。
+  //    紧跟在 `installConsult` 之后：它是问事面的伴生抽屉，注册序与 `panel-surface.mjs` 的
+  //    `EXTRA_REGISTRATIONS`（after: 'consult'）一致。
+  installMounts(rpc, { api: mountsApi, workspaces: () => workspaceCatalog.list(), workspaceAvailable: workspaceCatalog.available });
 
   // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
   installDigao(rpc, { api: digao, navigate });
@@ -233,4 +279,29 @@ export function apply(ctx: Context): void {
 
   // ⑨ 票 16：工作流门厅（`workflow`，order 70）—— 创建工作流 → 会话；导出 skill 的落点表单在这里。
   installWorkflowPanel(rpc, { api: workflow, navigate });
+
+  // ⑩ 票 15：沉淀三处贡献（`conversation.composer.dock` 入口 / `conversation.chat.turnTail` 草稿卡 /
+  // `shell.overlay` 通知）。**不新增 main key、不新增侧栏行** —— 沉淀是会话内区块，
+  // 只在 DSH 原生 `conversation` 面板在屏时渲染（S10 §1 D5 / F1）。放在最后，纯加性。
+  installSediment(rpc, { api: sediment, controller: sedimentController, navigate });
+
+  // ⑪ 票 11：多 AI 合参（`shell.overlay` 浮层 + `settings.general.item` 开关行 + `/多模型` 命令
+  //    与别名 `/合参` · `bestof` + 会话 composer 旁的触发按钮）。四条注册都是纯加性；
+  //    浮层无内容时 `return null`（click-through）。
+  //    命令面能给当前 sessionId；**按钮给不了**，所以由回调退到「最近一次问事会话」
+  //    （`consult.list` 按 createdAt 倒序，门厅里显示的就是它）。
+  //    **注册序**：`panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 里 sediment 与 bestof 都挂在
+  //    `workflow` 那一对之后，靠**数组顺序**分先后 —— 这里谁在后，那边谁就在后。
+  installBestOf(ctx, {
+    api: bestof,
+    controller: bestofController,
+    resolveSessionId: async () => {
+      try {
+        const { items } = await consultApi.list();
+        return items[0]?.sessionId;
+      } catch {
+        return undefined;
+      }
+    },
+  });
 }

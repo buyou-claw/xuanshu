@@ -92,3 +92,25 @@ export async function createConsultQuestionMessage(text, { searchDirs = [] } = {
   const createUserMessage = await loadCreateUserMessage(searchDirs)
   return createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
 }
+
+/** 票 11 采用稿的来源 kind：轨迹里显示成一条「注入」行，标签就是它。 */
+export const BESTOF_ADOPTED_SOURCE_KIND = 'xuanshu-bestof-adopted'
+
+/**
+ * 票 11：**被人采用的那一份**合参稿。
+ *
+ * 为什么是「用户消息 + 自定义 source kind」而不是别的载体：会话日志只接受**已登记**的事件
+ * 类型（`user/message` 是其一），而 `source` 是 DSH 显式 merge-extensible 的合并点 ——
+ * 于是这一份既能落进历史（后续轮次看得见），又不会被当成用户本人的原话
+ * （轨迹里渲染成「注入」行）。**落选候选永远不走这条路**（旁挂 `bestof` 记录是候选的唯一权威）。
+ *
+ * 内容前面那一行是**说明**，不是伪装：告诉模型这一段是谁放进来的。
+ */
+export async function createBestofAdoptedMessage(text, { searchDirs = [], merged = false } = {}) {
+  const createUserMessage = await loadCreateUserMessage(searchDirs)
+  const label = merged ? '【已采用的多 AI 合参稿（合并稿）】' : '【已采用的多 AI 合参稿】'
+  return createUserMessage({
+    content: [{ type: 'text', text: `${label}\n${text}` }],
+    source: { kind: BESTOF_ADOPTED_SOURCE_KIND },
+  })
+}

@@ -14,6 +14,7 @@
  *   - `apply` 期**不调 `ctx.layout.selectPanel`**（默认面板语义只属于 overview）。
  */
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 
 import type { ConsultApi, ConsultDefaults, ConsultMessage, ConsultSummary, MountRef } from './consult-api.js';
@@ -58,6 +59,11 @@ export interface ConsultInstallDeps {
    * 而不是假装切过去了。
    */
   openSession?: (sessionId: string) => void;
+  /**
+   * 票 12 的挂载区插槽（S8 抽屉入口 + 状态栏）。宿主接线时给；不给就退回票 10 的占位说明 ——
+   * 门厅不会因为挂载面缺席而空一块，票 10 的断言台也不用改。
+   */
+  mountSlot?: (session: ConsultSummary | undefined) => ReactNode;
 }
 
 export interface ConsultPanelProps extends ConsultInstallDeps {
@@ -79,7 +85,7 @@ function errorText(error: unknown): string {
  * @param props - 数据面、导航与静态预置。
  * @returns 门厅 / 历史子页节点。
  */
-export function ConsultPanel({ api, navigate, openSession, refreshSessions, preloaded }: ConsultPanelProps) {
+export function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, preloaded }: ConsultPanelProps) {
   const [view, setView] = useState<'lobby' | 'history'>(preloaded?.view ?? 'lobby');
   const [defaults, setDefaults] = useState<Loadable<ConsultDefaults>>(
     preloaded?.defaults === undefined ? { kind: 'loading' } : { kind: 'ready', value: preloaded.defaults },
@@ -271,7 +277,9 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, prel
             />
           ) : null}
 
-          <XsConsultMountPlaceholder mounts={mountsNow} />
+          {/* 票 12：挂载区。宿主接线时用真的挂载区（S8 的抽屉入口 + 状态栏）；
+              没接线时仍是票 10 的占位说明 —— 门厅不会因为挂载面缺席而空一块。 */}
+          {mountSlot === undefined ? <XsConsultMountPlaceholder mounts={mountsNow} /> : mountSlot(latest)}
 
           <XsConsultAsk
             question={question}

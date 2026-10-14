@@ -365,6 +365,101 @@ export function fakeWorkspaceRegistry() {
   return { calls, service: { create: trap('create'), attachSession: trap('attachSession'), list: trap('list') } }
 }
 
+/**
+ * 假 `ctx.workspaceRegistry`（**票 12 专用**）：`list/get/resolveByPath` 给真数据，写操作照旧抛。
+ *
+ * 为什么另开一个而不改 `fakeWorkspaceRegistry()`：那一个是票 10 的判据 ——
+ * 「问事会话不挂进任何工作区」的机器判据就是「一次都没被调」。票 12 允许**读**工作区
+ * （挂载要拿 path 去读内容），但**仍然不许**把会话挂进去 —— 所以这个替身把「读」放开、
+ * 把「写」继续钉死，而老判据一个字都不动（新票不许把老票的判据弄松）。
+ *
+ * @param {{workspaces?: readonly object[]}} [options] 假工作区清单（形状照 `dsh-workspace` 的 `Workspace`）。
+ * @returns `{ calls, workspaces, service }`；`calls` 记录每一次真实调用（含 `get`）。
+ */
+export function fakeWorkspaceRegistryForMounts({ workspaces = [] } = {}) {
+  const calls = []
+  const byId = new Map(workspaces.map((workspace) => [workspace.id, workspace]))
+  const trap = (name) => (...args) => {
+    calls.push({ name, args })
+    throw new Error(`票 12 只许**读**工作区：挂载 ≠ 归属（ADR-0009 第 3 条），不许调 ${name}`)
+  }
+  return {
+    calls,
+    workspaces,
+    service: {
+      list: () => {
+        calls.push({ name: 'list' })
+        return workspaces.map((workspace) => ({ ...workspace }))
+      },
+      get: (id) => {
+        calls.push({ name: 'get', args: [id] })
+        return byId.get(id)
+      },
+      resolveByPath: (path) => {
+        calls.push({ name: 'resolveByPath', args: [path] })
+        return workspaces.find((workspace) => workspace.path === path)
+      },
+      create: trap('create'),
+      attachSession: trap('attachSession'),
+      detachSession: trap('detachSession'),
+    },
+  }
+}
+
+/**
+ * 假 `ctx.fs`（**票 12 专用**）：读走**真** `node:fs`，写与编辑一律抛。
+ *
+ * 形状照 `@deepseek-ai/dsh-fs/lib/types/types.d.ts` 逐字段抄（本机只读核对）：
+ *   `FsTarget = { targetKey, displayPath }`、
+ *   `FsInfo = { version, type: 'file'|'directory'|'other', size? }`、
+ *   `FsDirEntry = { name, type, target, version?, size? }`。
+ * 读真文件系统而不是手搓 fixture，是为了让「读出来的内容」本身就是被判的东西；
+ * 写方法做成抛，是因为 E.4 明说沙箱只在写路径设围栏 —— 票 12 **一次写都不该做**。
+ *
+ * @returns `{ calls, service }`；`calls` 记录每一次调用（含写方法的尝试）。
+ */
+export function fakeFsReader() {
+  const calls = []
+  const trap = (name) => (...args) => {
+    calls.push({ name, args })
+    throw new Error(`票 12 只读挂载内容：不许调 ctx.fs.${name}（E.4：沙箱只在写路径设围栏）`)
+  }
+  const target = (path) => ({ targetKey: `k:${path}`, displayPath: path })
+  return {
+    calls,
+    service: {
+      async resolve(path) {
+        calls.push({ name: 'resolve', args: [path] })
+        return target(path)
+      },
+      async stat(t) {
+        calls.push({ name: 'stat', args: [t.displayPath] })
+        try {
+          const info = statSync(t.displayPath)
+          return { version: 'v1', type: info.isDirectory() ? 'directory' : info.isFile() ? 'file' : 'other', size: info.size }
+        } catch {
+          return undefined
+        }
+      },
+      async listDir(t) {
+        calls.push({ name: 'listDir', args: [t.displayPath] })
+        return readdirSync(t.displayPath, { withFileTypes: true }).map((entry) => ({
+          name: entry.name,
+          type: entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'other',
+          target: target(join(t.displayPath, entry.name)),
+          version: 'v1',
+        }))
+      },
+      async readText(t) {
+        calls.push({ name: 'readText', args: [t.displayPath] })
+        return readFileSync(t.displayPath, 'utf8')
+      },
+      writeText: trap('writeText'),
+      editText: trap('editText'),
+    },
+  }
+}
+
 /** 造一条 `user/message` 会话事件（形状照 `dsh-session` 的 SessionEvent）。 */
 export function userEvent(seq, message, time) {
   return { type: 'user/message', seq, time, data: message }

@@ -22,11 +22,12 @@ import { join } from 'node:path'
 
 import { createBaziMethods, resolveDataDir } from '../bazi/service.mjs'
 import { createPuMethods } from '../pu/service.mjs'
+import { buildMountPreview, requireMountableWorkspaces } from '../mounts/preview.mjs'
 import { buildConsultContext } from './context.mjs'
 import { consultAgentCapability, createConsultAgent, resumeConsultAgent } from './agent.mjs'
 import { isSessionNotFound, projectConsultMessages } from './history.mjs'
 import { createConsultContextMessage, createConsultQuestionMessage } from './message.mjs'
-import { DEFAULT_CONSULT_TITLE, consultRoot, createConsultStore, isConsultSessionId, newConsultSessionId, normalizePus, normalizeTitle, titleFromQuestion, toConsultSummary } from './store.mjs'
+import { DEFAULT_CONSULT_TITLE, consultRoot, createConsultStore, isConsultSessionId, newConsultSessionId, normalizeMounts, normalizePus, normalizeTitle, titleFromQuestion, toConsultSummary } from './store.mjs'
 import { waitForTurnEnd } from './turn.mjs'
 
 /** 底稿文件名（契约 §2/§3：`<dataDir>/digao.md`，由票 13 生产，本票只探测与注入）。 */
@@ -124,7 +125,13 @@ export function createConsultMethods(ctx, config = {}) {
     return handle.agent
   }
 
-  /** 装配这一场问事的首轮上下文（底座谱 → 底稿 → 勾选谱；读面全部来自票 08 / 票 09）。 */
+  /**
+   * 装配这一场问事的首轮上下文（底座谱 → 底稿 → 勾选谱 → 临时挂载；
+   * 读面全部来自票 08 / 票 09 / 票 12 的 `ctx.fs`）。
+   *
+   * 挂载只在**真有挂载**时才多出那一段（`mounts` 为空时输出与票 10 逐字节相同）——
+   * 这是「加性」在这里的具体含义：改动不许影响没有挂载的会话。
+   */
   async function buildInjection(manifest) {
     const read = await basePu()
     const selected = []
@@ -136,7 +143,10 @@ export function createConsultMethods(ctx, config = {}) {
         selected.push({ slug, error: String(error?.message ?? error) })
       }
     }
-    return buildConsultContext({ dataDir, basePu: read?.pu ?? null, digao: readDigao(dataDir), selected })
+    const mounts = Array.isArray(manifest.mounts) && manifest.mounts.length > 0
+      ? await buildMountPreview(ctx, config, manifest.mounts)
+      : undefined
+    return buildConsultContext({ dataDir, basePu: read?.pu ?? null, digao: readDigao(dataDir), selected, mounts })
   }
 
   /**
@@ -343,6 +353,34 @@ export function createConsultMethods(ctx, config = {}) {
         throw new Error(`问事记录不存在：${sessionId}（列表以旁挂清单为准；consult.list 里没有它）。`)
       }
       return { session: toConsultSummary(updated) }
+    },
+
+    /**
+     * 临时挂载（票 12，契约 §2）：把「这次要临时引进来看看」的工作区 / 工作流写进
+     * **同一份旁挂清单的 `mounts` 字段**（不另开权威），与勾选谱 `pus` 并列。
+     *
+     * `preview: true` = **只算不写**：读挂载内容、按预算裁剪、把逐层账本返回给抽屉展示。
+     * 校验 / 读取 / 裁剪与真正写入走**同一条**代码路径（契约修订的核心理由：少一处漂移），
+     * 所以「预览看到的」与「确认后注入的」不会各算一套。
+     */
+    'consult.setMounts': async (request) => {
+      const source = request && typeof request === 'object' && !Array.isArray(request) ? request : {}
+      const sessionId = requireSessionId(source.sessionId)
+      const mounts = normalizeMounts(source.mounts)
+
+      const manifest = store.read(sessionId)
+      if (manifest === null) {
+        throw new Error(`问事记录不存在：${sessionId}（列表以旁挂清单为准；consult.list 里没有它 —— 先 consult.create）。`)
+      }
+      requireMountableWorkspaces(ctx, mounts)
+
+      // `preview` 缺席时响应与票 10 冻结的 `{session}` **逐字相同**（不许冒出 `preview: undefined` 之类的键）。
+      if (source.preview !== true) {
+        const updated = store.update(sessionId, { mounts })
+        if (updated === null) throw new Error(`问事记录不存在：${sessionId}。`)
+        return { session: toConsultSummary(updated) }
+      }
+      return { session: toConsultSummary(manifest), preview: await buildMountPreview(ctx, config, mounts) }
     },
   }
 }
