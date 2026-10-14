@@ -1383,9 +1383,8 @@ function kindOf(name) {
   return "other";
 }
 function splitMarker(inner) {
-  const parts = inner.split(/\s+/).filter((part) => part !== "");
-  if (parts.length === 0) return { label: "", name: "" };
-  return { label: parts[0], name: parts.slice(1).join(" ") };
+  const [label = "", ...rest] = inner.split(/\s+/).filter((part) => part !== "");
+  return { label, name: rest.join(" ") };
 }
 function parseDigaoMarkdown(markdown) {
   const drafts = [];
@@ -1393,14 +1392,15 @@ function parseDigaoMarkdown(markdown) {
   let segment;
   const closeSegment = () => {
     if (group === void 0 || segment === void 0) return;
-    const origins = segment.bodyLines.map((line) => ORIGIN_RE.exec(line.trim())).filter((match) => match !== null).map((match) => match[1].trim());
-    const body = segment.bodyLines.filter((line) => ORIGIN_RE.exec(line.trim()) === null).join("\n").trim();
+    const current = segment;
+    const origins = current.bodyLines.map((line) => ORIGIN_RE.exec(line.trim())).filter((match) => match !== null).map((match) => match[1] ?? "");
+    const body = current.bodyLines.filter((line) => ORIGIN_RE.exec(line.trim()) === null).join("\n").trim();
     group.segments.push({
-      label: segment.label,
-      kind: segment.kind,
-      name: segment.name,
+      label: current.label,
+      kind: current.kind,
+      name: current.name,
       body,
-      ...origins.length === 0 ? {} : { origin: origins[origins.length - 1] }
+      ...origins.length === 0 ? {} : { origin: origins[origins.length - 1] ?? "" }
     });
     segment = void 0;
   };
@@ -1408,18 +1408,21 @@ function parseDigaoMarkdown(markdown) {
     const heading = HEADING_RE.exec(rawLine.trim());
     if (heading !== null) {
       closeSegment();
-      const name = heading[1];
-      group = { kind: kindOf(name), name, noteLines: [], segments: [] };
-      drafts.push(group);
+      const name = heading[1] ?? "";
+      const draft = { kind: kindOf(name), name, noteLines: [], segments: [] };
+      group = draft;
+      drafts.push(draft);
       continue;
     }
     if (group === void 0) continue;
     const marker = MARKER_RE.exec(rawLine.trim());
     if (marker !== null) {
       closeSegment();
-      const { label, name } = splitMarker(marker[1]);
-      segment = { label, kind: kindOf(label), name, bodyLines: [] };
-      if (marker[2] !== "") segment.bodyLines.push(marker[2]);
+      const { label, name } = splitMarker(marker[1] ?? "");
+      const draft = { label, kind: kindOf(label), name, bodyLines: [] };
+      segment = draft;
+      const trailing = marker[2] ?? "";
+      if (trailing !== "") draft.bodyLines.push(trailing);
       continue;
     }
     if (segment === void 0) group.noteLines.push(rawLine);

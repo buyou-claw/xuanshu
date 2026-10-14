@@ -321,14 +321,6 @@ export type OverviewPanelProps = PropsRuntime<'main'> &
     baseplateReady?: boolean;
     /** 静态预置的命盘状态（测试 / SSR：给了就不调 `bazi.status`）。 */
     preloadedBaziStatus?: BaziStatus;
-    /** 日课数据面（票 13；`index.tsx` 用 `createRikkeApi(ctx)` 造好注入）。 */
-    rikke?: RikkeApi;
-    /** 日课生成 / 取数代次（票 13）。 */
-    rikkeController?: RikkeUiController;
-    /** 底稿数据面（票 13）。 */
-    digao?: DigaoApi;
-    /** 底稿刷新 / 取数代次（票 13）。 */
-    digaoController?: DigaoUiController;
     /** 静态预置的日课状态与生成结果（测试 / SSR：给了就不取数）。 */
     preloadedRikkeStatus?: RikkeStatus;
     preloadedRikkeOutcome?: RikkeOutcome;

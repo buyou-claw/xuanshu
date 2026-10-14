@@ -80,9 +80,8 @@ function kindOf(name: string): DigaoSourceKind | 'other' {
 
 /** 段首标记 `【来源：谱 事业与行业】` → `{ label:'谱', name:'事业与行业' }`。 */
 function splitMarker(inner: string): { label: string; name: string } {
-  const parts = inner.split(/\s+/).filter((part) => part !== '');
-  if (parts.length === 0) return { label: '', name: '' };
-  return { label: parts[0], name: parts.slice(1).join(' ') };
+  const [label = '', ...rest] = inner.split(/\s+/).filter((part) => part !== '');
+  return { label, name: rest.join(' ') };
 }
 
 /**
@@ -99,20 +98,21 @@ export function parseDigaoMarkdown(markdown: string): DigaoGroup[] {
   /** 收段：正文剔除「源自：」行，最后一条「源自：」成为该段的来源指针。 */
   const closeSegment = (): void => {
     if (group === undefined || segment === undefined) return;
-    const origins = segment.bodyLines
+    const current = segment;
+    const origins = current.bodyLines
       .map((line) => ORIGIN_RE.exec(line.trim()))
       .filter((match): match is RegExpExecArray => match !== null)
-      .map((match) => match[1].trim());
-    const body = segment.bodyLines
+      .map((match) => match[1] ?? '');
+    const body = current.bodyLines
       .filter((line) => ORIGIN_RE.exec(line.trim()) === null)
       .join('\n')
       .trim();
     group.segments.push({
-      label: segment.label,
-      kind: segment.kind,
-      name: segment.name,
+      label: current.label,
+      kind: current.kind,
+      name: current.name,
       body,
-      ...(origins.length === 0 ? {} : { origin: origins[origins.length - 1] }),
+      ...(origins.length === 0 ? {} : { origin: origins[origins.length - 1] ?? '' }),
     });
     segment = undefined;
   };
@@ -121,19 +121,22 @@ export function parseDigaoMarkdown(markdown: string): DigaoGroup[] {
     const heading = HEADING_RE.exec(rawLine.trim());
     if (heading !== null) {
       closeSegment();
-      const name = heading[1];
-      group = { kind: kindOf(name), name, noteLines: [], segments: [] };
-      drafts.push(group);
+      const name = heading[1] ?? '';
+      const draft: DraftGroup = { kind: kindOf(name), name, noteLines: [], segments: [] };
+      group = draft;
+      drafts.push(draft);
       continue;
     }
     if (group === undefined) continue; // 章节之前的抬头（`# 底稿` 之类）不是来源内容
     const marker = MARKER_RE.exec(rawLine.trim());
     if (marker !== null) {
       closeSegment();
-      const { label, name } = splitMarker(marker[1]);
-      segment = { label, kind: kindOf(label), name, bodyLines: [] };
+      const { label, name } = splitMarker(marker[1] ?? '');
+      const draft: DraftSegment = { label, kind: kindOf(label), name, bodyLines: [] };
+      segment = draft;
       // 标记行末尾的说明文字（`…】事业与行业 ▸ 近一年判断`）落在正文首行，界面照原样展示。
-      if (marker[2] !== '') segment.bodyLines.push(marker[2]);
+      const trailing = marker[2] ?? '';
+      if (trailing !== '') draft.bodyLines.push(trailing);
       continue;
     }
     if (segment === undefined) group.noteLines.push(rawLine);

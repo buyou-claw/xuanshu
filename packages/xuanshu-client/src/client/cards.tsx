@@ -17,6 +17,8 @@ import type { ReactNode } from 'react';
 
 import type { BaziApi } from './bazi-api.js';
 import type { BaziUiController } from './bazi-controller.js';
+import type { DigaoApi } from './digao-api.js';
+import type { DigaoUiController } from './digao-controller.js';
 import {
   ACTION_COPY,
   BADGE_DERIVED,
@@ -44,6 +46,8 @@ import {
 } from './glyphs.js';
 import type { MainPanelsWatch } from './watch.js';
 import { useMainPanels } from './watch.js';
+import type { RikkeApi } from './rikke-api.js';
+import type { RikkeUiController } from './rikke-controller.js';
 
 /* ───────────────────────── 共用：导航与可用性 ───────────────────────── */
 
@@ -70,6 +74,16 @@ export interface OverviewInjected {
   bazi?: BaziApi;
   /** 命盘取数代次 / 重录预填（票 08）：出盘成功后概览据此重取快照（不重新出盘）。 */
   baziController?: BaziUiController;
+  /**
+   * 日课数据面与控制器（票 13）：同样是**面板级**注入，四卡不消费 ——
+   * `OverviewPanel` 用 `rikke.status` 决定日课卡四态，`rikkeController.generate()` 是
+   * 「人点 [立即生成]」的唯一落点（`onGenerate` 由概览自己造，不从注入面来）。
+   */
+  rikke?: RikkeApi;
+  rikkeController?: RikkeUiController;
+  /** 底稿数据面与控制器（票 13）：`digao.status` 决定底稿卡四态，`refresh()` 是「人点 [刷新]」的落点。 */
+  digao?: DigaoApi;
+  digaoController?: DigaoUiController;
 }
 
 /** 订阅 main 面板键（卡片渲染期判定 fail-soft）。 */
