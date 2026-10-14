@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join } from 'node:path'
 
 import { resolveDataDir } from '../bazi/service.mjs'
+import { DIGAO_TASK_TITLE, findDailyTask, scheduleSummary } from '../rikke/daily-tasks.mjs'
 import { condenseWithLlm } from './llm.mjs'
 import { DIGAO_SCHEMA, buildDigaoMeta, buildSegments, renderDigaoMarkdown } from './skeleton.mjs'
 import { collectSources } from './sources.mjs'
@@ -111,12 +112,30 @@ export async function refreshDigao({ ctx, dataDir, now = new Date() } = {}) {
 export function createDigaoMethods(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
 
+  /**
+   * 底稿那条 daily 任务的摘要（契约修订 2026-10-15：`digao.status` 与 `digao.read` 各多一个可选
+   * `schedule`，界面用它显示「下次刷新」）。**拿不到就省略该键** —— 不写 null、不写空串。
+   */
+  async function scheduleField() {
+    return scheduleSummary(await findDailyTask(ctx, DIGAO_TASK_TITLE))
+  }
+
   return {
     /** 底稿在不在 + 元数据（票 07 的底稿卡用它给 state 与 summary）。 */
-    'digao.status': async () => ({ exists: existsSync(digaoMarkdownFile(dataDir)), meta: readDigaoMeta(dataDir) }),
+    'digao.status': async () => {
+      const out = { exists: existsSync(digaoMarkdownFile(dataDir)), meta: readDigaoMeta(dataDir) }
+      const schedule = await scheduleField()
+      if (schedule !== null) out.schedule = schedule
+      return out
+    },
 
     /** 只读全文（只读面板用）。 */
-    'digao.read': async () => ({ markdown: readDigaoMarkdown(dataDir), meta: readDigaoMeta(dataDir) }),
+    'digao.read': async () => {
+      const out = { markdown: readDigaoMarkdown(dataDir), meta: readDigaoMeta(dataDir) }
+      const schedule = await scheduleField()
+      if (schedule !== null) out.schedule = schedule
+      return out
+    },
 
     /** 人点 [立即刷新] 走它（写操作：整文件原子重写）。 */
     'digao.refresh': async () => {

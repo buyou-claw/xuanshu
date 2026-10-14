@@ -1,0 +1,100 @@
+{
+  "ok": false,
+  "tool": "huangli",
+  "version": "0.40.1",
+  "input_normalized": {},
+  "data": {},
+  "summary": [],
+  "warnings": [],
+  "memory_ref": null,
+  "trace_id": null,
+  "group_id": null,
+  "error": {
+    "code": "tool.invalid_payload",
+    "message": "huangli payload failed validation; see details.agent_recovery.",
+    "details": {
+      "validation_errors": [
+        {
+          "loc": [
+            "hour"
+          ],
+          "msg": "Input should be a valid integer, unable to parse string as an integer",
+          "type": "int_parsing"
+        }
+      ],
+      "agent_recovery": {
+        "must_ask_user": true,
+        "reason": "invalid_or_incomplete_payload",
+        "prompt_to_user": "调用 `huangli` 前需要先确认这些会影响结果的设置：\nBefore running `huangli`, please confirm these result-changing settings:\n1. 要看哪一天的黄历？（公历 YYYY-MM-DD）",
+        "ask_if_missing": [
+          {
+            "field": "date",
+            "question": "要看哪一天的黄历？（公历 YYYY-MM-DD）"
+          }
+        ],
+        "safe_defaults": [],
+        "do_not_assume": [],
+        "retry_requires_one_of": [
+          {
+            "agent_confirmed_settings": true,
+            "meaning": "Use after the user explicitly answered the clarification."
+          },
+          {
+            "defaults_accepted": true,
+            "meaning": "Use only after the user explicitly accepted Horosa/Xingque defaults."
+          }
+        ],
+        "retry_should_include": [
+          "clarification_notes"
+        ],
+        "kind": "input",
+        "next_action": "resend_arguments_as_object"
+      },
+      "hint": "调用参数没解析成对象。把各个字段按工具的 inputSchema 直接传（不要整包塞进一个字符串），确需整包时 request 必须是合法 JSON 对象。 / The call arguments did not parse as an object. Pass fields directly per the tool's inputSchema; if you must send one blob, `request` has to be a valid JSON object.",
+      "next_action": "resend_arguments_as_object"
+    }
+  },
+  "code": "tool.invalid_payload",
+  "message": "huangli payload failed validation; see details.agent_recovery.",
+  "details": {
+    "validation_errors": [
+      {
+        "loc": [
+          "hour"
+        ],
+        "msg": "Input should be a valid integer, unable to parse string as an integer",
+        "type": "int_parsing"
+      }
+    ],
+    "agent_recovery": {
+      "must_ask_user": true,
+      "reason": "invalid_or_incomplete_payload",
+      "prompt_to_user": "调用 `huangli` 前需要先确认这些会影响结果的设置：\nBefore running `huangli`, please confirm these result-changing settings:\n1. 要看哪一天的黄历？（公历 YYYY-MM-DD）",
+      "ask_if_missing": [
+        {
+          "field": "date",
+          "question": "要看哪一天的黄历？（公历 YYYY-MM-DD）"
+        }
+      ],
+      "safe_defaults": [],
+      "do_not_assume": [],
+      "retry_requires_one_of": [
+        {
+          "agent_confirmed_settings": true,
+          "meaning": "Use after the user explicitly answered the clarification."
+        },
+        {
+          "defaults_accepted": true,
+          "meaning": "Use only after the user explicitly accepted Horosa/Xingque defaults."
+        }
+      ],
+      "retry_should_include": [
+        "clarification_notes"
+      ],
+      "kind": "input",
+      "next_action": "resend_arguments_as_object"
+    },
+    "hint": "调用参数没解析成对象。把各个字段按工具的 inputSchema 直接传（不要整包塞进一个字符串），确需整包时 request 必须是合法 JSON 对象。 / The call arguments did not parse as an object. Pass fields directly per the tool's inputSchema; if you must send one blob, `request` has to be a valid JSON object.",
+    "next_action": "resend_arguments_as_object"
+  }
+}
