@@ -240,18 +240,23 @@ describe('票 07 · 首屏 = 自我总览（产物物化）', () => {
     const { calls, ctx } = recordingCtx()
     plugin.apply(ctx)
     const registers = calls.filter((call) => call.kind === 'register')
-    // 总装配后的完整注册面：overview（票 07）、pus（票 09）、cang（票 14）+ 藏登记浮层。
+    // 总装配后的完整注册面：overview（票 07）、pus（票 09）、cang（票 14）、
+    // onboarding + mingpan（票 08）+ 藏登记浮层。**只扩容期望数组，断言语义未变**：
+    // 票 08 的两个 key 是纯加性追加（在 cang 之后），不遮蔽、不加 priority、不声明 children。
     // 顺序有意义：overview 必须仍是**第一个** main 注册（默认面板与 S3 的 `find('main')` 都取首个）。
     const mainKeys = registers.filter((r) => r.name === 'main').map((r) => r.options.key)
     const rowIds = registers.filter((r) => r.name === 'sidebar.panellist').map((r) => r.options.id)
-    expect(mainKeys).toEqual(['overview', 'pus', 'cang'])
+    expect(mainKeys).toEqual(['overview', 'pus', 'cang', 'onboarding', 'mingpan'])
     // 「每个侧栏行 id 必须与某个 main key 同字符串」是行与面板配对的唯一依据。
     expect(rowIds).toEqual(mainKeys)
     expect(registers.map((r) => r.name)).toEqual([
       'main', 'sidebar.panellist',
       'main', 'sidebar.panellist',
       'main', 'sidebar.panellist',
+      // 藏登记浮层：`installCangClient` 里就挂在 `cang` 那对之后。
       'shell.overlay',
+      'main', 'sidebar.panellist',
+      'main', 'sidebar.panellist',
     ])
     expect(registers.some((call) => call.name === 'root'), '不得注册进 root 槽（single 槽会单独占满整页）').toBe(false)
     for (const register of registers) {
@@ -302,10 +307,14 @@ describe('票 07 · 槽位遮蔽不 fail-loud（加性注册）', () => {
     expect(() => plugin.apply(ctx)).not.toThrow()
     expect([...registry.cells.keys()].sort()).toEqual([
       'main\u0000cang',
+      'main\u0000mingpan',
+      'main\u0000onboarding',
       'main\u0000overview',
       'main\u0000pus',
       'shell.overlay\u0000xuanshu-cang-drawer',
       'sidebar.panellist\u0000cang',
+      'sidebar.panellist\u0000mingpan',
+      'sidebar.panellist\u0000onboarding',
       'sidebar.panellist\u0000overview',
       'sidebar.panellist\u0000pus',
     ])

@@ -16,19 +16,25 @@
  *   4. token 覆盖层：`ctx.theme.overrideTokens('xuanshu-ui-v1', …)`（票 03 取值）；
  *   5. 样式随 JS 走：模块加载时注入一个 `<style>`（官方 ui-layout 同法）。
  *
- * **总装配**（票 09 谱 / 票 14 藏）：本入口是唯一一处「组装」的地方，两个面板各自的
- * `installPuPanel` / `installCangClient` 在此被调用——它们各自的实现与断言台早就落地，
+ * **总装配**（票 09 谱 / 票 14 藏 / 票 08 八字）：本入口是唯一一处「组装」的地方，
+ * 两个面板各自的 `installPuPanel` / `installCangClient` 与票 08 的
+ * `installOnboarding` / `installMingpan` 在此被调用——它们各自的实现与断言台早已落地，
  * 缺的只是这一步。宿主侧对应的一半在 `packages/xuanshu-host/lib/index.js` 的
- * `installRpc`（同一通道 `/xuanshu`，方法名 `pu.*` / `cang.*`）。
+ * `installRpc`（同一通道 `/xuanshu`，方法名 `pu.*` / `cang.*` / `bazi.*`）。
  *
  * 不注册进 `root` 槽（那是 single 槽，会单独占满整页）、不声明 `children`
  * （槽位声明排他，`main.conversation` 已由 ui-conversation 声明）、
- * 不加 priority（`overview` / `pus` / `cang` 都是新 cell，纯加性、不遮蔽任何既有占用者）。
+ * 不加 priority（`overview` / `pus` / `cang` / `onboarding` / `mingpan` 都是新 cell，
+ * 纯加性、不遮蔽任何既有占用者）。
  */
 import type { Context } from '@deepseek-ai/cordis';
 
+import { createBaziApi } from './bazi-api.js';
+import { createBaziUiController } from './bazi-controller.js';
 import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
+import { installMingpan } from './MingpanPanel.js';
+import { installOnboarding } from './onboarding.js';
 import { OverviewIcon } from './OverviewIcon.js';
 import { OverviewPanel } from './OverviewPanel.js';
 import { PANEL_ID, PANEL_LABEL, PANEL_ORDER } from './panel.js';
@@ -110,7 +116,25 @@ export function apply(ctx: Context): void {
     ctx.layout.selectPanel(target);
   };
 
-  const injected = (): OverviewInjected => ({ navigate, mainPanels });
+  // 票 08：命盘数据面与跨面板控制器（概览 / 向导 / 详情三块共用同一份，
+  // 出盘成功后的「重取快照」与重录预填都靠它广播）。
+  const rpc = ctx as Context & RpcContext;
+  const bazi = createBaziApi(rpc);
+  const baziController = createBaziUiController();
+  const baziDeps = { api: bazi, controller: baziController, navigate };
+
+  const injected = (): OverviewInjected => ({
+    navigate,
+    mainPanels,
+    // 票 08：冷启动向导与命盘详情都是**已装配**的面板（本文件下面就注册它们），
+    // 所以这两个回调从此不再是「未接线」——命盘卡的两个出口因此可用。
+    onStartOnboarding: () => { navigate('onboarding'); },
+    onOpenDetail: () => { navigate('mingpan'); },
+    // 卡级重试：让控制器代次 +1，概览的 `useBaziStatus` 据此重取快照（不重新出盘）。
+    onRetry: () => { baziController.invalidate(); },
+    bazi,
+    baziController,
+  });
 
   // ③ 主面板：keyed 槽按 key 分派；key 必须与侧栏行 id 相同。
   // 依据：`…/dsh-client-ui-layout/lib/types/client/index.d.ts:49-56`（main 是 keyed/root）。
@@ -136,10 +160,14 @@ export function apply(ctx: Context): void {
     ),
   );
 
-  // ⑥ 总装配：谱（票 09）与藏（票 14）各自的面板 / 侧栏行 / 浮层。
-  // 两者都是**纯加性**注册（新 key / 新 id），且各自带自己的 style 注入与 RPC 客户端；
+  // ⑥ 总装配：谱（票 09）与藏（票 14）各自的面板 / 侧栏行 / 浮层；
+  // ⑦ 票 08：八字冷启动向导（`onboarding`）与命盘详情（`mingpan`）。
+  // 全部都是**纯加性**注册（新 key / 新 id），各自带自己的样式与 RPC 客户端；
   // 放在 overview 之后，保证「第一个 main 注册仍是 overview」与默认面板语义不变。
-  const rpc = ctx as Context & RpcContext;
+  // 顺序有意义：`verify-assembly` / `overview-contract` 都按注册序断言
+  // `overview` 在最前、且 `selectPanel` 只在 overview 注册后发生一次。
   installPuPanel(rpc);
   installCangClient(rpc);
+  installOnboarding(rpc, baziDeps);
+  installMingpan(rpc, baziDeps);
 }

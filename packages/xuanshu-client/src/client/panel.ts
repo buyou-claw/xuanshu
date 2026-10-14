@@ -44,6 +44,37 @@ export const PANEL_ORDER = 20;
  */
 export const PANEL_LABEL = '总览';
 
+/**
+ * 票 08 的两个新 main key：`onboarding`（S3 冷启动向导）/ `mingpan`（S2 命盘详情）。
+ *
+ * 为什么各带一条侧栏行（而不是像屏稿原本设想的那样藏在 `overview` 的子状态里）：
+ *   契约 §6 冻结了「新 main key + 各带一条 `sidebar.panellist` 行」，理由是 DSH 的
+ *   keyed `main` 槽按 key 分派、`sidebar.panellist` 只认 `{id, order, label}`（D7 无分组字段）。
+ *   **F1 的后果要知道**：这两个 key ≠ `conversation`，所以面板内没有会话绑定、
+ *   `conversation.*` 子槽不渲染、右侧栏命令不可用（`DSH槽位映射.md` §0 F1）——
+ *   向导与详情都不需要会话座位，这是刻意的选择。
+ */
+export const ONBOARDING_ID = 'onboarding';
+export const MINGPAN_ID = 'mingpan';
+
+/** 侧栏行文案（D1 分区靠 order + 措辞表达，不承诺分组容器）。 */
+export const ONBOARDING_LABEL = '填八字';
+export const MINGPAN_LABEL = '命盘';
+
+/**
+ * 这两个 key 的侧栏 order。
+ *
+ * 取 80 / 90：S15 §2 的六行表把 *问事 30 / 谱 40 / 藏 50 / 底稿 60 / 工作流 70*
+ * 都**预约**给了后续票（`S15-管理入口与骨架落位.md:178,233`），插进 30 或 60 会与未来票撞位；
+ * 80 / 90 是 70 之后的两个空档，既保持「10 一档」的既有约定，又不动任何既有值
+ * （契约 §7：既有 key 的语义与 `PANEL_ORDER` 既有值都不许改）。
+ *
+ * 语义上也没问题：向导与详情是**流程入口**（进一次做完就走），排在管理入口之后，
+ * 与「总览 20 是玄枢自有行中的第一行」的口径不冲突。
+ */
+export const ONBOARDING_ORDER = 80;
+export const MINGPAN_ORDER = 90;
+
 /** 面板页头标题（S1 §2.1 线框图「家 - 自我总览」）。 */
 export const PANEL_TITLE = '自我总览';
 /** 面板页头的「家」分区标记（D1 定案，S15 §2）。 */
@@ -146,13 +177,18 @@ export const DISABLED_REASON = {
 /** 卡级三态 + ready（S1 §6：每卡各自三态，D2 卡级骨架、无整页 loading）。 */
 export type CardState = 'empty' | 'loading' | 'error' | 'ready';
 
-/** 面板导航目标（= `main` keyed 槽的 key；`conversation` 特殊：回 DSH 原面板）。 */
+/**
+ * 面板导航目标（= `main` keyed 槽的 key；`conversation` 特殊：回 DSH 原面板）。
+ * 票 08 起多了 `onboarding`（冷启动向导）与 `mingpan`（命盘详情）两个玄枢自有 key。
+ */
 export type PanelNavTarget =
   | 'consult'
   | 'pus'
   | 'digao'
   | 'workflow'
   | 'schedules'
+  | 'onboarding'
+  | 'mingpan'
   | 'conversation';
 
 /** 四卡的 DOM 名（`data-xuanshu-card`；素材命名法见 assets README §2）。 */
