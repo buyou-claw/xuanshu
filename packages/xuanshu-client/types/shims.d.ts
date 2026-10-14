@@ -203,6 +203,10 @@ declare module '@deepseek-ai/cordis' {
   } from '@deepseek-ai/dsh-client-ui-renderer';
 
   export interface Context {
+    /** dsh-client-connection/lib/types/rpc.d.ts ClientConnectionRpc.call. */
+    connection: import('../src/client/rpc.js').RpcContext['connection'];
+    /** dsh-client-ui-workspace/lib/types/client/navigation.d.ts UiWorkspace.openSession. */
+    uiWorkspace: { openSession(target: string): void };
     /** Renderer-owned UI composition registry. */
     slots: SlotRegistry;
     /** Panel navigation face（票 07：默认面板 + 四卡跳转）。 */
