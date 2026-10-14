@@ -358,12 +358,44 @@ export interface XsRikkeCardProps extends OverviewInjected {
   /** 当日日期（YYYY-MM-DD）；缺省由面板注入本机日期。 */
   today: string;
   content?: RikkeContent;
+  /** 失败理由（票 13：生成失败 / 底座未立时必须看得见，不许静默）。 */
+  reason?: string;
+}
+
+/** 宜 / 忌 / 流日三行（ready 与 error 两态共用：失败时已有内容照常可读）。 */
+function RikkeLines({ content }: { content?: RikkeContent }) {
+  return (
+    <div className="xs-lines">
+      <p className="xs-line">
+        <span className="xs-line__label">宜</span>
+        <span className="xs-line__value">{content?.yi ?? '—'}</span>
+      </p>
+      <p className="xs-line">
+        <span className="xs-line__label">忌</span>
+        <span className="xs-line__value">{content?.ji ?? '—'}</span>
+      </p>
+      <p className="xs-line">
+        <span className="xs-line__label">流日</span>
+        <span className="xs-line__value">{content?.liuri ?? '—'}</span>
+      </p>
+    </div>
+  );
 }
 
 /** 日课卡：当日产物三行 + 「看完整日课 / 立即生成」（S1 §3.1②）。 */
-export function XsRikkeCard({ state = 'empty', today, content, navigate, mainPanels, onGenerate, onRetry }: XsRikkeCardProps) {
+export function XsRikkeCard({
+  state = 'empty',
+  today,
+  content,
+  reason,
+  navigate,
+  mainPanels,
+  onGenerate,
+  onRetry,
+}: XsRikkeCardProps) {
   const available = useAvailable(mainPanels);
   const schedulesReady = isAvailable(available, 'schedules');
+  const rikkeReady = isAvailable(available, 'rikke');
   const generateDisabled = onGenerate === undefined;
   const retryDisabled = onRetry === undefined;
 
@@ -403,44 +435,42 @@ export function XsRikkeCard({ state = 'empty', today, content, navigate, mainPan
         />
       ) : null}
       {state === 'error' ? (
-        <XsEmptyBlock
-          variant="error"
-          illus={<IllusCardsError />}
-          why={ERROR_COPY.rike}
-          actions={
-            <ActionButton
-              action="retry"
-              disabled={retryDisabled}
-              reason={DISABLED_REASON.retry}
-              onClick={onRetry}
-            >
-              {ACTION_COPY.retry}
-            </ActionButton>
-          }
-        />
+        <>
+          <XsEmptyBlock
+            variant="error"
+            illus={<IllusCardsError />}
+            why={ERROR_COPY.rike}
+            // 票 13：失败理由（宿主给的可读理由 / RPC 拒绝原因）逐字展示。
+            sub={reason}
+            actions={
+              <ActionButton
+                action="retry"
+                disabled={retryDisabled}
+                reason={DISABLED_REASON.retry}
+                onClick={onRetry}
+              >
+                {ACTION_COPY.retry}
+              </ActionButton>
+            }
+          />
+          {/* 失败时若还有上一份内容，照常可读（S14 §6 error 行：保留上一份，不给空白）。 */}
+          {content === undefined ? null : (
+            <div className="xs-card__body" data-xuanshu-ready="rike">
+              <RikkeLines content={content} />
+            </div>
+          )}
+        </>
       ) : null}
       {state === 'ready' ? (
         <div className="xs-card__body" data-xuanshu-ready="rike">
-          <div className="xs-lines">
-            <p className="xs-line">
-              <span className="xs-line__label">宜</span>
-              <span className="xs-line__value">{content?.yi ?? '—'}</span>
-            </p>
-            <p className="xs-line">
-              <span className="xs-line__label">忌</span>
-              <span className="xs-line__value">{content?.ji ?? '—'}</span>
-            </p>
-            <p className="xs-line">
-              <span className="xs-line__label">流日</span>
-              <span className="xs-line__value">{content?.liuri ?? '—'}</span>
-            </p>
-          </div>
+          <RikkeLines content={content} />
           <div className="xs-card__actions">
+            {/* [看完整日课 ->] 进票 13 的 `rikke` main 面板（S14 日课与定时任务）。 */}
             <NavLink
-              target="schedules"
-              disabled={!schedulesReady}
-              reason={DISABLED_REASON.retry}
-              onClick={() => navigate('schedules')}
+              target="rikke"
+              disabled={!rikkeReady}
+              reason={DISABLED_REASON.rikke}
+              onClick={() => navigate('rikke')}
             >
               {ACTION_COPY.watchFull}
             </NavLink>
@@ -473,6 +503,8 @@ export interface XsDigaoCardProps extends OverviewInjected {
   summary?: DigaoSummary;
   /** 底座是否已立：决定空态取 (a) 底座未立 还是 (b) 从未刷新（S1 §6 ③）。 */
   baseplateEstablished?: boolean;
+  /** 失败理由（票 13：刷新失败 / 读不出来时必须看得见，不许静默）。 */
+  reason?: string;
 }
 
 /** 底稿卡：纯派生标记 + 三源头跳转 + 「打开底稿 / 刷新」（S1 §3.1③、§9 C2）。 */
@@ -480,6 +512,7 @@ export function XsDigaoCard({
   state = 'empty',
   summary,
   baseplateEstablished = false,
+  reason,
   navigate,
   mainPanels,
   onRefresh,
@@ -536,6 +569,8 @@ export function XsDigaoCard({
           variant="error"
           illus={<IllusCardsError />}
           why={ERROR_COPY.digao}
+          // 票 13：刷新失败 / 读不出来的理由逐字展示（不静默）。
+          sub={reason}
           actions={
             <>
               <ActionButton
