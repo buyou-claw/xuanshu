@@ -58,6 +58,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createBaziMethods } from './bazi/service.mjs';
 import { createCangMethods } from './cang/service.mjs';
+import { createConsultMethods } from './consult/service.mjs';
 import { installHorosa } from './horosa/service.mjs';
 import { createPuMethods, installPuSkill } from './pu/service.mjs';
 import { installRpc } from './rpc.mjs';
@@ -424,6 +425,10 @@ export function apply(ctx, config) {
       // 出盘只走票 06 装出来的 `xuanshuHorosa` 服务（上面 installHorosa 已 provide 它），
       // 所以这一组必须排在 installHorosa 之后装配 —— 顺序是接线的一部分。
       ...createBaziMethods(ctx, { dataDir }),
+      // 票 10：问事容器（`consult.create/send/list/read/rename/defaults`）。
+      // 会话走 `ctx.agents.create` + 自铸 id 前缀 + 专用 cwd（`<dataDir>/consult`），
+      // 清单落旁挂文件；底座谱/可选谱的读面分别只走票 08 的 `bazi.basePu` 与票 09 的 `pu.*`。
+      ...createConsultMethods(ctx, { dataDir }),
     });
   } catch (error) {
     log.warn('谱 / 藏 / 八字 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
