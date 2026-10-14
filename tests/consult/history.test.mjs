@@ -1,0 +1,174 @@
+/**
+ * 票 10 · `consult.list` / `consult.read` / `consult.rename`（契约 §2，S7）
+ *
+ * 历史回看的**两条权威分开**（ADR-0009 Consequences）：
+ *   - `consult.list` 读**旁挂清单目录**（含本次勾选的谱与挂载），**不扫会话日志**；
+ *   - `consult.read` 的正文走 `ctx.sessionQuery.readSession(id)`（本机日志是 `session.v4.jsonl.zstd`，
+ *     **不要自己解压**）。
+ *
+ * 抓的真实缺陷/风险：
+ *   ① **list 去扫会话日志反推清单**：慢、且反推不出「这次勾了哪些谱」（`meta` 读不回）。判据是
+ *      「不给 sessionQuery 也照样列得出来」+「假 sessionQuery 零调用」。
+ *   ② **read 自己解压 / 自己读文件**：zstd 细节一变就全红，且绕过了 replay 校验。
+ *   ③ **把工具结果当消息读出去**：阅读器要的是「你问 → AI 答」，`tool/result` 混进消息流会让回看变成日志。
+ *   ④ **损坏的旁挂文件拖垮整张列表**：一条坏记录不该让「历史」整页打不开。
+ *   ⑤ **改名不改权威**：改名必须落到旁挂清单上（列表与阅读器都读它），否则重启就丢。
+ */
+import { afterEach, describe, expect, it } from 'vitest'
+
+import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
+import {
+  assistantEvent,
+  envelope,
+  fakeAgents,
+  fakeHorosa,
+  fakeSessionQuery,
+  makeHost,
+  makeSandbox,
+  seedBasePu,
+  userEvent,
+} from './lib/sandbox.mjs'
+
+const roots = []
+afterEach(() => roots.splice(0).forEach((sandbox) => sandbox.cleanup()))
+
+const QUESTION = '帮我看这次转岗的时机'
+const T1 = Date.parse('2026-10-15T00:41:00.000Z')
+const T2 = Date.parse('2026-10-15T00:41:01.000Z')
+const T3 = Date.parse('2026-10-15T00:41:20.000Z')
+const T5 = Date.parse('2026-10-15T00:42:00.000Z')
+
+/** 一条真实形状的会话事件流：注入消息 → 用户问题 → AI 答 → 工具结果 → AI 再答。 */
+const EVENTS = [
+  userEvent(1, { id: 'm1', role: 'user', source: { kind: 'xuanshu-consult' }, content: [{ type: 'text', text: '【玄枢·问事上下文】……' }] }, T1),
+  userEvent(2, { id: 'm2', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: QUESTION }] }, T2),
+  assistantEvent(3, '先读你的谱……', T3),
+  { type: 'tool/result', seq: 4, time: T3 + 1000, data: { callId: 'c1', content: [{ type: 'text', text: '不该出现在回看里' }], isError: false } },
+  assistantEvent(5, '结论：这次转岗宜缓。', T5),
+]
+
+/** 起一套方法 + 沙箱；`sessionQuery` 可缺席（用来验 list 不依赖它）。 */
+async function scene({ withSessionQuery = true, events = EVENTS } = {}) {
+  const sandbox = makeSandbox('history')
+  roots.push(sandbox)
+  const fake = fakeHorosa(envelope('bazi-ok-default'))
+  const agents = fakeAgents()
+  const query = fakeSessionQuery()
+  const services = { xuanshuHorosa: fake.service, agents: agents.service }
+  if (withSessionQuery) services.sessionQuery = query.service
+  const host = makeHost({ services })
+  await seedBasePu(sandbox, host.ctx)
+  const api = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir })
+  const { session } = await api['consult.create']({ pus: [] })
+  if (events !== null) query.events[session.sessionId] = events
+  return { sandbox, host, api, agents, query, session }
+}
+
+describe('consult.list · 旁挂清单是列表权威（不扫会话日志）', () => {
+  it('按 createdAt 倒序；每项形状是 ConsultSummary', async () => {
+    const { api, session } = await scene()
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const second = await api['consult.create']({ pus: ['紫微笔记'] })
+
+    const { items } = await api['consult.list']({})
+    expect(items.map((item) => item.sessionId)).toEqual([second.session.sessionId, session.sessionId])
+    expect(Object.keys(items[0]).sort()).toEqual(['createdAt', 'mounts', 'pus', 'sessionId', 'title', 'turns'])
+    expect(items[0]).toMatchObject({ title: '未命名问事', pus: ['紫微笔记'], mounts: [], turns: 0 })
+  })
+
+  it('会话日志不是清单来源：没有 sessionQuery 服务也照样列得出来', async () => {
+    const { api, sandbox } = await scene({ withSessionQuery: false })
+    const { items } = await api['consult.list']({})
+    expect(items).toHaveLength(1)
+    expect(sandbox.exists('consult', 'sessions', `${items[0].sessionId}.json`)).toBe(true)
+  })
+
+  it('旁挂清单里没有的会话（一条别的会话日志）不会出现在列表里', async () => {
+    const { api, query } = await scene()
+    // 会话日志里造一条不属于问事的记录：清单是权威，它不该冒出来。
+    query.events['session-foreign'] = EVENTS
+    const { items } = await api['consult.list']({})
+    expect(items.map((item) => item.sessionId)).not.toContain('session-foreign')
+    expect(query.calls).toEqual([])
+  })
+
+  it('坏掉的旁挂文件不拖垮整张列表（其余照常列出）', async () => {
+    const { api, sandbox, session } = await scene()
+    sandbox.write('consult/sessions/session-xs-consult-broken.json', '{ 这不是 JSON')
+    const { items } = await api['consult.list']({})
+    expect(items.map((item) => item.sessionId)).toEqual([session.sessionId])
+  })
+})
+
+describe('consult.read · 正文走 ctx.sessionQuery.readSession', () => {
+  it('回放成 user/assistant 消息；注入行带得出 source，工具结果不进消息流', async () => {
+    const { api, query, session } = await scene()
+    const answer = await api['consult.read']({ sessionId: session.sessionId })
+
+    expect(query.calls).toEqual([session.sessionId])
+    expect(Object.keys(answer).sort()).toEqual(['messages', 'session'])
+    expect(answer.session.sessionId).toBe(session.sessionId)
+    expect(answer.messages).toEqual([
+      { role: 'user', text: '【玄枢·问事上下文】……', at: new Date(T1).toISOString(), source: 'xuanshu-consult' },
+      { role: 'user', text: QUESTION, at: new Date(T2).toISOString(), source: 'user' },
+      { role: 'assistant', text: '先读你的谱……', at: new Date(T3).toISOString(), source: 'model' },
+      { role: 'assistant', text: '结论：这次转岗宜缓。', at: new Date(T5).toISOString(), source: 'model' },
+    ])
+  })
+
+  it('刚建好、还没落盘的会话：sessionQuery 报 not-found → messages 为空数组而不是报错', async () => {
+    const { api, session, query } = await scene()
+    query.service.readSession = async () => {
+      const error = new Error(`session "${session.sessionId}" not found`)
+      error.code = 'SESSION_QUERY_SESSION_NOT_FOUND'
+      throw error
+    }
+    const answer = await api['consult.read']({ sessionId: session.sessionId })
+    expect(answer.messages).toEqual([])
+    expect(answer.session.sessionId).toBe(session.sessionId)
+  })
+
+  it('会话读坏了（不是 not-found）：把 upstream 的错误原文带出来，不吞', async () => {
+    const { api, session, query } = await scene()
+    query.service.readSession = async () => {
+      throw new Error('corrupt session log')
+    }
+    await expect(api['consult.read']({ sessionId: session.sessionId })).rejects.toThrow(/corrupt session log/u)
+  })
+
+  it('没有 sessionQuery 服务：明确说清读不了正文（不假装空会话）', async () => {
+    const { api, session } = await scene({ withSessionQuery: false })
+    await expect(api['consult.read']({ sessionId: session.sessionId })).rejects.toThrow(/sessionQuery|会话查询/u)
+  })
+
+  it('没有旁挂清单的会话：拒绝（先 consult.list 看有没有）', async () => {
+    const { api } = await scene()
+    await expect(api['consult.read']({ sessionId: 'session-xs-consult-不存在' })).rejects.toThrow(/问事记录|不存在/u)
+  })
+})
+
+describe('consult.rename · 改名落到旁挂清单', () => {
+  it('返回改后的 ConsultSummary，列表与阅读器都跟着变', async () => {
+    const { api, sandbox, session } = await scene()
+    const answer = await api['consult.rename']({ sessionId: session.sessionId, title: '  转岗时机  ' })
+
+    expect(answer.session).toMatchObject({ sessionId: session.sessionId, title: '转岗时机' })
+    expect(sandbox.json('consult', 'sessions', `${session.sessionId}.json`).title).toBe('转岗时机')
+    const { items } = await api['consult.list']({})
+    expect(items[0].title).toBe('转岗时机')
+  })
+
+  it('空标题 / 非文本标题：拒绝，且不改盘', async () => {
+    const { api, sandbox, session } = await scene()
+    const before = sandbox.read('consult', 'sessions', `${session.sessionId}.json`)
+    for (const title of ['', '   ', 42, undefined]) {
+      await expect(api['consult.rename']({ sessionId: session.sessionId, title })).rejects.toThrow(/标题/u)
+    }
+    expect(sandbox.read('consult', 'sessions', `${session.sessionId}.json`)).toBe(before)
+  })
+
+  it('没有旁挂清单的会话：拒绝', async () => {
+    const { api } = await scene()
+    await expect(api['consult.rename']({ sessionId: 'session-xs-consult-不存在', title: 'x' })).rejects.toThrow(/问事记录|不存在/u)
+  })
+})
