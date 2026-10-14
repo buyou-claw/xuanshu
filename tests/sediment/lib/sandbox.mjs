@@ -106,12 +106,18 @@ export function makeSandbox(label) {
  *
  * `ctx.get(name, false)` 是**唯一**的取服务方式（与 `lib/bazi/service.mjs` 的软取同款）；
  * 每次取用都记进 `lookups`，于是「有没有碰 `ctx.sessions` / `workspaceRegistry`」有客观判据。
+ *
+ * @param {{services?: object, wired?: boolean}} [options]
+ *        `wired:true` 时 `ctx.inject()` 会回调一个带 `connection.rpc.handle` / `skills` /
+ *        `webServer` 的 scoped ctx —— 总装配用例（真 `apply()`）走这条路，服务级用例不需要。
  */
-export function makeHost({ services = {} } = {}) {
+export function makeHost({ services = {}, wired = false } = {}) {
   const lookups = []
   const listeners = []
   const provided = new Map()
-  const ctx = {
+  const skills = []
+  const routes = []
+  const base = {
     get(name) {
       lookups.push(name)
       return services[name]
@@ -136,13 +142,38 @@ export function makeHost({ services = {} } = {}) {
     },
     commands: { register: () => () => {} },
   }
+  const ctx = { ...base }
+  if (wired) {
+    ctx.inject = (names, callback) => {
+      callback({
+        ...base,
+        skills: {
+          register(skill) {
+            skills.push({ names: [...names], skill })
+            return () => {}
+          },
+        },
+        connection: {
+          rpc: {
+            handle(path, handler) {
+              routes.push({ path, handler })
+              return () => {}
+            },
+          },
+        },
+        webServer: { register: () => () => {} },
+        storageDomain: { open: () => ({}) },
+      })
+      return () => {}
+    }
+  }
   /** 触发一个宿主事件（只打本替身记下的监听器）。 */
   const emit = (event, ...args) => {
     for (const entry of [...listeners]) if (entry.event === event) entry.listener(...args)
   }
   /** 当前还挂着的监听器数（「等到了就退订」这类断言的判据）。 */
   const listenerCount = (event) => listeners.filter((entry) => entry.event === event).length
-  return { ctx, lookups, listeners, emit, listenerCount, provided, services }
+  return { ctx, lookups, listeners, emit, listenerCount, provided, services, skills, routes }
 }
 
 /** 假 agent：按调用顺序记 inject / followup（顺序本身也是被验的东西）。 */
