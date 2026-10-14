@@ -270,6 +270,11 @@ export interface OnboardingDraft {
   gender: GenderValue;
   /** 勾选的不确定项 id（写进 clarification_notes）。 */
   notes: string[];
+  /**
+   * 澄清闸回问的自由文本回答（S3 §2.7「回答并重新出盘」）。
+   * 与 `notes` 一样进 `clarification_notes`，只是它不是预设选项而是用户的原话。
+   */
+  gateAnswer: string;
   /** `[x] 以上信息我已核对` —— 出盘按钮的解锁条件（S3 §3.5③）。 */
   verified: boolean;
 }
@@ -287,6 +292,7 @@ export function defaultDraft(): OnboardingDraft {
     timeAlg: 0,
     gender: 'unknown',
     notes: [],
+    gateAnswer: '',
     verified: false,
   };
 }
@@ -330,6 +336,7 @@ export function draftFromSnapshot(snapshot: SnapshotBirthLike): OnboardingDraft 
     timeAlg,
     gender: 'unknown',
     notes: [],
+    gateAnswer: '',
     verified: false,
   };
 }
@@ -414,7 +421,8 @@ export interface CastRequest {
  */
 export function buildCastRequest(draft: OnboardingDraft): CastRequest | undefined {
   if (castBlockers(draft).length > 0) return undefined;
-  const notes = composeNotes(draft.notes);
+  // notes 的两段来源：勾选的不确定项 + 澄清闸回问的自由回答（都没填就整个键都不带）。
+  const notes = [composeNotes(draft.notes), draft.gateAnswer.trim()].filter((part) => part !== '').join('；');
   const birth: CastRequest['birth'] = {
     date: draft.date,
     time: draft.time,
@@ -435,4 +443,16 @@ export function nowStamp(now: Date = new Date()): { date: string; time: string }
     `${String(now.getFullYear())}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`,
     `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
   );
+}
+
+/**
+ * 偏移分钟 → `+HH:MM` / `-HH:MM`（时区行的显示格式，与契约 §2 的 `offsetMinutes` 同源）。
+ * @param minutes - `bazi.timezone` 给的偏移；`null`（推导失败）显示 `—`。
+ * @returns 显示串。
+ */
+export function formatOffsetMinutes(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined || !Number.isFinite(minutes)) return '—';
+  const sign = minutes < 0 ? '-' : '+';
+  const absolute = Math.abs(minutes);
+  return `${sign}${pad2(Math.floor(absolute / 60))}:${pad2(absolute % 60)}`;
 }

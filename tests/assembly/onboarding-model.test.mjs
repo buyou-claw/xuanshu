@@ -29,6 +29,7 @@ import {
   draftFromSnapshot,
   formatCoords,
   formatDegreeMinute,
+  formatOffsetMinutes,
   genderLabel,
   manualLocation,
   missingCoordinates,
@@ -75,6 +76,10 @@ describe('票 08 · 出盘请求（契约 §2 / §3 的口径本体）', () => {
     expect(composeNotes(['minute'])).toBe('出生时间只精确到分钟')
     expect(composeNotes(['minute', 'place'])).toBe('出生时间只精确到分钟；出生地是大概位置')
     expect(buildCastRequest({ ...ready(), notes: ['place'] }).notes).toBe('出生地是大概位置')
+    // 澄清闸的自由回答与勾选项同进 clarification_notes（前者在后，读起来像补充说明）。
+    expect(
+      buildCastRequest({ ...ready(), notes: ['minute'], gateAnswer: '只知道凌晨 4 点前后' }).notes,
+    ).toBe('出生时间只精确到分钟；只知道凌晨 4 点前后')
     expect(NOTE_OPTIONS.map((option) => option.label)).toEqual([
       '出生时间只精确到分钟',
       '出生地是大概位置',
@@ -185,6 +190,14 @@ describe('票 08 · 起盘口径文案与档位（S3 §2.4 / S2 §3.6）', () =>
     // 春分定卯时（=2）上游未实现：界面上不出现，也不置灰。
     expect(TIME_ALG_OPTIONS.map((option) => option.value)).not.toContain(2)
     expect(timeAlgLabel(2)).toBe('未知档位')
+  })
+
+  it('时间算法档位文案与偏移显示格式（契约 §2 的 offsetMinutes → +HH:MM）', () => {
+    expect(formatOffsetMinutes(540)).toBe('+09:00')
+    expect(formatOffsetMinutes(480)).toBe('+08:00')
+    expect(formatOffsetMinutes(-330)).toBe('-05:30')
+    expect(formatOffsetMinutes(0)).toBe('+00:00')
+    expect(formatOffsetMinutes(null)).toBe('—')
   })
 
   it('性别三档含「未知（按男排）」的后果说明', () => {

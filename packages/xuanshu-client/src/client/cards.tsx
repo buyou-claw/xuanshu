@@ -15,6 +15,8 @@
  */
 import type { ReactNode } from 'react';
 
+import type { BaziApi } from './bazi-api.js';
+import type { BaziUiController } from './bazi-controller.js';
 import {
   ACTION_COPY,
   BADGE_DERIVED,
@@ -61,6 +63,13 @@ export interface OverviewInjected {
   onRefresh?: () => void;
   /** 卡级重试（票 08/13 接线；未接线 → 置灰）。 */
   onRetry?: () => void;
+  /**
+   * 命盘数据面（票 08）：**面板级**注入，四卡本身不消费它 ——
+   * 只有 `OverviewPanel` 用它取 `bazi.status` 决定命盘卡的四态。
+   */
+  bazi?: BaziApi;
+  /** 命盘取数代次 / 重录预填（票 08）：出盘成功后概览据此重取快照（不重新出盘）。 */
+  baziController?: BaziUiController;
 }
 
 /** 订阅 main 面板键（卡片渲染期判定 fail-soft）。 */
