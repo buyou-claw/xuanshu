@@ -105,8 +105,8 @@ declare module '@deepseek-ai/dsh-client-ui-sidebar/client' {
 declare module '@deepseek-ai/dsh-client-ui-renderer' {
   import type { SlotLabel } from '@deepseek-ai/dsh-client-ui-slots';
 
-  /** keyed 槽注册选项。证据：slots/index.d.ts:560-563。 */
-  export interface KeyedRegisterOptions<K extends string> {
+  /** keyed 槽注册选项。证据：slots/index.d.ts:560-563 + ui-sidebar 的 `inject` 用法:487-521。 */
+  export interface KeyedRegisterOptions<K extends string> extends SlotInjectOptions {
     name: K;
     /** 本 keyed 单元格的 key；与 `main` 槽的 list id 同名。 */
     key: string;
@@ -114,8 +114,8 @@ declare module '@deepseek-ai/dsh-client-ui-renderer' {
     priority?: number;
   }
 
-  /** list 槽注册选项。证据：slots/index.d.ts:564-569。 */
-  export interface ListRegisterOptions<K extends string> {
+  /** list 槽注册选项。证据：slots/index.d.ts:564-569 + ui-sidebar 的 `inject` 用法:487-521。 */
+  export interface ListRegisterOptions<K extends string> extends SlotInjectOptions {
     name: K;
     id: string;
     order?: number;
@@ -129,15 +129,37 @@ declare module '@deepseek-ai/dsh-client-ui-renderer' {
    * 证据：`dsh-client-ui-sidebar/lib/client.js:478-481` 实现
    *   `selectPanel: (id) => { ...; ctx.layout.selectPanel(id); }`
    *   —— 点侧栏行的副作用就是选 main 面板。
+   * 证据：`dsh-client-ui-layout/lib/types/client/service.d.ts:26-32`
+   *   `selectPanel(panelId: MainPanelId | null)`；`:1-23` 文档「Select a global panel
+   *   or return to the Conversation」——`null` 的语义是「显示当前会话」（V94）。
    */
   export interface LayoutService {
     selectPanel(panelId: string | null): void;
   }
 
   /**
+   * 证据：`dsh-client-ui-theme/lib/types/client/index.d.ts:153-178`
+   *   `overrideTokens(source: string, tokens: ThemeTokenOverrides): () => void`。
+   * `ThemeTokenOverrides` 值 = `{ light, dark }`（双模必填，证据同上 :34-41）。
+   * 本桩只收窄到票 07 用到的这一个方法。
+   */
+  export interface ThemeTokenModes {
+    light: string;
+    dark: string;
+  }
+
+  /** 证据：同上 :34-41 `ThemeTokenOverrides`（按 token 名索引的双模取值）。 */
+  export type ThemeTokenOverrides = Record<string, ThemeTokenModes>;
+
+  /** 证据：同上 :109 `declare class ThemeRuntime`、:178 `overrideTokens`。 */
+  export interface ThemeService {
+    overrideTokens(source: string, tokens: ThemeTokenOverrides): () => void;
+  }
+
+  /**
    * 证据：`dsh-client-ui-renderer/lib/types/client/registry.d.ts:46`
    *   `export declare class SlotRegistry extends Service`（cordis Service）。
-   * 本桩只收窄到我们调用到的两个方法。
+   * 本桩只收窄到我们调用到的方法。
    */
   export interface SlotRegistry {
     /** 证据：registry.d.ts:111。返回幂等 disposer。 */
@@ -145,6 +167,23 @@ declare module '@deepseek-ai/dsh-client-ui-renderer' {
     /** 证据：registry.d.ts:85（= SlotCore['register']，slots/index.d.ts:789-804）。 */
     register(options: KeyedRegisterOptions<string>, component: (props: never) => unknown): () => void;
     register(options: ListRegisterOptions<string>, component: (props: never) => unknown): () => void;
+    /**
+     * 证据：`dsh-client-ui-layout/lib/client.js:593`（`ctx.slots.entries("main")`）、
+     *   `…/ui-sidebar/lib/client.js:454`（`entriesOfSlot("sidebar.panellist")`）。
+     * 返回该槽当前的条目（`options` 即注册选项）。
+     */
+    entries(slot: string): { options?: { key?: string; id?: string } }[];
+    /** 证据：`…/ui-layout/lib/client.js:663`（`ctx.slots.subscribe("main", cb)`）。 */
+    subscribe(slot: string, listener: () => void): () => void;
+  }
+
+  /**
+   * 注册选项里注入给组件的 owner 分享。
+   * 证据：`…/ui-sidebar/lib/client.js:487-521`（`inject: injectProps`，回调返回的对象
+   *   成为组件 props 的一部分）；`…/ui-theme/lib/client.js:1596-1610`（`inject: (actions) => (…)`）。
+   */
+  export interface SlotInjectOptions {
+    inject?: (actions?: unknown) => object;
   }
 }
 
@@ -152,17 +191,29 @@ declare module '@deepseek-ai/dsh-client-ui-renderer' {
  * 证据：`dsh-client-ui-renderer/lib/types/client/index.d.ts:15-31`
  *   `declare module '@deepseek-ai/cordis' { interface Context {
  *      slots: SlotRegistry; uiRenderer: UiRendererService } }`
- * 证据：`dsh-client-ui-layout/lib/types/client/index.d.ts:18-23` 同法补 `layout`。
- * 我们只用到 `ctx.slots` 与（四卡票才需要）`ctx.layout`，故只声明这两个。
+ * 证据：`dsh-client-ui-layout/lib/types/client/index.d.ts:18-23` 同法补 `layout`；
+ * `dsh-client-ui-theme/lib/types/client/index.d.ts:84-101` 同法补 `theme`。
+ * 我们只用到 `ctx.slots` / `ctx.layout` / `ctx.theme` / `ctx.effect`。
  */
 declare module '@deepseek-ai/cordis' {
-  import type { SlotRegistry, LayoutService } from '@deepseek-ai/dsh-client-ui-renderer';
+  import type {
+    LayoutService,
+    SlotRegistry,
+    ThemeService,
+  } from '@deepseek-ai/dsh-client-ui-renderer';
 
   export interface Context {
     /** Renderer-owned UI composition registry. */
     slots: SlotRegistry;
-    /** Panel navigation face（本票不调用，留给票 07 · 首页替换的默认面板切换）。 */
+    /** Panel navigation face（票 07：默认面板 + 四卡跳转）。 */
     layout: LayoutService;
+    /** Theme runtime（票 07：token 覆盖层）。 */
+    theme: ThemeService;
+    /**
+     * 证据：cordis 核心 API；本仓先例 `…/ui-layout/lib/client.js:580-583, 674-684`
+     *   （`ctx.effect(() => … , "title")`，回调立即执行、返回的 disposer 挂 fiber）。
+     */
+    effect(callback: () => void | (() => void), title?: string): () => void;
   }
 }
 

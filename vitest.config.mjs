@@ -10,6 +10,12 @@ import { defineConfig } from 'vitest/config'
  * 证据：未加本文件前 `pnpm test` = 961 failed | 2 passed。
  */
 export default defineConfig({
+  // 票 07 起，UI 槽位契约测试直接 import `packages/xuanshu-client/src/client/*.tsx`
+  // （vite 原生 esbuild 只做 TS 擦除 + JSX 变换）。JSX 必须是自动运行时，与包的
+  // tsconfig（`"jsx": "react-jsx"`）和产物构建（esbuild `jsx: 'automatic'`）三处一致。
+  esbuild: {
+    jsx: 'automatic',
+  },
   test: {
     include: ['tests/**/*.test.mjs'],
     exclude: ['**/node_modules/**', '.upstream/**', '.scratch/**', 'profile/**', 'packages/**'],

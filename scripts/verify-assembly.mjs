@@ -418,19 +418,30 @@ export function buildBaseline({ profileDir, dshHome, dshVersion }) {
     const packageManifest = readPackageManifest(packageDir)
     if (packageManifest === undefined) throw new Error(`bundle ${name} is declared but not installed under ${packageDir}`)
     const patchRel = packageManifest.dsh?.bundle?.patch
-    if (typeof patchRel !== 'string') {
+    // 票 07：`dsh.bundle.patch` 是「一个路径**或**一串路径」（官方 `dsh-app-boot` 的
+    // `bundlePatchFiles()` 两种都收，bundle 内按声明顺序依次叠加）。只认 string 会让数组形态的
+    // bundle（`@deepseek-ai/dsh-web-app`：主 patch + 4 个 presets patch）静默变成 0 行 —— 于是
+    // 这一层整层不受 S4 漂移监督，而且 `assembly-contract.test.mjs` 的
+    // 「每个 layer 的 rows > 0」会直接红。按文件逐条进 sources，`patch` 字段的数组/字符串形态
+    // 就都保住了（单文件 bundle 的输出与之前逐字节一致）。
+    const patchRels = typeof patchRel === 'string' ? [patchRel] : Array.isArray(patchRel) ? patchRel : []
+    if (patchRels.length === 0) {
       sources.push({ layer: name, version: packageManifest.version, patch: null, rows: 0 })
       continue
     }
-    const patchFile = join(packageDir, patchRel)
-    const inserted = extractInsertedRows(readFileSync(patchFile, 'utf8'), name)
-    for (const row of inserted) rows.push({ ...row, order: rows.length })
-    sources.push({
-      layer: name,
-      version: packageManifest.version,
-      patch: relative(profileDir, patchFile).split(sep).join('/'),
-      rows: inserted.length,
-    })
+    for (const rel of patchRels) {
+      if (typeof rel !== 'string') continue
+      const patchFile = join(packageDir, rel)
+      const patchText = readFileSync(patchFile, 'utf8')
+      const inserted = extractInsertedRows(patchText, name)
+      for (const row of inserted) rows.push({ ...row, order: rows.length })
+      sources.push({
+        layer: name,
+        version: packageManifest.version,
+        patch: relative(profileDir, patchFile).split(sep).join('/'),
+        rows: inserted.length,
+      })
+    }
   }
   const critical = rows.filter((row) => CRITICAL_ROW_IDS.includes(row.id)).map((row) => row.id)
   let profileRel = relative(REPO_ROOT, profileDir).split(sep).join('/')
@@ -528,7 +539,7 @@ export function materializeClientBundle(text) {
     if (specifier === 'react/jsx-runtime' || specifier === 'react/jsx-dev-runtime') {
       return { jsx: () => null, jsxs: () => null, Fragment: {} }
     }
-    if (specifier === 'react') return { createElement: () => null, Fragment: {}, useMemo: (fn) => fn(), useRef: () => ({ current: undefined }), useEffect: () => {} }
+    if (specifier === 'react') return { createElement: () => null, Fragment: {}, useMemo: (fn) => fn(), useRef: () => ({ current: undefined }), useEffect: () => {}, useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot() }
     throw new Error(`未预期的 require(${JSON.stringify(specifier)})：基线外部依赖之外要写进 dsh.client.external`)
   }
   const moduleExports = spec.factory(fakeRequire)
@@ -541,6 +552,19 @@ function recordingContext(registrations) {
     slots: {
       inject: (key, callback) => { registrations.push({ kind: 'inject', name: key }); callback() },
       register: (spec, component) => { registrations.push({ kind: 'register', name: spec?.name, spec, component }) },
+      // 票 07：四卡的 fail-soft 要看 main 面板键快照（官方 ui-layout 同法）。
+      entries: (name) => { registrations.push({ kind: 'entries', name }); return [] },
+      subscribe: (name) => { registrations.push({ kind: 'subscribe', name }); return () => {} },
+    },
+    // 票 07：默认面板切换（selectPanel）与 token 覆盖层（overrideTokens）。
+    layout: {
+      selectPanel: (panelId) => { registrations.push({ kind: 'selectPanel', panelId }) },
+    },
+    theme: {
+      overrideTokens: (source, tokens) => {
+        registrations.push({ kind: 'overrideTokens', source, tokenCount: tokens === null || typeof tokens !== 'object' ? 0 : Object.keys(tokens).length })
+        return () => {}
+      },
     },
     effect: (callback) => { const disposer = callback(); return typeof disposer === 'function' ? disposer : () => {} },
   }
@@ -607,6 +631,27 @@ function checkS3(opts) {
       failed.push(`面板 key（${JSON.stringify(mainPanel.spec?.key)}）与侧栏行 id（${JSON.stringify(sidebarRow.spec?.id)}）不一致：它们是行与面板配对的唯一依据`)
     }
 
+    // 票 07（首页替换）：默认面板 + token 覆盖层 + 四卡注入面（契约注记 §1 的装配级断言）。
+    const selections = registrations.filter((entry) => entry.kind === 'selectPanel')
+    const mainIndex = registrations.findIndex((entry) => entry.kind === 'register' && entry.name === 'main')
+    const selectIndex = registrations.findIndex((entry) => entry.kind === 'selectPanel')
+    if (selections.length !== 1) failed.push(`默认面板 ctx.layout.selectPanel 应恰好调用一次，实际 ${selections.length} 次`)
+    else if (String(selections[0].panelId) !== 'overview') failed.push(`默认面板应为 "overview"，实际 ${JSON.stringify(selections[0].panelId)}`)
+    if (mainIndex >= 0 && selectIndex >= 0 && selectIndex < mainIndex) failed.push('默认面板在 main 注册之前切换：selectPanel 对未注册 key 会 throw')
+    const overrides = registrations.filter((entry) => entry.kind === 'overrideTokens')
+    if (overrides.length !== 1) failed.push(`ctx.theme.overrideTokens 应恰好调用一次，实际 ${overrides.length} 次`)
+    else if (overrides[0].source !== 'xuanshu-ui-v1' || !(overrides[0].tokenCount > 0)) {
+      failed.push(`token 覆盖层不合格：source=${JSON.stringify(overrides[0].source)} tokenCount=${overrides[0].tokenCount}`)
+    }
+    if (mainPanel !== undefined) {
+      if (typeof mainPanel.spec?.inject !== 'function') failed.push('main 注册缺少 inject 注入面（四卡拿不到 navigate / mainPanels）')
+      else {
+        const provided = mainPanel.spec.inject()
+        if (typeof provided?.navigate !== 'function') failed.push('main 的 inject 没有提供 navigate 函数')
+        if (provided?.mainPanels === undefined || typeof provided.mainPanels.getSnapshot !== 'function') failed.push('main 的 inject 没有提供 mainPanels watch')
+      }
+    }
+
     const specifiers = [...new Set(requested)]
     const undeclared = specifiers.filter((spec) => !BASELINE_EXTERNALS.includes(spec) && !declaredExternal.includes(spec))
     if (undeclared.length > 0) failed.push(`产物 require 了未声明的依赖：${undeclared.join(', ')}（超基线依赖必须写进 dsh.client.external）`)
@@ -651,7 +696,7 @@ function checkS3(opts) {
   }
   check.ok = failed.length === 0
   check.detail = check.ok
-    ? `${check.evidence.clientFile} ${bytes}B；物化 ok（apply+inject，槽位 main/overview + sidebar.panellist/overview）；platform=web；require=${check.evidence.requireSpecifiers.join(',')}`
+    ? `${check.evidence.clientFile} ${bytes}B；物化 ok（apply+inject；main/overview + sidebar.panellist/overview；默认面板 overview；token 覆盖层 xuanshu-ui-v1；四卡注入面 navigate/mainPanels）；platform=web；require=${check.evidence.requireSpecifiers.join(',')}`
     : failed.join('；')
   return check
 }

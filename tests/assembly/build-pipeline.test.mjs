@@ -71,6 +71,15 @@ describe('build-client（预编译产物管线）', () => {
       // node_modules 是 pnpm 的符号链接丛林：只带 esbuild 一条解析路径，不要整棵树
       filter: (src) => !src.includes('node_modules') || /node_modules[\\/](\.pnpm|esbuild)$/.test(src),
     })
+    // 票 07 起客户端源码**直接引用** docs 下的 token 取值（assets README §4 的「接线」，
+    // 不复制第二份）：这个脚手架模拟的是「仓库根」，所以必须把那条相对路径也摆出来，
+    // 否则构建会先死在解析失败上、测不到「产物与源码不同步」这条断言。
+    const tokensDir = join(scratch, 'docs', 'design', 'ui-v1', 'assets', 'tokens')
+    mkdirSync(tokensDir, { recursive: true })
+    cpSync(
+      join(REPO_ROOT, 'docs', 'design', 'ui-v1', 'assets', 'tokens', 'xs-tokens.json'),
+      join(tokensDir, 'xs-tokens.json'),
+    )
     const artifact = join(pkgDir, 'lib', 'client.js')
     writeFileSync(artifact, '// drift\n', { flag: 'a' })
     const before = statSync(artifact).size

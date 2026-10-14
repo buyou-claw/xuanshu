@@ -20,11 +20,18 @@
  * 四种模式：
  *   doctor（默认） 算清一切 + 跑 webPort/horosaGuard 两道门 + 断言派生路径都在 home 下，只报告不 spawn；
  *   web            前提全绿后 spawn `dsh --profile <p> web --port <n> --no-open`，退出码 = 子进程退出码。
- *                  **本票这条通常跑不起来**：`dsh web` 由 `@deepseek-ai/dsh-web-app` bundle 提供，
- *                  而本票不接它（评审裁决 §5.1 R1：接进 `dsh.profile.bundles` 会让装配树多出 4 条
+ *                  **票 04 时这条必然跑不起来**：`dsh web` 由 `@deepseek-ai/dsh-web-app` bundle 提供，
+ *                  而票 04 不接它（评审裁决 §5.1 R1：接进 `dsh.profile.bundles` 会让装配树多出 4 条
  *                  error 行，属票 07 首页替换）。缺它时 CLI 会以 `error: unknown option '--port'` exit 1，
- *                  所以这里**在 spawn 前就拒绝**：`profile` 门 FAIL、退出码 2、detail 点名缺哪个包、
- *                  并给两条出路（`--mode env` 拿命令去有 bundle 的实例跑 / 等票 07）。
+ *                  所以那时**在 spawn 前就拒绝**：`profile` 门 FAIL、退出码 2、detail 点名缺哪个包。
+ *                  **票 07 已把该 bundle 接进 `dsh.profile.bundles`**，所以上面那条前置拒绝的真值翻了：
+ *                  `webBundle.available === true`，`profile` 门过、放行 spawn（见 tests/isolation/resolve.test.mjs
+ *                  的 R2/R17 翻转断言 + 真起冒烟 `tests/isolation/lib/web-boot.mjs`）。
+ *                  **已知残留**：本模式构造的命令仍是 `--profile <p> web …`，而 0.2.0-rc.2 的 CLI 根解析器
+ *                  会把 `web` 当多余位置参数拒掉（实测 `error: too many arguments. Expected 0 arguments
+ *                  but got 1: web.`）；CLI 认的形态是 `dsh web --port <n> --no-open`（`dsh <name>` 捷径
+ *                  把 `web` 展开成 `--profile web`）。所以「web 真的能起」由上面那个冒烟文件用后者证明，
+ *                  而本模式的命令构造尚未随票 07 调整（写域与门行为分离，改前先由票主裁决）。
  *   headless       真跑一次 `dsh --profile <p> --help`（= boot + dispose + exit 0，不调 LLM、不开端口），
  *                  并断言 `<home>/xuanshu/assembly-report.json` **本次新写出**；
  *   env            不 spawn，只把 plan.env / plan.command 打到 stdout，给 pwsh / CI 用。

@@ -1,7 +1,10 @@
 /**
- * `sidebar.panellist` list 槽行 `overview` 的图标组件。
+ * `sidebar.panellist` list 槽行 `overview` 的图标组件（asset.S1-1 的形状照抄）。
  */
 import type { SidebarPanelIconOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client';
+
+import { GlyphOverview } from './glyphs.js';
+import { PANEL_ID } from './panel.js';
 
 /**
  * owner 分享 = 侧栏行给的呈现参数：请求的方形边长 + 本行是否选中。
@@ -14,26 +17,17 @@ export type OverviewIconProps = SidebarPanelIconOwnerProps;
  * 渲染侧栏行图标。
  *
  * 侧栏把它套在一个带 `aria-label` 的 `button` 里、外层 `span` 已 `aria-hidden`
- * （`…/ui-sidebar/lib/client.js:179-197`），所以这里再标一次 `aria-hidden`
- * 是为了让 SVG 自身不进可访问性树（`role="img"` + `aria-hidden` 是显式声明）。
+ * （`…/ui-sidebar/lib/client.js:179-197`），所以图标自身再标一次 `aria-hidden`
+ * 是为了不进可访问性树。几何 = `docs/design/ui-v1/assets/icons/nav/nav-overview.svg`
+ * （asset.S1-1，viewBox 24；尺寸由侧栏的 `size` 决定，图标不写死宽高）。
  *
  * @param props - 侧栏行的尺寸与选中态。
  * @returns 图标节点。
  */
-export function OverviewIcon({ size = 16, active }: OverviewIconProps) {
+export function OverviewIcon({ size = 20 }: OverviewIconProps) {
   return (
-    <svg
-      className="xs-overview-icon"
-      data-xuanshu-panel="overview"
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      role="img"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth={1.4} />
-      {active ? <circle cx="8" cy="8" r="2" fill="currentColor" /> : null}
-    </svg>
+    <span className="xs-overview-icon" data-xuanshu-panel={PANEL_ID}>
+      <GlyphOverview className="xs-overview-icon__glyph" size={size} />
+    </span>
   );
 }

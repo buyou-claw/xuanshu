@@ -28,6 +28,7 @@
     "@deepseek-ai/dsh-spill": "0.2.0-rc.2",
     "@deepseek-ai/dsh-subagent-in-process-driver": "0.2.0-rc.2",
     "@deepseek-ai/dsh-util-time": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-web-app": "0.2.0-rc.2",
     "@deepseek-ai/dsh-workflow": "0.2.0-rc.2",
     "xuanshu-host": "file:../packages/xuanshu-host",
     "xuanshu-client": "file:../packages/xuanshu-client"
@@ -37,6 +38,7 @@
       "bundles": [
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-headless",
+        "@deepseek-ai/dsh-web-app",
         "xuanshu-host",
         "xuanshu-client"
       ]

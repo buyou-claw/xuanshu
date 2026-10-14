@@ -10,11 +10,12 @@
 | 文件 | 作用 |
 |---|---|
 | [`../../scripts/verify-isolation.mjs`](../../scripts/verify-isolation.mjs) | **唯一断言实现**（CLI，`--json` 给机器读，退出码 0/1） |
-| `resolve.test.mjs` | I1/I2 + 环境门 `profile-installed` + **端口解析回归（数字形态）** + 启动器 CLI 前提（R2/R3/R12/R17）+ 拒绝路径负例 |
+| `resolve.test.mjs` | I1/I2 + 环境门 `profile-installed` + **端口解析回归（数字形态）** + 启动器 CLI 前提（R2/R3/R12/R17）+ **web 真起冒烟** + 拒绝路径负例 |
 | `port-guard.test.mjs` | I3/I4：真起对照组服务端验 web 端口门与 horosa 守卫四态（含 R5 的 probe-failed） |
 | `dual-instance.test.mjs` | I5/I6/I7：两个隔离 home 各真跑一次 `headless`，**哨兵法**（R15）+ 指纹 + 清单 |
 | `lib/verifier.mjs` | 公共夹具：环境门（唯一一份）、`spawnSync` 跑验收台、空闲端口 |
 | `lib/fixture-server.mjs` | I4 对照组：**独立进程**的假服务端（为什么必须独立，见文件头） |
+| `lib/web-boot.mjs` | 票 07 新增：**独立进程**真起 `dsh web` 探针（token 握手 → HTML 里的 `__DSH_BOOT__`）；为什么必须独立进程，见文件头 |
 | `.tmp/` | 运行期临时 home（已 gitignore；绿的自动清理，红的留现场） |
 
 ## 跑
@@ -92,8 +93,15 @@ XUANSHU_REQUIRE_ASSEMBLY=1 pnpm test:isolation          # 交付前验收
   验收台同时钉这两半：`checks['horosa-guard'].evidence.gateOk === false` 且 `...startupExitCode === 0`。
 - **R5**：「有人 LISTEN 但 HTTP 在预算内零响应」（裸 TCP / 慢应答的 horosa）判 `probe-failed`，
   不再判 `occupied-foreign` —— 那格的真值是「无法判定」，判成「确定被占」会制造假红。
-- **R2/R17**：`--mode web` 在缺 `@deepseek-ai/dsh-web-app` bundle 时**拒绝 spawn**：exit 2、profile 门 detail
-  点名 bundle、报告里**没有** `spawn` 字段、stdout 仍是**单份** JSON。doctor/env/headless 不受它影响。
+- **R2/R17（票 07 已翻转）**：票 04 里 `@deepseek-ai/dsh-web-app` 不在 `dsh.profile.bundles`，`--mode web`
+  在 spawn 前拒绝（exit 2、profile 门 detail 点名 bundle、报告无 `spawn`）。票 07 接上 bundle 后真值翻了：
+  同一个 `--mode web` 必须放行（profile 门 ok、`webBundle.available=true`、报告里**有** `spawn`），并且
+  `resolve.test.mjs` 加了一条**真起**的冒烟（`lib/web-boot.mjs`：token 握手 → HTML 含 `__DSH_BOOT__`）。
+  翻转的是断言的真值，不是删断言。doctor/env/headless 一直不受它影响。
+- **web 命令形态**（票 07 实测）：`dsh web --port <n> --no-open`（`dsh <name>` 捷径把 `web` 展开成
+  `--profile web`）才是 CLI 认的形态；`--profile <name> web --port <n>` 会被根解析器当多余位置参数拒掉
+  （`error: too many arguments. Expected 0 arguments but got 1: web.`）。所以探针 spawn 的是前一种形态，
+  `--mode web` 的 `plan.command` 仍是后一种（启动器侧待随票 07 调整，见其文件头与验收报告）。
 - **R12**：没 spawn 就没有 `spawn` 字段（doctor/env 不再塞 `{ attempted: false }`）。
 - **R8/R10**：非法端口只从 `defaults.INVALID_PROBE_PORT` 取；CLI `source` 比较只认 `resolve.CLI_SOURCES`
   —— 本目录不再出现这些字面量（`--help` 里的示例除外，那是给人敲的命令行）。
@@ -130,7 +138,6 @@ XUANSHU_REQUIRE_ASSEMBLY=1 pnpm test:isolation          # 交付前验收
 | 没测的东西 | 为什么 | 依赖 |
 |---|---|---|
 | 真起 horosa 服务（8765 上真的答 MCP） | horosa 还没装；本票只做单占用守卫，用假端点验三条判据 | 票 05/06 |
-| `dsh web` 真监听 `19388` 并跑起来 | 缺 `@deepseek-ai/dsh-web-app` bundle（§5.1 R1/R2），本票 `--mode web` **必然** exit 2；这里断言的是「拒绝得对」+ 计划命令 | 票 07（bundle）、票 05+（真跑） |
-| `--mode web` 的终版报告（R3：含真实 `spawn.exitCode`） | 同上：本票 web 起不来，量不到；R3 的报告语义在**会 spawn 的 headless** 上被钉住（单份 JSON + 终版 `spawn.exitCode`） | 票 07 |
+| `--mode web` 的 `plan.command` 真能跑起来 | 票 07 实测那条命令形态（`--profile <name> web …`）会被 CLI 根解析器拒成 `too many arguments`；能跑的是 `dsh web --port <n>`。web 真起由 `lib/web-boot.mjs` 用后者证明；启动器侧命令形态待随票 07 调整 | 票 07（启动器侧） |
 | 会话级互不可见（两个会话看不到对方） | 哨兵法只证「存储根分开」；会话可见性要等有真会话路径 | 票 10 |
 | 与 desktop **真的同时**长跑互不干扰 | 涉及 GUI 与时间维度；这里用「哨兵 + 状态指纹 + 清单不相交 + 端口不撞」逼近 | 手工 runbook（`docs/runbook/dual-instance.md`） |

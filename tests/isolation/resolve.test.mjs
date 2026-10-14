@@ -7,8 +7,8 @@
  *   I2  CLI 来自 profile 树、版本 = profile 装的 dsh-base 版本；显式 `--cli-bin` 优先
  *   （另加一份环境门本体 profile-installed，以及两条**不需要 profile** 的拒绝路径负例）
  *   再加一块「启动器 CLI 前提」（真的 spawn `scripts/isolation/startup.mjs --json`）：
- *   R12 doctor/env 报告里**没有** `spawn` 字段；R2/R17 `--mode web` 在缺
- *       `@deepseek-ai/dsh-web-app` bundle 时 exit 2、detail 点名 bundle、无 `spawn`、stdout 单份 JSON；
+ *   R12 doctor/env 报告里**没有** `spawn` 字段；R2/R17 票 07 之后**翻转**为「web bundle 已声明 +
+ *       已装 → profile 门过、preflight 不再拒绝」，并且真的起一次 web 验 HTML（`lib/web-boot.mjs`）；
  *   R3  真会 spawn 的 `--mode headless` 把**终版报告**（含真实 `spawn.exitCode`）写进单份 stdout JSON。
  *
  * 同源：主块只跑 `scripts/verify-isolation.mjs --json --only home-isolated,cli-version,profile-installed`，
@@ -30,6 +30,9 @@ import {
 
 const SELECTED = ['home-isolated', 'cli-version', 'profile-installed']
 const STARTUP = join(REPO_ROOT, 'scripts', 'isolation', 'startup.mjs')
+/** web 真起冒烟探针（独立进程：web 服务端要真答 HTTP，测试进程不能被 spawnSync 阻塞住）。 */
+const WEB_BOOT = join(REPO_ROOT, 'tests', 'isolation', 'lib', 'web-boot.mjs')
+const WEB_BOOT_MARKER = '##XUANSHU-WEB-BOOT##'
 /** 回归用端口（数字形态）：故意不是默认值，被忽略就一定看得出来。 */
 const NUMERIC_WEB_PORT = 7973
 const NUMERIC_HOROSA_PORT = 65533
@@ -68,6 +71,22 @@ function expectSingleJsonDoc(result) {
   // （别用 `"schema":` 出现次数当判据：报告里 schema 字段本来就有好几处，那是嵌套键，不是第二份文档。）
   const roots = lines.filter((line) => /^[[{]/.test(line))
   expect(roots.length, `stdout 里有 ${roots.length} 个顶格 JSON 根行：${roots.slice(0, 4).join(' | ')}`).toBe(1)
+}
+
+/** 真起一次 web（独立进程探针），返回探针报告；端口由 OS 挑，绝不去撞 19387/19388。 */
+function runWebBoot({ timeoutMs = 180_000 } = {}) {
+  const run = spawnSync(process.execPath, [
+    WEB_BOOT, '--home', DSH_HOME, '--profile', PROFILE, '--cwd', REPO_ROOT, '--timeout-ms', '120000',
+  ], { cwd: REPO_ROOT, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 })
+  const line = (run.stdout ?? '').split(/\r?\n/).find((row) => row.startsWith(WEB_BOOT_MARKER))
+  return {
+    status: run.status,
+    report: line === undefined ? undefined : JSON.parse(line.slice(WEB_BOOT_MARKER.length)),
+    stdout: run.stdout ?? '',
+    stderr: run.stderr ?? '',
+    error: run.error?.message,
+    raw: () => `exit=${run.status}\n--- stdout ---\n${(run.stdout ?? '').slice(-2500)}\n--- stderr ---\n${(run.stderr ?? '').slice(-1200)}`,
+  }
 }
 
 withProfileGate('玄枢隔离验收 · I1/I2（home-isolated / cli-version / profile-installed）', () => {
@@ -232,28 +251,52 @@ withProfileGate('玄枢隔离验收 · 启动器 CLI 前提（web 模式 / 单�
     expect(result.json.plan.env.DSH_HOME).toBe(DSH_HOME)
   })
 
-  it('R2/R17 --mode web 在缺 web bundle 时拒绝 spawn：exit 2 + 点名 bundle + 无 spawn + 单份 JSON', () => {
-    // 真跑（不是 dry-run）：这一票里 `@deepseek-ai/dsh-web-app` 不在 profile 的 bundles 里（§5.1 R1），
-    // 所以启动器必须在 spawn 前就拒绝，而不是放一个必死的 `dsh web --port` 子进程出去。
+  it('R2/R17（票 07 翻转）web bundle 已声明 + 已装 → profile 门过，preflight 不再拒绝', () => {
+    // 票 04 时 `@deepseek-ai/dsh-web-app` 不在 `dsh.profile.bundles` 里（§5.1 R1），所以启动器必须在
+    // spawn 前拒绝（exit 2、点名缺哪个 bundle）。票 07 把它接进 bundles（首页替换 = 自我总览），
+    // 这条前提的**真值翻了**：同一个 `--mode web` 必须放行 —— profile 门 ok、webBundle.available=true、
+    // 顶层退出码不再等于环境门。断言翻转的是真值，不是把断言删掉（不然「接没接上」就没人看了）。
     const result = runStartupCli([...base, '--mode', 'web', '--timeout-ms', '30000'])
     expectSingleJsonDoc(result)
-    expect(result.status, `--mode web 应退出 2（环境门），实际 ${result.status}\n${result.raw()}`).toBe(2)
-    expect(result.json.exitCode).toBe(2)
-    expect(result.json.ok).toBe(false)
-    // 拒绝的证据：profile 门 FAIL 且 detail 点名缺哪个 bundle；报告里没有 spawn 字段。
+    expect(result.json.exitCode, `--mode web 不再该以环境门（2）退出\n${result.raw()}`).not.toBe(2)
     const profile = result.json.checks.profile
-    expect(profile.ok, `profile 门应 FAIL：${profile.detail}`).toBe(false)
-    expect(profile.detail).toContain(DSH_WEB_APP_PACKAGE)
-    expect(String(profile.detail)).toMatch(/bundles/)
-    expect(profile.hint, '拒了就得给两条出路（--mode env 取命令 / 等票 07）').toBeTruthy()
-    expect(Object.keys(result.json)).not.toContain('spawn')
-    // 门不 ok 的原因必须是「缺 web bundle」，不是「profile 没装」—— 后者会让这条断言失去意义。
-    expect(result.json.checks.profile.evidence.webBundle.available).toBe(false)
-    expect(result.json.checks.profile.evidence.webBundle.declaredInBundles).toBe(false)
-    // doctor/headless 不受它影响：这条前提只该挡住 web 模式。
+    expect(profile.ok, `profile 门应通过（web bundle 已接）：${profile.detail}`).toBe(true)
+    // 门通过的证据必须是「真的声明 + 真的装」，不是「碰巧没红」。
+    expect(profile.evidence.webBundle.available).toBe(true)
+    expect(profile.evidence.webBundle.declaredInBundles).toBe(true)
+    expect(profile.evidence.webBundle.installed).toBe(true)
+    expect(profile.evidence.bundles).toContain(DSH_WEB_APP_PACKAGE)
+    // 其余环境门不受它影响。
     expect(result.json.checks.home.ok).toBe(true)
     expect(result.json.checks.cli.ok).toBe(true)
-  })
+    // 到了真 spawn 那一步：报告里必须有 spawn 字段（R3 的报告语义在 web 路径上也成立）。
+    // 命令形态的已知缺口（`--profile <name> web …` 会被 CLI 根解析器拒成 too many arguments）见
+    // 下面那条 test；这里只钉「preflight 不再替 CLI 拒绝」，不把 CLI 自己的退出码当环境门。
+    expect(result.json.spawn, '放行后必须真的尝试 spawn 一次').toBeDefined()
+    expect(result.json.spawn.attempted).toBe(true)
+  }, 300_000)
+
+  it('web 真起冒烟：真 CLI 起 web → HTTP 200 + HTML 含 __DSH_BOOT__ 注入标记（票 07 装配级）', () => {
+    // 票 04 的 README 把这条列在「未覆盖」里（缺 web bundle，`--mode web` 必然 exit 2）。票 07 接上
+    // bundle 之后它成了**唯一**能证明「web 真的起得来」的断言：不是「包在 node_modules 里躺着」，
+    // 也不是「端口有人在听」，而是 28/34KB 的 index HTML 里真有 DSH 的 `window.__DSH_BOOT__` 注入。
+    const boot = runWebBoot()
+    expect(boot.report, `web 探针没有给出结果：\n${boot.raw()}`).toBeDefined()
+    const report = boot.report
+    expect(report.error ?? null, boot.raw()).toBeNull()
+    expect(report.ok, `web 没真起来：\n${boot.raw()}`).toBe(true)
+    expect(report.page.status, boot.raw()).toBe(200)
+    expect(String(report.page.contentType)).toContain('text/html')
+    expect(report.page.bytes).toBeGreaterThan(1000)
+    expect(report.hasBootMarker, `HTML 里没有 __DSH_BOOT__：${String(report.page.head)}`).toBe(true)
+    // 信任握手必须是 `303 + dsh-auth-* cookie` 那条路径：去掉 cookie 只会拿到 401/303，
+    // 这条断言让「拿到 HTML」不可能靠关掉 trust fence 蒙过去。
+    expect(report.handshake.status).toBe(303)
+    expect(report.handshake.cookies).toBeGreaterThan(0)
+    // 端口是 OS 挑的：绝不占 desktop 的 19387（I7 的同类卫生）。
+    expect(report.port).not.toBe(19387)
+    expect(boot.status, `探针进程退出码 ${boot.status}`).toBe(0)
+  }, 300_000)
 
   it('R3 真会 spawn 的 headless：stdout 是**终版**单份 JSON，含真实 spawn.exitCode', () => {
     const result = runStartupCli([...base, '--mode', 'headless'])

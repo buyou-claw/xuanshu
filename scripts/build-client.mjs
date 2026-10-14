@@ -276,6 +276,19 @@ function executeArtifact(code, pkgName) {
       const noop = () => null;
       return { Fragment: Symbol.for('react.fragment'), jsx: noop, jsxs: noop };
     }
+    if (spec === 'react') {
+      // 票 07 起组件用 `useSyncExternalStore`（main 面板键快照）等钩子：
+      // apply 期不调 hook，只要求成员在（真浏览器走基线 module table 的真 react）。
+      return {
+        Fragment: Symbol.for('react.fragment'),
+        createElement: () => null,
+        useState: (initial) => [initial, () => {}],
+        useEffect: () => {},
+        useMemo: (factory) => factory(),
+        useRef: () => ({ current: undefined }),
+        useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
+      };
+    }
     throw new Error(`Unexpected require("${spec}") during in-process self-check`);
   };
   vm.runInNewContext(code, { window: fakeWindow }, { filename: 'lib/client.js' });
@@ -301,13 +314,29 @@ function executeArtifact(code, pkgName) {
     throw new BuildError('factory 返回的插件对象缺少 cordis 服务 inject 数组');
   }
 
-  // 调用 apply，捕获它向槽位注册了什么。
+  // 调用 apply，捕获它向槽位注册了什么、以及默认面板/token 覆盖层的副作用。
   const slotCalls = [];
+  const sideEffects = [];
   const fakeCtx = {
     effect(callback) {
       // 真实现会立刻跑回调并把返回的 disposer 挂到 fiber 上；这里照做。
       const disposer = callback();
       return typeof disposer === 'function' ? disposer : () => {};
+    },
+    theme: {
+      overrideTokens(source, tokens) {
+        sideEffects.push({
+          kind: 'overrideTokens',
+          source,
+          tokenCount: tokens === null || typeof tokens !== 'object' ? 0 : Object.keys(tokens).length,
+        });
+        return () => {};
+      },
+    },
+    layout: {
+      selectPanel(panelId) {
+        sideEffects.push({ kind: 'selectPanel', panelId });
+      },
     },
     slots: {
       inject(key, callback) {
@@ -317,17 +346,25 @@ function executeArtifact(code, pkgName) {
       },
       register(options, component) {
         slotCalls.push({ kind: 'register', options, component });
+        // 副作用序列里也记一笔：默认面板必须晚于 main 注册（见 checkSlotCalls 的顺序断言）。
+        sideEffects.push({ kind: 'register', name: options?.name });
+        return () => {};
+      },
+      entries() {
+        return [];
+      },
+      subscribe() {
         return () => {};
       },
     },
   };
   plugin.apply(fakeCtx);
 
-  return { requested, slotCalls, plugin };
+  return { requested, slotCalls, sideEffects, plugin };
 }
 
-/** 校验 apply 注册的两个槽位形状（与契约 §4 一致）。 */
-function checkSlotCalls(slotCalls) {
+/** 校验 apply 注册的槽位形状与默认面板/token 覆盖层副作用（票 07 契约）。 */
+function checkSlotCalls(slotCalls, sideEffects) {
   const registers = slotCalls.filter((call) => call.kind === 'register').map((call) => call.options);
   const injected = slotCalls.filter((call) => call.kind === 'inject').map((call) => call.key);
   const problems = [];
@@ -354,6 +391,41 @@ function checkSlotCalls(slotCalls) {
     problems.push(
       `main.key (${JSON.stringify(main.key)}) 与 sidebar.panellist.id (${JSON.stringify(row.id)}) 必须相同`,
     );
+  }
+
+  // ── 票 07（首页替换）：默认面板 + token 覆盖层 + 注入面（契约注记 §1） ──
+  if (main !== undefined && typeof main.inject !== 'function') {
+    problems.push('main 注册选项缺少 `inject` 注入函数（四卡拿不到 navigate / mainPanels）');
+  } else if (main !== undefined) {
+    const provided = main.inject();
+    if (typeof provided?.navigate !== 'function') problems.push('main 的 inject 没有提供 navigate 函数');
+    if (provided?.mainPanels === undefined) problems.push('main 的 inject 没有提供 mainPanels watch');
+    else if (typeof provided.mainPanels.getSnapshot !== 'function' || typeof provided.mainPanels.subscribe !== 'function') {
+      problems.push('inject 提供的 mainPanels 不是 { subscribe, getSnapshot } 形状');
+    }
+  }
+
+  const overrides = sideEffects.filter((effect) => effect.kind === 'overrideTokens');
+  if (overrides.length !== 1) {
+    problems.push(`ctx.theme.overrideTokens 应恰好调用一次，实际 ${overrides.length} 次`);
+  } else {
+    if (overrides[0].source !== 'xuanshu-ui-v1') {
+      problems.push(`token 覆盖层 source 应为 "xuanshu-ui-v1"，实际 ${JSON.stringify(overrides[0].source)}`);
+    }
+    if (!(overrides[0].tokenCount > 0)) problems.push('token 覆盖层是空的（xs-tokens.json 没接上）');
+  }
+
+  const selections = sideEffects.filter((effect) => effect.kind === 'selectPanel');
+  if (selections.length !== 1) {
+    problems.push(`ctx.layout.selectPanel 应恰好调用一次（默认面板），实际 ${selections.length} 次`);
+  } else if (selections[0].panelId !== 'overview') {
+    problems.push(`默认面板应为 "overview"，实际 ${JSON.stringify(selections[0].panelId)}`);
+  }
+  // 顺序：默认面板必须在 main 注册**成功之后**切（selectPanel 对未注册 key 会 throw）。
+  const mainIndex = sideEffects.findIndex((effect) => effect.kind === 'register' && effect.name === 'main');
+  const selectIndex = sideEffects.findIndex((effect) => effect.kind === 'selectPanel');
+  if (mainIndex >= 0 && selectIndex >= 0 && selectIndex < mainIndex) {
+    problems.push('ctx.layout.selectPanel 发生在 main 注册之前（会 throw：selectPanel 对未注册 key 不容错）');
   }
 
   return problems;
@@ -545,7 +617,7 @@ async function main() {
     ...checkArtifactText(code, name, executed.requested, declaredExternal),
     ...checkDeclaredExports(executed.plugin, declaredExports),
     ...probeExportForwarding(code, name),
-    ...checkSlotCalls(executed.slotCalls),
+    ...checkSlotCalls(executed.slotCalls, executed.sideEffects),
   ];
   if (problems.length > 0) {
     throw new BuildError(
@@ -578,6 +650,7 @@ async function main() {
   console.log(`[build-client]     cordis inject : ${JSON.stringify(executed.plugin.inject)}`);
   console.log(`[build-client]     导出行为断言  : ${declaredExports.join(', ')} 全部存在于返回对象`);
   console.log('[build-client]     导出转发探针  : 注入第三个导出后仍在返回对象上（旧尾部写法会被此探针拦下）');
+  console.log(`[build-client]     槽位/面板副作用: ${executed.sideEffects.map((effect) => (effect.kind === 'register' ? `register(${String(effect.name)})` : effect.kind === 'selectPanel' ? `selectPanel(${String(effect.panelId)})` : `overrideTokens(${String(effect.source)}×${String(effect.tokenCount)})`)).join(' → ') || '(无)'}`);
   console.log(`[build-client]     缩进护栏      : ${indentNote}`);
   console.log('[build-client]     自检          : 信封 / 物化 / 导出面 / 槽位注册形状 / 外部依赖 全部通过');
   if (checkNote !== undefined) {

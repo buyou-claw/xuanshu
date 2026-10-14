@@ -1,6 +1,6 @@
 {
   "schema": "xuanshu/patch-row-baseline@1",
-  "generatedAt": "2026-10-11T12:32:15.266Z",
+  "generatedAt": "2026-10-13T13:29:19.531Z",
   "generatedBy": "node scripts/verify-assembly.mjs --write-baseline",
   "dshVersion": "0.2.0-rc.2",
   "profile": "dsh-profile-xuanshu",
@@ -27,6 +27,36 @@
       "version": "0.2.0-rc.2",
       "patch": "node_modules/@deepseek-ai/dsh-headless/cordis.patch.yml",
       "rows": 2
+    },
+    {
+      "layer": "@deepseek-ai/dsh-web-app",
+      "version": "0.2.0-rc.2",
+      "patch": "node_modules/@deepseek-ai/dsh-web-app/cordis.patch.yml",
+      "rows": 85
+    },
+    {
+      "layer": "@deepseek-ai/dsh-web-app",
+      "version": "0.2.0-rc.2",
+      "patch": "node_modules/@deepseek-ai/dsh-web-app/presets/standard.patch.yml",
+      "rows": 1
+    },
+    {
+      "layer": "@deepseek-ai/dsh-web-app",
+      "version": "0.2.0-rc.2",
+      "patch": "node_modules/@deepseek-ai/dsh-web-app/presets/ptc.patch.yml",
+      "rows": 1
+    },
+    {
+      "layer": "@deepseek-ai/dsh-web-app",
+      "version": "0.2.0-rc.2",
+      "patch": "node_modules/@deepseek-ai/dsh-web-app/presets/minimal.patch.yml",
+      "rows": 1
+    },
+    {
+      "layer": "@deepseek-ai/dsh-web-app",
+      "version": "0.2.0-rc.2",
+      "patch": "node_modules/@deepseek-ai/dsh-web-app/presets/cordis.patch.yml",
+      "rows": 1
     }
   ],
   "rows": [
@@ -605,6 +635,540 @@
       "name": "@deepseek-ai/dsh-headless",
       "layer": "@deepseek-ai/dsh-headless",
       "order": 95
+    },
+    {
+      "id": "desktop-product-telemetry",
+      "name": "@deepseek-ai/dsh-host-product-telemetry-otel",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 96
+    },
+    {
+      "id": "product-analytics",
+      "name": "@deepseek-ai/dsh-client-product-analytics",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 97
+    },
+    {
+      "id": "subagent-model-selection-settings",
+      "name": "@deepseek-ai/dsh-tool-subagent/model-selection-settings",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 98
+    },
+    {
+      "id": "message-feedback",
+      "name": "@deepseek-ai/dsh-message-feedback",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 99
+    },
+    {
+      "id": "session-log-download",
+      "name": "@deepseek-ai/dsh-session-log-export",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 100
+    },
+    {
+      "id": "open-in-app",
+      "name": "@deepseek-ai/dsh-host-open-in-app",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 101
+    },
+    {
+      "id": "ui-open-in-app",
+      "name": "@deepseek-ai/dsh-client-ui-open-in-app",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 102
+    },
+    {
+      "id": "workspace",
+      "name": "@deepseek-ai/dsh-workspace",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 103
+    },
+    {
+      "id": "session-reference",
+      "name": "@deepseek-ai/dsh-session-reference",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 104
+    },
+    {
+      "id": "file-reference-local",
+      "name": "@deepseek-ai/dsh-file-reference-local",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 105
+    },
+    {
+      "id": "session-stats",
+      "name": "@deepseek-ai/dsh-session-stats",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 106
+    },
+    {
+      "id": "session-turn-outline",
+      "name": "@deepseek-ai/dsh-session-turn-outline",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 107
+    },
+    {
+      "id": "directory-picker",
+      "name": "@deepseek-ai/dsh-host-directory-picker-auto",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 108
+    },
+    {
+      "id": "plugin-inventory",
+      "name": "@deepseek-ai/dsh-host-plugin-inventory",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 109
+    },
+    {
+      "id": "session-controller",
+      "name": "@deepseek-ai/dsh-api-session-controller",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 110
+    },
+    {
+      "id": "job-controller",
+      "name": "@deepseek-ai/dsh-api-job-controller",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 111
+    },
+    {
+      "id": "terminal-controller",
+      "name": "@deepseek-ai/dsh-api-terminal-controller",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 112
+    },
+    {
+      "id": "workspace-files",
+      "name": "@deepseek-ai/dsh-api-workspace-files",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 113
+    },
+    {
+      "id": "ui-settings-account",
+      "name": "@deepseek-ai/dsh-client-ui-settings-account",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 114
+    },
+    {
+      "id": "account-controller",
+      "name": "@deepseek-ai/dsh-api-account-controller",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 115
+    },
+    {
+      "id": "settings-controller",
+      "name": "@deepseek-ai/dsh-api-settings-controller",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 116
+    },
+    {
+      "id": "workspace-controller",
+      "name": "@deepseek-ai/dsh-api-workspace-controller",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 117
+    },
+    {
+      "id": "cordis-host-runner",
+      "name": "@deepseek-ai/dsh-cordis-host-runner",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 118
+    },
+    {
+      "id": "cordis-inspect-providers",
+      "name": "@deepseek-ai/dsh-tool-cordis/host",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 119
+    },
+    {
+      "id": "web-startup",
+      "name": "@deepseek-ai/dsh-web-app/startup",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 120
+    },
+    {
+      "id": "webserver",
+      "name": "@deepseek-ai/dsh-host-webserver",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 121
+    },
+    {
+      "id": "web-runtime",
+      "name": "@deepseek-ai/dsh-web-app",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 122
+    },
+    {
+      "id": "client-hmr",
+      "name": "@deepseek-ai/dsh-client-hmr",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 123
+    },
+    {
+      "id": "modules",
+      "name": "@deepseek-ai/dsh-client-modules",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 124
+    },
+    {
+      "id": "connection",
+      "name": "@deepseek-ai/dsh-client-connection",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 125
+    },
+    {
+      "id": "file-upload",
+      "name": "@deepseek-ai/dsh-client-file-upload",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 126
+    },
+    {
+      "id": "api-remotes",
+      "name": "@deepseek-ai/dsh-api-remotes",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 127
+    },
+    {
+      "id": "cordis-client-runner",
+      "name": "@deepseek-ai/dsh-cordis-client-runner",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 128
+    },
+    {
+      "id": "ui-theme",
+      "name": "@deepseek-ai/dsh-client-ui-theme",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 129
+    },
+    {
+      "id": "locale",
+      "name": "@deepseek-ai/dsh-client-locale",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 130
+    },
+    {
+      "id": "shortcuts",
+      "name": "@deepseek-ai/dsh-client-shortcuts",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 131
+    },
+    {
+      "id": "ui-shortcuts",
+      "name": "@deepseek-ai/dsh-client-ui-shortcuts",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 132
+    },
+    {
+      "id": "ui-layout",
+      "name": "@deepseek-ai/dsh-client-ui-layout",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 133
+    },
+    {
+      "id": "ui-renderer",
+      "name": "@deepseek-ai/dsh-client-ui-renderer",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 134
+    },
+    {
+      "id": "ui-session",
+      "name": "@deepseek-ai/dsh-client-ui-session",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 135
+    },
+    {
+      "id": "resources",
+      "name": "@deepseek-ai/dsh-client-resources",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 136
+    },
+    {
+      "id": "ui-sidebar",
+      "name": "@deepseek-ai/dsh-client-ui-sidebar",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 137
+    },
+    {
+      "id": "ui-sidebar-right",
+      "name": "@deepseek-ai/dsh-client-ui-sidebar-right",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 138
+    },
+    {
+      "id": "office-to-pdf",
+      "name": "@deepseek-ai/dsh-office-to-pdf",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 139
+    },
+    {
+      "id": "ui-sidebar-documentpreview",
+      "name": "@deepseek-ai/dsh-client-ui-sidebar-documentpreview",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 140
+    },
+    {
+      "id": "ui-sidebar-browser",
+      "name": "@deepseek-ai/dsh-client-ui-sidebar-browser",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 141
+    },
+    {
+      "id": "ui-sidebar-terminal",
+      "name": "@deepseek-ai/dsh-client-ui-sidebar-terminal",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 142
+    },
+    {
+      "id": "ui-sidebar-files",
+      "name": "@deepseek-ai/dsh-client-ui-sidebar-files",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 143
+    },
+    {
+      "id": "ui-settings",
+      "name": "@deepseek-ai/dsh-client-ui-settings",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 144
+    },
+    {
+      "id": "ui-settings-general",
+      "name": "@deepseek-ai/dsh-client-ui-settings-general",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 145
+    },
+    {
+      "id": "ui-settings-models",
+      "name": "@deepseek-ai/dsh-client-ui-settings-models",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 146
+    },
+    {
+      "id": "ui-plugin-manager",
+      "name": "@deepseek-ai/dsh-client-ui-plugin-manager",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 147
+    },
+    {
+      "id": "ui-settings-plugin-inventory",
+      "name": "@deepseek-ai/dsh-client-ui-settings-plugin-inventory",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 148
+    },
+    {
+      "id": "ui-conversation",
+      "name": "@deepseek-ai/dsh-client-ui-conversation",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 149
+    },
+    {
+      "id": "ui-approval",
+      "name": "@deepseek-ai/dsh-client-ui-approval",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 150
+    },
+    {
+      "id": "ui-chat",
+      "name": "@deepseek-ai/dsh-client-ui-chat",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 151
+    },
+    {
+      "id": "ui-brand-official",
+      "name": "@deepseek-ai/dsh-client-ui-brand-official",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 152
+    },
+    {
+      "id": "ui-attachment",
+      "name": "@deepseek-ai/dsh-client-ui-attachment",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 153
+    },
+    {
+      "id": "ui-tool",
+      "name": "@deepseek-ai/dsh-client-ui-tool",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 154
+    },
+    {
+      "id": "ui-cordis",
+      "name": "@deepseek-ai/dsh-client-ui-cordis",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 155
+    },
+    {
+      "id": "ui-deliverables",
+      "name": "@deepseek-ai/dsh-client-ui-deliverables",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 156
+    },
+    {
+      "id": "workspace-changes",
+      "name": "@deepseek-ai/dsh-workspace-changes",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 157
+    },
+    {
+      "id": "ui-workspace",
+      "name": "@deepseek-ai/dsh-client-ui-workspace",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 158
+    },
+    {
+      "id": "ui-workflow-run",
+      "name": "@deepseek-ai/dsh-client-ui-workflow-run",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 159
+    },
+    {
+      "id": "ui-input-trigger",
+      "name": "@deepseek-ai/dsh-client-ui-input-trigger",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 160
+    },
+    {
+      "id": "ui-commands",
+      "name": "@deepseek-ai/dsh-client-ui-commands",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 161
+    },
+    {
+      "id": "ui-skill",
+      "name": "@deepseek-ai/dsh-client-ui-skill",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 162
+    },
+    {
+      "id": "ui-subagent",
+      "name": "@deepseek-ai/dsh-client-ui-subagent",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 163
+    },
+    {
+      "id": "ui-reference",
+      "name": "@deepseek-ai/dsh-client-ui-reference",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 164
+    },
+    {
+      "id": "ui-jobs",
+      "name": "@deepseek-ai/dsh-client-ui-jobs",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 165
+    },
+    {
+      "id": "ui-goal",
+      "name": "@deepseek-ai/dsh-client-ui-goal",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 166
+    },
+    {
+      "id": "ui-message-feedback",
+      "name": "@deepseek-ai/dsh-client-ui-message-feedback",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 167
+    },
+    {
+      "id": "ui-model-selection",
+      "name": "@deepseek-ai/dsh-client-ui-model-selection",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 168
+    },
+    {
+      "id": "ui-permission",
+      "name": "@deepseek-ai/dsh-client-ui-permission-presets",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 169
+    },
+    {
+      "id": "ui-agent-preset",
+      "name": "@deepseek-ai/dsh-client-ui-agent-preset",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 170
+    },
+    {
+      "id": "ui-settings-session-log",
+      "name": "@deepseek-ai/dsh-client-ui-settings-session-log",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 171
+    },
+    {
+      "id": "ui-settings-plugins",
+      "name": "@deepseek-ai/dsh-client-ui-settings-plugins",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 172
+    },
+    {
+      "id": "ui-settings-shell",
+      "name": "@deepseek-ai/dsh-client-ui-settings-shell",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 173
+    },
+    {
+      "id": "ui-settings-agent-loop",
+      "name": "@deepseek-ai/dsh-client-ui-settings-agent-loop",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 174
+    },
+    {
+      "id": "ui-settings-subagent",
+      "name": "@deepseek-ai/dsh-client-ui-settings-subagent",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 175
+    },
+    {
+      "id": "ui-settings-web-search",
+      "name": "@deepseek-ai/dsh-client-ui-settings-web-search",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 176
+    },
+    {
+      "id": "ui-plan",
+      "name": "@deepseek-ai/dsh-client-ui-plan",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 177
+    },
+    {
+      "id": "ui-user-questions",
+      "name": "@deepseek-ai/dsh-client-ui-user-questions",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 178
+    },
+    {
+      "id": "ui-trajectory",
+      "name": "@deepseek-ai/dsh-client-ui-trajectory",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 179
+    },
+    {
+      "id": "agent-preset-registry",
+      "name": "@deepseek-ai/dsh-agent-preset-registry",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 180
+    },
+    {
+      "id": "standard",
+      "name": "@deepseek-ai/dsh-agent-preset",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 181
+    },
+    {
+      "id": "ptc",
+      "name": "@deepseek-ai/dsh-agent-preset",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 182
+    },
+    {
+      "id": "minimal",
+      "name": "@deepseek-ai/dsh-agent-preset",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 183
+    },
+    {
+      "id": "cordis",
+      "name": "@deepseek-ai/dsh-agent-preset",
+      "layer": "@deepseek-ai/dsh-web-app",
+      "order": 184
     }
   ]
 }

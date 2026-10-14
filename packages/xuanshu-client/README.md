@@ -4,8 +4,8 @@
 **浏览器半边**（预编译 bundle），装进 `xuanshu` profile 后即可被 DSH 的 Web GUI 加载
 ——**不需要** `dev:web` 热更新，产物随包走。
 
-票 01 的范围是**空壳**：只注册两个槽位并渲染占位内容。
-四张卡（命盘 / 日课 / 底稿 / 快捷入口）的内容属票 07 · 首页替换。
+票 01 立起了空壳（两个槽位 + 构建管线 + 自检）；**票 07 · 首页替换**把它填成了
+「自我总览四卡」（命盘 / 日课 / 底稿 / 快捷入口），并设为打开玄枢的**默认面板**。
 
 ---
 
@@ -18,10 +18,15 @@ packages/xuanshu-client/
 ├── tsconfig.json         # 仅用于 `pnpm typecheck`；构建本身由 esbuild 完成，不做类型检查
 ├── types/shims.d.ts      # 官方 @deepseek-ai/* 包的最小类型切片（仓库根不装 rc 包）
 ├── src/client/           # 源码（TS/TSX），**不随包发布**
-│   ├── index.tsx         # 入口：导出 cordis 插件 apply / inject，做两次槽位注册
-│   ├── OverviewPanel.tsx # `main` keyed 槽 key `overview` 的占位面板
-│   ├── OverviewIcon.tsx  # `sidebar.panellist` list 槽行 `overview` 的图标
-│   └── panel.ts          # PANEL_ID / PANEL_ORDER / 占位文案
+│   ├── index.tsx         # 入口：cordis 插件 apply / inject（槽位注册 + 默认面板 + token + 样式）
+│   ├── panel.ts          # PANEL_ID / PANEL_ORDER / PANEL_LABEL + 四卡逐字文案与 fail-soft 理由
+│   ├── tokens.ts         # 票 03 的 token 取值（直接引用 docs 下的 xs-tokens.json）
+│   ├── style.ts          # 本包 CSS（`--xs-*` token）+ 幂等 <style> 注入
+│   ├── glyphs.tsx        # 票 03 素材的形状照抄（图标 ×7、空态/错误插画 ×4）
+│   ├── watch.ts          # main 面板键快照（四卡 fail-soft 置灰的唯一判据）
+│   ├── cards.tsx         # 卡壳 + 三态 + 四卡（命盘 / 日课 / 底稿 / 快捷入口）
+│   ├── OverviewPanel.tsx # `main` keyed 槽 key `overview` 的面板（页头 + 2×2 栅格）
+│   └── OverviewIcon.tsx  # `sidebar.panellist` list 槽行 `overview` 的图标
 └── lib/                  # 随包发布
     ├── index.js          # 宿主半边：最小 no-op cordis 插件（只为让补丁行 id 进树）
     └── client.js         # 浏览器半边：**预编译并提交**的单文件经典脚本
@@ -154,8 +159,8 @@ react-dom/client
 
 | 位置 | 含义 | 本包取值 |
 |---|---|---|
-| `package.json` → `dsh.client.inject` | 模块图边（包名） | `dsh-client-ui-layout`（拥有 `main` 槽）、`dsh-client-ui-renderer`（提供 `slots` 服务）、`dsh-client-ui-sidebar`（拥有 `sidebar.panellist` 槽） |
-| `lib/client.js` → `exports.inject` | cordis **服务**名 | `["slots"]` |
+| `package.json` → `dsh.client.inject` | 模块图边（包名） | `dsh-client-ui-layout`（拥有 `main` 槽）、`dsh-client-ui-renderer`（提供 `slots` 服务）、`dsh-client-ui-sidebar`（拥有 `sidebar.panellist` 槽）、`dsh-client-ui-theme`（提供 `theme` 服务，票 07 加） |
+| `lib/client.js` → `exports.inject` | cordis **服务**名 | `["slots", "layout", "theme"]`（`layout`：默认面板切换；`theme`：token 覆盖层） |
 
 往 `dsh.client.inject` 里塞一个**没有 `dsh.client` 声明**的包（例如
 `@deepseek-ai/dsh-client-ui-slots`，它是基线外部依赖、不是图里的行）会触发
@@ -163,15 +168,26 @@ react-dom/client
 
 ## 6. 注册了什么
 
-`src/client/index.tsx` 只做两次注册，两处字符串同源于 `panel.ts` 的 `PANEL_ID`：
+`src/client/index.tsx` 做**两处槽位注册 + 三件装配副作用**，字符串同源于 `panel.ts` 的 `PANEL_ID`：
 
 | 槽位 | kind | 注册选项 | 组件 |
 |---|---|---|---|
-| `main` | `keyed` | `{ name: 'main', key: 'overview' }` | `OverviewPanel` |
+| `main` | `keyed` | `{ name: 'main', key: 'overview', inject }` | `OverviewPanel` |
 | `sidebar.panellist` | `list` | `{ name: 'sidebar.panellist', id: 'overview', order: 20, label: '总览' }` | `OverviewIcon` |
 
 `main.key` 与 `sidebar.panellist.id` **必须是同一个字符串** —— 这是「侧栏行 ↔ 主面板」
 配对的唯一依据（侧栏读 `options.id` 收集面板元数据，点击时 `ctx.layout.selectPanel(id)`）。
+
+装配副作用（票 07 · 首页替换）：
+
+| # | 做什么 | 依据 |
+|---|---|---|
+| ① | **默认面板**：main 注册**成功之后** `ctx.layout.selectPanel('overview')`（`main` 槽的渲染键缺省回落 `conversation`） | `dsh-client-ui-layout/lib/client.js:118`（`activePanelId ?? "conversation"`）、`:462-466`（对未注册 key 会 throw） |
+| ② | **token 覆盖层**：`ctx.theme.overrideTokens('xuanshu-ui-v1', 票03取值)`（`--xs-*`，双模） | `dsh-client-ui-theme/lib/types/client/index.d.ts:153-178` |
+| ③ | **样式随 JS 走**：幂等注入 `<style data-plugin-css="xuanshu-client/overview.css">` | 官方 ui-layout 同法：`dsh-client-ui-layout/lib/client.js:72-81` |
+
+另有第 ④ 件（不算注册）：`ctx.slots.subscribe('main', …)` 维护「已注册 main 面板键」快照，
+四卡的 fail-soft 置灰以它为唯一判据（`dsh-client-ui-layout/lib/client.js:592-599` 同法）。
 
 刻意**没做**的事（及原因）：
 
@@ -179,12 +195,17 @@ react-dom/client
   ui-layout 声明的所有座位随之消失。
 - **不声明 `children`**：槽位声明是排他的，`main.conversation` 已由官方 ui-conversation
   声明，抢声明会抛。「问事」将来是另开 `consult` key（票 10 · 问事闭环），不是复用 `conversation`。
-- **不接 locale 服务**：本票是无 i18n 的单中文占位壳，`label` 用纯字符串
+- **不加 `priority`**：`overview` 是新 cell（keyed 新 key / list 新 id），纯加性、不遮蔽任何
+  既有占用者 —— 「遮蔽不报错」正是这样实现的。同 cell 同 priority 二次注册才 fail-loud
+  （`dsh-client-ui-slots/lib/types/index.d.ts:577-583`），测试里对这个区分有正反两向断言。
+- **不接 locale 服务**：本包是无 i18n 的单中文界面，`label` 用纯字符串
   （`SlotLabel = string | (() => string)`，侧栏按 `resolveSlotLabel(...) ?? id` 取值）。
   注意 `ctx.locale` 只有 `register(ns, locale, dict)` / `register(ns, dicts)` / `bind(ns)`，
   **没有 `t(ns, key)`** —— `t` 是写了 `locale:` 声明后框架合成到组件 props 上的座位。
-- **不设默认面板**：让 `overview` 成为打开玄枢时的首屏属票 07 · 首页替换（需要时用
-  `ctx.layout.selectPanel('overview')`）。
+- **不引 `@deepseek-ai/dsh-client-store`**：四卡只需要「取快照 + 订阅」，`src/client/watch.ts`
+  自写了十几行的极简 watch，少一条运行期 `require` 就少一条 module table 耦合边。
+- **不 require primitives / 任何 Harness Client 包**（F4）：卡片、徽标、骨架、单元格都是
+  自研 markup + 自有类名，几何照抄票 03 素材（`src/client/glyphs.tsx`）。
 
 ## 7. 验证
 
@@ -198,16 +219,13 @@ node scripts/build-client.mjs --check
 # 单独跑类型检查（构建本身不做类型检查）
 pnpm --filter ./packages/xuanshu-client run typecheck
 
-# 行为核对产物：在假 loader 里物化，断言**返回对象**上的插件面
-# （不再 grep 字面量 exports.apply —— 产物走 return module.exports，没有该字面量）
-node -e "const vm=require('vm'),s=require('fs').readFileSync('packages/xuanshu-client/lib/client.js','utf8');const r=[];vm.runInNewContext(s,{window:{__ModuleLoader__:{load:x=>r.push(x)}}});const m=r[0].factory(()=>({jsx:()=>null,jsxs:()=>null,Fragment:Symbol('f')}));console.log(s.startsWith('window.__ModuleLoader__.load('), s.includes('id: \"xuanshu-client\"'), typeof m.apply==='function', Array.isArray(m.inject), s.length)"
-
-# 确认没把 react 实现打进来（只应看到 require("react/jsx-runtime")）
-node -e "const s=require('fs').readFileSync('packages/xuanshu-client/lib/client.js','utf8');console.log([...s.matchAll(/require\((\"[^\"]+\")\)/g)].map(m=>m[1]))"
+# UI 槽位契约测试（票 07 的验收面：默认面板 / 四卡渲染 / 遮蔽语义 / 工作区原样）
+npx vitest run tests/assembly/overview-contract.test.mjs
 ```
 
-> PowerShell 里跑上面这些 `node -e` 内联脚本时，双引号可能被外壳吃掉
-> （表现为断言莫名其妙为 false）。写成临时 `.mjs` 文件再 `node <file>` 更可靠。
+构建自检在票 07 起还断言：`theme.overrideTokens` 恰一次、source 是 `xuanshu-ui-v1`
+且取值非空；`layout.selectPanel('overview')` 恰一次且**晚于 main 注册**；
+`main` 注册选项里的 `inject` 真的提供 `navigate` 与 `mainPanels` watch。
 
 ## 8. 类型桩（`types/shims.d.ts`）为什么存在
 
