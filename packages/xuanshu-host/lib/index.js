@@ -63,6 +63,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createBaziMethods } from './bazi/service.mjs';
+import { createBestOfMethods } from './consult/bestof.mjs';
 import { createCangMethods } from './cang/service.mjs';
 import { createConsultMethods } from './consult/service.mjs';
 import { createDigaoMethods } from './digao/service.mjs';
@@ -445,6 +446,10 @@ export function apply(ctx, config) {
       // 票 13：底稿（纯派生，没有 write/update）与日课（本地黄历 + 底座）。
       ...createDigaoMethods(ctx, { dataDir }),
       ...createRikkeMethods(ctx, { dataDir }),
+      // 票 11：多 AI 合参（`bestof.run/state/adopt`）。
+      // 候选并发多路 `ctx.llm.stream()`、judge 走单字段工具（ADR-0010），
+      // 记录落 `<dataDir>/consult/<sessionId>.bestof.json`；`consult.*` 的六个方法一字不动。
+      ...createBestOfMethods(ctx, { dataDir }),
     });
   } catch (error) {
     log.warn('谱 / 藏 / 八字 / 底稿 / 日课 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
