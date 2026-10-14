@@ -9,6 +9,7 @@ export function CangOverlay({ api, controller }: { api: CangApi; controller: Can
 export function CangDrawer({ api, controller, initial }: { api: CangApi; controller: CangController; initial: CangDraft }) {
   const [draft, setDraft] = useState<CangDraft>(() => ({ ...initial, tags: [...initial.tags], actions: { ...initial.actions } }));
   const [tags, setTags] = useState(initial.tags.join('，'));
+  const [nameTouched, setNameTouched] = useState(Boolean(initial.name));
   const [pointer, setPointer] = useState<CangPointer>();
   const [picker, setPicker] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -30,7 +31,7 @@ export function CangDrawer({ api, controller, initial }: { api: CangApi; control
   }, [api]);
   function changePath(path: string) {
     const name = path.replace(/[\\/]+$/, '').split(/[\\/]/).at(-1) ?? '';
-    setDraft(value => ({ ...value, path, name: value.name || name })); setError('');
+    setDraft(value => ({ ...value, path, name: nameTouched ? value.name : name })); setError('');
   }
   async function pick() {
     setBusy(true); setError('');
@@ -59,7 +60,7 @@ export function CangDrawer({ api, controller, initial }: { api: CangApi; control
         <label>本地文件 / 文件夹路径<input value={draft.path} onChange={event => changePath(event.target.value)} disabled={busy} required /></label>
         <button type="button" onClick={() => void pick()} disabled={busy || !picker} title={!picker ? '宿主未提供系统目录选择器，可粘贴本地路径' : undefined}>选择文件夹…</button>
         <p>系统选择器只取指针。文件藏请粘贴本地路径；玄枢不复制、不移动、不修改内容。</p>
-        <label>名称<input value={draft.name} onChange={event => setDraft(value => ({ ...value, name: event.target.value }))} maxLength={200} required disabled={busy} /></label>
+        <label>名称<input value={draft.name} onChange={event => { setNameTouched(true); setDraft(value => ({ ...value, name: event.target.value })); }} maxLength={200} required disabled={busy} /></label>
         <label>签（用逗号分隔）<input value={tags} onChange={event => setTags(event.target.value)} disabled={busy} /></label>
         <fieldset disabled={busy}><legend>跳转入口</legend>{(['open', 'reveal', 'copy'] as const).map((key, index) => <label key={key}><input type="checkbox" checked={draft.actions[key]} onChange={event => setDraft(value => ({ ...value, actions: { ...value.actions, [key]: event.target.checked } }))} />{['以默认程序打开', '在文件管理器中显示', '复制路径'][index]}</label>)}</fieldset>
         <p>校验只做路径可达性判断，不读取内容、不列目录、不算大小、不建索引。</p>

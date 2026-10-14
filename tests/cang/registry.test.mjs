@@ -50,3 +50,28 @@ test('existing valid JSONL without a final newline remains readable after anothe
   await registry.register({ path: pointer, name: '第二藏', tags: [] });
   expect((await createCangRegistry({ dataDir }).list()).entries.map(value => value.name)).toEqual(['第一藏', '第二藏']);
 });
+
+test('谱 paths and aliases into 谱 are rejected without reading their content', async () => {
+  const { dir, dataDir } = await sandbox();
+  const puDir = join(dataDir, 'pus', '私密谱');
+  await mkdir(puDir, { recursive: true });
+  await writeFile(join(puDir, 'manifest.md'), 'must-not-be-read');
+  const alias = join(dir, 'alias');
+  await symlink(puDir, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  const registry = createCangRegistry({ dataDir });
+  await expect(registry.register({ path: puDir, name: '拒绝', tags: [] })).rejects.toThrow('谱会被 AI 读取');
+  await expect(registry.register({ path: alias, name: '拒绝链接', tags: [] })).rejects.toThrow('谱会被 AI 读取');
+  expect((await registry.list()).entries).toEqual([]);
+});
+
+test('corrupt registry fails closed, while moved pointers are listed as stale', async () => {
+  const { dataDir, pointer } = await sandbox();
+  const registry = createCangRegistry({ dataDir });
+  await registry.register({ path: pointer, name: '藏', tags: [] });
+  await rm(pointer);
+  expect((await registry.list()).entries[0].pointer).toMatchObject({ valid: false });
+  await writeFile(registry.file, '{broken-json}\n');
+  await expect(registry.list()).rejects.toThrow('损坏');
+  await expect(registry.register({ path: pointer, name: '新藏', tags: [] })).rejects.toThrow('损坏');
+  expect(await readFile(registry.file, 'utf8')).toBe('{broken-json}\n');
+});

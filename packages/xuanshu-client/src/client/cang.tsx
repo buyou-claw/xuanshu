@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { rpcCall } from './rpc.js';
+import type { RpcContext } from './rpc.js';
 import { CangPanel } from './CangPanel.js';
 import { CangOverlay } from './CangDrawer.js';
 import { installCangStyle } from './cang-style.js';
@@ -19,7 +20,7 @@ export function createCangController(): CangController {
 }
 
 /** Additive main, sidebar and overlay registration; root wires this installer. */
-export function installCangClient(ctx: Context): void {
+export function installCangClient(ctx: Context & RpcContext): void {
   installCangStyle();
   const api: CangApi = {
     list: signal => rpcCall(ctx, 'cang.list', undefined, signal),
