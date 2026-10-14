@@ -15,23 +15,17 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { join } from 'node:path'
 
 import { PIN_FILE, RUNTIME_MANIFEST_TEMPLATE, SETUP_REPORT_TEMPLATE, TMP_ROOT } from './paths.mjs'
+import { pruneStaleDirs } from '../../lib/sandbox-prune.mjs'
 
-/** 上一次运行留下的沙箱超过这个岁数就删（当次运行的现场一律保留）。 */
-const STALE_MS = 6 * 60 * 60 * 1000
-
+/**
+ * 清理上一次运行留下的旧沙箱（超过 `SANDBOX_STALE_MS`）。
+ *
+ * 实现收在 `tests/lib/sandbox-prune.mjs`（**单一来源**）：这段逻辑曾经在 6 个域的沙箱里各抄一份，
+ * 然后漂移了 —— bazi / consult 两处把比较写反（删的是**刚建**的沙箱、旧件永不清，并发跑还会互删现场）。
+ * 共享文件头部记了这件事的来龙去脉与判据。
+ */
 function pruneStale() {
-  if (!existsSync(TMP_ROOT)) return
-  const now = Date.now()
-  for (const entry of readdirSync(TMP_ROOT, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue
-    const full = join(TMP_ROOT, entry.name)
-    try {
-      if (now - statSync(full).mtimeMs < STALE_MS) continue
-      rmSync(full, { recursive: true, force: true })
-    } catch {
-      /* Windows 上偶发 EBUSY：临时区是 gitignore 的，留着无害 */
-    }
-  }
+  return pruneStaleDirs(TMP_ROOT)
 }
 
 export function readJson(path) {
