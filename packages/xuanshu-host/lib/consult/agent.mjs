@@ -112,7 +112,9 @@ async function compositionOptions(ctx, requested) {
  */
 export function consultAgentCapability(ctx) {
   const missing = []
-  if (typeof softGet(ctx, 'agentPresets')?.mount !== 'function') missing.push('agentPresets')
+  // 判据与 `composeAgentPreset()` 的入口条件逐字对齐：两个方法缺一个就组合不出来。
+  const presets = softGet(ctx, 'agentPresets')
+  if (typeof presets?.resolve !== 'function' || typeof presets?.mount !== 'function') missing.push('agentPresets')
   if (defaultModelSelection(ctx) === undefined) missing.push('agentDefaultModel')
   if (missing.length === 0) return { ok: true, missing, detail: '' }
   return {
