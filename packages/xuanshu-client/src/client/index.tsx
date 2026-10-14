@@ -33,6 +33,8 @@ import { createBaziApi } from './bazi-api.js';
 import { createBaziUiController } from './bazi-controller.js';
 import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
+import { createConsultApi } from './consult-api.js';
+import { installConsult } from './consult.js';
 import { installMingpan } from './MingpanPanel.js';
 import { installOnboarding } from './onboarding.js';
 import { OverviewIcon } from './OverviewIcon.js';
@@ -123,6 +125,18 @@ export function apply(ctx: Context): void {
   const baziController = createBaziUiController();
   const baziDeps = { api: bazi, controller: baziController, navigate };
 
+  // 票 10：问事门厅的数据面 + 「进入正式对话」的导航面。
+  // `openSession` 只**导航**（`dsh-api-facts.md` §6.2：它不创建）；
+  // 拿不到 `uiWorkspace` 时给 `undefined`，门厅照实说明并把 sessionId 显示出来（fail-soft）。
+  const consultApi = createConsultApi(rpc);
+  const uiWorkspace = ctx.uiWorkspace;
+  const openSession =
+    typeof uiWorkspace?.openSession === 'function'
+      ? (sessionId: string): void => {
+          uiWorkspace.openSession(sessionId);
+        }
+      : undefined;
+
   const injected = (): OverviewInjected => ({
     navigate,
     mainPanels,
@@ -161,7 +175,8 @@ export function apply(ctx: Context): void {
   );
 
   // ⑥ 总装配：谱（票 09）与藏（票 14）各自的面板 / 侧栏行 / 浮层；
-  // ⑦ 票 08：八字冷启动向导（`onboarding`）与命盘详情（`mingpan`）。
+  // ⑦ 票 08：八字冷启动向导（`onboarding`）与命盘详情（`mingpan`）；
+  // ⑧ 票 10：问事门厅（`consult`）。
   // 全部都是**纯加性**注册（新 key / 新 id），各自带自己的样式与 RPC 客户端；
   // 放在 overview 之后，保证「第一个 main 注册仍是 overview」与默认面板语义不变。
   // 顺序有意义：`verify-assembly` / `overview-contract` 都按注册序断言
@@ -170,4 +185,5 @@ export function apply(ctx: Context): void {
   installCangClient(rpc);
   installOnboarding(rpc, baziDeps);
   installMingpan(rpc, baziDeps);
+  installConsult(rpc, { api: consultApi, navigate, openSession });
 }
