@@ -189,6 +189,19 @@ react-dom/client
 另有第 ④ 件（不算注册）：`ctx.slots.subscribe('main', …)` 维护「已注册 main 面板键」快照，
 四卡的 fail-soft 置灰以它为唯一判据（`dsh-client-ui-layout/lib/client.js:592-599` 同法）。
 
+**票 15（沉淀闭环）另加三处会话内 cell**（`src/client/sediment-views.tsx` 的 `installSediment`；
+**不新增 main key、不新增侧栏行**）——三处都在 `conversation` 子树里/框架浮层上，
+只在 DSH 原生 `conversation` 面板在屏时渲染（S10 §1 D5 + `DSH槽位映射.md` F1）：
+
+| 槽位 | kind / scope | 注册选项 | 组件 |
+|---|---|---|---|
+| `conversation.composer.dock` | `list` / session | `{ name, id: 'xuanshu.sediment-entry', inject }` | `XsSedimentEntry`（`[导出汇总]` + 目标谱选择） |
+| `conversation.chat.turnTail` | `list` / session | `{ name, id: 'xuanshu.sediment-draft', order: 30, inject }` | `XsSedimentDraftCard`（草稿卡 + 确认弹窗） |
+| `shell.overlay` | `list` / root | `{ name, id: 'xuanshu.sediment-notice', inject }` | `XsSedimentNotice`（写入结果通知；无内容 `return null` → click-through） |
+
+「人点才跑」的结构保证在 `sediment-model.ts` 的控制器上：造它不发请求，写谱只在 `commit()` 里发生，
+而 `commit()` 只由确认弹窗的 `[确认更新]` 调用；`confirmed` 在 `sediment-api.ts` 里写死为字面量 `true`。
+
 刻意**没做**的事（及原因）：
 
 - **不注册进 `root` 槽**：那是 single 槽，动态注册的条目会成为赢家并**单独占满整页**，

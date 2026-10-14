@@ -205,6 +205,76 @@ packages/xuanshu-host/lib/consult/
   session-controller 的会话内换模型面）；会话内换模型的完整语义由 DSH 自己的面板负责。
   **未确认**：consult 会话在 conversation 面板里换模型是否能生效（需要在真机上试一次）。
 
+## 沉淀闭环（票 15）
+
+一次问事结束后，把成果收成「更新到谱」的草稿 —— 但**写入必须由人点**。这是「AI 会动你的东西」
+这条产品线上唯一由人端着的闸门（S10 §9 C4 / 铁律 2、5）。
+
+```
+packages/xuanshu-host/lib/sediment/
+  store.mjs     草稿暂存：<dataDir>/sediment/<draftId>.json（schema xuanshu/sediment@1）+ 形状归一与路径穿越面
+  plan.mjs      纯决策：目标谱推断 / 提示装配 / 模型回答解析（无 IO、无 LLM，可单测）
+  message.mjs   指令消息载体：source.kind = 'xuanshu-sediment'（与票 10 同一套构造函数与兜底）
+  agent.mjs     把**这一场问事会话**接回来（不另开会话；resume 走票 10 的 resumeConsultAgent）
+  skill.mjs     内置 skill `xuanshu:sediment`（ctx.skills.register，正文在 sediment.md）
+  sediment.md   skill 正文（模型照它吐 JSON；解析侧按同一份校验）
+  service.mjs   三个方法：draft / commit / discard
+```
+
+**三个方法**（`/xuanshu` 通道，契约 §3 冻结）：
+
+| method | 做什么 |
+|---|---|
+| `sediment.draft` | 只对**问事会话**成立（`session-xs-consult-` 前缀 + 旁挂清单存在 + `turns ≥ 1`）→ 过能力门（同 `consult.send`）→ 目标谱在生成前定下来（`targetSlug` > 这场问事勾过的第一本现存谱 > 谱列表第一本）→ 把 skill 正文 + 目标谱**当前正文**塞进提示 → 在**这场会话**里 `followup` 并等 `turn/end` → 从会话日志取最后一条助手消息 → 校验成 `{description, body, summary}` → 暂存草稿。**一步都不碰谱** |
+| `sediment.commit` | **第一行**检查 `confirmed === true`（不是 truthy）→ 读草稿（不存在 = 可读错误，零写入）→ 读目标谱当前态（拿 `name`/`level`：写回是**更新**）→ **`pu.update`**（票 09 的 staging + rename，本模块没有第二份写盘逻辑）→ 删草稿（同一次沉淀不会被应用第二遍） |
+| `sediment.discard` | 删这一份草稿（只删草稿文件；会话与谱不受影响）。草稿不在就说清楚，不静默成功 |
+
+**人工确认闸门**（本票唯一不可让的东西）：
+
+- `confirmed !== true` 一律拒收，**在任何读盘/写盘之前**；负路径断言的是**字节级快照**
+  （`tests/sediment/commit.test.mjs`：未确认时谱文件与草稿文件逐字节未变）。
+- 界面上不存在 AI 自动写入的入口：客户端 `confirmed` 在数据面里写死为字面量 `true`，
+  只有确认弹窗的 `[确认更新]` 会走到 `commit()`（结构断言见
+  `tests/assembly/sediment-model.test.mjs` 的「AI 不静默写谱」一组）。
+- 写回**只走** `pu.update`；因此「谱怎么原子替换、怎么保留原 `source`、失败怎么回滚」
+  仍然只有一个实现（票 09）。
+
+**草稿暂存**：`<dataDir>/sediment/<draftId>.json`，schema `xuanshu/sediment@1`
+（`{schema, draftId, sessionId, createdAt, target:{slug,name}, draft:{description,body,summary}}`）。
+草稿区**不在 `pus/` 下** —— 草稿落盘不等于「已写入」，所以它不构成对谱的任何改动。
+
+**内置 skill**：`xuanshu:sediment`（注册名 kebab-case；正文标题仍是人读的 `# xuanshu:sediment`，
+与票 09 的 `xuanshu-create-pu` 同法）。注册成功与否的判据只能是「`register` 没抛」——
+web profile 关掉了宿主层 `skill-filesystem`，`ctx.skills.list()` 不传 `scope` 只看得到 global 层。
+
+**与设计稿的一处偏离（如实登记；Lead 2026-10-15 裁定：可接受）**：S10 §9 C10 设想「草稿落盘由 AI 用工具发起，
+因此在会话里出一张 DSH 审批卡」。本实现把草稿写盘放在**宿主**（`sediment.draft` 落 `<dataDir>/sediment/`），
+因此**不产生审批卡**。可接受的理由是**保护强度没有降低，只是换了一道更贴形状的闸**：草稿落在
+`<dataDir>/sediment/`、**不进任何谱**，所以它根本不是对用户数据的写操作；真正的写操作是 `sediment.commit`，
+它前面站着**人点确认**这道闸（`confirmed === true`，第一行拒收）。而人点的谱写入本来就不经 AI 工具
+（同一节也这么写）。设计稿里 `~/.dsh/xuanshu/sediment/<会话id>.md` 的文件名是暂定值（实现落在
+`<dataDir>/sediment/<draftId>.json`，schema `xuanshu/sediment@1`）。
+
+**S10 §1 ⑤「只导出，不写谱」：现状即满足（Lead 2026-10-15 裁定，不动）**。票 15 的验收把「导出汇总」
+映射成「内置 skill 生成草稿」，而 `sediment.draft` **一步不碰谱**（断言钉着「只暂存不改谱：旧文件逐字节相同」）
+—— 这就是「只导出，不写谱」。把汇总**导成文件给人拿走**（`exports/`）属于**新功能**：不在本票三条验收里，
+且要先改冻结接口面（契约 §3 只冻结三个方法），所以**不补 `sediment.export`**，留作可选后续。
+
+**已知口径（不是缺陷；均经 Lead 2026-10-15 裁定）**：
+
+- **写回不改谱的 `source`**：`pu.update` 的语义是「保留原 `source`」（票 09 的实现），
+  所以沉淀不会把它改成谱规范里那个 `sediment` 值 —— **保持**。「这本谱是怎么来的」与
+  「它最后一次被什么改过」是两件事，后者靠 `updated_at`；沉淀不该把一本谱的出身改掉。
+  （本票不改 `lib/pu/**`，只读 import。）
+- **草稿在提交成功后删除**：它已经进了谱，留着只会让同一次沉淀被应用第二遍。
+- **目标谱在生成之后被改名/删除** → `sediment.commit` 读不到（按 slug），可读失败且**不新建**谱。
+- **提示里带目标谱的当前正文**：草稿是「既有正文之上的更新」（S10 §2 B② 的 diff 预览建立在这个前提上）；
+  代价是这一轮的提示会带上那份正文的长度。
+- **S10 §2 B⑤ 的持久备份目录（`.bak/`）不做**（Lead 2026-10-15 裁定）：票 09 的写路径已经做了
+  「先 rename 到 `.old-<uuid>`、成功后再删」的原子替换与失败回滚，只是**不留常驻备份**；
+  玄枢的数据契约是「一个本地目录可整体拷走」，往里塞隐形备份目录反而破坏那条。
+  设计稿里那一行本来就标着「(需确认) 目录名由实现票定」。若要常驻备份，属新票。
+
 ## 用法与自检
 
 ```powershell
