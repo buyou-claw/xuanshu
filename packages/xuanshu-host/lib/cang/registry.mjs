@@ -1,14 +1,30 @@
+/**
+ * packages/xuanshu-host/lib/cang/registry.mjs — **藏**的登记表（票 14；`<dataDir>/cang/registry.jsonl`）。
+ *
+ * 「藏」是**只给人看**的东西（`CONTEXT.md`：藏永不进 AI 上下文），所以这个模块第一位的职责不是
+ * 「存下来」，而是**保证它永远不会被 AI 那条路读到**：
+ *   1. **与谱物理隔离**：`<dataDir>/pus/**` 里的路径一律拒收（谱是要被 AI 读的），而且这一判据
+ *      在 `realpath()` **之后**再查一遍 —— 否则 `C:\somewhere\link → pus` 这种链接就绕过去了；
+ *   2. **只读面不碰内容**：`list()` 探指针只用 `stat`/`realpath`，**不读文件内容、不枚举目录、
+ *      不建索引、不调工具 / 会话 / LLM**。文件内容只有人点「打开」时由客户端交给操作系统去开。
+ *      （这条口径出自票 14 的隔离要求；我在 `.scratch/notes/` 里**没有**找到 t14 契约文件，
+ *      所以**具体出处未确认** —— 只按本文件实际行为记述，不编行号。）
+ *   3. **追加式事件流**：每个操作 append 一行 JSON（`register`/`update`/`remove`），读时按 id 折叠成
+ *      当前视图。这样一次崩在半路最多丢最后一行，而**不会**留下半个 JSON 文档。
+ *      读到坏行 → **抛错并报行号**，绝不静默跳过（跳过会让用户以为藏没了）。
+ */
+
 import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-/** The only readFile target is this registry. Pointer checks use stat/realpath,
- * never file reads, directory enumeration, indexing, tools, sessions or LLM. */
 export function createCangRegistry({ dataDir }) {
   const file = join(dataDir, 'cang', 'registry.jsonl');
   const pus = resolve(dataDir, 'pus');
   let pending = Promise.resolve();
   let needsSeparator = false;
+  // Windows 上 DSH 给的是 `C:\…` 或 `\\server\share\…`（UNC）；`isAbsolute()` 本身在 win32 上
+  // 认这两种，这条正则只是把「盘符 + 斜杠」与 UNC 的形状再钉一遍，免得 `C:relative` 混进来。
   const absolute = path => isAbsolute(path) && (process.platform !== 'win32' || /^(?:[a-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+)/i.test(path));
   const contains = (root, path) => { const part = relative(root, path); return part === '' || (part !== '..' && !part.startsWith(`..${sep}`) && !isAbsolute(part)); };
   async function validate(input) {
@@ -63,6 +79,8 @@ export function createCangRegistry({ dataDir }) {
     await appendFile(file, `${needsSeparator ? '\n' : ''}${JSON.stringify(event)}\n`, { encoding: 'utf8', mode: 0o600 });
     needsSeparator = false;
   }
+  // 写操作**串行化**：JSONL 的每一行都是「读旧状态 → 追加」这一步的产物，两个写并发交错会
+  // 追加出重复或错序的行（读侧按 id 折叠，一旦错序就会把旧状态折叠回来）。失败不污染队尾。
   function serialized(operation) {
     const result = pending.then(operation);
     pending = result.catch(() => {});
