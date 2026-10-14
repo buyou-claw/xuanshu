@@ -82,23 +82,48 @@ describe('票 10 · 勾选谱：恒定在场项 + 两组可选谱', () => {
         selected: ['rensheng-jingli'],
         onToggle: () => {},
         onManagePu: () => {},
+        onOpenDetail: () => {},
       }),
     )
 
-  it('底座与底稿：勾选框 disabled + 理由文案可见，节点**不removed**（契约 §3 的置灰约定）', () => {
+  it('底座与底稿是**非交互锁定行**：行内没有勾选框，🔒 与「默认在场 · 不可关」逐字在', () => {
     const html = picker()
+    // 三重区分之一：分组头（另两重是缩进与「无勾选框」）。
+    expect(html).toContain('data-xuanshu-group-head="locked"')
+    expect(blockOf(html, 'data-xuanshu-group-head="locked"')).toContain('默认在场 · 不可关')
     for (const [kind, name] of [['base-pu', '底座（八字）'], ['digao', '底稿']]) {
       const row = blockOf(html, `data-xuanshu-locked="${kind}"`)
       expect(row).toContain(name)
+      expect(row).toContain('🔒')
       expect(row).toContain('默认在场 · 不可关')
-      const box = tagOf(row, 'type="checkbox"')
-      expect(box, `${name} 的勾选框必须在（禁用而不是移除）`).toContain('disabled')
-      expect(box, `${name} 的勾选框不许被勾上`).not.toContain('checked')
+      // S6 §9 C5（`S6-问事面板.md:192`，另见 `:48`/`:102`/`:110`/`:223`）：锁定行**不是被禁用的
+      // 复选框，而是根本不该有复选框** —— 所以这里断「不存在 input」，比「存在但 disabled」更强。
+      expect(row, `${name} 的锁定行内不许有任何勾选框`).not.toMatch(/<input/)
     }
-    // 底稿缺席时把理由写在行内（不是静默灰掉）
-    expect(picker()).toContain('底稿还没生成（属票 13 · 底稿与日课）')
     // 底稿是纯派生：徽标逐字（C2 与 S13 同款）
     expect(blockOf(picker(), 'data-xuanshu-locked="digao"')).toContain('纯派生 · 不可手改')
+    // 缺席时把理由写在卡里（不是静默灰掉）
+    expect(picker()).toContain('底稿还没生成（属票 13 · 底稿与日课）')
+  })
+
+  it('点锁定行只弹说明卡：给「不可关」的因果与「要改就改源头」的去路，**不给任何取消途径**', () => {
+    const html = picker()
+    const baseCard = blockOf(html, 'data-xuanshu-locked-card="base-pu"')
+    expect(baseCard).toContain('始终在场、不可关')
+    expect(baseCard).toContain('重新录制出生信息')
+    expect(baseCard).toContain('data-xuanshu-action="locked-goto-mingpan"')
+
+    // 底稿说明卡的三个源头（S6 §3 表 `:102`：谱 / 工作区 / 工作流）——这是**源头的名字**，
+    // 不是勾选项：它与 C6②「勾选清单里不出现工作区」不冲突（那条由下一组用例按勾选块断言）。
+    const digaoCard = blockOf(html, 'data-xuanshu-locked-card="digao"')
+    expect(digaoCard).toContain('与八字同级')
+    expect(digaoCard).toContain('纯派生')
+    expect(digaoCard).toContain('要改就改源头')
+    for (const source of ['谱', '工作区', '工作流']) expect(digaoCard).toContain(source)
+    expect(digaoCard).toContain('data-xuanshu-action="locked-goto-pu"')
+
+    // 锁定行不给任何「取消 / 关掉这一项」的途径
+    expect(html).not.toMatch(/data-xuanshu-action="(unlock|disable-locked|cancel-locked)/)
   })
 
   it('可选谱按级别分组：base 组头写明「默认勾选」，行是可勾的 checkbox', () => {
@@ -113,10 +138,14 @@ describe('票 10 · 勾选谱：恒定在场项 + 两组可选谱', () => {
     expect(tagOf(optionalRow, 'type="checkbox"')).not.toContain('checked')
   })
 
-  it('勾选区只列谱：工作区 / 工作流不出现（C6②），并给「管理谱 ▸ S5」出口', () => {
+  it('勾选清单只列谱：两组可勾选块里不出现工作区 / 工作流（C6②），并给「管理谱 ▸ S5」出口', () => {
     const html = picker()
     expect(html).toContain('data-xuanshu-action="manage-pu"')
-    expect(blockOf(html, 'data-xuanshu-block="pu-picker"')).not.toContain('工作区')
+    for (const level of ['base', 'optional']) {
+      const group = blockOf(html, `data-xuanshu-group="${level}"`)
+      expect(group, `${level} 组里混进了挂载对象`).not.toContain('工作区')
+      expect(group).not.toContain('工作流')
+    }
   })
 
   it('一个可选谱都没有：给可执行的追加行（S6 §6 empty），不留空分组头', () => {

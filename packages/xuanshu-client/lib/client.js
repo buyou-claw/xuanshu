@@ -486,7 +486,7 @@ function createConsultApi(ctx) {
 }
 
 // src/client/consult.tsx
-var import_react3 = require("react");
+var import_react4 = require("react");
 
 // src/client/consult-model.ts
 var CONSULT_SESSION_PREFIX = "session-xs-consult-";
@@ -583,23 +583,55 @@ function roleLabel(role) {
 }
 
 // src/client/consult-views.tsx
+var import_react3 = require("react");
 var import_jsx_runtime4 = require("react/jsx-runtime");
-function lockedReason(source) {
-  if (source.present) {
-    return source.kind === "digao" ? "底稿是基础输入级、默认必加载；纯派生，要改就改源头（谱 / 工作区 / 工作流）" : "底座是每场问事的前提，默认在场、不可关；要改走「重新录制出生信息」";
-  }
-  return source.reason ?? "这一项现在不在场";
+function lockedExplain(source) {
+  return source.kind === "digao" ? "底稿与八字同级、默认必加载的基础谱；它是纯派生的，要改就改源头（谱 / 工作区 / 工作流）。" : "底座始终在场、不可关：它是每一场问事的前提。";
 }
-function XsConsultPicker({ required, optional, selected, onToggle, onManagePu }) {
+function XsConsultPicker({ required, optional, selected, onToggle, onManagePu, onOpenDetail }) {
   const groups = groupOptional(optional);
+  const [explaining, setExplaining] = (0, import_react3.useState)(void 0);
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "pu-picker", children: [
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h3", { children: "① 本次要用的谱（勾选）" }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { className: "xs-consult__group-head", "data-xuanshu-group-head": "locked", children: "── 默认在场 · 不可关 ──" }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("ul", { className: "xs-consult__locked", "data-xuanshu-locked-list": String(required.length), children: required.map((source) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { className: "xs-consult__row xs-consult__row--locked", "data-xuanshu-locked": source.kind, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("input", { type: "checkbox", "data-xuanshu-field": `locked-${source.kind}`, disabled: true }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__row-name", children: source.name }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__badge", "data-xuanshu-badge": "locked", children: "默认在场 · 不可关" }),
-      source.kind === "digao" ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__badge", "data-xuanshu-badge": "derived", children: "纯派生 · 不可手改" }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("small", { className: "xs-consult__note", "data-xuanshu-note": `locked-reason-${source.kind}`, children: lockedReason(source) })
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+        "button",
+        {
+          type: "button",
+          className: "xs-consult__locked-hit",
+          "data-xuanshu-action": "locked-why",
+          onClick: () => {
+            setExplaining(explaining === source.kind ? void 0 : source.kind);
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__lock", "aria-hidden": "true", children: "🔒" }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__row-name", children: source.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { "aria-hidden": "true", children: "·" }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__badge", "data-xuanshu-badge": "locked", children: "默认在场 · 不可关" }),
+            source.kind === "digao" ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__badge", "data-xuanshu-badge": "derived", children: "纯派生 · 不可手改" }) : null
+          ]
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+        "div",
+        {
+          className: "xs-consult__locked-card",
+          "data-xuanshu-locked-card": source.kind,
+          hidden: explaining !== source.kind,
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: lockedExplain(source) }),
+            source.present ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": `locked-absent-${source.kind}`, children: source.reason ?? "这一项现在不在场" }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "xs-consult__actions", children: source.kind === "digao" ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "locked-goto-pu", onClick: onManagePu, children: "去谱管理 ▸" }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__note", children: "三个源头：谱（在谱管理里改）/ 工作区 / 工作流；底稿本身在底稿面板看。" })
+            ] }) : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "locked-goto-mingpan", onClick: onOpenDetail, children: "去命盘详情 ▸" }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__note", children: "要改出生信息：走命盘详情里的「重新录制出生信息」。" })
+            ] }) })
+          ]
+        }
+      )
     ] }, source.kind)) }),
     groups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__group", "data-xuanshu-group": group.level, children: [
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { className: "xs-consult__group-head", children: group.level === "base" ? "── 基础输入级 base · 默认勾选" : "── 可选输入级 optional" }),
@@ -974,25 +1006,25 @@ function errorText(error) {
   return error instanceof Error ? error.message : String(error);
 }
 function ConsultPanel({ api, navigate, openSession, preloaded }) {
-  const [view, setView] = (0, import_react3.useState)(preloaded?.view ?? "lobby");
-  const [defaults, setDefaults] = (0, import_react3.useState)(
+  const [view, setView] = (0, import_react4.useState)(preloaded?.view ?? "lobby");
+  const [defaults, setDefaults] = (0, import_react4.useState)(
     preloaded?.defaults === void 0 ? { kind: "loading" } : { kind: "ready", value: preloaded.defaults }
   );
-  const [items, setItems] = (0, import_react3.useState)(
+  const [items, setItems] = (0, import_react4.useState)(
     preloaded?.items === void 0 ? { kind: "loading" } : { kind: "ready", value: preloaded.items }
   );
-  const [selected, setSelected] = (0, import_react3.useState)(
+  const [selected, setSelected] = (0, import_react4.useState)(
     preloaded?.defaults === void 0 ? [] : initialSelection(preloaded.defaults.optional)
   );
-  const [question, setQuestion] = (0, import_react3.useState)("");
-  const [busy, setBusy] = (0, import_react3.useState)(false);
-  const [createError, setCreateError] = (0, import_react3.useState)(void 0);
-  const [nudge, setNudge] = (0, import_react3.useState)(false);
-  const [pendingOpen, setPendingOpen] = (0, import_react3.useState)(void 0);
-  const [reader, setReader] = (0, import_react3.useState)({ kind: "idle" });
-  const [query, setQuery] = (0, import_react3.useState)("");
-  const [range, setRange] = (0, import_react3.useState)("all");
-  const touched = (0, import_react3.useRef)(preloaded?.defaults !== void 0);
+  const [question, setQuestion] = (0, import_react4.useState)("");
+  const [busy, setBusy] = (0, import_react4.useState)(false);
+  const [createError, setCreateError] = (0, import_react4.useState)(void 0);
+  const [nudge, setNudge] = (0, import_react4.useState)(false);
+  const [pendingOpen, setPendingOpen] = (0, import_react4.useState)(void 0);
+  const [reader, setReader] = (0, import_react4.useState)({ kind: "idle" });
+  const [query, setQuery] = (0, import_react4.useState)("");
+  const [range, setRange] = (0, import_react4.useState)("all");
+  const touched = (0, import_react4.useRef)(preloaded?.defaults !== void 0);
   const seeded = preloaded !== void 0;
   const reloadDefaults = () => {
     setDefaults({ kind: "loading" });
@@ -1014,7 +1046,7 @@ function ConsultPanel({ api, navigate, openSession, preloaded }) {
       setItems({ kind: "error", message: errorText(error) });
     });
   };
-  (0, import_react3.useEffect)(() => {
+  (0, import_react4.useEffect)(() => {
     if (seeded) return;
     reloadDefaults();
     reloadItems();
@@ -1123,6 +1155,9 @@ function ConsultPanel({ api, navigate, openSession, preloaded }) {
           },
           onManagePu: () => {
             navigate("pus");
+          },
+          onOpenDetail: () => {
+            navigate("mingpan");
           }
         }
       ) : null,
@@ -1272,6 +1307,9 @@ function installConsultStyle() {
 .xs-consult__block{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad);margin:12px 0}
 .xs-consult__row{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--xs-edge-card);flex-wrap:wrap}
 .xs-consult__row--locked{background:var(--xs-surface-card);border-radius:var(--xs-radius-control);padding:8px}
+.xs-consult__locked-hit{display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;background:transparent;border:0;padding:6px 0;cursor:pointer}
+.xs-consult__lock{font-size:1rem}
+.xs-consult__locked-card{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:10px;margin:6px 0 2px 24px}
 .xs-consult__row-name{font-weight:600}
 .xs-consult__badge{font-size:.72rem;padding:2px 8px;border:1px solid var(--xs-edge-card);border-radius:999px;color:var(--xs-text-secondary)}
 .xs-consult__note{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6}
@@ -1297,7 +1335,7 @@ function installConsultStyle() {
 }
 
 // src/client/MingpanPanel.tsx
-var import_react5 = require("react");
+var import_react6 = require("react");
 
 // src/client/bazi-style.ts
 function installBaziStyle() {
@@ -1568,7 +1606,7 @@ function IllusCardsError({ className = "xs-empty__illus" }) {
 }
 
 // src/client/watch.ts
-var import_react4 = require("react");
+var import_react5 = require("react");
 function createMainPanelsWatch(slots) {
   const read = () => {
     const keys = /* @__PURE__ */ new Set();
@@ -1607,7 +1645,7 @@ function createMainPanelsWatch(slots) {
   };
 }
 function useMainPanels(watch) {
-  return (0, import_react4.useSyncExternalStore)(watch.subscribe, watch.getSnapshot, watch.getSnapshot);
+  return (0, import_react5.useSyncExternalStore)(watch.subscribe, watch.getSnapshot, watch.getSnapshot);
 }
 var EMPTY_MAIN_PANELS = {
   subscribe: () => () => {
@@ -2349,18 +2387,18 @@ function MingpanPanel({
   preloadedSnapshot,
   preloadedError
 }) {
-  const revision = (0, import_react5.useSyncExternalStore)(controller.subscribe, controller.getRevision, controller.getRevision);
+  const revision = (0, import_react6.useSyncExternalStore)(controller.subscribe, controller.getRevision, controller.getRevision);
   const seeded = preloadedError !== void 0 || preloadedSnapshot !== void 0;
-  const [view, setView] = (0, import_react5.useState)(() => {
+  const [view, setView] = (0, import_react6.useState)(() => {
     if (preloadedError !== void 0) return { kind: "error", message: preloadedError };
     if (preloadedSnapshot !== void 0) {
       return preloadedSnapshot === null ? { kind: "empty" } : { kind: "ready", snapshot: preloadedSnapshot };
     }
     return { kind: "loading" };
   });
-  const [confirming, setConfirming] = (0, import_react5.useState)(false);
-  const sequence = (0, import_react5.useRef)(0);
-  (0, import_react5.useEffect)(() => {
+  const [confirming, setConfirming] = (0, import_react6.useState)(false);
+  const sequence = (0, import_react6.useRef)(0);
+  (0, import_react6.useEffect)(() => {
     if (seeded) return;
     const mine = ++sequence.current;
     setView((current) => current.kind === "ready" ? current : { kind: "loading" });
@@ -2505,7 +2543,7 @@ function installMingpan(ctx, deps) {
 }
 
 // src/client/onboarding.tsx
-var import_react7 = require("react");
+var import_react8 = require("react");
 
 // src/client/cities.ts
 var CITY_DEBOUNCE_MS = 180;
@@ -2707,7 +2745,7 @@ function createCityQuery(options) {
 }
 
 // src/client/onboarding-steps.tsx
-var import_react6 = require("react");
+var import_react7 = require("react");
 var import_jsx_runtime9 = require("react/jsx-runtime");
 var STEP_TITLES = [
   "出生日期与钟表时间",
@@ -2750,7 +2788,7 @@ function StepShell({ step, title, hint, children }) {
   ] });
 }
 function XsTimeStep({ draft, onChange, onNudge, onNow }) {
-  const [grain, setGrain] = (0, import_react6.useState)("fourMinute");
+  const [grain, setGrain] = (0, import_react7.useState)("fourMinute");
   const empty = draft.date.trim() === "" || draft.time.trim() === "";
   const activeLabel = NUDGE_GRAINS.find((row) => row.id === grain)?.label ?? "四分钟";
   return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
@@ -2827,8 +2865,8 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
   );
 }
 function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onManual }) {
-  const [lonText, setLonText] = (0, import_react6.useState)("");
-  const [latText, setLatText] = (0, import_react6.useState)("");
+  const [lonText, setLonText] = (0, import_react7.useState)("");
+  const [latText, setLatText] = (0, import_react7.useState)("");
   const missing = missingCoordinates(draft);
   const searching = query.trim() !== "";
   const noMatch = searching && results.items.length === 0;
@@ -3210,38 +3248,38 @@ function XsConfirmStep({
 var import_jsx_runtime10 = require("react/jsx-runtime");
 var MANUAL_REJECTED_HINT = "经纬度不合法，已忽略（经度在前，例如 118.78 / 32.06）";
 function useCityQuery(api, query) {
-  const controller = (0, import_react7.useMemo)(
+  const controller = (0, import_react8.useMemo)(
     () => createCityQuery({
       // 失败**不在这里吞**：让 `bazi.cities` 的拒绝走到调度器里，由它静默回落小库。
       loadFull: (keyword, signal) => api.cities({ query: keyword, limit: CITY_RESULT_LIMIT }, signal).then((result) => result.items)
     }),
     [api]
   );
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     controller.setQuery(query);
   }, [controller, query]);
-  (0, import_react7.useEffect)(() => () => {
+  (0, import_react8.useEffect)(() => () => {
     controller.dispose();
   }, [controller]);
-  return (0, import_react7.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  return (0, import_react8.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 }
 function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
-  const [draft, setDraft] = (0, import_react7.useState)(() => preloadedDraft ?? defaultDraft());
-  const [step, setStep] = (0, import_react7.useState)(1);
-  const [query, setQuery] = (0, import_react7.useState)("");
-  const [zone, setZone] = (0, import_react7.useState)(void 0);
-  const [zonePending, setZonePending] = (0, import_react7.useState)(false);
-  const [manualHint, setManualHint] = (0, import_react7.useState)(void 0);
-  const [gateAnswer, setGateAnswer] = (0, import_react7.useState)("");
-  const [result, setResult] = (0, import_react7.useState)(void 0);
-  const [busy, setBusy] = (0, import_react7.useState)(false);
-  const castSequence = (0, import_react7.useRef)(0);
-  const zoneSequence = (0, import_react7.useRef)(0);
+  const [draft, setDraft] = (0, import_react8.useState)(() => preloadedDraft ?? defaultDraft());
+  const [step, setStep] = (0, import_react8.useState)(1);
+  const [query, setQuery] = (0, import_react8.useState)("");
+  const [zone, setZone] = (0, import_react8.useState)(void 0);
+  const [zonePending, setZonePending] = (0, import_react8.useState)(false);
+  const [manualHint, setManualHint] = (0, import_react8.useState)(void 0);
+  const [gateAnswer, setGateAnswer] = (0, import_react8.useState)("");
+  const [result, setResult] = (0, import_react8.useState)(void 0);
+  const [busy, setBusy] = (0, import_react8.useState)(false);
+  const castSequence = (0, import_react8.useRef)(0);
+  const zoneSequence = (0, import_react8.useRef)(0);
   const cityResults = useCityQuery(api, query);
   const patch = (next) => {
     setDraft((current) => ({ ...current, ...next }));
   };
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     const prefill = controller.consumePrefill();
     if (prefill === void 0) return;
     setDraft(prefill);
@@ -3250,7 +3288,7 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
     setGateAnswer("");
   }, [controller]);
   const { lon, lat, date, time, zoneManual } = draft;
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     if (zoneManual) return;
     if (!Number.isFinite(lon) || !Number.isFinite(lat) || date.trim() === "") {
       setZone(void 0);
@@ -3452,7 +3490,7 @@ function OverviewIcon({ size = 20 }) {
 }
 
 // src/client/OverviewPanel.tsx
-var import_react8 = require("react");
+var import_react9 = require("react");
 var import_jsx_runtime12 = require("react/jsx-runtime");
 function localDate(now = /* @__PURE__ */ new Date()) {
   const pad = (value) => String(value).padStart(2, "0");
@@ -3489,11 +3527,11 @@ function destinyStateFromStatus(status) {
 function useBaziStatus(options) {
   const { api, controller, preloaded } = options;
   const active = controller ?? NO_CONTROLLER;
-  const revision = (0, import_react8.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
-  const [status, setStatus] = (0, import_react8.useState)(
+  const revision = (0, import_react9.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
+  const [status, setStatus] = (0, import_react9.useState)(
     preloaded ?? (api === void 0 ? { state: "empty" } : void 0)
   );
-  (0, import_react8.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     if (preloaded !== void 0) {
       setStatus(preloaded);
       return;
@@ -3554,7 +3592,7 @@ function OverviewPanel({
 }
 
 // src/client/PuPanel.tsx
-var import_react9 = require("react");
+var import_react10 = require("react");
 var import_jsx_runtime13 = require("react/jsx-runtime");
 var pendingJob;
 var pendingView = "create";
@@ -3571,21 +3609,21 @@ async function fileData(file) {
   return { name: file.name, data };
 }
 function PuPanel({ ctx }) {
-  const [rows, setRows] = (0, import_react9.useState)([]);
-  const [loading, setLoading] = (0, import_react9.useState)(true);
-  const [query, setQuery] = (0, import_react9.useState)("");
-  const [level, setLevel] = (0, import_react9.useState)("");
-  const [source, setSource] = (0, import_react9.useState)("");
-  const [view, setView] = (0, import_react9.useState)(pendingJob ? pendingView : "list");
-  const [step, setStep] = (0, import_react9.useState)(pendingJob ? 3 : 1);
-  const [job, setJob] = (0, import_react9.useState)(pendingJob);
-  const [text, setText] = (0, import_react9.useState)("");
-  const [files, setFiles] = (0, import_react9.useState)([]);
-  const [draft, setDraft] = (0, import_react9.useState)(pendingJob && pendingView === "detail" && pendingSelected ? pendingSelected : blank);
-  const [selected, setSelected] = (0, import_react9.useState)(pendingSelected);
-  const [original, setOriginal] = (0, import_react9.useState)(pendingSelected ? JSON.stringify(pendingSelected) : "");
-  const [error, setError] = (0, import_react9.useState)("");
-  const [busy, setBusy] = (0, import_react9.useState)(false);
+  const [rows, setRows] = (0, import_react10.useState)([]);
+  const [loading, setLoading] = (0, import_react10.useState)(true);
+  const [query, setQuery] = (0, import_react10.useState)("");
+  const [level, setLevel] = (0, import_react10.useState)("");
+  const [source, setSource] = (0, import_react10.useState)("");
+  const [view, setView] = (0, import_react10.useState)(pendingJob ? pendingView : "list");
+  const [step, setStep] = (0, import_react10.useState)(pendingJob ? 3 : 1);
+  const [job, setJob] = (0, import_react10.useState)(pendingJob);
+  const [text, setText] = (0, import_react10.useState)("");
+  const [files, setFiles] = (0, import_react10.useState)([]);
+  const [draft, setDraft] = (0, import_react10.useState)(pendingJob && pendingView === "detail" && pendingSelected ? pendingSelected : blank);
+  const [selected, setSelected] = (0, import_react10.useState)(pendingSelected);
+  const [original, setOriginal] = (0, import_react10.useState)(pendingSelected ? JSON.stringify(pendingSelected) : "");
+  const [error, setError] = (0, import_react10.useState)("");
+  const [busy, setBusy] = (0, import_react10.useState)(false);
   const call = (method, payload) => rpcCall(ctx, method, payload);
   const reload = async () => {
     setLoading(true);
@@ -3598,10 +3636,10 @@ function PuPanel({ ctx }) {
       setLoading(false);
     }
   };
-  (0, import_react9.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     void reload();
   }, []);
-  (0, import_react9.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (job?.status !== "running") return;
     let disposed = false;
     let timer;
@@ -3629,7 +3667,7 @@ function PuPanel({ ctx }) {
       clearTimeout(timer);
     };
   }, [job?.id, job?.status]);
-  (0, import_react9.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (job?.status === "ready" && job.draft && step === 3 && view === "create") {
       setDraft(job.draft);
       setStep(4);

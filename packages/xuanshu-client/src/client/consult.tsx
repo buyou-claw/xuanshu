@@ -247,6 +247,7 @@ export function ConsultPanel({ api, navigate, openSession, preloaded }: ConsultP
               selected={selected}
               onToggle={(slug) => { touched.current = true; setSelected((current) => toggleSelection(current, slug)); }}
               onManagePu={() => { navigate('pus'); }}
+              onOpenDetail={() => { navigate('mingpan'); }}
             />
           ) : null}
 
@@ -397,6 +398,9 @@ function installConsultStyle(): void {
 .xs-consult__block{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad);margin:12px 0}
 .xs-consult__row{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--xs-edge-card);flex-wrap:wrap}
 .xs-consult__row--locked{background:var(--xs-surface-card);border-radius:var(--xs-radius-control);padding:8px}
+.xs-consult__locked-hit{display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;background:transparent;border:0;padding:6px 0;cursor:pointer}
+.xs-consult__lock{font-size:1rem}
+.xs-consult__locked-card{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:10px;margin:6px 0 2px 24px}
 .xs-consult__row-name{font-weight:600}
 .xs-consult__badge{font-size:.72rem;padding:2px 8px;border:1px solid var(--xs-edge-card);border-radius:999px;color:var(--xs-text-secondary)}
 .xs-consult__note{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6}

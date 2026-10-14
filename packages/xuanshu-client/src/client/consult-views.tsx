@@ -11,7 +11,7 @@
  *   - **底座 / 底稿不可关**（C5）：勾选框 `disabled` + 理由文案，**节点不removed**（契约 §3）；
  *   - **历史只读**（S7 §6）：阅读器零编辑控件，唯一动作为「切回会话」。
  */
-import type { ReactNode } from 'react';
+import { useState } from 'react';
 
 import type { ConsultMessage, ConsultSummary, MountRef, OptionalSource, RequiredSource } from './consult-api.js';
 import {
@@ -26,14 +26,16 @@ import {
 } from './consult-model.js';
 import type { HistoryRange } from './consult-model.js';
 
-/** 锁定行的理由（在场 / 缺席两种：缺席是宿主 `consult.defaults` 给的 `reason`）。 */
-function lockedReason(source: RequiredSource): string {
-  if (source.present) {
-    return source.kind === 'digao'
-      ? '底稿是基础输入级、默认必加载；纯派生，要改就改源头（谱 / 工作区 / 工作流）'
-      : '底座是每场问事的前提，默认在场、不可关；要改走「重新录制出生信息」';
-  }
-  return source.reason ?? '这一项现在不在场';
+/**
+ * 锁定行说明卡里的因果（点行才展开；S6 §3 表 `:102` 逐字口径）。
+ *
+ * 「默认在场 · 不可关」不是「暂时禁用」，而是**根本不该有开关** ——
+ * 所以说明卡里给的是「要改就改源头」，没有任何取消途径。
+ */
+function lockedExplain(source: RequiredSource): string {
+  return source.kind === 'digao'
+    ? '底稿与八字同级、默认必加载的基础谱；它是纯派生的，要改就改源头（谱 / 工作区 / 工作流）。'
+    : '底座始终在场、不可关：它是每一场问事的前提。';
 }
 
 /** ① 勾选谱区：恒定在场项（锁定行）+ 两组可选谱（S6 §2.1① / §9 C5）。 */
@@ -43,27 +45,72 @@ export interface XsConsultPickerProps {
   selected: readonly string[];
   onToggle: (slug: string) => void;
   onManagePu: () => void;
+  /** 底座说明卡里的去路（改出生信息走命盘详情的「重新录制」）。 */
+  onOpenDetail?: () => void;
 }
 
-export function XsConsultPicker({ required, optional, selected, onToggle, onManagePu }: XsConsultPickerProps) {
+export function XsConsultPicker({ required, optional, selected, onToggle, onManagePu, onOpenDetail }: XsConsultPickerProps) {
   const groups = groupOptional(optional);
+  /** 当前展开的说明卡（`undefined` = 都收起；锁定行不给任何取消途径）。 */
+  const [explaining, setExplaining] = useState<string | undefined>(undefined);
   return (
     <section className="xs-consult__block" data-xuanshu-block="pu-picker">
       <h3>① 本次要用的谱（勾选）</h3>
+      {/* 三重区分之一：分组头（S6 §2.1① 的「── 默认在场 · 不可关 ──」）。 */}
+      <h4 className="xs-consult__group-head" data-xuanshu-group-head="locked">── 默认在场 · 不可关 ──</h4>
       <ul className="xs-consult__locked" data-xuanshu-locked-list={String(required.length)}>
         {required.map((source) => (
           <li className="xs-consult__row xs-consult__row--locked" key={source.kind} data-xuanshu-locked={source.kind}>
-            {/* 契约 §3：勾选框 disabled + 理由文案，**不移除节点**（票 07 的置灰约定）。
-                S6 §9 C5 原本写「无 checkbox」，契约冻结时改判为置灰 —— 以契约为准。 */}
-            <input type="checkbox" data-xuanshu-field={`locked-${source.kind}`} disabled />
-            <span className="xs-consult__row-name">{source.name}</span>
-            <span className="xs-consult__badge" data-xuanshu-badge="locked">默认在场 · 不可关</span>
-            {source.kind === 'digao' ? (
-              <span className="xs-consult__badge" data-xuanshu-badge="derived">纯派生 · 不可手改</span>
-            ) : null}
-            <small className="xs-consult__note" data-xuanshu-note={`locked-reason-${source.kind}`}>
-              {lockedReason(source)}
-            </small>
+            {/*
+              S6 §9 C5（`S6-问事面板.md:192`，另见 `:48`/`:102`/`:110`/`:223` 四处一致）：
+              锁定行**无 checkbox** —— 它不是「被禁用的复选框」，它是根本不该有复选框；
+              点击只弹说明卡，不给任何取消途径。票 02 的验收把 C5 列为逐屏核过的硬约束。
+            */}
+            <button
+              type="button"
+              className="xs-consult__locked-hit"
+              data-xuanshu-action="locked-why"
+              onClick={() => { setExplaining(explaining === source.kind ? undefined : source.kind); }}
+            >
+              <span className="xs-consult__lock" aria-hidden="true">🔒</span>
+              <span className="xs-consult__row-name">{source.name}</span>
+              <span aria-hidden="true">·</span>
+              <span className="xs-consult__badge" data-xuanshu-badge="locked">默认在场 · 不可关</span>
+              {source.kind === 'digao' ? (
+                <span className="xs-consult__badge" data-xuanshu-badge="derived">纯派生 · 不可手改</span>
+              ) : null}
+            </button>
+            <div
+              className="xs-consult__locked-card"
+              data-xuanshu-locked-card={source.kind}
+              hidden={explaining !== source.kind}
+            >
+              <p>{lockedExplain(source)}</p>
+              {source.present ? null : (
+                <p className="xs-consult__note" data-xuanshu-note={`locked-absent-${source.kind}`}>
+                  {source.reason ?? '这一项现在不在场'}
+                </p>
+              )}
+              <div className="xs-consult__actions">
+                {source.kind === 'digao' ? (
+                  <>
+                    <button type="button" data-xuanshu-action="locked-goto-pu" onClick={onManagePu}>
+                      {'去谱管理 ▸'}
+                    </button>
+                    <span className="xs-consult__note">
+                      三个源头：谱（在谱管理里改）/ 工作区 / 工作流；底稿本身在底稿面板看。
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" data-xuanshu-action="locked-goto-mingpan" onClick={onOpenDetail}>
+                      {'去命盘详情 ▸'}
+                    </button>
+                    <span className="xs-consult__note">要改出生信息：走命盘详情里的「重新录制出生信息」。</span>
+                  </>
+                )}
+              </div>
+            </div>
           </li>
         ))}
       </ul>
