@@ -19,6 +19,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { WORKFLOW_ENDPOINTS, createWorkflowApi } from '../../packages/xuanshu-client/src/client/workflow/workflow-api.ts'
+import { QUICKLINK } from '../../packages/xuanshu-client/src/client/panel.ts'
 import {
   WORKFLOW_HUMAN_JUDGE_NOTE, WORKFLOW_ID, WORKFLOW_LABEL, WORKFLOW_ORDER, exportBlockers, splitWorkflows, workflowSubtitle,
 } from '../../packages/xuanshu-client/src/client/workflow/workflow-model.ts'
@@ -180,6 +181,13 @@ describe('票16 · 加性注册（不碰默认面板、Node 下安全）', () =>
     }
     installWorkflowPanel(ctx, { api: spyApi().api, navigate: () => {} })
     expect(selectPanelCalls).toBe(0)
+  })
+
+  it('S1 快捷入口那一格从此有落点：票 07 备好的 `QUICKLINK.workflow` + 本票注册的 main key `workflow`', () => {
+    // 票 07 的快捷入口卡按 `mainPanels` 快照做 fail-soft 置灰：目标 main key 没注册就置灰。
+    // 本票把 key 注册上（见上一条用例），这一格因此从「置灰」变成「可点」——S1 → 门厅 → 创建工作流 这条链闭了。
+    expect(QUICKLINK.workflow).toEqual({ title: '工作流', subtitle: '流水线' })
+    expect(WORKFLOW_ID).toBe('workflow')
   })
 
   it('注入面透传 api 与 navigate（面板 props 拿到的是同一份）', () => {
