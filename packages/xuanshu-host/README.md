@@ -124,6 +124,66 @@ bazi?{lastPhase,lastTool,lastVersion,pillars} }`。
 排障手册见 [`docs/runbook/horosa.md`](../../docs/runbook/horosa.md)；为什么宿主侧自带一份接缝库、以及
 「两份四态实现」这笔债，见 [`docs/adr/0008-horosa-static-mount-host-managed-lifecycle.md`](../../docs/adr/0008-horosa-static-mount-host-managed-lifecycle.md)。
 
+## 问事容器（票 10）
+
+问事（consult）与工作区**并列、不属于任何工作区**：会话由 `lib/consult/**` 自己建、自己记账，
+DSH 原有的工作区 / `conversation` 面板一字不动。
+
+```
+packages/xuanshu-host/lib/consult/
+  store.mjs     旁挂清单：<dataDir>/consult/sessions/<sessionId>.json（schema xuanshu/consult@1）+ id 前缀与 slug 归一
+  context.mjs   首轮注入的正文装配（纯函数：底座谱 → 底稿 → 勾选谱；每段带【来源：…】）
+  message.mjs   注入消息载体：source.kind = 'xuanshu-consult'（自定义 MessageSourceMap 合并点）
+  turn.mjs      waitForTurnEnd：等一轮结束看 turn/end，不是 whenIdle()
+  history.mjs   会话事件流 → ConsultMessage（只读投影；isSessionNotFound 认上游错误码）
+  service.mjs   六个方法：create / send / list / read / rename / defaults
+```
+
+**分类载体**（ADR-0009，契约 §1；rc.2 的会话 `meta` 是闭集 7 字段且逐字段挑，额外键**静默丢弃**）：
+
+| 载体 | 定值 | 为什么 |
+|---|---|---|
+| `sessionId` | `session-xs-consult-<uuid>` | `SessionId` 只是未校验的 branded string，自铸前缀零成本可筛 |
+| `cwd` | `<dataDir>/consult`（**全部问事会话共用**） | `cwd` 是唯一受支持的会话过滤（`filterSessions([{kind:'cwd',…}])`）；**刻意不挂 workspace**（那会破坏「与工作区并列」） |
+| 旁挂清单 | `<dataDir>/consult/sessions/<sessionId>.json` | 「问过哪些事、这次勾了哪些谱」的权威；列表只读它，不扫会话日志 |
+| 注入消息来源 | `source.kind = 'xuanshu-consult'` | 官方允许的 `MessageSourceMap` 合并点；轨迹里显示成「注入」行 |
+
+**六个方法**（`/xuanshu` 通道，契约 §2 冻结）：
+
+| method | 做什么 |
+|---|---|
+| `consult.defaults` | `{required:[底座谱,底稿], optional:[可勾选谱]}`；底座走票 08 `bazi.basePu`，底稿探测 `<dataDir>/digao.md`（**不存在就 `present:false`，不造空底稿**），可选谱来自票 09 `pu.list()`（读不出来的谱不进列表） |
+| `consult.create` | 铸 id → `mkdir -p <dataDir>/consult` → **`ctx.agents.create({sessionId, meta:{cwd}})`** → 写旁挂清单；清单写失败就把刚建的会话 `dispose` 掉（不留「跑得起来但列表里看不见」的会话）。`meta` **只给 `cwd`** |
+| `consult.send` | 首轮先 `agent.inject(注入消息)` 再 `agent.followup(问题)`，**受理即回 `{accepted:true}`**（不等答完）；同会话发问串行（并发两问不许丢 `turns` 更新、不许灌两遍上下文）；进程重启后会 `agents.resume({resumeSessionId})` 接回来 |
+| `consult.list` | 读旁挂目录，`createdAt` 倒序（坏文件跳过，不拖垮整张列表） |
+| `consult.read` | 旁挂清单给标题/勾选谱，正文走 **`ctx.sessionQuery.readSession(id)`**（本机是 `session.v4.jsonl.zstd`，**不自己解压**）；刚建好还没落盘的会话 → `messages: []` |
+| `consult.rename` | 改名落到旁挂清单（列表与阅读器都读它） |
+
+**注入载体（契约 §3 让实现者择一，这里记明）**：**单独一条注入消息**，不是「同一个 content part 数组」。
+理由：多 content part 只有**一个** `source.kind`，把用户的问题也标成注入（轨迹里显示成「注入」行）就错了；
+所以注入用 `agent.inject()`（不唤醒）排在 `agent.followup()`（唤醒）之前 —— 于是它必然落在这一轮的问题之前，
+且各自带各自的 kind。**首轮判据**是旁挂清单里的 `turns === 0`（跨进程成立）。
+
+**内容口径**：底座谱与勾选谱只给 **manifest 概览 + summary + 文件路径**（正文由 AI 用工具按需读，
+票面第 3 条「AI 自己完成加载谱资料」）；底稿给**全文**（它本身就是精简汇总这一层）；
+底座与底稿是恒定在场项，**不进** `pus`。
+
+**等一轮结束**：`consult.send` 用 `waitForTurnEnd()`（订阅 `session/event` 的 `turn/end`）做**后台记账**
+（旁挂清单的 `lastTurnAt`），**不阻塞** RPC；验收禁止用 `whenIdle()` —— 官方注解明说它不标识某条消息的
+结束（`dsh-agent/lib/types/runtime-types.d.ts:164`）。
+
+**已知的口径决定（不是缺陷）**：
+
+- **`consult.send` 不传 `requestId`**：契约里有这个可选键（与 DSH `SessionPromptRequest` 同形），
+  宿主侧没有「回显 requestId」的落点（响应固定 `{accepted:true}`），接收即忽略；
+  客户端要防乐观回显错配，请在客户端侧配对。**未确认**：是否有客户端流程依赖宿主回显。
+- **底稿全文没有长度上限**：契约字面是「全文」，而底稿由票 13 以「精简汇总」口径生成；
+  若票 13 的产物可能很大，需要 Lead 裁决是否给注入加长度上限与截断说明。
+- **`pus` 只做形状校验**（规范 slug、去重、拒 `_base`），**不**校验谱当前是否存在：
+  勾了之后谱被删，注入时那一段会写「读不出来：…」而不是让整个开会话失败（历史要留得住）。
+- **读不出来的谱不进 `consult.defaults.optional`**：勾一个坏谱只会注入一段「读不出来」，
+  用户修它的地方在 S5 谱管理。
+
 ## 用法与自检
 
 ```powershell
