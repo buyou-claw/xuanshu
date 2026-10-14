@@ -75,6 +75,22 @@ export const MINGPAN_LABEL = '命盘';
 export const ONBOARDING_ORDER = 80;
 export const MINGPAN_ORDER = 90;
 
+/**
+ * 票 10 的 main key：`consult`（问事门厅，S6）。
+ *
+ * 与 S1 的四卡**不是**同一层东西：四卡里那格「问事」是快捷入口（跳转），
+ * 这里是被跳到的面板本体。侧栏 order 取 **30** —— 这正是 S15 §2 六行表里
+ * 预约给「问事（书房）」的那一档（`S15-管理入口与骨架落位.md:178,233`：
+ * `overview` 20 / `consult` 30 / `pus` 40 / `cang` 50 / `digao` 60 / `workflow` 70），
+ * 所以票 08 当初把 80/90 留给向导与详情是正确的：30 空着就是等这一票。
+ *
+ * label 用「问事」（不是分区名「书房」）：D7 说明 `sidebar.panellist` 只读
+ * `{id, order, label}`、没有分组字段，分区语义只能落在措辞上。
+ */
+export const CONSULT_ID = 'consult';
+export const CONSULT_LABEL = '问事';
+export const CONSULT_ORDER = 30;
+
 /** 面板页头标题（S1 §2.1 线框图「家 - 自我总览」）。 */
 export const PANEL_TITLE = '自我总览';
 /** 面板页头的「家」分区标记（D1 定案，S15 §2）。 */

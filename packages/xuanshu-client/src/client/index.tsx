@@ -33,6 +33,8 @@ import { createBaziApi } from './bazi-api.js';
 import { createBaziUiController } from './bazi-controller.js';
 import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
+import { createConsultApi } from './consult-api.js';
+import { installConsult } from './consult.js';
 import { createDigaoApi } from './digao-api.js';
 import { createDigaoUiController } from './digao-controller.js';
 import { installDigao } from './digao.js';
@@ -136,6 +138,33 @@ export function apply(ctx: Context): void {
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
 
+  // 票 10：问事门厅的数据面 + 「进入正式对话」的导航面。
+  // `openSession` 只**导航**（`dsh-api-facts.md` §6.2：它不创建）；拿不到 `uiWorkspace` 时给
+  // `undefined`，门厅照实说明并给可读失败（fail-soft，不假装切过去了）。
+  //
+  // **先刷目录、再导航**：`openSession(id)` 内部直接 `retain(id)` 且没有 try/catch
+  // （`dsh-client-ui-workspace/lib/client.js:821-823,973`），而 `retain` 对不在客户端会话目录里的
+  // id 同步抛 `unknown session`（`dsh-api-session-controller/.../sessions/manager.js:63-71`）；
+  // 宿主建的会话只靠 `api-session/added` 推送进目录，推送与 RPC 回包的到达顺序**未被证明有序**。
+  // `ISessions.refresh()` 幂等、单飞，拉一次 `session.list`（含未落盘的活会话）。
+  // 客户端 `ctx.sessions` 是 `ISessions`，与宿主 `SessionStore` **同名不同物**（facts §6.3）——
+  // 类型桩里还没有这一面，故在此就地收窄一个最小形状（不动 `types/shims.d.ts`，那是作用域外）。
+  const consultApi = createConsultApi(rpc);
+  const uiWorkspace = ctx.uiWorkspace;
+  const sessionCatalog = (ctx as unknown as { sessions?: { refresh?: () => Promise<void> } }).sessions;
+  const openSession =
+    typeof uiWorkspace?.openSession === 'function'
+      ? (sessionId: string): void => {
+          uiWorkspace.openSession(sessionId);
+        }
+      : undefined;
+  const refreshSessions =
+    typeof sessionCatalog?.refresh === 'function'
+      ? async (): Promise<void> => {
+          await sessionCatalog.refresh?.();
+        }
+      : undefined;
+
   const injected = (): OverviewInjected => ({
     navigate,
     mainPanels,
@@ -180,7 +209,8 @@ export function apply(ctx: Context): void {
   );
 
   // ⑥ 总装配：谱（票 09）与藏（票 14）各自的面板 / 侧栏行 / 浮层；
-  // ⑦ 票 08：八字冷启动向导（`onboarding`）与命盘详情（`mingpan`）。
+  // ⑦ 票 08：八字冷启动向导（`onboarding`）与命盘详情（`mingpan`）；
+  // ⑧ 票 10：问事门厅（`consult`）。
   // 全部都是**纯加性**注册（新 key / 新 id），各自带自己的样式与 RPC 客户端；
   // 放在 overview 之后，保证「第一个 main 注册仍是 overview」与默认面板语义不变。
   // 顺序有意义：`verify-assembly` / `overview-contract` 都按注册序断言
@@ -189,6 +219,7 @@ export function apply(ctx: Context): void {
   installCangClient(rpc);
   installOnboarding(rpc, baziDeps);
   installMingpan(rpc, baziDeps);
+  installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
   // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
   installDigao(rpc, { api: digao, navigate });
   installRikke(rpc, { api: rikke, navigate });

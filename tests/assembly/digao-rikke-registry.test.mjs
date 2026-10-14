@@ -29,8 +29,8 @@ const ARTIFACT = join(REPO_ROOT, 'packages', 'xuanshu-client', 'lib', 'client.js
 const DSH_MAIN_KEYS = ['conversation', 'plugins', 'schedules']
 const DSH_SIDEBAR_IDS = ['plugins', 'schedules']
 
-/** 票 13 之后的完整 main 注册（顺序有意义）。 */
-const EXPECTED_MAIN_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', DIGAO_ID, RIKKE_ID]
+/** 票 13 之后的完整 main 注册（顺序 = `index.tsx` 的 install 调用序，含票 10 的 `consult`）。 */
+const EXPECTED_MAIN_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', 'consult', DIGAO_ID, RIKKE_ID]
 
 /** 假 react：apply 期不渲染，只要成员在（与 `scripts/build-client.mjs` 的假 require 同法）。 */
 const REACT_STUB = {

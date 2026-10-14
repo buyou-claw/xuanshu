@@ -124,6 +124,87 @@ bazi?{lastPhase,lastTool,lastVersion,pillars} }`。
 排障手册见 [`docs/runbook/horosa.md`](../../docs/runbook/horosa.md)；为什么宿主侧自带一份接缝库、以及
 「两份四态实现」这笔债，见 [`docs/adr/0008-horosa-static-mount-host-managed-lifecycle.md`](../../docs/adr/0008-horosa-static-mount-host-managed-lifecycle.md)。
 
+## 问事容器（票 10）
+
+问事（consult）与工作区**并列、不属于任何工作区**：会话由 `lib/consult/**` 自己建、自己记账，
+DSH 原有的工作区 / `conversation` 面板一字不动。
+
+```
+packages/xuanshu-host/lib/consult/
+  store.mjs     旁挂清单：<dataDir>/consult/sessions/<sessionId>.json（schema xuanshu/consult@1）+ id 前缀与 slug 归一
+  agent.mjs     把会话接上 agent：缺省 preset 组合（mount）+ 模型选择；能力门（缺服务就拒绝发问）
+  context.mjs   首轮注入的正文装配（纯函数：底座谱 → 底稿 → 勾选谱；每段带【来源：…】）
+  message.mjs   注入消息载体：source.kind = 'xuanshu-consult'（自定义 MessageSourceMap 合并点）
+  turn.mjs      waitForTurnEnd：等一轮结束看 turn/end，不是 whenIdle()
+  history.mjs   会话事件流 → ConsultMessage（只读投影；isSessionNotFound 认上游错误码）
+  service.mjs   六个方法：create / send / list / read / rename / defaults
+```
+
+**分类载体**（ADR-0009，契约 §1；rc.2 的会话 `meta` 是闭集 7 字段且逐字段挑，额外键**静默丢弃**）：
+
+| 载体 | 定值 | 为什么 |
+|---|---|---|
+| `sessionId` | `session-xs-consult-<uuid>` | `SessionId` 只是未校验的 branded string，自铸前缀零成本可筛 |
+| `cwd` | `<dataDir>/consult`（**全部问事会话共用**） | `cwd` 是唯一受支持的会话过滤（`filterSessions([{kind:'cwd',…}])`）；**刻意不挂 workspace**（那会破坏「与工作区并列」） |
+| 旁挂清单 | `<dataDir>/consult/sessions/<sessionId>.json` | 「问过哪些事、这次勾了哪些谱」的权威；列表只读它，不扫会话日志 |
+| 注入消息来源 | `source.kind = 'xuanshu-consult'` | 官方允许的 `MessageSourceMap` 合并点；轨迹里显示成「注入」行 |
+
+**六个方法**（`/xuanshu` 通道，契约 §2 冻结）：
+
+| method | 做什么 |
+|---|---|
+| `consult.defaults` | `{required:[底座谱,底稿], optional:[可勾选谱]}`；底座走票 08 `bazi.basePu`，底稿探测 `<dataDir>/digao.md`（**不存在就 `present:false`，不造空底稿**），可选谱来自票 09 `pu.list()`（读不出来的谱不进列表） |
+| `consult.create` | 铸 id → `mkdir -p <dataDir>/consult` → **`ctx.agents.create(...)`**（组合口径见下）→ 写旁挂清单；清单写失败就把刚建的会话 `dispose` 掉（不留「跑得起来但列表里看不见」的会话） |
+| `consult.send` | 先过**能力门**（preset / 模型服务缺一个就拒绝，不给假 `accepted`）→ 首轮 `agent.inject(注入消息)` 再 `agent.followup(问题)`，**受理即回 `{accepted:true}`**（不等答完）；同会话发问串行（并发两问不许丢 `turns` 更新、不许灌两遍上下文）；进程重启后会 `agents.resume(...)` 接回来（preset 取会话 header 里存的那个） |
+| `consult.list` | 读旁挂目录，`createdAt` 倒序（坏文件跳过，不拖垮整张列表） |
+| `consult.read` | 旁挂清单给标题/勾选谱，正文走 **`ctx.sessionQuery.readSession(id)`**（本机是 `session.v4.jsonl.zstd`，**不自己解压**）；刚建好还没落盘的会话 → `messages: []` |
+| `consult.rename` | 改名落到旁挂清单（列表与阅读器都读它） |
+
+**会话怎么接上 agent（`agent.mjs`；这条不落对，票 10 第 3 条验收不成立）**：不能只写
+`ctx.agents.create({sessionId, meta:{cwd}})` —— 两条实证据：① `dsh-agent-loop/lib/index.js:1185`
+在第一轮请求前对缺 provider/model 的 agent 直接抛（裸 create 既没有 `agentOptions`，也没有
+`agent/request` waterfall 的来源）；② `standard` preset 声明的工具行（`tool-pwsh`/`tool-fs`/`tool-skill`…）
+只在 preset **挂载出来的 scope** 里激活。所以照第一方先例（`dsh-webhook/lib/index.js:154-174`、
+`dsh-api-session-controller/lib/index.js:358-371,449-458`）落：`agentPresets.resolve()`（缺省 = registry 的
+`default`，web 层 `standard`）→ `meta.agentPreset`（**真语义**；ADR-0009 禁的是拿它当自由标签，
+不写它 resume 认不回 preset）→ `agentOptions = ctx.agentDefaultModel.currentSelection()` →
+`setup` 里 `agentPresets.mount(agentCtx, id)`。resume 时 preset 优先取会话 header 里存的那个，
+名册里没有了才退回缺省。
+
+**能力门（发问前）**：`agentPresets` / `agentDefaultModel` 任缺 → 那种会话**跑不了一轮**，
+所以 `consult.send` 当场可读地失败（说清缺哪个服务 + 指一条修复路径），**不许**回一个
+`accepted:true` 然后什么都不发生。与票 08「缺经纬度禁止出盘」「确认闸拦下不落盘」同一条纪律。
+
+**注入载体（契约 §3 让实现者择一，这里记明）**：**单独一条注入消息**，不是「同一个 content part 数组」。
+理由：多 content part 只有**一个** `source.kind`，把用户的问题也标成注入（轨迹里显示成「注入」行）就错了；
+所以注入用 `agent.inject()`（不唤醒）排在 `agent.followup()`（唤醒）之前 —— 于是它必然落在这一轮的问题之前，
+且各自带各自的 kind。**首轮判据**是旁挂清单里的 `turns === 0`（跨进程成立）。
+
+**内容口径**：底座谱与勾选谱只给 **manifest 概览 + summary + 文件路径**（正文由 AI 用工具按需读，
+票面第 3 条「AI 自己完成加载谱资料」）；底稿给**全文**（它本身就是精简汇总这一层）；
+底座与底稿是恒定在场项，**不进** `pus`。
+
+**等一轮结束**：`consult.send` 用 `waitForTurnEnd()`（订阅 `session/event` 的 `turn/end`）做**后台记账**
+（旁挂清单的 `lastTurnAt`），**不阻塞** RPC；验收禁止用 `whenIdle()` —— 官方注解明说它不标识某条消息的
+结束（`dsh-agent/lib/types/runtime-types.d.ts:164`）。
+
+**已知的口径决定（不是缺陷）**：
+
+- **`consult.send` 不传 `requestId`**：契约里有这个可选键（与 DSH `SessionPromptRequest` 同形），
+  宿主侧没有「回显 requestId」的落点（响应固定 `{accepted:true}`），接收即忽略；
+  客户端要防乐观回显错配，请在客户端侧配对。**未确认**：是否有客户端流程依赖宿主回显。
+- **`lastTurnAt` 是「记到的上一轮结束时间」**：同会话两问挨得极近时只有一个 `turn/end` 订阅能命中，
+  这个字段可能停在上一轮（它不是轮次账本，轮数看 `turns`）。
+- **底稿全文没有长度上限**：契约字面是「全文」，而底稿由票 13 以「精简汇总」口径生成；
+  若票 13 的产物可能很大，需要 Lead 裁决是否给注入加长度上限与截断说明。
+- **`pus` 只做形状校验**（规范 slug、去重、拒 `_base`），**不**校验谱当前是否存在：
+  勾了之后谱被删，注入时那一段会写「读不出来：…」而不是让整个开会话失败（历史要留得住）。
+- **读不出来的谱不进 `consult.defaults.optional`**：勾一个坏谱只会注入一段「读不出来」，
+  用户修它的地方在 S5 谱管理。
+- **模型只按创建/接回那一刻的默认选择**：玄枢没有装 `installModelSelection`（那是 DSH
+  session-controller 的会话内换模型面）；会话内换模型的完整语义由 DSH 自己的面板负责。
+  **未确认**：consult 会话在 conversation 面板里换模型是否能生效（需要在真机上试一次）。
+
 ## 用法与自检
 
 ```powershell

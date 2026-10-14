@@ -1,0 +1,96 @@
+{
+  "ok": true,
+  "tool": "huangli",
+  "version": "0.40.1",
+  "input_normalized": {
+    "agent_confirmed_settings": true,
+    "clarification_notes": "xuanshu ticket-13 huangli groundtruth probe",
+    "date": "2026-10-15",
+    "hour": 7
+  },
+  "data": {
+    "date": "2026-10-15",
+    "snapshot_text": "[起盘信息]\n公历：2026-10-15 星期四\n农历：二〇二六年九月初六\n干支：丙午年 戊戌月 壬戌日\n生肖：马\n\n[今日宜忌]\n宜：祭祀、祈福、求嗣、开光、出行、解除、上梁、入宅、移徙、安床、安门、纳财、纳畜、造畜稠\n忌：伐木、行丧、破土、嫁娶、安葬、开渠\n\n[值神值宿]\n建除十二神：建日（neutral）\n黄黑道值神：白虎（黑道·凶）\n二十八宿：角木蛟（东青龙·吉）\n九星值日：八白土\n乌兔九星：太阴（2宫·吉·太阴日）\n纳音：大海水\n\n[彭祖百忌]\n壬不泱水更难提防；戌不吃犬作怪上床\n\n[吉神凶煞]\n吉神宜趋：月空、母仓、四相、守日、天马\n凶煞宜忌：月建、小时、土府、白虎\n\n[冲煞·胎神·方位]\n冲煞：冲龙（(丙辰)龙）煞北\n胎神占方：仓库栖 外东南\n喜神：正南　福神：东南　财神：正南\n阳贵：正东　阴贵：东南\n日禄：亥命互禄\n\n[时辰吉凶]\n| 时辰 | 时段 | 吉凶 | 宜 |\n| --- | --- | --- | --- |\n| 庚子 | 00:00-00:59 | 凶 | 求嗣、嫁娶、移徙、入宅 |\n| 辛丑 | 01:00-02:59 | 凶 | 祈福、嫁娶、修造、造庙 |\n| 壬寅 | 03:00-04:59 | 吉 | 求嗣、订婚、嫁娶、出行 |\n| 癸卯 | 05:00-06:59 | 凶 | 求嗣、订婚、嫁娶、求财 |\n| 甲辰 | 07:00-08:59 | 吉 | 无 |\n| 乙巳 | 09:00-10:59 | 吉 | 出行、求财、见贵、订婚 |\n| 丙午 | 11:00-12:59 | 凶 | 祈福、求嗣、订婚、嫁娶 |\n| 丁未 | 13:00-14:59 | 凶 | 见贵、求财、嫁娶、进人口 |\n| 戊申 | 15:00-16:59 | 吉 | 订婚、嫁娶、开市、安葬 |\n| 己酉 | 17:00-18:59 | 吉 | 修造、作灶 |\n| 庚戌 | 19:00-20:59 | 凶 | 祭祀、祈福、求嗣、斋醮 |\n| 辛亥 | 21:00-22:59 | 吉 | 修造、盖屋、移徙、安床 |\n| 壬子 | 23:00-23:59 | 凶 | 求财、见贵、订婚、嫁娶 |\n\n[物候·六曜·数九三伏]\n物候：寒露 二候　六曜：友引　月相：夕\n\n[流年年神方位]\n太岁：离(南)（午）　岁破：坎(北)（子）\n三煞：劫煞、灾煞、岁煞（火局）\n五黄：离(南)\n忌动土方：坎(北)、离(南)、乾(西北)、艮(东北)\n\n[方法说明]\n日课宜忌/彭祖百忌/吉神凶煞/胎神/吉神方位/时辰宜忌/物候/六曜/数九三伏 由本地历算引擎推得（纯前端）。\n建除十二神/黄黑道值神/二十八宿值日/年家凶煞方位 与择日通书体系一致。宜忌须与坐向、主事年命合参，忌逢关键凶煞。",
+    "technique_card": {
+      "schema": "horosa.skill.technique_card.v1",
+      "tool": "huangli",
+      "technique": {
+        "key": "huangli",
+        "label": "老黄历日课"
+      },
+      "compute": {
+        "declared_class": "headless_js",
+        "declared_engines": [
+          "huangli"
+        ],
+        "declared_endpoints": [],
+        "measured": {},
+        "matches_declaration": null,
+        "notes": "纯 headless JS，无后端引擎"
+      },
+      "settings": {},
+      "gate": {
+        "agent_confirmed_settings": {
+          "label": "已与用户确认设置",
+          "value": true
+        },
+        "clarification_notes": {
+          "label": "澄清备注",
+          "value": "xuanshu ticket-13 huangli groundtruth probe"
+        }
+      },
+      "sections": {
+        "selected_count": 11,
+        "detected_count": 10,
+        "titles": [
+          "起盘信息",
+          "今日宜忌",
+          "值神值宿",
+          "彭祖百忌",
+          "吉神凶煞",
+          "冲煞·胎神·方位",
+          "时辰吉凶",
+          "物候·六曜·数九三伏",
+          "流年年神方位",
+          "方法说明"
+        ],
+        "missing_selected_sections": [],
+        "unknown_detected_sections": [],
+        "contract_clean": true,
+        "format_source": "snapshot_parser"
+      },
+      "versions": {
+        "skill": "0.40.1",
+        "tool_envelope_schema": "0.8.0",
+        "export_settings": 15,
+        "runtime": "0.40.1"
+      },
+      "generated_at": "2026-10-14T18:28:46+00:00",
+      "refs": {
+        "run_id": "ba48e8abb91c41299b675d317c2b18fc",
+        "trace_id": "8693ca350b564b66abca4b592d68b596",
+        "group_id": "8d33d25c391d44a2aaed66de27f440fc"
+      }
+    }
+  },
+  "summary": [
+    "工具 `huangli` 已返回结构化结果。",
+    "顶层字段：date, export_snapshot, snapshot_text, technique_card"
+  ],
+  "warnings": [],
+  "memory_ref": {
+    "run_id": "ba48e8abb91c41299b675d317c2b18fc",
+    "tool_name": "huangli",
+    "artifact_path": "E:\\ai_project\\XuanShu\\.scratch\\assembly-foundation\\captures\\gt13-huangli-data\\runs\\2026\\10\\14\\ba48e8abb91c41299b675d317c2b18fc_huangli_2.json",
+    "tool_call_id": 2,
+    "artifact_id": 3,
+    "trace_id": "8693ca350b564b66abca4b592d68b596",
+    "group_id": "8d33d25c391d44a2aaed66de27f440fc"
+  },
+  "trace_id": "8693ca350b564b66abca4b592d68b596",
+  "group_id": "8d33d25c391d44a2aaed66de27f440fc",
+  "error": null,
+  "code": null,
+  "message": null,
+  "details": null
+}

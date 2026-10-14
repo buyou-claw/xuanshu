@@ -26,6 +26,7 @@ import { createBaziUiController } from '../../packages/xuanshu-client/src/client
 import { installMingpan } from '../../packages/xuanshu-client/src/client/MingpanPanel.tsx'
 import { installOnboarding } from '../../packages/xuanshu-client/src/client/onboarding.tsx'
 import {
+  CONSULT_ID,
   DIGAO_ID,
   MINGPAN_ID,
   MINGPAN_LABEL,
@@ -49,10 +50,11 @@ const DSH_SIDEBAR_IDS = ['plugins', 'schedules']
 /**
  * 票 08 之后玄枢的全部 main 注册（顺序有意义，见下）。
  *
- * 票 13 机械扩容：底稿（`digao`）与日课（`rikke`）两个 key 追加在 `mingpan` 之后，
+ * 机械扩容（两半合并后由 Lead 收口，顺序 = `index.tsx` 的 install 调用序）：
+ * 票 10 的 `consult` 与票 13 的 `digao` / `rikke` 追加在 `mingpan` 之后，
  * **断言语义未变**（仍是「全部注册、纯加性、`overview` 在最前」）。
  */
-const EXPECTED_MAIN_KEYS = ['overview', 'pus', 'cang', ONBOARDING_ID, MINGPAN_ID, DIGAO_ID, RIKKE_ID]
+const EXPECTED_MAIN_KEYS = ['overview', 'pus', 'cang', ONBOARDING_ID, MINGPAN_ID, CONSULT_ID, DIGAO_ID, RIKKE_ID]
 
 /* ───────────────────────── 产物物化（运行时真实路径） ───────────────────────── */
 
@@ -278,6 +280,7 @@ describe('票 08 · 槽位不 fail-loud（加性注册）', () => {
     expect(() => plugin.apply(ctx)).not.toThrow()
     expect([...registry.cells.keys()].sort()).toEqual([
       'main\u0000cang',
+      'main\u0000consult',
       'main\u0000digao',
       'main\u0000mingpan',
       'main\u0000onboarding',
@@ -286,6 +289,7 @@ describe('票 08 · 槽位不 fail-loud（加性注册）', () => {
       'main\u0000rikke',
       'shell.overlay\u0000xuanshu-cang-drawer',
       'sidebar.panellist\u0000cang',
+      'sidebar.panellist\u0000consult',
       'sidebar.panellist\u0000digao',
       'sidebar.panellist\u0000mingpan',
       'sidebar.panellist\u0000onboarding',
