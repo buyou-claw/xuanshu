@@ -1,6 +1,6 @@
 /** DSH 0.2.0-rc.2 Connection channel: rpc.d.ts HostConnectionRpc.handle. */
 export function installRpc(ctx, methods) {
-  return ctx.inject(['connection'], connected => {
+  return ctx.inject(['connection', 'webServer'], connected => {
     connected.effect(() => connected.connection.rpc.handle('/xuanshu', async (endpoint, payload, signal) => {
       try {
         signal.throwIfAborted();
