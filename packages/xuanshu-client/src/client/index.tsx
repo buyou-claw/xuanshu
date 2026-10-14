@@ -48,6 +48,8 @@ import { installPuPanel } from './PuPanel.js';
 import { createRikkeApi } from './rikke-api.js';
 import { createRikkeUiController } from './rikke-controller.js';
 import { installRikke } from './rikke.js';
+import { createWorkflowApi } from './workflow/workflow-api.js';
+import { installWorkflowPanel } from './workflow/WorkflowPanel.js';
 import type { RpcContext } from './rpc.js';
 import { installOverviewStyle } from './style.js';
 import { THEME_SOURCE, THEME_TOKENS } from './tokens.js';
@@ -165,6 +167,9 @@ export function apply(ctx: Context): void {
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
 
+  // 票 16：工作流门厅的数据面（创建 / 列表 / 导出三件事都**只由人点**触发，apply 期不发请求）。
+  const workflow = createWorkflowApi(rpc);
+
   const injected = (): OverviewInjected => ({
     navigate,
     mainPanels,
@@ -225,4 +230,7 @@ export function apply(ctx: Context): void {
   // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
   installDigao(rpc, { api: digao, navigate });
   installRikke(rpc, { api: rikke, navigate });
+
+  // ⑨ 票 16：工作流门厅（`workflow`，order 70）—— 创建工作流 → 会话；导出 skill 的落点表单在这里。
+  installWorkflowPanel(rpc, { api: workflow, navigate });
 }
