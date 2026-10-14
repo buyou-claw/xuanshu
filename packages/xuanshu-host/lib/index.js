@@ -390,13 +390,12 @@ function registerReportCommand(ctx, config) {
  * 任何失败都只记日志，绝不抛出——装配失败会让整个 profile 起不来，
  * 而本插件的失败不该有那种权重（契约 §6 隔离与卫生）。
  *
- * 自票 13 起本函数是 **async**：两条 daily 定时任务要绑会话（异步面），而验收判据是
- * 「**装配后** `ctx.schedule` 含日课/底稿两条任务」—— 只有 await 到装配完成这句话才为真。
- * 依然**永不 reject**：最后一段全程 try/catch，定时注册失败最多记一条 warn。
+ * 自票 13 起本函数仍是**同步立刻返回**（票 01 的纪律）：两条 daily 定时任务走
+ * `ctx.inject(['schedule'], …)` 注册 —— 依赖就绪才回调，注册失败最多记一条 warn，绝不拖垮装配。
  * @param ctx - cordis 宿主上下文。
  * @param config - 补丁行的 config；可选 `dataDir` 覆盖数据目录（测试用）。
  */
-export async function apply(ctx, config) {
+export function apply(ctx, config) {
   const log = namedLogger(ctx);
   let written;
   try {
@@ -448,21 +447,35 @@ export async function apply(ctx, config) {
 
   // 票 13：两条 daily 定时任务（日课 07:30 / 底稿刷新 03:30）。
   //
-  // **为什么 apply 是 async**：任务要绑在会话上（`ctx.agents.create` + `ctx.schedule.create` 都是 Promise 面），
-  // 而验收判据是「**装配后** ctx.schedule 含两条任务」—— 只有 await 到装配完成，这句话才为真；
-  // 若改成 fire-and-forget，`dsh --help` 那种随即退出的启动路径上任务根本来不及建。
-  // 全程兜住：`installDailyTasks` 自己永不抛，这里再兜一层，**绝不因为定时注册失败让 profile 起不来**。
-  try {
-    if (dataDir !== undefined) {
-      const timeZone = safeBaseZone(dataDir);
-      const daily = await installDailyTasks({ ctx, dataDir, timeZone });
-      log.info('票13 定时任务：日课=%s（%s）、底稿刷新=%s（%s）',
-        daily.rikke.ok ? daily.rikke.task.id : '未建', daily.rikke.reused ? '复用' : '新建',
-        daily.digao.ok ? daily.digao.task.id : '未建', daily.digao.reused ? '复用' : '新建');
-      for (const note of daily.notes) log.warn('票13 %s', note);
+  // **为什么用 `ctx.inject(['schedule'], …)` 而不是在这里直接 await**：
+  // `schedule` 行由本包的 `cordis.patch.yml` 插进树里，它在运行时树中的**挂载时刻晚于本行** ——
+  // apply 里直接 `ctx.get('schedule')` 会拿到 `undefined`（本票最恶劣的失败形态：boot 不报错、
+  // 任务永远没建，而界面只是「未回传」）。`ctx.inject` 是 cordis 的「依赖就绪再回调」，
+  // 它**不会**让本行 pending（票 01 那条 `inject = []` 的纪律仍然成立：拿不到 schedule 也只是少两条任务）。
+  //
+  // 注册本身是异步的（建会话 + 建任务都是 Promise 面），所以这里不阻塞 apply 返回；
+  // 装配完成的判据是「树挂完」，而注入回调就在这一波里触发。
+  if (dataDir !== undefined) {
+    try {
+      if (typeof ctx.inject === 'function') {
+        ctx.inject(['schedule'], (scoped) => {
+          const timeZone = safeBaseZone(dataDir);
+          installDailyTasks({ ctx: scoped, dataDir, timeZone })
+            .then((daily) => {
+              log.info('票13 定时任务：日课=%s（%s）、底稿刷新=%s（%s）',
+                daily.rikke.ok ? daily.rikke.task.id : '未建', daily.rikke.reused ? '复用' : '新建',
+                daily.digao.ok ? daily.digao.task.id : '未建', daily.digao.reused ? '复用' : '新建');
+              for (const note of daily.notes) log.warn('票13 %s', note);
+            })
+            .catch((error) => log.warn('票13 定时任务注册失败（已兜住）：%C', String(error?.message ?? error)));
+          return () => {};
+        });
+      } else {
+        log.warn('票13 ctx.inject 不可得：跳过两条 daily 定时任务的注册（其余装配不受影响）。');
+      }
+    } catch (error) {
+      log.warn('票13 定时任务注册失败（已兜住）：%C', String(error?.message ?? error));
     }
-  } catch (error) {
-    log.warn('票13 定时任务注册失败（已兜住）：%C', String(error?.message ?? error));
   }
 }
 

@@ -188,8 +188,7 @@ export function fakeAgents() {
   }
 }
 
-/** 记调用的 `ctx.llm` 替身（形状照 `dsh-llm` 的 LlmRuntime：listProviders / listModels / stream）。 */
-export function fakeLlm({ text = '这是模型压出来的一段精简汇总。', fail = false } = {}) {
+/** 记调用的 `ctx.llm` 替身（形状照 `dsh-llm` 的 LlmRuntime：listProviders / listModels / stream）。 */export function fakeLlm({ text = '这是模型压出来的一段精简汇总。', fail = false } = {}) {
   const calls = []
   return {
     calls,
@@ -210,5 +209,22 @@ export function fakeLlm({ text = '这是模型压出来的一段精简汇总。'
         for (const chunk of chunks) yield chunk
       })()
     },
+  }
+}
+
+/**
+ * 等一个条件成立（轮询），超时抛错（错误信息里带现场）。
+ *
+ * 为什么断言台需要它：两条 daily 定时任务的注册是**异步**的（`ctx.inject(['schedule'], …)` 的
+ * 回调里跑 `agents.create` + `schedule.create`，两件都是 Promise 面），装配返回时它们可能还在飞。
+ * 定时路径上用轮询而不是「睡固定毫秒」，是为了不把测试钉在机器的快慢上。
+ */
+export async function waitFor(condition, { timeoutMs = 3000, intervalMs = 5, describe = '条件' } = {}) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const value = await condition()
+    if (value) return value
+    if (Date.now() >= deadline) throw new Error(`等${describe}超时（${timeoutMs}ms）`)
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
   }
 }

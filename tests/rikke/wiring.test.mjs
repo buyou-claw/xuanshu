@@ -14,7 +14,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { apply } from '../../packages/xuanshu-host/lib/index.js'
-import { fakeAgents, fakeSchedule, makeSandbox } from '../digao/lib/sandbox.mjs'
+import { fakeAgents, fakeSchedule, makeSandbox, waitFor } from '../digao/lib/sandbox.mjs'
 
 const roots = []
 afterEach(() => roots.splice(0).forEach((sandbox) => sandbox.cleanup()))
@@ -65,8 +65,14 @@ async function assemble({ withSchedule = true } = {}) {
   if (schedule !== undefined) services.schedule = schedule
   const { host, routes } = makeHost({ services })
   // autoStart:false：本用例不验 horosa 的 serve 生命周期（票 06 的事），只验接线。
-  await apply(host, { dataDir: sandbox.dataDir, autoStart: false })
+  apply(host, { dataDir: sandbox.dataDir, autoStart: false })
   expect(routes).toHaveLength(1)
+  // 两条 daily 任务是**异步**注册的（`ctx.inject(['schedule'], …)` 的回调里跑两位 Promise 面），
+  // 装配返回时可能还在飞；等它们落地再断言（等价于界面上「装配完成后看得到任务」）。
+  await waitFor(
+    () => (withSchedule ? schedule.calls.filter((entry) => entry.method === 'create').length === 2 : true),
+    { describe: '两条 daily 任务注册' },
+  )
   return { sandbox, route: routes[0], schedule, agents }
 }
 
