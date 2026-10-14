@@ -79,27 +79,14 @@ export interface WorkspaceCandidate {
   updatedAt: string;
 }
 
-/** 最小 RPC 形状（与 `consult-api.ts` 同款：只取 `connection.rpc.call`）。 */
-interface RpcCaller {
-  connection: { rpc: { call(method: string, payload: unknown): Promise<unknown> } };
-}
-
-/** 从信封里取 `value`（`/xuanshu` 通道的统一应答形状）。 */
-function unwrap<T>(answer: unknown): T {
-  if (answer && typeof answer === 'object' && 'ok' in answer) {
-    const envelope = answer as { ok: boolean; value?: unknown; error?: { message?: string } };
-    if (envelope.ok === false) throw new Error(envelope.error?.message ?? '调用失败（宿主没有给出原因）。');
-    return envelope.value as T;
-  }
-  return answer as T;
-}
+/** 最小 RPC 形状：与 `consult-api.ts` 同款，走 `rpcCall`（`/xuanshu` 通道，信封统一在这里拆）。 */
+import { rpcCall, type RpcContext } from './rpc.js';
 
 /** 建数据面。 */
-export function createMountsApi(ctx: RpcCaller): MountsApi {
+export function createMountsApi(ctx: RpcContext): MountsApi {
   return {
     async setMounts(payload) {
-      const answer = await ctx.connection.rpc.call(MOUNTS_ENDPOINTS.setMounts, payload);
-      return unwrap<SetMountsAnswer>(answer);
+      return rpcCall<SetMountsAnswer>(ctx, MOUNTS_ENDPOINTS.setMounts, payload);
     },
   };
 }

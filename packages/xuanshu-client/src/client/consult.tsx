@@ -59,14 +59,14 @@ export interface ConsultInstallDeps {
    * 而不是假装切过去了。
    */
   openSession?: (sessionId: string) => void;
+  /**
+   * 票 12 的挂载区插槽（S8 抽屉入口 + 状态栏）。宿主接线时给；不给就退回票 10 的占位说明 ——
+   * 门厅不会因为挂载面缺席而空一块，票 10 的断言台也不用改。
+   */
+  mountSlot?: (session: ConsultSummary | undefined) => ReactNode;
 }
 
 export interface ConsultPanelProps extends ConsultInstallDeps {
-  /**
-   * 票 12 的挂载区（S8 抽屉入口 + 状态栏）。宿主接线时给这个插槽；
-   * 不给就退回票 10 的占位说明 —— 门厅不会因为挂载面缺席而空一块。
-   */
-  mountSlot?: (session: ConsultSummary | undefined) => ReactNode;
   /** 静态预置（测试 / SSR 断言）：给了就不取数。 */
   preloaded?: {
     defaults?: ConsultDefaults;

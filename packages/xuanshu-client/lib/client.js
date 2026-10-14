@@ -2967,19 +2967,10 @@ function installMingpan(ctx, deps) {
 
 // src/client/mounts-api.ts
 var MOUNTS_ENDPOINTS = { setMounts: "consult.setMounts" };
-function unwrap(answer) {
-  if (answer && typeof answer === "object" && "ok" in answer) {
-    const envelope = answer;
-    if (envelope.ok === false) throw new Error(envelope.error?.message ?? "调用失败（宿主没有给出原因）。");
-    return envelope.value;
-  }
-  return answer;
-}
 function createMountsApi(ctx) {
   return {
     async setMounts(payload) {
-      const answer = await ctx.connection.rpc.call(MOUNTS_ENDPOINTS.setMounts, payload);
-      return unwrap(answer);
+      return rpcCall(ctx, MOUNTS_ENDPOINTS.setMounts, payload);
     }
   };
 }
