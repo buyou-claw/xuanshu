@@ -148,7 +148,13 @@ export function DigaoPanel({ api, navigate, preloaded, preloadedRawView }: Digao
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, seeded]);
 
-  /** `[刷新]`：**人点**才走（重算派生文件，再读回同一个文件）。 */
+  /**
+   * `[刷新]`：**人点**才走（重算派生文件，再读回同一个文件）。
+   *
+   * 面板走裸 `api.refresh()` 而不经 `DigaoUiController`：控制器存在的理由是**跨面板**的两件事
+   * （卡片要重取 status、失败理由要有一个来源），而面板本身就是那个动作的现场 ——
+   * 它的结果直接落在本屏的 `view` / `note` 上，不需要再绕一圈共享状态。
+   */
   const refresh = (): void => {
     const mine = ++sequence.current;
     setBusy(true);
