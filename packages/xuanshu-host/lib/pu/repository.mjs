@@ -53,7 +53,7 @@ export function createPuRepository(dataDir) {
     }));
     const summary = !singleFile && existsSync(join(dir, 'summary.md')) ? readFileSync(join(dir, 'summary.md'), 'utf8') : '';
     return { slug, ...meta, singleFile, description: front[2].replace(/^#.*\r?\n/, '').split(/(?:^|\n)#\s+/)[0].trim(), body: Object.values(contents).join('\n\n'), contents, summary, updatedAt: meta.updated_at,
-      stale: files.some(f => statSync(join(dir, f)).mtimeMs > statSync(join(dir, 'manifest.md')).mtimeMs + 1000) };
+      stale: !singleFile && [...files, ...(existsSync(join(dir, 'summary.md')) ? ['summary.md'] : [])].some(f => statSync(join(dir, f)).mtimeMs > statSync(join(dir, 'manifest.md')).mtimeMs) };
   }
   function list(filters = {}) {
     if (!existsSync(root)) return [];

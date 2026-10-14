@@ -80,7 +80,7 @@ function PuPanel({ ctx }: { ctx: PuClient }) {
         <select aria-label="来源筛选" value={source} onChange={e => setSource(e.target.value)}><option value="">全部来源</option>{['manual', 'ai-assisted', 'sediment', 'workflow'].map(s => <option key={s}>{s}</option>)}</select>
         <button onClick={() => { setView('create'); setStep(pendingJob ? 3 : 1); setJob(pendingJob); if (!pendingJob) setDraft(blank); }}>＋ 创建新谱</button></div>
       {loading ? <p role="status">正在读取谱…</p> : <>
-        <section><h2>基础输入级 base · {filtered.filter(p => p.level === 'base').length} 个</h2><p>进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。</p><p>🔒 底座（八字） · 只读 · 由出生信息与底座生成 · 默认在场 · 不可关</p></section>
+        <section><h2>基础输入级 base · {filtered.filter(p => p.level === 'base').length} 个</h2><p>进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。</p><p>🔒 底座（八字） · 只读 · 由出生信息与底座生成 · 默认在场 · 不可关 <button onClick={() => window.alert('底座默认在场、不可关；要修改，请重新录制出生信息并确认。')}>打开</button></p></section>
         {(['base', 'optional'] as const).map(group => <section key={group}>{group === 'optional' && <><h2>可选输入级 optional · {filtered.filter(p => p.level === group).length} 个</h2><p>底稿不采 · 问事时按需追加</p></>}{filtered.filter(p => p.level === group || (group === 'optional' && p.error)).map(p => <article key={p.slug}><div><strong>{p.name}</strong><p>{p.description}</p><small>{p.source} · {p.updatedAt}{p.stale && ' · 汇总可能过期'}</small>{p.error && <p role="alert">{p.error}</p>}</div><button disabled={!!p.error || busy} onClick={() => open(p.slug)}>打开 / 编辑</button></article>)}</section>)}
         {!filtered.length && <div><p>{rows.length ? '没有匹配的谱' : '还没有可选谱：谱由你积累，非必填、不阻塞使用。'}</p><button onClick={() => { setQuery(''); setLevel(''); setSource(''); }}>清空筛选</button></div>}
       </>}
@@ -96,12 +96,12 @@ function PuPanel({ ctx }: { ctx: PuClient }) {
     </>}
     {view === 'create' && <><p aria-label="创建步骤">① 给资料 → ② 定义谱名 → ③ AI 转换中 → ④ 生成预览 → ⑤ 确认落盘</p>
       {step === 1 && <><label>资料文字<textarea value={text} onChange={e => setText(e.target.value)} placeholder="把你知道的先写进来" /></label><label>附件（MD / PDF / 任意文件）<input type="file" multiple onChange={e => setFiles(Array.from(e.target.files ?? []))} /></label><ul>{files.map((f, i) => <li key={i}>{f.name}</li>)}</ul><p>语音输入 v2 再做。</p><button disabled={!text.trim() && !files.length} onClick={() => setStep(2)}>下一步</button></>}
-      {step === 2 && <><label>谱名<input value={draft.name} onChange={e => field('name', e.target.value)} /></label>{levels}<p>谱名唯一 · 目录名小写、- 连接、可含中文。所有谱均非必填。</p><button onClick={() => setStep(1)}>返回改资料</button><button disabled={busy || !draft.name.trim()} onClick={generate}>开始转换</button></>}
+      {step === 2 && <><label>谱名<input value={draft.name} onChange={e => field('name', e.target.value)} /></label>{levels}<p>谱名唯一 · 目录名小写、- 连接、可含中文。所有谱均非必填。</p><p>预览：pus/{draft.name.trim().normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}-]+/gu, '-').replace(/^-+|-+$/g, '')}/</p><button onClick={() => setStep(1)}>返回改资料</button><button disabled={busy || !draft.name.trim()} onClick={generate}>开始转换</button></>}
       {step === 3 && <p role="status">{job?.status === 'running' ? 'AI 正在读取资料、分节并提炼汇总。' : job?.error ?? '转换已中断，可重新开始。'} 借用 DSH coding 工具；中断不落盘。<button disabled={job?.status !== 'running'} onClick={() => void run(async () => { const canceled = await call<Job>('pu.cancel', { id: job?.id }); setJob(canceled); pendingJob = undefined; })}>中断</button><button onClick={() => setStep(2)}>返回改</button></p>}
       {step === 4 && <>{preview}<p>这一步只是预览，pus/ 下还没有任何文件。落盘后会出现在谱列表。</p><button onClick={() => setStep(2)}>返回改</button><button disabled={busy || job?.status !== 'ready'} onClick={() => void run(async () => { await call('pu.confirm', { id: job?.id, draft, level: draft.level, confirmed: true }); pendingJob = undefined; setJob(undefined); setStep(5); await reload(); })}>确认落盘</button></>}
       {step === 5 && <><p>已落盘：manifest.md + content.md + summary.md</p><button onClick={back}>回谱列表</button></>}
     </>}
-    {job?.status === 'running' && <p>审批由 DSH 决定，玄枢不自建审批。<button onClick={() => ctx.uiWorkspace.openSession(job.sessionId)}>在会话里看审批</button><span>返回「谱」可继续查看生成预览。</span></p>}
+    {job?.status === 'running' && <p>审批由 DSH 决定，玄枢不自建审批。<button onClick={() => ctx.uiWorkspace.openSession(job.sessionId)}>在会话里看审批</button>{view === 'detail' && <button onClick={() => void run(async () => { const canceled = await call<Job>('pu.cancel', { id: job.id }); setJob(canceled); pendingJob = undefined; })}>中断汇总提炼（不落盘）</button>}<span>返回「谱」可继续查看生成预览。</span></p>}
   </main>;
 }
 export function installPuPanel(ctx: PuClient): void {
