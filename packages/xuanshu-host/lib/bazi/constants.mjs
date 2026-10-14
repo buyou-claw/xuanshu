@@ -33,3 +33,15 @@ export const CITY_SOURCE_NONE = 'none'
 
 /** `bazi.timezone` 的「什么都没算出来」形状（契约 §4：界面据此落回手改时区）。 */
 export const UNKNOWN_TIMEZONE = Object.freeze({ zone: null, offsetMinutes: null, dst: null })
+
+/**
+ * `timeAlg` 三档的人读标签（底座谱的口径行用它）。
+ * 出处：上游 `horosa_skill/time_basis.py` 的 `TIME_ALG_LABEL`（逐字移植自星阙
+ * `astrostudyui/src/utils/timeBasisLine.js`），见 `docs/research/true-solar-time.md` §1.4。
+ * `2`（春分定卯时）上游自身未实现，所以不在这里给标签。
+ */
+export const TIME_ALG_LABELS = Object.freeze({
+  0: '真太阳时（经度 + 均时差校正）',
+  1: '直接时间（钟表时，不做校正）',
+  3: '平太阳时（仅经度校正，无均时差）',
+})

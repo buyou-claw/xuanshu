@@ -32,9 +32,11 @@ export function createPuRepository(dataDir) {
     if (typeof slug !== 'string' || puSlug(slug) !== slug || slug === 'base') throw new Error('谱路径无效或属于底座');
     return join(root, slug);
   };
-  function read(slug) {
-    const dir = target(slug);
-    const singleFile = !existsSync(dir) && existsSync(`${dir}.md`);
+  // 底座谱的保留目录名（票 08 契约 §1/§7）。写成字面量而不是从 lib/bazi 引：
+  // 谱仓是更底层的模块，反向依赖会让「用户谱面」的语义被票 08 的形状牵着走。
+  const BASE_SLUG = '_base';
+  const baseDir = () => join(root, BASE_SLUG);
+  function readAt(dir, slug, singleFile) {
     if (lstatSync(singleFile ? `${dir}.md` : dir).isSymbolicLink()) throw new Error('谱不允许使用符号链接');
     if (!singleFile) for (const file of ['manifest.md', 'summary.md']) if (existsSync(join(dir, file)) && lstatSync(join(dir, file)).isSymbolicLink()) throw new Error('谱元信息不允许符号链接');
     const raw = readFileSync(singleFile ? `${dir}.md` : join(dir, 'manifest.md'), 'utf8');
@@ -54,6 +56,64 @@ export function createPuRepository(dataDir) {
     const summary = !singleFile && existsSync(join(dir, 'summary.md')) ? readFileSync(join(dir, 'summary.md'), 'utf8') : '';
     return { slug, ...meta, singleFile, description: front[2].replace(/^#.*\r?\n/, '').split(/(?:^|\n)#\s+/)[0].trim(), body: Object.values(contents).join('\n\n'), contents, summary, updatedAt: meta.updated_at,
       stale: !singleFile && [...files, ...(existsSync(join(dir, 'summary.md')) ? ['summary.md'] : [])].some(f => statSync(join(dir, f)).mtimeMs > statSync(join(dir, 'manifest.md')).mtimeMs) };
+  }
+  function read(slug) {
+    const dir = target(slug);
+    return readAt(dir, slug, !existsSync(dir) && existsSync(`${dir}.md`));
+  }
+  /**
+   * 读底座谱（票 08 契约 §7 的**新增保留路径**）——`_base` 永远不会出现在 `list()` / `read(slug)`
+   * 那条路上（用户 slug 语义一字不动），只有这一个入口能读它。
+   * @returns 谱对象（与 `read` 同形，`slug` 固定 `_base`）；`pus/_base` 不存在 → null
+   */
+  function readBase() {
+    const dir = baseDir();
+    if (!existsSync(dir)) return null;
+    if (lstatSync(dir).isSymbolicLink()) throw new Error('底座谱不允许符号链接');
+    return readAt(dir, BASE_SLUG, false);
+  }
+  /**
+   * 写底座谱（新增保留路径）：`pus/_base/{manifest.md, 分节, summary.md}`。
+   *
+   * 三条硬要求（票 08 契约 §1 + S2 §127「原子替换」）：
+   *   - `name=底座 / level=base / source=manual`（级别与来源是谱规范 v1 的定值，不由调用方给）；
+   *   - 先写暂存目录再整体 rename，**旧底座谱原子替换**（重新录制出生信息时不会留下半新半旧的一份）；
+   *   - 分节名只允许普通 `.md` 文件名（不许 `manifest.md`/`summary.md`、不许路径分隔符）。
+   * @param {Record<string,string>} [sections] 分节文件名 → 正文
+   * @param {{description?: string, summary?: string}} [meta]
+   * @returns 与 `readBase()` 同形的谱对象
+   */
+  function writeBase(sections = {}, { description, summary } = {}) {
+    const text = typeof description === 'string' && description.trim() !== ''
+      ? description.trim()
+      : '出生信息与八字底盘（四柱、口径、快照来源）。由八字冷启动向导出盘后落盘；重新录制会原子替换本谱。';
+    const draft = { name: '底座', level: 'base', description: text, body: `# 概览\n${text}` };
+    validatePuDraft(draft);
+    for (const [file, body] of Object.entries(sections)) {
+      if (!/^[A-Za-z0-9._-]+\.md$/.test(file) || ['manifest.md', 'summary.md'].includes(file)) throw new Error(`底座谱分节名无效：${file}`);
+      if (typeof body !== 'string') throw new Error(`底座谱分节 ${file} 的正文必须是文本`);
+    }
+    mkdirSync(root, { recursive: true });
+    const dest = baseDir();
+    const staging = join(root, `.base-${randomUUID()}`);
+    const backup = join(root, `.old-${randomUUID()}`);
+    mkdirSync(staging);
+    const replacing = existsSync(dest);
+    try {
+      writeFileSync(join(staging, 'manifest.md'), manifest(draft, 'manual'));
+      for (const [file, body] of Object.entries(sections)) writeFileSync(join(staging, file), body);
+      writeFileSync(join(staging, 'summary.md'), typeof summary === 'string' ? summary : '');
+      if (replacing) {
+        if (lstatSync(dest).isSymbolicLink()) throw new Error('底座谱不允许符号链接');
+        renameSync(dest, backup);
+      }
+      try { renameSync(staging, dest); } catch (error) { if (replacing) renameSync(backup, dest); throw error; }
+      if (replacing) rmSync(backup, { recursive: true, force: true });
+    } catch (error) {
+      rmSync(staging, { recursive: true, force: true });
+      throw error;
+    }
+    return readBase();
   }
   function list(filters = {}) {
     if (!existsSync(root)) return [];
@@ -96,5 +156,5 @@ export function createPuRepository(dataDir) {
     } catch (error) { rmSync(staging, { recursive: true, force: true }); throw error; }
     return read(nextSlug);
   }
-  return { list, read, confirm, update, baseSources: () => list({ level: 'base' }).filter(p => !p.error) };
+  return { list, read, confirm, update, baseSources: () => list({ level: 'base' }).filter(p => !p.error), readBase, writeBase };
 }

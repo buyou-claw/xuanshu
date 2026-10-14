@@ -192,3 +192,46 @@ export function resolveTimezone(request) {
   if (offsetMinutes === null) return { zone, offsetMinutes: null, dst: null }
   return { zone, offsetMinutes, dst: isDstAt(zone, source.date) }
 }
+
+/**
+ * 固定偏移写法的 zone → 分钟数（`'+08:00'` / `'+0800'` / `'Z'` / `'UTC'` / `'GMT+8'`）。
+ *
+ * 为什么要有这一条：`birth.zone` 允许是 IANA 名，也允许是**固定偏移串**——票 06 的真机捕获里
+ * payload 传的就是 `'+08:00'`（上游进入 runtime 前会按起盘日期归一成固定 offset）。
+ * 快照的 `basis.offsetMinutes` 要能覆盖这两种写法，否则「用 +08:00 出盘」的人快照里就少一行口径。
+ * @returns {number|null} 不是固定偏移写法 → null
+ */
+export function parseFixedOffsetZone(zone) {
+  const text = String(zone ?? '').trim()
+  if (text === '') return null
+  if (/^(z|utc|gmt)$/i.test(text)) return 0
+  const iana = /^(?:utc|gmt)([+-])(\d{1,2})(?::?(\d{2}))?$/i.exec(text)
+  const plain = /^([+-])(\d{1,2}):?(\d{2})$/.exec(text)
+  const match = plain ?? iana
+  if (!match) return null
+  const sign = match[1] === '-' ? -1 : 1
+  const hours = Number(match[2])
+  const minutes = Number(match[3] ?? '0')
+  if (hours > 23 || minutes > 59) return null
+  return sign * (hours * 60 + minutes)
+}
+
+/**
+ * `birth.zone`（IANA 名**或**固定偏移串）→ 当天偏移分钟数。
+ * 两种写法都不成立 → null（不猜）。
+ */
+export function zoneOffsetMinutes(zone, date, time) {
+  const fixed = parseFixedOffsetZone(zone)
+  if (fixed !== null) return fixed
+  return offsetMinutesAt(zone, date, time)
+}
+
+/**
+ * `birth.zone` 当天是不是夏令时。
+ * **固定偏移串没有 DST 概念**（它本身就是归一后的结果）→ null，不假装知道。
+ * @returns {boolean|null}
+ */
+export function zoneIsDst(zone, date) {
+  if (parseFixedOffsetZone(zone) !== null) return null
+  return isDstAt(zone, date)
+}
