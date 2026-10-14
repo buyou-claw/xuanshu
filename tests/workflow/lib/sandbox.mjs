@@ -112,17 +112,23 @@ export function fakeDefaultModel({ provider = 'fake-provider', model = 'fake-mod
   return { currentSelection: () => (provider === null ? undefined : { provider, model }) }
 }
 
-/** 假 `ctx.skills`：注册表面（`list(options)` / `get(name, options)`）。 */
+/**
+ * 假 `ctx.skills`：注册表面（`list(options)` / `get(name, options)`）。
+ *
+ * **两个方法都是 async**，与真机一致：`SkillRegistry.list(options?) => Promise<SkillSummary[]>`、
+ * `get(name, options?) => Promise<SkillDefinition|undefined>`（`dsh-skill/lib/types/index.d.ts`）。
+ * 第一版这里写成同步的，于是「没 await」这个真缺陷在断言台里永远看不见 —— 真机跑一次才现形。
+ */
 export function fakeSkills(entries = []) {
   const calls = []
   return {
     calls,
     entries,
-    list(options = {}) {
+    async list(options = {}) {
       calls.push({ method: 'list', options })
       return entries
     },
-    get(name, options = {}) {
+    async get(name, options = {}) {
       calls.push({ method: 'get', name, options })
       return entries.find((entry) => entry.name === name)
     },

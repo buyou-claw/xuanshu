@@ -183,7 +183,8 @@ export function createWorkflowMethods(ctx, config = {}) {
       const result = exportSkillFile({ dshHome, name: source.name, description, content })
 
       // 写完立刻读回验证（第 ① 步在 exportSkillFile 里做了磁盘重解析；这里是第 ② 步：注册表）。
-      const registry = verifySkillRegistered(ctx, { name: result.name, description, scope: config.skillScope })
+      // `await` 不能少：`ctx.skills.list()` 是 `Promise<SkillSummary[]>`（真机取证改出来的缺陷）。
+      const registry = await verifySkillRegistered(ctx, { name: result.name, description, scope: config.skillScope })
       if (registry.conflict) {
         // 名字被别人占了：**回滚刚写的那一份**，别在别人的 skill 上盖一层同名目录。
         try {

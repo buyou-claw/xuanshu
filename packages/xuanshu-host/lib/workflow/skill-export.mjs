@@ -4,8 +4,7 @@
  * 落点：`<dshHome>/skills/<kebab-name>/SKILL.md` —— 那是 `dsh-skill-filesystem` 的 **`user-dsh`** 根
  * （`dsh-skill-filesystem/lib/index.js:171-175`），「无需用户指定路径」就是用它做缺省。
  *
- * 三条真机事实（`.scratch/notes/dsh-api-facts.md` §4.1/§4.1.3，逐条有 file:line）：
- *   1. frontmatter **必填 `name`（kebab-case）+ `description`**；缺一个、名字不合规、YAML 坏 →
+ * 三条真机事实（`.scratch/notes/dsh-api-facts.md` §4.1/§4.1.3，逐条有 file:line）： *   1. frontmatter **必填 `name`（kebab-case）+ `description`**；缺一个、名字不合规、YAML 坏 →
  *      扫描器**只打一条 warn 然后把整个 skill 忽略**（`:664-704` `parseSkillFile`）。所以这里**只写**
  *      确认过的键，不写 `whenToUse` / `disable-model-invocation` / `user-invocable`（用户没给就不编）。
  *   2. **旧键 `disableModelInvocation` / `modelInvocable` / `userInvocable` 会让 skill 被直接忽略**
@@ -152,23 +151,29 @@ function softGet(ctx, name) {
  * @returns {{checked: boolean, found: boolean, conflict: boolean, reason: string}}
  *   `checked:false` = 注册表不可得（不当作失败：磁盘那一步已经验过格式与内容）
  */
-export function verifySkillRegistered(ctx, { name, scope, description }) {
+export async function verifySkillRegistered(ctx, { name, scope, description }) {
   const skills = softGet(ctx, 'skills')
   if (typeof skills?.list !== 'function') {
     return { checked: false, found: false, conflict: false, reason: '`ctx.skills` 不可得：只做了磁盘读回验证（格式与内容已核对）。' }
   }
   let entries
   try {
-    entries = skills.list(scope === undefined ? {} : { scope })
+    // **必须 await**：`SkillRegistry.list(options?) => Promise<SkillSummary[]>`（真机取证改出来的，
+    // 见文件头 §读回验证）。同步取数组的话 `Array.isArray(Promise)` 永远 false —— 每次都报「没看到」，
+    // 听起来像 watcher 没生效，其实是我自己没 await。
+    entries = await skills.list(scope === undefined ? {} : { scope })
   } catch (error) {
-    return { checked: false, found: false, conflict: false, reason: `` + `读 ctx.skills.list() 失败：${String(error?.message ?? error)}` }
+    return { checked: false, found: false, conflict: false, reason: `读 ctx.skills.list() 失败：${String(error?.message ?? error)}` }
   }
-  const list = Array.isArray(entries) ? entries : []
-  const hit = list.find((entry) => entry?.name === name)
+  if (!Array.isArray(entries)) {
+    // 官方签名是 `Promise<SkillSummary[]>`；拿到的不是数组说明服务面变了 —— 如实说没核对上，别猜。
+    return { checked: false, found: false, conflict: false, reason: `ctx.skills.list() 没回数组（拿到 ${typeof entries}）：这一版服务面与事实笔记 §4.1.3 记的形状不一致，注册表这一步没核对上。` }
+  }
+  const hit = entries.find((entry) => entry?.name === name)
   if (hit === undefined) {
     // 扫描器是文件系统 watcher，**运行期即时可见性未确认**（事实笔记 §4.4）→ 不把它当失败，
     // 但如实把「注册表这一步没看到」写进 reason，别把没核对的说成核对过了。
-    return { checked: true, found: false, conflict: false, reason: `磁盘已写入并按同一套规则读回通过；但注册表这一层暂时没看到 ${name}（watcher 生效时机未确认）——它会在 skill 扫描路径里被下一次扫描收进去。` }
+    return { checked: true, found: false, conflict: false, reason: `磁盘已写入并按同一套规则读回通过；但注册表这一层暂时没看到 ${name}（宿主层看不到 preset 层扫出来的 user-dsh skill，watcher 即时性也未确认）——它会在 skill 扫描路径里被下一次扫描收进去。` }
   }
   const hitDescription = typeof hit.description === 'string' ? hit.description : ''
   if (description !== undefined && hitDescription !== '' && hitDescription !== description) {

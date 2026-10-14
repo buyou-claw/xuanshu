@@ -102,6 +102,25 @@ describe('票16 · 导出落点与文件格式（契约 §4）', () => {
 })
 
 describe('票16 · 写完立刻读回验证（§4.1.4：不一致就不许报成功）', () => {
+  it('**回归**：注册表是 Promise 面（`list()` 是 async）——不 await 会永远报「没看到」', async () => {
+    // 真机取证发现的缺陷：`ctx.skills.list(options?) => Promise<SkillSummary[]>`，
+    // 第一版同步取数组 → `Array.isArray(Promise)` 恒 false → 每次都走「注册表没看到」那条路
+    // （听起来像 watcher 没生效，其实是自己没 await）。这条用例拿**同名冲突**当探针：
+    // 只有真的 await 到了列表，才可能发现「名字被别人占了」并回滚。
+    const { sandbox, methods } = scene({ skillEntries: [{ name: 'async-taken', description: '别人的技能', source: 'user-dsh' }] })
+    const sessionId = await created(methods)
+    await expect(methods['workflow.exportSkill']({ sessionId, name: 'async-taken', description: '我的摘要', content: CONTENT }))
+      .rejects.toThrow(/名字被别人占了/u)
+    expect(sandbox.exists(sandbox.path('dsh-home', 'skills', 'async-taken'))).toBe(false)
+  })
+
+  it('注册表里看到同名同描述的 skill → 不算冲突（verified 走注册表这一条路）', async () => {
+    const { methods } = scene({ skillEntries: [{ name: 'seen-skill', description: '我的摘要', source: 'user-dsh' }] })
+    const sessionId = await created(methods)
+    const result = await methods['workflow.exportSkill']({ sessionId, name: 'seen-skill', description: '我的摘要', content: CONTENT })
+    expect(result.name).toBe('seen-skill')
+  })
+
   it('读回验证走 ctx.skills 且**带 scope 选项**（不传 scope 只看得到 global 层）', async () => {
     const { methods, skills } = scene({ skillEntries: [{ name: 'weekly-industry-digest', description: '每周把行业动态整理成一页摘要', source: 'user-dsh' }] })
     const sessionId = await created(methods)
