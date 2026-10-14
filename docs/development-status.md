@@ -214,6 +214,16 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 本机 PATH 中的 `pnpm` shim 指向已不存在的 executable。所有构建 / vitest / tsc 通过现有 Node 直接执行；
 需要 pnpm 时照 `scripts/install-profile.mjs` 内部的调用方式走。未修改机器全局配置。
 
+### 两条会让"没验"伪装成"验过"的操作陷阱（实测踩到，记下来）
+
+1. **merge 集成 tip 之后必须重跑 `node scripts/install-profile.mjs --home .dsh-home`。**
+   否则 S3 会红：profile 里装的 `lib/client.js` 与仓库不一致（merge 带进来的客户端源文件不会自动同步）。
+   **本条每张票都会踩一次**，实现者两轮各踩了一次。
+2. **改中文源码文件不要走 PowerShell 的 `Get-Content -Raw | Set-Content -Encoding utf8` 往返** ——
+   中文注释会变乱码，进而让 vitest 报 **`no tests`**。危险的不是乱码本身，而是它的**失败形态**：
+   一个「测试根本没跑」被读成「测试通过」或「实现被改坏」。**用 `read`/`edit`/`write` 工具改文件。**
+   同一类问题的另一面：`--reporter=basic` 在 vitest 4 不支持（要用 `dot`）、`fileParallelism: false` 是刻意设的。
+
 ## 工作方式
 
 - 每个实现者在自己的 git worktree（`.scratch/worktrees/<ticket>`）与自己的分支上工作，
