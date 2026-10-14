@@ -178,13 +178,55 @@ export const DISABLED_REASON = {
 export type CardState = 'empty' | 'loading' | 'error' | 'ready';
 
 /**
+ * 计划时刻的显示口径：`03:30:00` → `03:30`。
+ *
+ * `ctx.schedule` 的 `time` 是 `HH:mm:ss.SSS`（契约 §1 的 daily 播种），而 `<input type="time">`
+ * 与界面文案都只到分钟 —— 两处（底稿的「下次刷新」与日课的「计划时刻」）用同一个口径，
+ * 免得一个显示秒、一个不显示。
+ */
+export function clockOf(time: string | undefined): string {
+  if (time === undefined) return '';
+  const parts = time.split(':');
+  if (parts.length < 2) return time;
+  return `${parts[0]}:${parts[1]}`;
+}
+
+/**
+ * 票 13 的两个新 main key：`digao`（S13 底稿只读面板）/ `rikke`（S14 看完整日课）。
+ *
+ * 两个 key 都**不是** `conversation`：面板内没有会话座位（`DSH槽位映射.md` F1），
+ * 底稿与日课都不需要会话绑定。
+ */
+export const DIGAO_ID = 'digao';
+export const RIKKE_ID = 'rikke';
+
+/** 侧栏行文案（D7 措辞：不加「库 ·」前缀；日课是面板名本身）。 */
+export const DIGAO_LABEL = '底稿';
+export const RIKKE_LABEL = '日课';
+
+/**
+ * 两条侧栏行的 order。
+ *
+ * `digao` = 60 是 S13 §8 与 S15 六行表**已预约**的落位（库 · 谱 40 / 藏 50 / 底稿 60）。
+ * `rikke` 在 S15 的六行表里**没有座位**（S14 §8 原本的口径是「日课不新增侧栏行」），
+ * 但票 13 的冻结契约 §3 定死「新 main key 各带一条 `sidebar.panellist` 行（id 与 key 同字符串）」
+ * ——行与面板配对是 DSH 侧栏的唯一依据，所以这里必须有一行。
+ * 取 100：20/30/40/50/60/70 已由六行表预约、80/90 由票 08 的向导与详情占用，
+ * 100 是唯一既不撞位、又保持「10 一档」的位置（也如实反映它是**后来追加**的一行）。
+ */
+export const DIGAO_ORDER = 60;
+export const RIKKE_ORDER = 100;
+
+/**
  * 面板导航目标（= `main` keyed 槽的 key；`conversation` 特殊：回 DSH 原面板）。
- * 票 08 起多了 `onboarding`（冷启动向导）与 `mingpan`（命盘详情）两个玄枢自有 key。
+ * 票 08 起多了 `onboarding`（冷启动向导）与 `mingpan`（命盘详情）两个玄枢自有 key；
+ * 票 13 多了 `rikke`（日课：看完整日课）。
  */
 export type PanelNavTarget =
   | 'consult'
   | 'pus'
   | 'digao'
+  | 'rikke'
   | 'workflow'
   | 'schedules'
   | 'onboarding'

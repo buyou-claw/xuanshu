@@ -27,10 +27,12 @@ export interface DigaoMeta {
   digest?: 'llm' | 'skeleton';
 }
 
-/** `digao.status`：`{ exists, meta: DigaoMeta|null }`。 */
+/** `digao.status`：`{ exists, meta: DigaoMeta|null, schedule? }`（契约 §2 + 2026-10-15 批准的加性扩容）。 */
 export interface DigaoStatus {
   exists: boolean;
   meta: DigaoMeta | null;
+  /** 底稿 daily 任务的计划时刻（**可选**：宿主不回传时省略键，界面不编一个时刻）。 */
+  schedule?: DigaoSchedule;
   reason?: string;
 }
 
@@ -38,6 +40,14 @@ export interface DigaoStatus {
 export interface DigaoRead {
   markdown: string;
   meta: DigaoMeta | null;
+  schedule?: DigaoSchedule;
+}
+
+/** 底稿 daily 任务的计划时刻投影（只读展示用；改它去 DSH 的「自动化任务」面板）。 */
+export interface DigaoSchedule {
+  time: string;
+  timeZone: string;
+  id?: string;
 }
 
 /** `digao.refresh`：重算后的元数据（正文用 `digao.read` 再读一次）。 */
