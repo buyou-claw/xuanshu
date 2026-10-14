@@ -51,7 +51,10 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createCangMethods } from './cang/service.mjs';
 import { installHorosa } from './horosa/service.mjs';
+import { createPuMethods, installPuSkill } from './pu/service.mjs';
+import { installRpc } from './rpc.mjs';
 
 /** cordis 插件名（= 包名 = 补丁行 id，契约 §0）。 */
 export const name = 'xuanshu-host';
@@ -173,6 +176,17 @@ function resolveDshHome(profileCtx, notes) {
 }
 
 /**
+ * 解析数据目录：`config.dataDir` 覆盖优先（测试用），否则 `<dshHome>/xuanshu`。
+ * 装配报告与「谱 / 藏」能力**共用这一份**——两处各算一遍就会出现
+ * 「报告写在 A、谱落在 B」这种最难查的错位。
+ */
+function resolveDataDir(dshHome, config) {
+  return typeof config?.dataDir === 'string' && config.dataDir !== ''
+    ? config.dataDir
+    : join(dshHome, DATA_DIR_NAME);
+}
+
+/**
  * 采集本进程可见的补丁行 id：`ctx.get('loader').entries()` 全树遍历，取每行的
  * `Entry.options.id`（= 补丁文件里写的行 id），去重后字典序排序（契约 §3.1 的 `patchRowIds`）。
  *
@@ -253,8 +267,7 @@ function buildReport(ctx, config) {
   }
   if (dshVersion === '') notes.push('DSH 版本探测失败（@deepseek-ai/dsh 等包均未解析到）：dsh.version 留空串。');
 
-  const dataDir =
-    typeof config?.dataDir === 'string' && config.dataDir !== '' ? config.dataDir : join(dshHome, DATA_DIR_NAME);
+  const dataDir = resolveDataDir(dshHome, config);
 
   const report = {
     schema: REPORT_SCHEMA,
@@ -389,5 +402,20 @@ export function apply(ctx, config) {
   } catch (error) {
     // installHorosa 自己已经兜了一层；这里再兜一层，保证「装配报告」那条路永远不因 horosa 失败。
     log.warn('horosa 底座装配失败（已兜住）：%C', String(error?.message ?? error));
+  }
+
+  // 总装配：把宿主侧能力挂到同一条 `/xuanshu` RPC 通道上（票 09 谱 / 票 14 藏）。
+  // 这两组方法各自的**实现**与断言台早就落地了，缺的只是「有人把它们接上」这一步——
+  // 面板注册（客户端 `installPuPanel` / `installCangClient`）与本处是同一次装配的两半。
+  // 数据目录与装配报告同源（`resolveDataDir`），避免报告与数据各写一处。
+  try {
+    const dataDir = resolveDataDir(resolveDshHome(softGet(ctx, 'profileContext'), []), config);
+    installPuSkill(ctx);
+    installRpc(ctx, {
+      ...createPuMethods(ctx, { dataDir }),
+      ...createCangMethods(ctx, { dataDir }),
+    });
+  } catch (error) {
+    log.warn('谱 / 藏 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
   }
 }

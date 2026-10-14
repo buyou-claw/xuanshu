@@ -16,17 +16,25 @@
  *   4. token 覆盖层：`ctx.theme.overrideTokens('xuanshu-ui-v1', …)`（票 03 取值）；
  *   5. 样式随 JS 走：模块加载时注入一个 `<style>`（官方 ui-layout 同法）。
  *
+ * **总装配**（票 09 谱 / 票 14 藏）：本入口是唯一一处「组装」的地方，两个面板各自的
+ * `installPuPanel` / `installCangClient` 在此被调用——它们各自的实现与断言台早就落地，
+ * 缺的只是这一步。宿主侧对应的一半在 `packages/xuanshu-host/lib/index.js` 的
+ * `installRpc`（同一通道 `/xuanshu`，方法名 `pu.*` / `cang.*`）。
+ *
  * 不注册进 `root` 槽（那是 single 槽，会单独占满整页）、不声明 `children`
  * （槽位声明排他，`main.conversation` 已由 ui-conversation 声明）、
- * 不加 priority（`overview` 是新 cell，纯加性、不遮蔽任何既有占用者）。
+ * 不加 priority（`overview` / `pus` / `cang` 都是新 cell，纯加性、不遮蔽任何既有占用者）。
  */
 import type { Context } from '@deepseek-ai/cordis';
 
+import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
 import { OverviewIcon } from './OverviewIcon.js';
 import { OverviewPanel } from './OverviewPanel.js';
 import { PANEL_ID, PANEL_LABEL, PANEL_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
+import { installPuPanel } from './PuPanel.js';
+import type { RpcContext } from './rpc.js';
 import { installOverviewStyle } from './style.js';
 import { THEME_SOURCE, THEME_TOKENS } from './tokens.js';
 import { EMPTY_MAIN_PANELS, createMainPanelsWatch } from './watch.js';
@@ -44,13 +52,18 @@ import type { MainPanelsWatch } from './watch.js';
  *   - `layout`：ui-layout 的 `ctx.reflect.provide('layout', …)`
  *     （`dsh-client-ui-layout/lib/client.js:600`）——默认面板切换要用；
  *   - `theme`：ui-theme 的 `ctx.provide('theme', …)`
- *     （`dsh-client-ui-theme/lib/client.js:1582`）——token 覆盖层要用。
+ *     （`dsh-client-ui-theme/lib/client.js:1582`）——token 覆盖层要用；
+ *   - `connection`：dsh-client-connection 的 `ctx.provide("connection", handle)`
+ *     （`dsh-client-connection/lib/client.js:1477`）——谱 / 藏面板的 RPC 要用。
+ *     它进 inject 而不是在调用处软取，是因为「没有连接的谱 / 藏面板」不显示任何真东西，
+ *     等它就绪再注册比注册一个永久报错的空壳更诚实（与票 07 四卡的 fail-soft 是两回事：
+ *     那是**卡级**降级，这里是**面板级**前置）。
  *
  * 槽位**声明**的先后由 `ctx.slots.inject` 的语义兜住
  * （`registry.d.ts:96-111`：声明已存在就立即跑回调，否则挂在声明提交后再跑），
  * 所以无需在此等待 sidebar。
  */
-export const inject = ['slots', 'layout', 'theme'];
+export const inject = ['slots', 'layout', 'theme', 'connection'];
 
 /**
  * 挂载玄枢的槽位贡献。
@@ -122,4 +135,11 @@ export function apply(ctx: Context): void {
       OverviewIcon,
     ),
   );
+
+  // ⑥ 总装配：谱（票 09）与藏（票 14）各自的面板 / 侧栏行 / 浮层。
+  // 两者都是**纯加性**注册（新 key / 新 id），且各自带自己的 style 注入与 RPC 客户端；
+  // 放在 overview 之后，保证「第一个 main 注册仍是 overview」与默认面板语义不变。
+  const rpc = ctx as Context & RpcContext;
+  installPuPanel(rpc);
+  installCangClient(rpc);
 }

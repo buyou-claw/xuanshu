@@ -7,7 +7,7 @@ type Level = 'base' | 'optional';
 interface Pu { slug: string; name: string; level: Level; description: string; body: string; summary: string; source: string; updatedAt: string; stale?: boolean; error?: string }
 interface Draft { name: string; level: Level; description: string; body: string; summary: string }
 interface Job { id: string; sessionId: string; status: 'running' | 'ready' | 'error' | 'canceled'; draft?: Draft; error?: string }
-interface PuClient extends Context, RpcContext { uiWorkspace: { openSession(id: string): void } }
+interface PuClient extends Context, RpcContext { uiWorkspace?: { openSession(id: string): void } }
 let pendingJob: Job | undefined;
 let pendingView: 'create' | 'detail' = 'create';
 let pendingSelected: Pu | undefined;
@@ -101,12 +101,20 @@ function PuPanel({ ctx }: { ctx: PuClient }) {
       {step === 4 && <>{preview}<p>这一步只是预览，pus/ 下还没有任何文件。落盘后会出现在谱列表。</p><button onClick={() => setStep(2)}>返回改</button><button disabled={busy || job?.status !== 'ready'} onClick={() => void run(async () => { await call('pu.confirm', { id: job?.id, draft, level: draft.level, confirmed: true }); pendingJob = undefined; setJob(undefined); setStep(5); await reload(); })}>确认落盘</button></>}
       {step === 5 && <><p>已落盘：manifest.md + content.md + summary.md</p><button onClick={back}>回谱列表</button></>}
     </>}
-    {job?.status === 'running' && <p>审批由 DSH 决定，玄枢不自建审批。<button onClick={() => ctx.uiWorkspace.openSession(job.sessionId)}>在会话里看审批</button>{view === 'detail' && <button onClick={() => void run(async () => { const canceled = await call<Job>('pu.cancel', { id: job.id }); setJob(canceled); pendingJob = undefined; })}>中断汇总提炼（不落盘）</button>}<span>返回「谱」可继续查看生成预览。</span></p>}
+    {job?.status === 'running' && <p>审批由 DSH 决定，玄枢不自建审批。{ctx.uiWorkspace && <button onClick={() => ctx.uiWorkspace?.openSession(job.sessionId)}>在会话里看审批</button>}{view === 'detail' && <button onClick={() => void run(async () => { const canceled = await call<Job>('pu.cancel', { id: job.id }); setJob(canceled); pendingJob = undefined; })}>中断汇总提炼（不落盘）</button>}<span>返回「谱」可继续查看生成预览。</span></p>}
   </main>;
 }
-export function installPuPanel(ctx: PuClient): void {
-  ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'pus', inject: () => ({ ctx }) }, PuPanel));
+/**
+ * 谱面板的**加性**注册（main key `pus` + 侧栏行 `pus`）。
+ *
+ * 由客户端根入口 `index.tsx` 的 `apply()` 调用（总装配）；单独调用也成立，
+ * 因此断言台（`tests/assembly/pu-management.test.mjs`）可以直接调它。
+ * 样式注入必须在非 DOM 环境（Node 里的产物物化、SSR 渲染断言）下安全返回 ——
+ * 与 `cang-style.ts` / `style.ts` 同款守卫。
+ */
+export function installPuPanel(ctx: Context & RpcContext): void {
+  ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'pus', inject: () => ({ ctx }) }, PuPanel as never));
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: 'pus', order: 40, label: '谱' }, () => <span aria-hidden="true">谱</span>));
-  if (document.getElementById('xs-pu-style')) return;
+  if (typeof document === 'undefined' || document.getElementById('xs-pu-style')) return;
   const style = document.createElement('style'); style.id = 'xs-pu-style'; style.textContent = `.xs-pu{padding:24px;overflow:auto;height:100%;color:var(--dsw-alias-text-primary);background:var(--dsw-alias-bg-canvas)}.xs-pu header,.xs-pu-toolbar,.xs-pu article{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.xs-pu article{justify-content:space-between;padding:12px;border-bottom:1px solid var(--dsw-alias-border-default)}.xs-pu label{display:block;margin:12px 0}.xs-pu input,.xs-pu select,.xs-pu textarea,.xs-pu button{color:inherit;background:var(--dsw-alias-bg-surface);border:1px solid var(--dsw-alias-border-default);border-radius:8px;padding:8px;font:inherit}.xs-pu button{cursor:pointer;margin:4px}.xs-pu button:disabled{opacity:.5;cursor:default}.xs-pu textarea{display:block;width:100%;min-height:100px;box-sizing:border-box}.xs-pu .xs-pu-body{min-height:220px;font-family:monospace}.xs-pu-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px}.xs-pu section{margin:24px 0}.xs-pu [role=alert]{padding:12px;border:1px solid var(--dsw-alias-border-danger)}@media(max-width:1100px){.xs-pu-detail{grid-template-columns:1fr}.xs-pu{padding:16px}}`; document.head.appendChild(style);
 }

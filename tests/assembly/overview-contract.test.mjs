@@ -169,8 +169,10 @@ describe('票 07 · 首屏 = 自我总览（产物物化）', () => {
     expect(Array.isArray(plugin.inject)).toBe(true)
   })
 
-  it('cordis 服务注入含 slots / layout / theme（默认面板与 token 覆盖层的前置）', () => {
-    expect([...plugin.inject].sort()).toEqual(['layout', 'slots', 'theme'])
+  it('cordis 服务注入含 slots / layout / theme / connection（默认面板、token 覆盖层与谱藏 RPC 的前置）', () => {
+    // `connection` 是总装配（票 09 谱 / 票 14 藏）加进来的：面板的 RPC 走
+    // `dsh-client-connection` 的 `ctx.provide("connection", …)`（`…/dsh-client-connection/lib/client.js:1477`）。
+    expect([...plugin.inject].sort()).toEqual(['connection', 'layout', 'slots', 'theme'])
   })
 
   it('只 require 基线外部依赖（react / react/jsx-runtime）', () => {
@@ -234,21 +236,30 @@ describe('票 07 · 首屏 = 自我总览（产物物化）', () => {
     expect(calls.filter((call) => call.kind === 'selectPanel')).toHaveLength(2)
   })
 
-  it('纯加性 + 工作区原样：只注册两个 cell、无 priority、不碰 root/children、不遮蔽 DSH cell', () => {
+  it('纯加性 + 工作区原样：玄枢只加自己的 cell、无 priority、不碰 root/children、不遮蔽 DSH cell', () => {
     const { calls, ctx } = recordingCtx()
     plugin.apply(ctx)
     const registers = calls.filter((call) => call.kind === 'register')
-    expect(registers.map((call) => call.name).sort()).toEqual(['main', 'sidebar.panellist'])
+    // 总装配后的完整注册面：overview（票 07）、pus（票 09）、cang（票 14）+ 藏登记浮层。
+    // 顺序有意义：overview 必须仍是**第一个** main 注册（默认面板与 S3 的 `find('main')` 都取首个）。
+    const mainKeys = registers.filter((r) => r.name === 'main').map((r) => r.options.key)
+    const rowIds = registers.filter((r) => r.name === 'sidebar.panellist').map((r) => r.options.id)
+    expect(mainKeys).toEqual(['overview', 'pus', 'cang'])
+    // 「每个侧栏行 id 必须与某个 main key 同字符串」是行与面板配对的唯一依据。
+    expect(rowIds).toEqual(mainKeys)
+    expect(registers.map((r) => r.name)).toEqual([
+      'main', 'sidebar.panellist',
+      'main', 'sidebar.panellist',
+      'main', 'sidebar.panellist',
+      'shell.overlay',
+    ])
     expect(registers.some((call) => call.name === 'root'), '不得注册进 root 槽（single 槽会单独占满整页）').toBe(false)
     for (const register of registers) {
       expect(register.options.priority, '新 cell 不需要 priority（加了反而像在遮蔽）').toBeUndefined()
       expect(register.options.children, '不得声明 children（槽位声明排他，main.conversation 已由 ui-conversation 声明）').toBeUndefined()
     }
-    const mainKey = registers.find((call) => call.name === 'main').options.key
-    const rowId = registers.find((call) => call.name === 'sidebar.panellist').options.id
-    expect(DSH_MAIN_KEYS).not.toContain(mainKey)
-    expect(DSH_SIDEBAR_IDS).not.toContain(rowId)
-    expect(mainKey).toBe(rowId)
+    for (const key of mainKeys) expect(DSH_MAIN_KEYS, `遮蔽了 DSH 的 main key：${key}`).not.toContain(key)
+    for (const id of rowIds) expect(DSH_SIDEBAR_IDS, `遮蔽了 DSH 的侧栏行：${id}`).not.toContain(id)
   })
 })
 
@@ -282,7 +293,7 @@ function createDocumentedRegistry() {
 }
 
 describe('票 07 · 槽位遮蔽不 fail-loud（加性注册）', () => {
-  it('我们的两个注册落在按文档语义实现的 registry 上，不触发 fail-loud，两个 cell 都落位', () => {
+  it('玄枢的全部注册落在按文档语义实现的 registry 上，不触发 fail-loud，每个 cell 都落位', () => {
     const registry = createDocumentedRegistry()
     const { plugin } = materializeArtifact()
     const { ctx } = recordingCtx()
@@ -290,8 +301,13 @@ describe('票 07 · 槽位遮蔽不 fail-loud（加性注册）', () => {
     ctx.slots.register = (options, component) => registry.register(options, component)
     expect(() => plugin.apply(ctx)).not.toThrow()
     expect([...registry.cells.keys()].sort()).toEqual([
+      'main\u0000cang',
       'main\u0000overview',
+      'main\u0000pus',
+      'shell.overlay\u0000xuanshu-cang-drawer',
+      'sidebar.panellist\u0000cang',
       'sidebar.panellist\u0000overview',
+      'sidebar.panellist\u0000pus',
     ])
   })
 
