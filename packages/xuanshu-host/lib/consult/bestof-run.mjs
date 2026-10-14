@@ -226,14 +226,23 @@ export async function runCandidate(ctx, { route, angle, question, signal, onText
 
 /**
  * 从 judge 的一次返回里取判定（工具调用优先，正文 JSON 是降级路径）。
- * @returns {{mode: 'tool'|'prompt-json', raw?: string, error?: string}}
+ *
+ * **三种来源，三种说法**（ADR-0010：`mode` 记录的是**这次判定到底怎么来的**）：
+ *   - `'tool'` —— 模型真的调了 `submit_judgement`；
+ *   - `'prompt-json'` —— 没调工具，但正文里有可解析的 JSON（ADR-0010 的降级路径）；
+ *   - `'failed'` —— **既没调工具、正文也没有 JSON**：这次判定**没有来源**。
+ * 第三个档曾经报成 `'tool'`（`raw` 为空、`error` 写着「既没有调用…」），那是在记录里说一件
+ * 没发生的事 —— 与「打桩值不许写成实测值」同一条硬线。`'failed'` 本来就在客户端的联合类型里
+ * （`packages/xuanshu-client/src/client/bestof-api.ts:38`），所以不需要动接口面。
+ *
+ * @returns {{mode: 'tool'|'prompt-json'|'failed', raw?: string, error?: string}}
  */
 export function extractJudgementPayload(result) {
   const call = result.toolCalls?.find((entry) => entry.name === JUDGE_TOOL_NAME) ?? result.toolCalls?.[0]
   if (call !== undefined) return { mode: 'tool', raw: call.arguments ?? '' }
   const json = extractJsonObject(result.text ?? '')
   if (json === undefined) {
-    return { mode: 'tool', error: '模型既没有调用 submit_judgement，正文里也没有可解析的 JSON 对象。' }
+    return { mode: 'failed', error: '模型既没有调用 submit_judgement，正文里也没有可解析的 JSON 对象（这次判定没有来源，不按 tool 记）。' }
   }
   return { mode: 'prompt-json', raw: json }
 }
@@ -292,7 +301,10 @@ export function validateJudgement(parsed, ids) {
 export function judgeFrom(result, completionOrder) {
   const ids = [...completionOrder]
   const fallback = {
-    mode: 'tool',
+    // 这个 `mode` 是**兜底默认**，下面四条返回路径无一例外用 `payload.mode` 覆盖它
+    // （工具 / 正文 JSON / 没有来源 三种来源都要如实记）。缺省取最诚实的那个值：
+    // 「判官不可用」不是一次工具调用。
+    mode: 'failed',
     adoptedId: ids[0] ?? null,
     ranking: ids,
     error: '判官不可用，已按完成顺序排前。',

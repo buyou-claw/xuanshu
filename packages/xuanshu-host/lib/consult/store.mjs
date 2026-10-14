@@ -12,7 +12,7 @@
  *   - **会话日志** = 正文的权威（`ctx.sessionQuery.readSession()`）。
  *
  * 路径形状与 `cwd` **同源**：`<dataDir>/consult` 既是全部问事会话共用的 `cwd`
- * （ADF-0009 第 2 条：一个 `filterSessions([{kind:'cwd',…}])` 就能列出全部），
+ * （ADR-0009 第 2 条：一个 `filterSessions([{kind:'cwd',…}])` 就能列出全部），
  * 也是这份旁挂目录 —— 会话记录（`$DSH_HOME/sessions/**`）与旁挂清单不会各写一处。
  */
 import { randomUUID } from 'node:crypto'

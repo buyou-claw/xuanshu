@@ -23,6 +23,7 @@ import { makeSandbox as consultSandbox } from './../consult/lib/sandbox.mjs'
 import { makeSandbox as digaoSandbox } from './../digao/lib/sandbox.mjs'
 import { makeSandbox as horosaSandbox } from './../horosa/lib/sandbox.mjs'
 import { makeSandbox as setupSandbox } from './../setup/lib/sandbox.mjs'
+import { makeSandbox as sedimentSandbox } from './../sediment/lib/sandbox.mjs'
 import { makeSandbox as workflowSandbox } from './../workflow/lib/sandbox.mjs'
 import { SANDBOX_STALE_MS, pruneStaleDirs } from './sandbox-prune.mjs'
 
@@ -33,6 +34,7 @@ const SITES = [
   { suite: 'digao', make: digaoSandbox },
   { suite: 'horosa', make: horosaSandbox },
   { suite: 'setup', make: setupSandbox },
+  { suite: 'sediment', make: sedimentSandbox },
   { suite: 'workflow', make: workflowSandbox },
 ]
 
