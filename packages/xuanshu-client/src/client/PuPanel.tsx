@@ -7,7 +7,16 @@ type Level = 'base' | 'optional';
 interface Pu { slug: string; name: string; level: Level; description: string; body: string; summary: string; source: string; updatedAt: string; stale?: boolean; error?: string }
 interface Draft { name: string; level: Level; description: string; body: string; summary: string }
 interface Job { id: string; sessionId: string; status: 'running' | 'ready' | 'error' | 'canceled'; draft?: Draft; error?: string }
-interface PuClient extends Context, RpcContext { uiWorkspace?: { openSession(id: string): void } }
+/**
+ * 面板需要的 ctx 面。
+ *
+ * **不写成 `interface PuClient extends Context`**：cordis 的 `Context` 上已经声明了
+ * `uiWorkspace: UiWorkspace`（非可选），再声明一个可选的同名属性会让接口「错误地扩展」
+ * （`TS2430`：`undefined` 不可赋给非可选）。而这里**恰恰**要的是「拿不到就置灰」——
+ * 服务缺席是真实运行状态（票 07 的 fail-soft 约定），所以显式把它从基类型里摘掉再补可选版。
+ */
+type PuClient = Omit<Context, 'uiWorkspace'> &
+  RpcContext & { uiWorkspace?: { openSession(id: string): void } };
 let pendingJob: Job | undefined;
 let pendingView: 'create' | 'detail' = 'create';
 let pendingSelected: Pu | undefined;
