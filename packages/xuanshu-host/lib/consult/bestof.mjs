@@ -215,6 +215,13 @@ export function createBestOfMethods(ctx, config = {}) {
    * `user/message` 是**已登记**的事件类型（不新增 type、不碰 `meta`），自定义 source kind 让它在
    * 轨迹里显示成一条「注入」行而不是用户原话。落选候选**不走**这条路 —— 它们只活在旁挂记录里。
    *
+   * **为什么是 `followup()` 而不是 `inject()`**（Lead 2026-10-15 定案，别按「省一次调用」的直觉改回去）：
+   * 合参走 `ctx.llm.stream()`、不经 agent，采纳那一刻会话**就是 idle** —— `inject` 的原文是
+   * 「without waking the driver … idle drivers leave it pending until follow-up or steering wakes them」，
+   * 采用稿会停在待办里、**立刻不进日志**，人点完看不到任何变化。`followup` 多跑一轮（花一次 token），
+   * 但那一轮**可见**且有意义（人刚拍板了定稿，会话就该从这一份往下走）；「多花一次调用」看得见，
+   * 「日志里其实没有采用稿」看不见 —— 这个项目一律选可见的那个代价。
+   *
    * 失败**不上抛**：采用这个决定已经落盘（人是真点了），但**必须如实回来**
    * （`delivery.ok=false` + 原因），绝不能让界面以为「已经写进历史了」。
    */

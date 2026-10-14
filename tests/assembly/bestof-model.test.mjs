@@ -17,6 +17,7 @@ import {
   candidateStatusLabel,
   costLabel,
   createBestofController,
+  deliveryNotice,
   fallbackNotice,
   judgeUnavailable,
   parseBestofCommand,
@@ -141,6 +142,58 @@ describe('外部可观察的行为：三动作都要人点（C9）', () => {
     expect(rejected.last).toEqual(['adopt', { runId: 'bestof-1', decision: 'reject' }])
     expect(rejected.state.phase).toBe('rejected')
     expect(rejected.state.view.adoptedId).toBeNull()
+  })
+
+  it('task-15：投递回执进 state —— 失败留在 state.delivery，否决心后清掉', async () => {
+    const failed = { ok: false, candidateId: 'c1', error: 'DSH agent 服务（ctx.agents）不可得：这一份采用稿写不进会话。' }
+    // 照宿主的契约造回执：采用/合并带 `delivery`，否决**不带**（reject 不投递）。
+    const { api } = fakeApi({
+      adopt: async (payload) => {
+        const next = {
+          ...view(),
+          adoptedId: payload.decision === 'reject' ? null : (payload.adoptedId ?? 'merged'),
+          rejected: payload.decision === 'reject',
+        }
+        return payload.decision === 'reject' ? { bestOf: next } : { bestOf: next, delivery: failed }
+      },
+    })
+    const controller = createBestofController({ api, pollMs: 1 })
+    controller.setEnabled(true)
+    controller.ask({ question: '问一句', sessionId: SESSION })
+    await controller.confirm()
+    await settle(controller, (snapshot) => snapshot.phase === 'ready')
+
+    await controller.adopt('c1')
+    expect(controller.snapshot().delivery).toEqual(failed)
+    expect(deliveryNotice(controller.snapshot().delivery)).toBe(`采用稿没能写进会话：${failed.error}`)
+
+    // 否决之后不该再挂着上一轮的警告（否则界面拿旧警告说新状态）。
+    await controller.reject()
+    expect(controller.snapshot().delivery).toBeUndefined()
+    expect(deliveryNotice(controller.snapshot().delivery)).toBeUndefined()
+  })
+
+  it('task-15：成功回执 / 字段缺席都按成功渲染（deliveryNotice 返回 undefined）', async () => {
+    const ok = { ok: true, candidateId: 'c1', messageId: 'm-1', source: 'xuanshu-bestof-adopted' }
+    expect(deliveryNotice(ok)).toBeUndefined()
+    expect(deliveryNotice(undefined)).toBeUndefined() // 老宿主：没有投递面
+    expect(deliveryNotice({ ok: false })).toBe('采用稿没能写进会话：原因未知')
+  })
+
+  it('task-15：冷读 state 带回来的 delivery 也进 state（刷新后不会又变回「已写进历史」）', async () => {
+    const delivery = { ok: false, error: '接不回这个会话' }
+    const { api } = fakeApi({
+      run: async () => view({ finished: false, judge: { mode: 'pending', adoptedId: null, ranking: [] } }),
+      state: async () => view({ adoptedId: 'c1', delivery }),
+    })
+    const controller = createBestofController({ api, pollMs: 1 })
+    controller.setEnabled(true)
+    controller.ask({ question: '问一句', sessionId: SESSION })
+    await controller.confirm()
+    await settle(controller, (snapshot) => snapshot.view?.adoptedId === 'c1')
+
+    expect(controller.snapshot().delivery).toEqual(delivery)
+    expect(controller.snapshot().phase).toBe('adopted')
   })
 
   it('设置关着时触发：进 disabled 并说明去哪打开，不发任何请求', async () => {

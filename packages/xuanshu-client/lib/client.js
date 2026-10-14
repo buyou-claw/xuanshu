@@ -179,6 +179,10 @@ function decisionPayload(runId, decision, options = {}) {
   if (decision === "merge" && options.mergedText !== void 0) payload.mergedText = options.mergedText;
   return payload;
 }
+function deliveryNotice(delivery) {
+  if (delivery === void 0 || delivery.ok !== false) return void 0;
+  return `采用稿没能写进会话：${delivery.error ?? "原因未知"}`;
+}
 function createBestofController({ api, pollMs = 400 }) {
   let state = { phase: "idle", enabled: false, question: "" };
   const listeners = /* @__PURE__ */ new Set();
@@ -200,7 +204,7 @@ function createBestofController({ api, pollMs = 400 }) {
     try {
       const view = await api.state({ runId });
       if (state.view?.runId !== runId) return;
-      set({ view, phase: bestofPhase(view, { skippedByUser: stoppedByUser }) });
+      set({ view, phase: bestofPhase(view, { skippedByUser: stoppedByUser }), delivery: view.delivery });
       if (view.finished === true) {
         clearTimer();
         return;
@@ -285,8 +289,8 @@ function createBestofController({ api, pollMs = 400 }) {
       const view = state.view;
       if (view === void 0) return;
       try {
-        const { bestOf } = await api.adopt(decisionPayload(view.runId, "adopt", { adoptedId }));
-        set({ view: bestOf, phase: bestofPhase(bestOf), error: void 0 });
+        const { bestOf, delivery } = await api.adopt(decisionPayload(view.runId, "adopt", { adoptedId }));
+        set({ view: bestOf, phase: bestofPhase(bestOf), error: void 0, delivery });
       } catch (error) {
         set({ error: message(error) });
       }
@@ -295,8 +299,8 @@ function createBestofController({ api, pollMs = 400 }) {
       const view = state.view;
       if (view === void 0) return;
       try {
-        const { bestOf } = await api.adopt(decisionPayload(view.runId, "merge", { mergedText }));
-        set({ view: bestOf, phase: bestofPhase(bestOf), error: void 0 });
+        const { bestOf, delivery } = await api.adopt(decisionPayload(view.runId, "merge", { mergedText }));
+        set({ view: bestOf, phase: bestofPhase(bestOf), error: void 0, delivery });
       } catch (error) {
         set({ error: message(error) });
       }
@@ -305,8 +309,8 @@ function createBestofController({ api, pollMs = 400 }) {
       const view = state.view;
       if (view === void 0) return;
       try {
-        const { bestOf } = await api.adopt(decisionPayload(view.runId, "reject"));
-        set({ view: bestOf, phase: bestofPhase(bestOf), error: void 0 });
+        const { bestOf, delivery } = await api.adopt(decisionPayload(view.runId, "reject"));
+        set({ view: bestOf, phase: bestofPhase(bestOf), error: void 0, delivery });
       } catch (error) {
         set({ error: message(error) });
       }
@@ -453,7 +457,13 @@ function XsBestofRun({ state, actions }) {
     ] }),
     !running && view.adoptedId !== null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "xs-bestof__warn", "data-xs-bestof": "adopted", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: view.adoptedId === "merged" ? "已合并为一稿并采用" : `已采用 ${view.adoptedId}` }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__note", children: "采用只影响这次对话与回看；写进谱要在结束沉淀时由你确认。历史只带这一份采用稿。 其余候选已折叠保存在本地合参记录里，需要时展开查看。" }),
+      deliveryNotice(state.delivery ?? view.delivery) !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "xs-bestof__error", "data-xs-bestof": "delivery-failed", role: "alert", children: [
+          "⚠ ",
+          deliveryNotice(state.delivery ?? view.delivery)
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__note", children: "采用只影响这次对话与回看；写进谱要在结束沉淀时由你确认。 其余候选已折叠保存在本地合参记录里，需要时展开查看。" })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__note", children: "采用只影响这次对话与回看；写进谱要在结束沉淀时由你确认。历史只带这一份采用稿。 其余候选已折叠保存在本地合参记录里，需要时展开查看。" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__note", children: "合参没有改动本次会话的挂载账本与字数状态（旁路，不写页面态）。" })
     ] }),
     fallbackNotice(view) !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "xs-bestof__warn", "data-xs-bestof": "fallback", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "xs-bestof__note", children: [

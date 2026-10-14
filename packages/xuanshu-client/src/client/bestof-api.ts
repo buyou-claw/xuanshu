@@ -63,6 +63,35 @@ export interface BestofView {
   costUsd?: number;
   costUsdComplete?: boolean;
   mergedBy?: { by: 'host' | 'caller'; at: string };
+  /** 采用稿写进会话的时刻（**只在真有投递时出现**；冷读 `bestof.state` 也带它）。 */
+  deliveredAt?: string;
+  /** 投递失败时由宿主带在视图里（成功时不带）—— 刷新/冷读之后界面说同一句话。 */
+  delivery?: BestofDelivery;
+}
+
+/**
+ * 「采用稿到底有没有写进会话」的回执（task-14 宿主新增的加性字段；task-15 接到界面上）。
+ *
+ * `ok === false` 时**必须**逐字把 `error` 显示出来：界面说「历史只带这一份采用稿」而实际没写进去，
+ * 就是说了一句没发生的事 —— 与「缺经纬度不许出盘」「没有价表不许写 0」是同一条硬线。
+ * 字段**缺席** = 老宿主（没有投递面）→ 按成功态渲染。
+ */
+export interface BestofDelivery {
+  ok: boolean;
+  candidateId?: string;
+  messageId?: string;
+  /** 投递用的 source kind（`xuanshu-bestof-adopted`）。 */
+  source?: string;
+  at?: string;
+  /** 失败原因原文（`ok === false` 时必有）。 */
+  error?: string;
+  attemptedAt?: string;
+}
+
+/** `bestof.adopt` 的响应（契约 §1 的 `{bestOf}` + 加性的 `delivery`）。 */
+export interface BestofAdoptResult {
+  bestOf: BestofView;
+  delivery?: BestofDelivery;
 }
 
 /** `bestof.*` 的方法名（逐字对齐契约 §1；改这里等于改接口面）。 */
@@ -81,8 +110,8 @@ export interface BestofApi {
   run(payload: { sessionId: string; question: string; angles?: string[]; profileIds?: string[] }, signal?: AbortSignal): Promise<BestofView>;
   /** 轮询 / 回看（进程重启后也能按 runId 读回来）。 */
   state(payload: { runId: string }, signal?: AbortSignal): Promise<BestofView>;
-  /** 拍板：三个动作都要人点（C9）。 */
-  adopt(payload: { runId: string; decision: BestofDecision; adoptedId?: string; mergedText?: string }, signal?: AbortSignal): Promise<{ bestOf: BestofView }>;
+  /** 拍板：三个动作都要人点（C9）；`delivery` 是「采用稿有没有写进会话」的回执。 */
+  adopt(payload: { runId: string; decision: BestofDecision; adoptedId?: string; mergedText?: string }, signal?: AbortSignal): Promise<BestofAdoptResult>;
   /** 「停止全部」：真的 abort 那 N 路流；已产出的正文保留。 */
   cancel(payload: { runId: string }, signal?: AbortSignal): Promise<{ bestOf: BestofView }>;
 }
@@ -95,7 +124,7 @@ export function createBestofApi(ctx: RpcContext): BestofApi {
   return {
     run: (payload, signal) => rpcCall<BestofView>(ctx, BESTOF_ENDPOINTS.run, payload, signal),
     state: (payload, signal) => rpcCall<BestofView>(ctx, BESTOF_ENDPOINTS.state, payload, signal),
-    adopt: (payload, signal) => rpcCall<{ bestOf: BestofView }>(ctx, BESTOF_ENDPOINTS.adopt, payload, signal),
+    adopt: (payload, signal) => rpcCall<BestofAdoptResult>(ctx, BESTOF_ENDPOINTS.adopt, payload, signal),
     cancel: (payload, signal) => rpcCall<{ bestOf: BestofView }>(ctx, BESTOF_ENDPOINTS.cancel, payload, signal),
   };
 }
