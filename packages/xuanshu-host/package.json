@@ -6,6 +6,9 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "lib/index.js",
+  "dependencies": {
+    "tz-lookup": "6.1.25"
+  },
   "exports": {
     ".": {
       "default": "./lib/index.js"
@@ -23,6 +26,7 @@
   },
   "files": [
     "lib",
+    "data",
     "cordis.patch.yml",
     "README.md"
   ]
