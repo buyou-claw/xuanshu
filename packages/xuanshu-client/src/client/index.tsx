@@ -26,6 +26,10 @@
  * （槽位声明排他，`main.conversation` 已由 ui-conversation 声明）、
  * 不加 priority（`overview` / `pus` / `cang` / `onboarding` / `mingpan` 都是新 cell，
  * 纯加性、不遮蔽任何既有占用者）。
+ *
+ * 票 15 追加（沉淀闭环）：三处**会话内**贡献 —— `conversation.composer.dock`（`[导出汇总]` 入口）、
+ * `conversation.chat.turnTail`（草稿卡）、`shell.overlay`（结果通知）。三者共用一份
+ * `createSedimentApi` + `createSedimentController`；写谱只在确认弹窗的 `[确认更新]` 之后发生。
  */
 import type { Context } from '@deepseek-ai/cordis';
 
@@ -49,6 +53,9 @@ import { createRikkeApi } from './rikke-api.js';
 import { createRikkeUiController } from './rikke-controller.js';
 import { installRikke } from './rikke.js';
 import type { RpcContext } from './rpc.js';
+import { createSedimentApi } from './sediment-api.js';
+import { createSedimentController } from './sediment-model.js';
+import { installSediment } from './sediment-views.js';
 import { installOverviewStyle } from './style.js';
 import { THEME_SOURCE, THEME_TOKENS } from './tokens.js';
 import { EMPTY_MAIN_PANELS, createMainPanelsWatch } from './watch.js';
@@ -165,6 +172,12 @@ export function apply(ctx: Context): void {
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
 
+  // 票 15：沉淀闭环的数据面 + 跨槽共享控制器（入口条与草稿卡是两棵独立的 React 树）。
+  // 这一层也是「人点才跑」的结构保证：造控制器不发任何请求，写谱只在 `commit()` 里发生，
+  // 而它只由确认弹窗的 `[确认更新]` 调用（`confirmed` 由数据面写死为 true）。
+  const sediment = createSedimentApi(rpc);
+  const sedimentController = createSedimentController(sediment);
+
   const injected = (): OverviewInjected => ({
     navigate,
     mainPanels,
@@ -225,4 +238,9 @@ export function apply(ctx: Context): void {
   // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
   installDigao(rpc, { api: digao, navigate });
   installRikke(rpc, { api: rikke, navigate });
+
+  // ⑨ 票 15：沉淀三处贡献（`conversation.composer.dock` 入口 / `conversation.chat.turnTail` 草稿卡 /
+  // `shell.overlay` 通知）。**不新增 main key、不新增侧栏行** —— 沉淀是会话内区块，
+  // 只在 DSH 原生 `conversation` 面板在屏时渲染（S10 §1 D5 / F1）。放在最后，纯加性。
+  installSediment(rpc, { api: sediment, controller: sedimentController, navigate });
 }

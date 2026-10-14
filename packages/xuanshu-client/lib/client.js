@@ -663,9 +663,9 @@ function XsConsultPicker({ required, optional, selected, onToggle, onManagePu, o
         }
       )
     ] }, source.kind)) }),
-    groups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__group", "data-xuanshu-group": group.level, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { className: "xs-consult__group-head", children: group.level === "base" ? "── 基础输入级 base · 默认勾选" : "── 可选输入级 optional" }),
-      group.items.map((source) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { className: "xs-consult__row", "data-xuanshu-pu": source.slug, children: [
+    groups.map((group2) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__group", "data-xuanshu-group": group2.level, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { className: "xs-consult__group-head", children: group2.level === "base" ? "── 基础输入级 base · 默认勾选" : "── 可选输入级 optional" }),
+      group2.items.map((source) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { className: "xs-consult__row", "data-xuanshu-pu": source.slug, children: [
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
           "input",
           {
@@ -680,7 +680,7 @@ function XsConsultPicker({ required, optional, selected, onToggle, onManagePu, o
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__row-name", children: source.name }),
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("small", { className: "xs-consult__note", children: source.summary })
       ] }, source.slug))
-    ] }, group.level)),
+    ] }, group2.level)),
     optional.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "no-optional-pu", children: historyEmptyCopy.noneOptionalPu }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "xs-consult__actions", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "manage-pu", onClick: onManagePu, children: "管理谱 ▸ S5" }) })
   ] });
@@ -884,9 +884,9 @@ function XsConsultHistoryList({
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "start-consult", onClick: onStart, children: "＋ 开一次问事 ▸ S6" })
       ] })
     ] }) : null,
-    groups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__group", "data-xuanshu-history-group": group.key, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { className: "xs-consult__group-head", children: group.label }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("ul", { className: "xs-consult__rows", children: group.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+    groups.map((group2) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__group", "data-xuanshu-history-group": group2.key, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { className: "xs-consult__group-head", children: group2.label }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("ul", { className: "xs-consult__rows", children: group2.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
         "button",
         {
           type: "button",
@@ -902,7 +902,7 @@ function XsConsultHistoryList({
           ]
         }
       ) }, item.sessionId)) })
-    ] }, group.key)),
+    ] }, group2.key)),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "history-storage", children: historyEmptyCopy.storageNote }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "history-search-boundary", children: historyEmptyCopy.searchBoundary })
   ] });
@@ -2212,14 +2212,14 @@ function splitMarker(inner) {
 }
 function parseDigaoMarkdown(markdown) {
   const drafts = [];
-  let group;
+  let group2;
   let segment;
   const closeSegment = () => {
-    if (group === void 0 || segment === void 0) return;
+    if (group2 === void 0 || segment === void 0) return;
     const current = segment;
     const origins = current.bodyLines.map((line) => ORIGIN_RE.exec(line.trim())).filter((match) => match !== null).map((match) => match[1] ?? "");
     const body = current.bodyLines.filter((line) => ORIGIN_RE.exec(line.trim()) === null).join("\n").trim();
-    group.segments.push({
+    group2.segments.push({
       label: current.label,
       kind: current.kind,
       name: current.name,
@@ -2234,11 +2234,11 @@ function parseDigaoMarkdown(markdown) {
       closeSegment();
       const name = heading[1] ?? "";
       const draft = { kind: kindOf(name), name, noteLines: [], segments: [] };
-      group = draft;
+      group2 = draft;
       drafts.push(draft);
       continue;
     }
-    if (group === void 0) continue;
+    if (group2 === void 0) continue;
     const marker = MARKER_RE.exec(rawLine.trim());
     if (marker !== null) {
       closeSegment();
@@ -2249,7 +2249,7 @@ function parseDigaoMarkdown(markdown) {
       if (trailing !== "") draft.bodyLines.push(trailing);
       continue;
     }
-    if (segment === void 0) group.noteLines.push(rawLine);
+    if (segment === void 0) group2.noteLines.push(rawLine);
     else segment.bodyLines.push(rawLine);
   }
   closeSegment();
@@ -2451,18 +2451,18 @@ function DigaoBody({ markdown, meta, raw }) {
     groups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "shape-mismatch", children: "正文形态不符（没有「## 来源：…」章节）：按原文只读展示，界面不假装解析出来源分组。" }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("pre", { className: "xs-digao__raw", "data-xuanshu-raw": "digao-fallback", children: markdown })
-    ] }) : groups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-digao__group", "data-xuanshu-group": group.kind, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { className: "xs-digao__group-head", children: `来源：${group.name}（${group.segments.length} 段）` }),
-      group.note === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note", "data-xuanshu-group-note": group.kind, children: group.note }),
-      group.segments.map((segment, index) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "xs-digao__segment", children: [
+    ] }) : groups.map((group2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-digao__group", "data-xuanshu-group": group2.kind, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { className: "xs-digao__group-head", children: `来源：${group2.name}（${group2.segments.length} 段）` }),
+      group2.note === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__note", "data-xuanshu-group-note": group2.kind, children: group2.note }),
+      group2.segments.map((segment, index) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("article", { className: "xs-digao__segment", children: [
         /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { className: "xs-digao__segment-head", children: [
           /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-digao__tag", "data-xuanshu-source-tag": segment.label, children: `[${segment.label}]` }),
           /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-digao__segment-name", children: segment.name })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__segment-body", children: segment.body }),
         segment.origin === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-digao__origin", "data-xuanshu-origin": segment.kind, children: `源自：${segment.origin}` })
-      ] }, `${group.kind}-${String(index)}`))
-    ] }, `${group.kind}-${group.name}`))
+      ] }, `${group2.kind}-${String(index)}`))
+    ] }, `${group2.kind}-${group2.name}`))
   ] });
 }
 function DigaoIcon({ size = 20 }) {
@@ -4355,16 +4355,16 @@ ${p.body}`.toLowerCase().includes(query.toLowerCase())));
             /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => window.alert("底座默认在场、不可关；要修改，请重新录制出生信息并确认。"), children: "打开" })
           ] })
         ] }),
-        ["base", "optional"].map((group) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { children: [
-          group === "optional" && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+        ["base", "optional"].map((group2) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { children: [
+          group2 === "optional" && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("h2", { children: [
               "可选输入级 optional · ",
-              filtered.filter((p) => p.level === group).length,
+              filtered.filter((p) => p.level === group2).length,
               " 个"
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "底稿不采 · 问事时按需追加" })
           ] }),
-          filtered.filter((p) => p.level === group || group === "optional" && p.error).map((p) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("article", { children: [
+          filtered.filter((p) => p.level === group2 || group2 === "optional" && p.error).map((p) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("article", { children: [
             /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("strong", { children: p.name }),
               /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: p.description }),
@@ -4378,7 +4378,7 @@ ${p.body}`.toLowerCase().includes(query.toLowerCase())));
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { disabled: !!p.error || busy, onClick: () => open(p.slug), children: "打开 / 编辑" })
           ] }, p.slug))
-        ] }, group)),
+        ] }, group2)),
         !filtered.length && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: rows.length ? "没有匹配的谱" : "还没有可选谱：谱由你积累，非必填、不阻塞使用。" }),
           /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { onClick: () => {
@@ -4829,6 +4829,526 @@ function installRikke(ctx, deps) {
       RikkeIcon
     )
   );
+}
+
+// src/client/sediment-api.ts
+var SEDIMENT_ENDPOINTS = {
+  draft: "sediment.draft",
+  commit: "sediment.commit",
+  discard: "sediment.discard"
+};
+function createSedimentApi(ctx) {
+  return {
+    draft: (payload, signal) => rpcCall(ctx, SEDIMENT_ENDPOINTS.draft, payload, signal),
+    // `confirmed` 在这里写死成字面量 `true`：确认是人在弹窗里点的那一次，不是一个可传参的开关。
+    commit: (payload, signal) => rpcCall(ctx, SEDIMENT_ENDPOINTS.commit, { ...payload, confirmed: true }, signal),
+    discard: (payload, signal) => rpcCall(ctx, SEDIMENT_ENDPOINTS.discard, payload, signal),
+    readTarget: (slug, signal) => rpcCall(ctx, "pu.read", { slug }, signal),
+    // 读面仍是既有方法（`pu.list`）：本票不新开端点，只把「可选目标谱」这件事收在一处。
+    listTargets: async (signal) => {
+      const rows = await rpcCall(ctx, "pu.list", {}, signal);
+      return rows.filter((row) => row !== null && typeof row === "object" && typeof row.slug === "string");
+    }
+  };
+}
+
+// src/client/sediment-model.ts
+var CONSULT_SESSION_PREFIX2 = "session-xs-consult-";
+function isConsultSessionId(value) {
+  return typeof value === "string" && value.startsWith(CONSULT_SESSION_PREFIX2) && value.length > CONSULT_SESSION_PREFIX2.length;
+}
+function countWords(text) {
+  return String(text ?? "").replace(/\s+/gu, "").length;
+}
+function group(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/gu, ",");
+}
+function wordDeltaText(before, after) {
+  const head = `${group(before)} → ${group(after)} 字`;
+  const delta = after - before;
+  if (delta === 0) return `${head}（未变）`;
+  const sign = delta > 0 ? "+" : "-";
+  const body = `${sign}${group(Math.abs(delta))} 字`;
+  if (before === 0) return `${head}（${body} / 新增）`;
+  if (after === 0) return `${head}（${body} / 清空）`;
+  const ratio = Math.round(Math.abs(delta) / before * 100);
+  return `${head}（${body} / ${sign}${ratio}%）`;
+}
+function paragraphs(text) {
+  return String(text ?? "").split(/\n{2,}/u).map((part) => part.trim()).filter((part) => part !== "");
+}
+function diffParagraphs(currentBody, draftBody) {
+  const current = paragraphs(currentBody);
+  const draft = paragraphs(draftBody);
+  const remaining = current.map((text, index) => ({ text, index, used: false }));
+  const items = [];
+  const counts = { unchanged: 0, replaced: 0, added: 0, removed: 0 };
+  for (let index = 0; index < draft.length; index += 1) {
+    const text = draft[index];
+    const sameSpot = remaining[index];
+    if (sameSpot !== void 0 && sameSpot.used !== true && sameSpot.text === text) {
+      sameSpot.used = true;
+      items.push({ kind: "=", text });
+      counts.unchanged += 1;
+      continue;
+    }
+    const elsewhere = remaining.find((entry) => entry.used !== true && entry.text === text);
+    if (elsewhere !== void 0) {
+      elsewhere.used = true;
+      items.push({ kind: "=", text });
+      counts.unchanged += 1;
+      continue;
+    }
+    if (sameSpot !== void 0 && sameSpot.used !== true) {
+      sameSpot.used = true;
+      items.push({ kind: "~", text });
+      counts.replaced += 1;
+      continue;
+    }
+    items.push({ kind: "+", text });
+    counts.added += 1;
+  }
+  for (const entry of remaining) {
+    if (entry.used === true) continue;
+    items.push({ kind: "-", text: entry.text });
+    counts.removed += 1;
+  }
+  return { items, counts };
+}
+function previewText(text, maxChars = 480) {
+  const raw = String(text ?? "").trim();
+  return raw.length <= maxChars ? raw : `${raw.slice(0, maxChars)}…`;
+}
+function puPaths(slug) {
+  const base = `~/.dsh/xuanshu/pus/${slug}`;
+  return { content: `${base}/content.md`, summary: `${base}/summary.md`, manifest: `${base}/manifest.md` };
+}
+function confirmGate(input) {
+  if (input.busy) return { ok: false, reason: "正在写入，请稍候（写入期间按钮不可再点）。" };
+  if (input.hasDraft !== true) return { ok: false, reason: "还没有草稿：先点 [导出汇总]。" };
+  if (input.targetSlug === "") return { ok: false, reason: "还没有目标谱：沉淀只能写进谱（工作区 / 工作流不是谱）。" };
+  if (input.stale) return { ok: false, reason: "目标谱在预览后被改动，请先 [重新预览]（本页不会覆盖你没看过的内容）。" };
+  return { ok: true };
+}
+var EMPTY = { kind: "empty" };
+function errorText7(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function createSedimentController(api) {
+  const states = /* @__PURE__ */ new Map();
+  const listeners = /* @__PURE__ */ new Set();
+  let notice;
+  const notify = () => {
+    for (const listener of [...listeners]) listener();
+  };
+  const put = (sessionId, state) => {
+    states.set(sessionId, state);
+    notify();
+  };
+  return {
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    getState: (sessionId) => states.get(sessionId) ?? EMPTY,
+    async export(sessionId, targetSlug) {
+      put(sessionId, { kind: "loading" });
+      try {
+        const answer = await api.draft(targetSlug === void 0 || targetSlug === "" ? { sessionId } : { sessionId, targetSlug });
+        put(sessionId, { kind: "ready", answer });
+        return { ok: true };
+      } catch (error) {
+        const reason = errorText7(error);
+        put(sessionId, { kind: "error", reason });
+        return { ok: false, reason };
+      }
+    },
+    async commit(sessionId, draft) {
+      const state = states.get(sessionId);
+      if (state?.answer === void 0) return { ok: false, reason: "还没有草稿：先点 [导出汇总]。" };
+      try {
+        const answer = await api.commit(draft === void 0 ? { draftId: state.answer.draftId } : { draftId: state.answer.draftId, draft });
+        notice = { kind: "committed", pu: answer.pu };
+        put(sessionId, { kind: "done", pu: answer.pu });
+        return { ok: true };
+      } catch (error) {
+        const reason = errorText7(error);
+        put(sessionId, { kind: "ready", answer: state.answer, reason });
+        return { ok: false, reason };
+      }
+    },
+    async discard(sessionId) {
+      const state = states.get(sessionId);
+      if (state?.answer === void 0) {
+        put(sessionId, { kind: "empty" });
+        return { ok: true };
+      }
+      try {
+        await api.discard({ draftId: state.answer.draftId });
+        put(sessionId, { kind: "empty" });
+        return { ok: true };
+      } catch (error) {
+        const reason = errorText7(error);
+        put(sessionId, { kind: "ready", answer: state.answer, reason });
+        return { ok: false, reason };
+      }
+    },
+    getNotice: () => notice,
+    dismissNotice() {
+      if (notice === void 0) return;
+      notice = void 0;
+      notify();
+    },
+    reset(sessionId) {
+      put(sessionId, { kind: "empty" });
+    }
+  };
+}
+
+// src/client/sediment-views.tsx
+var import_react13 = require("react");
+var import_jsx_runtime16 = require("react/jsx-runtime");
+var SEDIMENT_ENTRY_ID = "xuanshu.sediment-entry";
+var SEDIMENT_DRAFT_CARD_ID = "xuanshu.sediment-draft";
+var SEDIMENT_NOTICE_ID = "xuanshu.sediment-notice";
+var SEDIMENT_TURNTAIL_ORDER = 30;
+var NO_SUBSCRIBE = () => () => {
+};
+var EMPTY_STATE = { kind: "empty" };
+function useSedimentState(controller, sessionId) {
+  const snapshot = () => controller === void 0 || sessionId === void 0 ? EMPTY_STATE : controller.getState(sessionId);
+  return (0, import_react13.useSyncExternalStore)(controller === void 0 ? NO_SUBSCRIBE : controller.subscribe, snapshot, snapshot);
+}
+function errorText8(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function XsSedimentEntry({ sessionId, api, controller, navigate, preloadedTargets }) {
+  const consult = isConsultSessionId(sessionId);
+  const [targets, setTargets] = (0, import_react13.useState)(preloadedTargets);
+  const [slug, setSlug] = (0, import_react13.useState)(preloadedTargets?.[0]?.slug ?? "");
+  const [error, setError] = (0, import_react13.useState)("");
+  const state = useSedimentState(controller, sessionId);
+  (0, import_react13.useEffect)(() => {
+    if (!consult || api === void 0 || preloadedTargets !== void 0) return;
+    const abort = new AbortController();
+    api.listTargets(abort.signal).then((rows) => {
+      if (abort.signal.aborted) return;
+      setTargets(rows);
+      setSlug((current) => current !== "" ? current : rows[0]?.slug ?? "");
+    }).catch((reason) => {
+      if (!abort.signal.aborted) setError(`谱列表读不出来：${errorText8(reason)}`);
+    });
+    return () => {
+      abort.abort();
+    };
+  }, [api, consult, preloadedTargets]);
+  if (!consult || api === void 0 || controller === void 0 || sessionId === void 0 || navigate === void 0) return null;
+  const busy = state.kind === "loading";
+  const none = targets !== void 0 && targets.length === 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-sediment__entry", "data-xuanshu-block": "sediment-entry", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "xs-sediment__field", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "目标谱（必选）" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+        "select",
+        {
+          "data-xuanshu-field": "sediment-target",
+          value: slug,
+          disabled: busy || none,
+          onChange: (event) => {
+            setSlug(event.target.value);
+          },
+          children: [
+            none ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: "", children: "（还没有可选的目标谱）" }) : null,
+            (targets ?? []).map((row) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: row.slug, children: row.name }, row.slug))
+          ]
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+      "button",
+      {
+        type: "button",
+        "data-xuanshu-action": "sediment-export",
+        disabled: busy || slug === "",
+        onClick: () => {
+          void controller.export(sessionId, slug);
+        },
+        children: busy ? "正在生成草稿…" : "导出汇总"
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__note", children: "导出只产出**草稿**：写进谱要你在下一步亲手点「确认更新」，AI 不会自动写。" }),
+    none ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__note", role: "status", children: "还没有可选的目标谱：沉淀只能写进谱（工作区 / 工作流不是谱），先去 S5 谱管理建一本。" }) : null,
+    error === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__error", role: "alert", children: error })
+  ] });
+}
+function stateLabel(kind) {
+  if (kind === "loading") return "loading";
+  if (kind === "ready") return "ready";
+  if (kind === "error") return "error";
+  if (kind === "done") return "done";
+  return "empty";
+}
+function XsSedimentDraftCard({ sessionId, api, controller, navigate, initialConfirmOpen, preloadedTargetView }) {
+  const consult = isConsultSessionId(sessionId);
+  const state = useSedimentState(controller, sessionId);
+  const [open, setOpen] = (0, import_react13.useState)(initialConfirmOpen === true);
+  const [targetView, setTargetView] = (0, import_react13.useState)(preloadedTargetView);
+  const [stale, setStale] = (0, import_react13.useState)(false);
+  const [busy, setBusy] = (0, import_react13.useState)(false);
+  const [actionError, setActionError] = (0, import_react13.useState)("");
+  const draft = state.answer?.draft;
+  const target = state.answer?.target;
+  const slug = target?.slug;
+  (0, import_react13.useEffect)(() => {
+    if (!open || api === void 0 || slug === void 0 || preloadedTargetView !== void 0) return void 0;
+    const abort = new AbortController();
+    api.readTarget(slug, abort.signal).then((view) => {
+      if (!abort.signal.aborted) setTargetView(view);
+    }).catch((reason) => {
+      if (!abort.signal.aborted) setActionError(`目标谱现状读不出来：${errorText8(reason)}`);
+    });
+    return () => {
+      abort.abort();
+    };
+  }, [api, open, preloadedTargetView, slug]);
+  if (!consult || api === void 0 || controller === void 0 || sessionId === void 0 || navigate === void 0) return null;
+  if (state.kind === "empty") return null;
+  const confirm = async () => {
+    if (slug === void 0) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      const fresh = await api.readTarget(slug);
+      if (targetView !== void 0 && fresh.updatedAt !== targetView.updatedAt) {
+        setTargetView(fresh);
+        setStale(true);
+        return;
+      }
+      const outcome = await controller.commit(sessionId);
+      if (outcome.ok) {
+        setOpen(false);
+        setStale(false);
+      } else {
+        setActionError(outcome.reason ?? "写入失败：宿主没有给出理由。");
+      }
+    } catch (reason) {
+      setActionError(`写入失败：${errorText8(reason)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const reopen = async () => {
+    if (slug === void 0) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      setTargetView(await api.readTarget(slug));
+      setStale(false);
+    } catch (reason) {
+      setActionError(`目标谱现状读不出来：${errorText8(reason)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "xs-sediment__card", "data-xuanshu-card": "sediment-draft", "data-xs-state": state.kind, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("header", { className: "xs-sediment__head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h3", { children: "沉淀草稿" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "xs-sediment__badge", "data-xuanshu-state": state.kind, children: stateLabel(state.kind) })
+    ] }),
+    state.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { "data-xuanshu-skeleton": "sediment", children: "正在让这场问事汇出草稿……（要等一轮回答，通常几十秒）" }) : null,
+    state.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-sediment__error", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { children: state.reason ?? "导出汇总失败：宿主没有给出理由。" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", "data-xuanshu-action": "sediment-retry", onClick: () => {
+        void controller.export(sessionId, target?.slug);
+      }, children: "重试" })
+    ] }) : null,
+    state.kind === "ready" && draft !== void 0 && target !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(import_jsx_runtime16.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__meta", children: `${countWords(draft.body)} 字 · 尚未写进任何谱` }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__target", children: `目标谱：${target.name}（${target.slug}）` }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("pre", { className: "xs-sediment__preview", "data-xuanshu-preview": "sediment", children: previewText(draft.body) }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__path", children: `草稿落点（只读）：~/.dsh/xuanshu/sediment/${state.answer?.draftId ?? ""}.json` }),
+      state.reason === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__error", role: "alert", children: state.reason }),
+      actionError === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__error", role: "alert", children: actionError }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-sediment__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", className: "xs-btn--primary", "data-xuanshu-action": "sediment-open-confirm", onClick: () => {
+          setOpen(true);
+        }, children: "更新到谱…" }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", "data-xuanshu-action": "sediment-discard", onClick: () => {
+          void controller.discard(sessionId);
+        }, children: "丢弃这份草稿" })
+      ] }),
+      open ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+        XsSedimentConfirmDialog,
+        {
+          draft,
+          target,
+          base: targetView,
+          stale,
+          busy,
+          error: actionError === "" ? void 0 : actionError,
+          onConfirm: () => {
+            void confirm();
+          },
+          onCancel: () => {
+            setOpen(false);
+          },
+          onReopen: () => {
+            void reopen();
+          }
+        }
+      ) : null
+    ] }) : null,
+    state.kind === "done" && state.pu !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-sediment__done", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { "data-xuanshu-state": "committed", children: `已更新到谱「${state.pu.name}」。` }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__note", children: `写入路径：${puPaths(state.pu.slug).content}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "xs-sediment__actions", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", "data-xuanshu-nav": "pus", onClick: () => {
+        navigate("pus");
+      }, children: "查看谱 ->" }) })
+    ] }) : null
+  ] });
+}
+function XsSedimentConfirmDialog({ draft, target, base, stale, busy, error, onConfirm, onCancel, onReopen }) {
+  const gate = confirmGate({ hasDraft: draft !== void 0, targetSlug: target?.slug ?? "", stale, busy });
+  const paths = target === void 0 ? void 0 : puPaths(target.slug);
+  const diff = draft === void 0 || base === void 0 ? void 0 : diffParagraphs(base.body, draft.body);
+  const words = draft === void 0 || base === void 0 ? void 0 : wordDeltaText(countWords(base.body), countWords(draft.body));
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "xs-sediment__overlay", role: "dialog", "aria-modal": "true", "aria-labelledby": "xs-sediment-dialog-title", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-sediment__dialog", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h2", { id: "xs-sediment-dialog-title", children: "更新到谱 · 人工确认" }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "xs-sediment__part", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h4", { children: "① 目标谱（必选）" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { "data-xuanshu-field": "sediment-confirm-target", children: target === void 0 ? "（还没有选定目标谱）" : `${target.name}（${target.slug}）` }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__note", children: "写入目标只能是谱 —— 工作区 / 工作流不是谱，选项里不出现。" }),
+      target === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__note", "data-xs-gate": "no-target", role: "status", children: "还没有目标谱：沉淀只能写进谱，先回入口选一本。" }) : null,
+      stale ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-sediment__stale", "data-xs-gate": "stale", role: "alert", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { children: "目标谱在预览后被改动，请重新预览（本页不会覆盖你没看过的内容）。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", "data-xuanshu-action": "sediment-reopen", disabled: busy, onClick: onReopen, children: "重新预览" })
+      ] }) : null
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "xs-sediment__part", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h4", { children: "② 变更 diff 预览（草稿 → 目标谱）" }),
+      diff === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__note", children: "正在读目标谱现状…" }) : /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(import_jsx_runtime16.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("p", { className: "xs-sediment__counts", children: [
+          `+ 新增 ${diff.counts.added} 段 · ~ 替换 ${diff.counts.replaced} 段 · = 未变 ${diff.counts.unchanged} 段`,
+          diff.counts.removed === 0 ? "" : ` · - 删除 ${diff.counts.removed} 段`
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("ol", { className: "xs-sediment__diff", "data-xuanshu-diff": "sediment", children: diff.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("li", { "data-xs-diff-kind": item.kind, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "xs-sediment__mark", children: item.kind }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "xs-sediment__diff-text", children: previewText(item.text, 200) })
+        ] }, `${item.kind}-${String(index)}`)) })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "xs-sediment__part", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h4", { children: "③ 字数变化" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { "data-xuanshu-field": "sediment-words", children: words ?? "正在读目标谱现状…" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__note", children: "summary 由 AI 重写（草稿里的那一份）；确认之后它就是新的汇总。" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "xs-sediment__part", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h4", { children: "④ 写入路径（只读展示，界面不可改）" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("ul", { className: "xs-sediment__paths", children: paths === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("li", { children: "（还没有目标谱）" }) : /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(import_jsx_runtime16.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("li", { "data-xuanshu-readonly-path": "content", children: paths.content }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("li", { "data-xuanshu-readonly-path": "summary", children: paths.summary })
+      ] }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__note", children: "写入走谱的原子替换（同目录暂存后整体替换）；不额外留备份目录。" })
+    ] }),
+    error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__error", role: "alert", children: error }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-sediment__actions", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "xs-btn--primary",
+          "data-xuanshu-action": "sediment-confirm",
+          disabled: !gate.ok,
+          onClick: onConfirm,
+          children: busy ? "正在写入…" : "确认更新"
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", "data-xuanshu-action": "sediment-cancel", disabled: busy, onClick: onCancel, children: "返回改草稿" })
+    ] }),
+    gate.ok || gate.reason === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__gate-reason", role: "status", children: gate.reason }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "xs-sediment__note", children: "长期放行请在 DSH 权限设置里改，本屏不提供跳过确认。" })
+  ] }) });
+}
+function XsSedimentNotice({ controller, navigate }) {
+  const notice = (0, import_react13.useSyncExternalStore)(controller.subscribe, controller.getNotice, controller.getNotice);
+  if (notice === void 0) return null;
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-sediment__notice", "data-xuanshu-notice": "sediment", role: "status", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { children: `已更新到谱「${notice.pu.name}」（${countWords(notice.pu.body)} 字）。` }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "xs-sediment__actions", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", "data-xuanshu-nav": "pus", onClick: () => {
+        navigate("pus");
+        controller.dismissNotice();
+      }, children: "查看谱 ->" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", "data-xuanshu-action": "sediment-dismiss", onClick: () => {
+        controller.dismissNotice();
+      }, children: "关闭" })
+    ] })
+  ] });
+}
+function installSediment(ctx, deps) {
+  installSedimentStyle();
+  ctx.slots.inject(
+    "conversation.composer.dock",
+    () => ctx.slots.register(
+      { name: "conversation.composer.dock", id: SEDIMENT_ENTRY_ID, inject: () => ({ ...deps }) },
+      XsSedimentEntry
+    )
+  );
+  ctx.slots.inject(
+    "conversation.chat.turnTail",
+    () => ctx.slots.register(
+      { name: "conversation.chat.turnTail", id: SEDIMENT_DRAFT_CARD_ID, order: SEDIMENT_TURNTAIL_ORDER, inject: () => ({ ...deps }) },
+      XsSedimentDraftCard
+    )
+  );
+  ctx.slots.inject(
+    "shell.overlay",
+    () => ctx.slots.register(
+      { name: "shell.overlay", id: SEDIMENT_NOTICE_ID, inject: () => ({ ...deps }) },
+      XsSedimentNotice
+    )
+  );
+}
+function installSedimentStyle() {
+  if (typeof document === "undefined" || document.getElementById("xs-sediment-style") !== null) return;
+  const style = document.createElement("style");
+  style.id = "xs-sediment-style";
+  style.textContent = `
+.xs-sediment__entry{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0}
+.xs-sediment__field{display:flex;gap:6px;align-items:center;font-size:.85rem}
+.xs-sediment__entry select,.xs-sediment__entry button{font:inherit}
+.xs-sediment__card{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad);margin:10px 0}
+.xs-sediment__head{display:flex;gap:8px;align-items:baseline;justify-content:space-between}
+.xs-sediment__head h3{font-size:.98rem;font-weight:600;margin:0}
+.xs-sediment__badge{font-size:.72rem;padding:2px 8px;border:1px solid var(--xs-edge-card);border-radius:999px;color:var(--xs-text-secondary)}
+.xs-sediment__meta{font-weight:600;margin:8px 0 4px}
+.xs-sediment__target{margin:0 0 6px;color:var(--xs-text-secondary)}
+.xs-sediment__preview{max-height:8em;overflow:auto;margin:6px 0;padding:8px;background:var(--xs-surface-card);border-radius:var(--xs-radius-control);white-space:pre-wrap;font:inherit}
+.xs-sediment__path,.xs-sediment__note{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6;margin:4px 0}
+.xs-sediment__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 0}
+.xs-sediment__actions button{font:inherit;padding:6px 12px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-sediment__actions button:disabled{opacity:.5;cursor:not-allowed}
+.xs-btn--primary{background:var(--xs-constraint-human-gate-bg,var(--xs-accent));border-color:var(--xs-accent);color:var(--xs-constraint-human-gate-fg,var(--xs-accent-fg))}
+.xs-sediment__overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:16px;z-index:30}
+.xs-sediment__dialog{background:var(--xs-surface-card);color:var(--xs-text-body);border-radius:var(--xs-radius-card);max-width:var(--xs-size-modal-width,720px);max-height:90vh;overflow:auto;padding:var(--xs-space-card-pad);box-sizing:border-box}
+.xs-sediment__dialog h2{font-size:1.05rem;font-weight:600;margin:0 0 8px}
+.xs-sediment__part{border-top:1px solid var(--xs-edge-card);padding-top:8px;margin-top:8px}
+.xs-sediment__part h4{font-size:.85rem;margin:0 0 4px;color:var(--xs-text-secondary)}
+.xs-sediment__counts{font-weight:600;margin:4px 0}
+.xs-sediment__diff{list-style:none;margin:4px 0;padding:0;max-height:12em;overflow:auto}
+.xs-sediment__diff li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:6px;padding:2px 0;border-bottom:1px solid var(--xs-edge-card)}
+.xs-sediment__mark{font-family:var(--font-mono,monospace);color:var(--xs-text-code)}
+.xs-sediment__diff-text{white-space:pre-wrap}
+.xs-sediment__paths{list-style:none;margin:4px 0;padding:0;font-family:var(--font-mono,monospace);color:var(--xs-text-code);font-size:.85rem;word-break:break-all}
+.xs-sediment__stale{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:8px;margin:6px 0}
+.xs-sediment__error{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:8px;margin:6px 0}
+.xs-sediment__gate-reason{font-size:.8rem;color:var(--xs-text-secondary);margin:6px 0 0}
+.xs-sediment__notice{position:fixed;right:16px;bottom:16px;z-index:40;background:var(--xs-surface-card);color:var(--xs-text-body);border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:12px}
+@media(max-width:1100px){.xs-sediment__dialog{max-width:none;width:100%;height:100%}}
+`;
+  document.head.appendChild(style);
 }
 
 // src/client/style.ts
@@ -5731,6 +6251,8 @@ function apply(ctx) {
   const rikkeController = createRikkeUiController(rikke);
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
+  const sediment = createSedimentApi(rpc);
+  const sedimentController = createSedimentController(sediment);
   const injected = () => ({
     navigate,
     mainPanels,
@@ -5777,6 +6299,7 @@ function apply(ctx) {
   installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
   installDigao(rpc, { api: digao, navigate });
   installRikke(rpc, { api: rikke, navigate });
+  installSediment(rpc, { api: sediment, controller: sedimentController, navigate });
 }
 		// 包体中途执行过 module.exports = __toCommonJS(...)，上面的 exports 已过期；
 		// 必须重新读取 module.exports，逐个补拷会漏掉将来的新导出。

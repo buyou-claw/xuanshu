@@ -24,6 +24,17 @@ export const PANEL_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', '
  */
 export const EXTRA_REGISTRATIONS = [
   { after: 'cang', names: ['shell.overlay'], cells: ['shell.overlay\u0000xuanshu-cang-drawer'] },
+  {
+    // 票 15（沉淀闭环）：**会话内区块**，不新增 main key / 侧栏行（S10 §1 D5 / F1）。
+    // 入口在收尾条、草稿卡在 `turnTail`、通知落框架浮层 —— 三处都是加性 cell。
+    after: 'rikke',
+    names: ['conversation.composer.dock', 'conversation.chat.turnTail', 'shell.overlay'],
+    cells: [
+      'conversation.composer.dock\u0000xuanshu.sediment-entry',
+      'conversation.chat.turnTail\u0000xuanshu.sediment-draft',
+      'shell.overlay\u0000xuanshu.sediment-notice',
+    ],
+  },
 ]
 
 /** 每个 key 产生的一对注册名（main 面板 + 侧栏行）。 */
