@@ -26,6 +26,7 @@ import { createBaziUiController } from '../../packages/xuanshu-client/src/client
 import { installMingpan } from '../../packages/xuanshu-client/src/client/MingpanPanel.tsx'
 import { installOnboarding } from '../../packages/xuanshu-client/src/client/onboarding.tsx'
 import {
+  CONSULT_ID,
   MINGPAN_ID,
   MINGPAN_LABEL,
   MINGPAN_ORDER,
@@ -44,8 +45,12 @@ const ARTIFACT = join(REPO_ROOT, 'packages', 'xuanshu-client', 'lib', 'client.js
 const DSH_MAIN_KEYS = ['conversation', 'plugins', 'schedules']
 const DSH_SIDEBAR_IDS = ['plugins', 'schedules']
 
-/** 票 08 之后玄枢的全部 main 注册（顺序有意义，见下）。 */
-const EXPECTED_MAIN_KEYS = ['overview', 'pus', 'cang', ONBOARDING_ID, MINGPAN_ID]
+/**
+ * 票 08 之后玄枢的全部 main 注册（顺序有意义，见下）。
+ * **票 10 追加 `consult`**（问事门厅，仍在末尾）：只扩容期望数组，断言语义未变。
+ * 票 13 客户端半还会追加自己的 key —— 合并时的最终顺序由 Lead 在集成分支上收口。
+ */
+const EXPECTED_MAIN_KEYS = ['overview', 'pus', 'cang', ONBOARDING_ID, MINGPAN_ID, CONSULT_ID]
 
 /* ───────────────────────── 产物物化（运行时真实路径） ───────────────────────── */
 
@@ -271,12 +276,14 @@ describe('票 08 · 槽位不 fail-loud（加性注册）', () => {
     expect(() => plugin.apply(ctx)).not.toThrow()
     expect([...registry.cells.keys()].sort()).toEqual([
       'main\u0000cang',
+      'main\u0000consult',
       'main\u0000mingpan',
       'main\u0000onboarding',
       'main\u0000overview',
       'main\u0000pus',
       'shell.overlay\u0000xuanshu-cang-drawer',
       'sidebar.panellist\u0000cang',
+      'sidebar.panellist\u0000consult',
       'sidebar.panellist\u0000mingpan',
       'sidebar.panellist\u0000onboarding',
       'sidebar.panellist\u0000overview',

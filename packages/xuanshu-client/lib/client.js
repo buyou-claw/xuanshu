@@ -465,8 +465,909 @@ function CangIcon({ size = 20 }) {
   ] });
 }
 
-// src/client/MingpanPanel.tsx
+// src/client/consult-api.ts
+var CONSULT_ENDPOINTS = {
+  create: "consult.create",
+  send: "consult.send",
+  list: "consult.list",
+  read: "consult.read",
+  rename: "consult.rename",
+  defaults: "consult.defaults"
+};
+function createConsultApi(ctx) {
+  return {
+    create: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.create, payload, signal),
+    send: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.send, payload, signal),
+    list: (signal) => rpcCall(ctx, CONSULT_ENDPOINTS.list, {}, signal),
+    read: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.read, payload, signal),
+    rename: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.rename, payload, signal),
+    defaults: (signal) => rpcCall(ctx, CONSULT_ENDPOINTS.defaults, {}, signal)
+  };
+}
+
+// src/client/consult.tsx
 var import_react4 = require("react");
+
+// src/client/consult-model.ts
+var CONSULT_SESSION_PREFIX = "session-xs-consult-";
+function isConsultSession(sessionId) {
+  return typeof sessionId === "string" && sessionId.startsWith(CONSULT_SESSION_PREFIX);
+}
+function shortConsultId(sessionId) {
+  const rest = isConsultSession(sessionId) ? sessionId.slice(CONSULT_SESSION_PREFIX.length) : sessionId;
+  return `#consult-${rest.slice(0, 8)}`;
+}
+function initialSelection(optional) {
+  return optional.filter((source) => source.level === "base").map((source) => source.slug);
+}
+function groupOptional(optional) {
+  const groups = [];
+  for (const level of ["base", "optional"]) {
+    const items = optional.filter((source) => source.level === level);
+    if (items.length > 0) groups.push({ level, items });
+  }
+  return groups;
+}
+function toggleSelection(selected, slug) {
+  return selected.includes(slug) ? selected.filter((row) => row !== slug) : [...selected, slug];
+}
+function contextSummary(input) {
+  const parts = ["底座 + 底稿"];
+  if (input.selected.length > 0) parts.push(`${String(input.selected.length)} 个谱`);
+  if (input.mounts.length > 0) parts.push(`${String(input.mounts.length)} 项挂载`);
+  return parts.join(" + ");
+}
+var historyEmptyCopy = {
+  /** 一个可选谱都没有时的追加行（S6 §6 empty 行）。 */
+  noneOptionalPu: "谱都非必填；你可以先空手问一句，或先去建一个谱（去 S5）。",
+  /** 历史子页首次空态（S7 §2.3①）。 */
+  noRecords: "还没有问事记录",
+  noRecordsSub: "每次问事都会自动存成本地文件，随时能回来接着读。",
+  /** 数据形态说明行（S7 §2.1③）。 */
+  storageNote: "会话记录 = 本地文件（JSONL 事件日志），玄枢只读不改",
+  searchBoundary: "列表按本地时间倒序；搜索只搜本次问事的标题与首句，不搜全文",
+  /** 无源拦截引导的标题与两条去路（S6 §5 步骤 5a）。 */
+  nudgeTitle: "需要先给这一问一点依据",
+  nudgePathPu: "在勾选区勾一个谱",
+  nudgePathMount: "临时挂载一个工作区 / 工作流（去 S8）",
+  /** 末条：显式的泛问出口 —— 不是「没有谱就不能问」。 */
+  nudgePlainExit: "只带底座 + 底稿问一次"
+};
+function nudgeNeeded(input) {
+  return input.question.trim() !== "" && input.selected.length === 0 && input.mounts.length === 0;
+}
+function localDateKey(iso) {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "未知";
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${String(at.getFullYear())}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+}
+function localClock(iso) {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "--:--";
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+function groupHistory(items, now = /* @__PURE__ */ new Date()) {
+  const today = localDateKey(now.toISOString());
+  const groups = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    const key = localDateKey(item.createdAt);
+    const bucket = groups.get(key);
+    if (bucket === void 0) groups.set(key, [item]);
+    else bucket.push(item);
+  }
+  return [...groups.entries()].sort((left, right) => left[0] < right[0] ? 1 : left[0] > right[0] ? -1 : 0).map(([key, rows]) => ({
+    key,
+    label: key === today ? `今天 · ${String(rows.length)} 条` : `更早 · ${key.slice(5)} · ${String(rows.length)} 条`,
+    items: rows
+  }));
+}
+function formatHistoryMeta(item) {
+  const parts = [localClock(item.createdAt), `${String(item.turns)} 轮`, `谱 ${String(item.pus.length)}`];
+  if (item.mounts.length > 0) parts.push(`挂载 ${String(item.mounts.length)}`);
+  return parts.join(" · ");
+}
+function filterHistory(items, query, range = "all", now = /* @__PURE__ */ new Date()) {
+  const keyword = query.trim().toLowerCase();
+  const today = localDateKey(now.toISOString());
+  return items.filter((item) => {
+    if (keyword !== "" && !item.title.toLowerCase().includes(keyword)) return false;
+    if (range === "all") return true;
+    const isToday = localDateKey(item.createdAt) === today;
+    return range === "today" ? isToday : !isToday;
+  });
+}
+function roleLabel(role) {
+  return role === "user" ? "你" : "AI";
+}
+async function openConsultSession(options) {
+  const { sessionId, refresh, open } = options;
+  const tail = `会话已建好（${shortConsultId(sessionId)}）`;
+  if (open === void 0) {
+    return { ok: false, reason: "unavailable", message: `${tail}，但 DSH 会话面板不可用：请在侧栏工作区里打开它。` };
+  }
+  if (refresh !== void 0) {
+    try {
+      await refresh();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        reason: "refresh-failed",
+        message: `${tail}，但刷新 DSH 会话目录失败：${reason}。请重试，或在侧栏工作区里打开它。`
+      };
+    }
+  }
+  try {
+    open(sessionId);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      reason: "open-failed",
+      message: `${tail}，但 DSH 会话面板没能打开：${reason}。请重试，或在侧栏工作区里打开它。`
+    };
+  }
+  return { ok: true };
+}
+
+// src/client/consult-views.tsx
+var import_react3 = require("react");
+var import_jsx_runtime4 = require("react/jsx-runtime");
+function lockedExplain(source) {
+  return source.kind === "digao" ? "底稿与八字同级、默认必加载的基础谱；它是纯派生的，要改就改源头（谱 / 工作区 / 工作流）。" : "底座始终在场、不可关：它是每一场问事的前提。";
+}
+function XsConsultPicker({ required, optional, selected, onToggle, onManagePu, onOpenDetail }) {
+  const groups = groupOptional(optional);
+  const [explaining, setExplaining] = (0, import_react3.useState)(void 0);
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "pu-picker", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h3", { children: "① 本次要用的谱（勾选）" }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { className: "xs-consult__group-head", "data-xuanshu-group-head": "locked", children: "── 默认在场 · 不可关 ──" }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("ul", { className: "xs-consult__locked", "data-xuanshu-locked-list": String(required.length), children: required.map((source) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { className: "xs-consult__row xs-consult__row--locked", "data-xuanshu-locked": source.kind, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+        "button",
+        {
+          type: "button",
+          className: "xs-consult__locked-hit",
+          "data-xuanshu-action": "locked-why",
+          onClick: () => {
+            setExplaining(explaining === source.kind ? void 0 : source.kind);
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__lock", "aria-hidden": "true", children: "🔒" }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__row-name", children: source.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { "aria-hidden": "true", children: "·" }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__badge", "data-xuanshu-badge": "locked", children: "默认在场 · 不可关" }),
+            source.kind === "digao" ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__badge", "data-xuanshu-badge": "derived", children: "纯派生 · 不可手改" }) : null
+          ]
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+        "div",
+        {
+          className: "xs-consult__locked-card",
+          "data-xuanshu-locked-card": source.kind,
+          hidden: explaining !== source.kind,
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: lockedExplain(source) }),
+            source.present ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": `locked-absent-${source.kind}`, children: source.reason ?? "这一项现在不在场" }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "xs-consult__actions", children: source.kind === "digao" ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "locked-goto-pu", onClick: onManagePu, children: "去谱管理 ▸" }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__note", children: "三个源头：谱（在谱管理里改）/ 工作区 / 工作流；底稿本身在底稿面板看。" })
+            ] }) : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "locked-goto-mingpan", onClick: onOpenDetail, children: "去命盘详情 ▸" }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__note", children: "要改出生信息：走命盘详情里的「重新录制出生信息」。" })
+            ] }) })
+          ]
+        }
+      )
+    ] }, source.kind)) }),
+    groups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__group", "data-xuanshu-group": group.level, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { className: "xs-consult__group-head", children: group.level === "base" ? "── 基础输入级 base · 默认勾选" : "── 可选输入级 optional" }),
+      group.items.map((source) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { className: "xs-consult__row", "data-xuanshu-pu": source.slug, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            "data-xuanshu-field": `pu-${source.slug}`,
+            checked: selected.includes(source.slug),
+            onChange: () => {
+              onToggle(source.slug);
+            }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__row-name", children: source.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("small", { className: "xs-consult__note", children: source.summary })
+      ] }, source.slug))
+    ] }, group.level)),
+    optional.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "no-optional-pu", children: historyEmptyCopy.noneOptionalPu }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "xs-consult__actions", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "manage-pu", onClick: onManagePu, children: "管理谱 ▸ S5" }) })
+  ] });
+}
+function XsConsultMountPlaceholder({ mounts }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "mounts", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h3", { children: "③ 临时挂载（工作区 / 工作流）" }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "mount-boundary", children: "工作区 / 工作流不是谱：它们是**挂载**，谱是**勾选**。" }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__actions", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        "button",
+        {
+          type: "button",
+          "data-xuanshu-action": "open-mounts",
+          disabled: true,
+          title: "临时挂载账本还没装配（属票 12 · 临时挂载账本）",
+          children: "＋ 临时挂载"
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { className: "xs-consult__note", "data-xuanshu-note": "mount-placeholder", children: [
+        "属票 12 · 临时挂载账本还没接上；本票只留展示位（已挂 ",
+        mounts.length,
+        " 项）。"
+      ] })
+    ] })
+  ] });
+}
+function XsConsultAsk({
+  question,
+  selected,
+  mounts,
+  busy,
+  summary,
+  error,
+  nudge = false,
+  onQuestion,
+  onStart,
+  onPlainAsk,
+  onGotoHistory,
+  onClearNudge
+}) {
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "ask", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h3", { children: "② 说事（可先空手开一个会话）" }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__summary", "data-xuanshu-note": "context-summary", children: `本次上下文将含：${summary}` }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "ask-selection", children: `已勾 ${String(selected.length)} 个可选谱 · 已挂 ${String(mounts.length)} 项（底座与底稿恒在场，不在这里计）` }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { className: "xs-consult__field", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: "这一次想问什么" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        "textarea",
+        {
+          "data-xuanshu-field": "consult-question",
+          placeholder: "说这件事…（进会话后仍在 DSH 原生输入区里继续）",
+          value: question,
+          onChange: (event) => {
+            onQuestion(event.target.value);
+          }
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "xs-consult__actions", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      "button",
+      {
+        type: "button",
+        className: "xs-btn xs-btn--primary",
+        "data-xuanshu-action": "start-consult",
+        disabled: busy,
+        onClick: onStart,
+        children: busy ? "开问事中…" : "＋ 开一次问事"
+      }
+    ) }),
+    nudge ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__nudge", "data-xuanshu-nudge": "no-source", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__nudge-title", children: historyEmptyCopy.nudgeTitle }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("ol", { className: "xs-consult__paths", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("li", { children: historyEmptyCopy.nudgePathPu }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("li", { children: historyEmptyCopy.nudgePathMount })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "clear-nudge", onClick: onClearNudge, children: "回到勾选区" }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "plain-ask", onClick: onPlainAsk, children: historyEmptyCopy.nudgePlainExit }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "goto-history", onClick: onGotoHistory, children: "改从历史里接着问 ▸" })
+      ] })
+    ] }) : null,
+    error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__error", "data-xuanshu-error": "create", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: error }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "retry-create", onClick: onStart, children: "重试开会话" }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "goto-history", onClick: onGotoHistory, children: "改从历史里接着问 ▸" })
+      ] })
+    ] })
+  ] });
+}
+function XsConsultRecentCard({ session, onContinue, onHistory }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "recent", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h3", { children: "④ 最近一次会话" }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("p", { className: "xs-consult__recent-title", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__shortid", "data-xuanshu-short-id": shortConsultId(session.sessionId), children: shortConsultId(session.sessionId) }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: session.title }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("small", { className: "xs-consult__note", children: formatHistoryMeta(session) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__actions", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "continue-consult", onClick: onContinue, children: "继续这次问事 ▸" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "toggle-history", onClick: onHistory, children: "历史回看 ▸" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "lobby-boundary", children: "ⓘ 本面板是「书房门厅」：进会话后切到 DSH 会话面板，工具轨迹与审批卡在那里。" })
+  ] });
+}
+function XsConsultHistoryList({
+  items,
+  loading,
+  error,
+  query,
+  range,
+  now,
+  onQuery,
+  onRange,
+  onOpen,
+  onBack,
+  onStart,
+  onManagePu,
+  onRetry
+}) {
+  const filtered = filterHistory(items, query, range, now);
+  const groups = groupHistory(filtered, now);
+  const neverAsked = items.length === 0;
+  const noMatch = !neverAsked && filtered.length === 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "xs-consult__history", "data-xuanshu-view": "history-list", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__toolbar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "back-lobby", onClick: onBack, children: "← 回到当前会话" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        "input",
+        {
+          type: "search",
+          "data-xuanshu-field": "history-search",
+          placeholder: "搜索 会话标题 / 首句",
+          value: query,
+          onChange: (event) => {
+            onQuery(event.target.value);
+          }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+        "select",
+        {
+          "data-xuanshu-field": "history-range",
+          value: range,
+          onChange: (event) => {
+            onRange(event.target.value);
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("option", { value: "all", children: "全部" }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("option", { value: "today", children: "今天" }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("option", { value: "earlier", children: "更早" })
+          ]
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        "button",
+        {
+          type: "button",
+          "data-xuanshu-action": "export-selected",
+          disabled: true,
+          title: "契约未冻结导出 RPC（属后续票）",
+          children: "导出选中"
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "delete-selected", disabled: true, title: "契约未冻结删除 RPC（属后续票）", children: "删除" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "contract-scope", children: "契约未冻结导出与删除的 RPC（§2 只有六个方法）：这两个动作先置灰，不做假按钮。" }),
+    loading ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-state": "loading", children: "正在读本地会话清单…" }) : null,
+    error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__error", "data-xuanshu-error": "list", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: error }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", children: "数据在本地：~/.dsh/sessions/（只读展示）" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "xs-consult__actions", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "retry-list", onClick: onRetry, children: "重试" }) })
+    ] }),
+    !loading && error === void 0 && neverAsked ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__empty", "data-xuanshu-state": "empty", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__empty-why", children: historyEmptyCopy.noRecords }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", children: historyEmptyCopy.noRecordsSub }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", className: "xs-btn xs-btn--primary", "data-xuanshu-action": "start-consult", onClick: onStart, children: "＋ 开一次问事 ▸ S6" }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "manage-pu", onClick: onManagePu, children: "管理谱 ▸ S5" })
+      ] })
+    ] }) : null,
+    !loading && error === void 0 && noMatch ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__empty", "data-xuanshu-state": "no-match", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__empty-why", children: `没有匹配「${query}」的记录` }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "clear-filter", onClick: () => {
+          onQuery("");
+        }, children: "清空筛选" }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+          "button",
+          {
+            type: "button",
+            "data-xuanshu-action": "reset-filter",
+            onClick: () => {
+              onQuery("");
+              onRange("all");
+            },
+            children: "回到全部"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "start-consult", onClick: onStart, children: "＋ 开一次问事 ▸ S6" })
+      ] })
+    ] }) : null,
+    groups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__group", "data-xuanshu-history-group": group.key, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h4", { className: "xs-consult__group-head", children: group.label }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("ul", { className: "xs-consult__rows", children: group.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+        "button",
+        {
+          type: "button",
+          className: "xs-consult__row-hit",
+          "data-xuanshu-row": item.sessionId,
+          onClick: () => {
+            onOpen(item.sessionId);
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__shortid", children: shortConsultId(item.sessionId) }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__row-title", children: item.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("small", { className: "xs-consult__note", children: formatHistoryMeta(item) })
+          ]
+        }
+      ) }, item.sessionId)) })
+    ] }, group.key)),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "history-storage", children: historyEmptyCopy.storageNote }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "history-search-boundary", children: historyEmptyCopy.searchBoundary })
+  ] });
+}
+function XsConsultHistoryReader({
+  session,
+  messages,
+  loading = false,
+  error,
+  onBack,
+  onContinue,
+  onRetry
+}) {
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "xs-consult__reader", "data-xuanshu-view": "reader", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__toolbar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "back-list", onClick: onBack, children: "← 列表" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__shortid", children: shortConsultId(session.sessionId) }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__row-title", children: session.title }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("small", { className: "xs-consult__note", children: formatHistoryMeta(session) }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__badge", "data-xuanshu-badge": "readonly", children: "【只读 · 不可编辑】" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "continue-consult", onClick: onContinue, children: "继续这次问事 ▸" })
+    ] }),
+    loading ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-state": "loading", children: "正在读这条会话…" }) : null,
+    error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__error", "data-xuanshu-error": "read", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: error }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-consult__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "retry-read", onClick: onRetry, children: "重试" }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-xuanshu-action": "back-list", onClick: onBack, children: "返回列表" })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "xs-consult__messages", children: messages.map((message, index) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+      "article",
+      {
+        className: `xs-consult__message xs-consult__message--${message.role}`,
+        "data-xuanshu-message": message.role,
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "xs-consult__role", children: roleLabel(message.role) }),
+          message.source === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("small", { className: "xs-consult__note", "data-xuanshu-source": message.source, children: `注入 · ${message.source}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__text", children: message.text })
+        ]
+      },
+      `${String(index)}-${message.role}`
+    )) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "reader-readonly", children: "回看是只读的：不改会话记录、不进会话、不追加任何事件。" })
+  ] });
+}
+
+// src/client/panel.ts
+var PANEL_ID = "overview";
+var PANEL_ORDER = 20;
+var PANEL_LABEL = "总览";
+var ONBOARDING_ID = "onboarding";
+var MINGPAN_ID = "mingpan";
+var ONBOARDING_LABEL = "填八字";
+var MINGPAN_LABEL = "命盘";
+var ONBOARDING_ORDER = 80;
+var MINGPAN_ORDER = 90;
+var CONSULT_ID = "consult";
+var CONSULT_LABEL = "问事";
+var CONSULT_ORDER = 30;
+var PANEL_TITLE = "自我总览";
+var PANEL_HOME = "家";
+var PANEL_LOCAL_NOTE = "数据都在本地 ~/.dsh/xuanshu/";
+var CARD_TITLE = {
+  mingpan: "命盘 / 八字",
+  rike: "日课",
+  digao: "底稿",
+  quicklinks: "快捷入口"
+};
+var BADGE_READONLY = "只读 · 由出生信息与底座生成";
+var BADGE_DERIVED = "纯派生 · 不可手改";
+var QUICKLINK = {
+  consult: { title: "问事", subtitle: "书房" },
+  conversation: { title: "工作区", subtitle: "车间" },
+  workflow: { title: "工作流", subtitle: "流水线" }
+};
+var QUICKLINK_CONSULT_UNREADY = "底座未立 · 会先引导你填出生信息";
+var QUICKLINKS_BOUNDARY = "谱 / 藏 / 定时任务是管理入口，在侧栏「库」与设置里，不在本卡。";
+var EMPTY_COPY = {
+  mingpan: {
+    why: "底座还没立起来",
+    sub: "填一次出生信息，命盘就点亮了。（预计 1 分钟；之后不再重复录入）"
+  },
+  rike: {
+    why: "今天还没有生成日课。日课默认每天 07:30 生成。",
+    sub: "（底座未立时生成会失败）"
+  },
+  digaoUnready: {
+    why: "底座未立，还没有可提炼的来源。",
+    sub: "这里不会先有内容：提炼源是 0。"
+  },
+  digaoNeverRefreshed: {
+    why: "底稿还没生成过。",
+    sub: "刷新一次就会按三路来源拼出骨架。"
+  }
+};
+var ERROR_COPY = {
+  mingpan: "命盘快照读不出来（文件缺失或格式不符）。",
+  rike: "日课生成失败：底座未就绪 / 推运调用失败。",
+  digao: "底稿读不出来。"
+};
+var ACTION_COPY = {
+  startOnboarding: "开始填写出生信息 ->",
+  openDetail: "看详情 ->",
+  generate: "立即生成",
+  watchFull: "看完整日课 ->",
+  changeTime: "改时间 ->",
+  openDigao: "打开底稿 ->",
+  refresh: "刷新",
+  retry: "重试",
+  sourcePu: "谱",
+  sourceWorkspace: "工作区",
+  sourceWorkflow: "工作流",
+  adjustSource: "要改就改源头："
+};
+var DISABLED_REASON = {
+  consult: "问事面板还没装配（属票 10 · 问事闭环）",
+  workflow: "工作流面板还没装配（属票 16 · 工作流创建向导）",
+  pus: "谱面板还没装配（属票 09 · 谱管理）",
+  digao: "底稿面板还没装配（属票 13 · 底稿与日课）",
+  onboarding: "八字冷启动向导还没装配（属票 08）",
+  generate: "日课生成还没接上（属票 13 · 底稿与日课）",
+  refreshDigao: "底稿刷新还没接上（属票 13 · 底稿与日课）",
+  openDetail: "命盘详情还没装配（属票 08）",
+  retry: "取数重试还没接上（属票 08 / 13）"
+};
+
+// src/client/consult.tsx
+var import_jsx_runtime5 = require("react/jsx-runtime");
+function errorText(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function ConsultPanel({ api, navigate, openSession, refreshSessions, preloaded }) {
+  const [view, setView] = (0, import_react4.useState)(preloaded?.view ?? "lobby");
+  const [defaults, setDefaults] = (0, import_react4.useState)(
+    preloaded?.defaults === void 0 ? { kind: "loading" } : { kind: "ready", value: preloaded.defaults }
+  );
+  const [items, setItems] = (0, import_react4.useState)(
+    preloaded?.items === void 0 ? { kind: "loading" } : { kind: "ready", value: preloaded.items }
+  );
+  const [selected, setSelected] = (0, import_react4.useState)(
+    preloaded?.defaults === void 0 ? [] : initialSelection(preloaded.defaults.optional)
+  );
+  const [question, setQuestion] = (0, import_react4.useState)("");
+  const [busy, setBusy] = (0, import_react4.useState)(false);
+  const [createError, setCreateError] = (0, import_react4.useState)(void 0);
+  const [nudge, setNudge] = (0, import_react4.useState)(false);
+  const [openError, setOpenError] = (0, import_react4.useState)(void 0);
+  const [reader, setReader] = (0, import_react4.useState)({ kind: "idle" });
+  const [query, setQuery] = (0, import_react4.useState)("");
+  const [range, setRange] = (0, import_react4.useState)("all");
+  const touched = (0, import_react4.useRef)(preloaded?.defaults !== void 0);
+  const seeded = preloaded !== void 0;
+  const reloadDefaults = () => {
+    setDefaults({ kind: "loading" });
+    void api.defaults().then((value) => {
+      setDefaults({ kind: "ready", value });
+      if (!touched.current) {
+        setSelected(initialSelection(value.optional));
+        touched.current = true;
+      }
+    }).catch((error) => {
+      setDefaults({ kind: "error", message: errorText(error) });
+    });
+  };
+  const reloadItems = () => {
+    setItems({ kind: "loading" });
+    void api.list().then((answer) => {
+      setItems({ kind: "ready", value: answer.items });
+    }).catch((error) => {
+      setItems({ kind: "error", message: errorText(error) });
+    });
+  };
+  (0, import_react4.useEffect)(() => {
+    if (seeded) return;
+    reloadDefaults();
+    reloadItems();
+  }, [seeded]);
+  const mountsNow = [];
+  const summary = contextSummary({ selected, mounts: mountsNow });
+  const enterConversation = (sessionId) => {
+    setOpenError(void 0);
+    void openConsultSession({ sessionId, refresh: refreshSessions, open: openSession }).then((result) => {
+      if (!result.ok) setOpenError(result.message);
+    });
+  };
+  const start = (plain = false) => {
+    const text = question.trim();
+    if (!plain && nudgeNeeded({ question: text, selected, mounts: mountsNow })) {
+      setNudge(true);
+      return;
+    }
+    setNudge(false);
+    setBusy(true);
+    setCreateError(void 0);
+    void (async () => {
+      let session;
+      try {
+        const answer = await api.create(selected.length > 0 ? { pus: selected } : {});
+        session = answer.session;
+      } catch (error) {
+        setCreateError(`开问事失败：${errorText(error)}`);
+        setBusy(false);
+        return;
+      }
+      setItems((current) => ({
+        kind: "ready",
+        value: [session, ...(current.kind === "ready" ? current.value : []).filter((row) => row.sessionId !== session.sessionId)]
+      }));
+      if (text !== "") {
+        try {
+          await api.send({ sessionId: session.sessionId, text });
+        } catch (error) {
+          setCreateError(
+            `会话已建好（${shortConsultId(session.sessionId)}），但这一问没发出去：${errorText(error)}（可点「继续这次问事」进会话重发）`
+          );
+          setBusy(false);
+          return;
+        }
+      }
+      setQuestion("");
+      setBusy(false);
+      enterConversation(session.sessionId);
+    })();
+  };
+  const openRow = (sessionId) => {
+    const known = items.kind === "ready" ? items.value.find((row) => row.sessionId === sessionId) : void 0;
+    if (known === void 0) return;
+    setView("history");
+    setReader({ kind: "loading" });
+    void api.read({ sessionId }).then((answer) => {
+      setReader({ kind: "ready", session: answer.session, messages: answer.messages });
+    }).catch((error) => {
+      setReader({ kind: "error", session: known, message: errorText(error) });
+    });
+  };
+  const required = defaults.kind === "ready" ? defaults.value.required : [];
+  const optional = defaults.kind === "ready" ? defaults.value.optional : [];
+  const historyItems = items.kind === "ready" ? items.value : [];
+  const latest = historyItems[0];
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("main", { className: "xs-consult", "data-xuanshu-panel": CONSULT_ID, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("header", { className: "xs-consult__head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h1", { children: "问事" }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        "button",
+        {
+          type: "button",
+          "data-xuanshu-action": "toggle-history",
+          onClick: () => {
+            setView(view === "lobby" ? "history" : "lobby");
+            setReader({ kind: "idle" });
+          },
+          children: view === "lobby" ? "历史回看 ▸" : "← 回到当前会话"
+        }
+      )
+    ] }),
+    openError === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-consult__error", "data-xuanshu-error": "open-session", role: "alert", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { children: openError }) }),
+    view === "lobby" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "landing", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { "data-xuanshu-note": "lobby-what", children: "一次问事 = 勾选谱 → 说事 →（可选）多 AI 合参 → 结束沉淀" }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { "data-xuanshu-note": "lobby-parallel", children: "与工作区并列、不属于任何工作区；带 DSH 全套工具能力" }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "lobby-f1", children: "ⓘ 本面板是「书房门厅」：进会话后切到 DSH 会话面板，工具轨迹与审批卡在那里。" })
+      ] }),
+      defaults.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "xs-consult__note", "data-xuanshu-state": "pu-loading", children: "正在读谱清单…" }) : null,
+      defaults.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-consult__error", "data-xuanshu-error": "defaults", role: "alert", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { children: `谱清单读不到：${defaults.message}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-consult__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { type: "button", "data-xuanshu-action": "retry-defaults", onClick: reloadDefaults, children: "重试" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { type: "button", "data-xuanshu-action": "goto-manage-pu", onClick: () => {
+            navigate("pus");
+          }, children: "去谱管理 ▸ S5" })
+        ] })
+      ] }) : null,
+      defaults.kind === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        XsConsultPicker,
+        {
+          required,
+          optional,
+          selected,
+          onToggle: (slug) => {
+            touched.current = true;
+            setSelected((current) => toggleSelection(current, slug));
+          },
+          onManagePu: () => {
+            navigate("pus");
+          },
+          onOpenDetail: () => {
+            navigate("mingpan");
+          }
+        }
+      ) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(XsConsultMountPlaceholder, { mounts: mountsNow }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        XsConsultAsk,
+        {
+          question,
+          selected,
+          mounts: mountsNow,
+          busy,
+          nudge,
+          summary,
+          error: createError,
+          onQuestion: setQuestion,
+          onStart: () => {
+            start();
+          },
+          onPlainAsk: () => {
+            start(true);
+          },
+          onClearNudge: () => {
+            setNudge(false);
+          },
+          onGotoHistory: () => {
+            setView("history");
+          }
+        }
+      ),
+      latest === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        XsConsultRecentCard,
+        {
+          session: latest,
+          onContinue: () => {
+            enterConversation(latest.sessionId);
+          },
+          onHistory: () => {
+            setView("history");
+          }
+        }
+      )
+    ] }) : null,
+    view === "history" && reader.kind === "idle" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+      XsConsultHistoryList,
+      {
+        items: historyItems,
+        loading: items.kind === "loading",
+        error: items.kind === "error" ? items.message : void 0,
+        query,
+        range,
+        now: /* @__PURE__ */ new Date(),
+        onQuery: setQuery,
+        onRange: setRange,
+        onOpen: openRow,
+        onBack: () => {
+          setView("lobby");
+        },
+        onStart: () => {
+          setView("lobby");
+        },
+        onManagePu: () => {
+          navigate("pus");
+        },
+        onRetry: reloadItems
+      }
+    ) : null,
+    view === "history" && reader.kind !== "idle" ? reader.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+      XsConsultHistoryReader,
+      {
+        session: historyItems[0] ?? FALLBACK_SESSION,
+        messages: [],
+        loading: true,
+        onBack: () => {
+          setReader({ kind: "idle" });
+        },
+        onContinue: () => {
+        },
+        onRetry: () => {
+        }
+      }
+    ) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+      XsConsultHistoryReader,
+      {
+        session: reader.session,
+        messages: reader.kind === "ready" ? reader.messages : [],
+        error: reader.kind === "error" ? reader.message : void 0,
+        onBack: () => {
+          setReader({ kind: "idle" });
+        },
+        onContinue: () => {
+          enterConversation(reader.session.sessionId);
+        },
+        onRetry: () => {
+          openRow(reader.session.sessionId);
+        }
+      }
+    ) : null
+  ] });
+}
+var FALLBACK_SESSION = {
+  sessionId: "session-xs-consult-",
+  title: "正在读…",
+  createdAt: "",
+  pus: [],
+  mounts: [],
+  turns: 0
+};
+function ConsultIcon({ size = 20 }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("path", { d: "M4 6.5c0-1.1 1.3-2 3-2s3 .9 3 2v11c0-.9-1.3-1.6-3-1.6s-3 .7-3 1.6z" }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("path", { d: "M10 6.5c0-1.1 1.3-2 3-2s3 .9 3 2v11c0-.9-1.3-1.6-3-1.6s-3 .7-3 1.6z" }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("path", { d: "M16 7h3.5M16 11h3.5M16 15h3.5" })
+  ] });
+}
+function installConsult(ctx, deps) {
+  installConsultStyle();
+  ctx.slots.inject(
+    "main",
+    () => ctx.slots.register(
+      { name: "main", key: CONSULT_ID, inject: () => ({ ...deps }) },
+      ConsultPanel
+    )
+  );
+  ctx.slots.inject(
+    "sidebar.panellist",
+    () => ctx.slots.register(
+      { name: "sidebar.panellist", id: CONSULT_ID, order: CONSULT_ORDER, label: CONSULT_LABEL },
+      ConsultIcon
+    )
+  );
+}
+function installConsultStyle() {
+  if (typeof document === "undefined" || document.getElementById("xs-consult-style") !== null) return;
+  const style = document.createElement("style");
+  style.id = "xs-consult-style";
+  style.textContent = `
+.xs-consult{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
+.xs-consult h1,.xs-consult h3,.xs-consult h4{font-weight:600}.xs-consult h1{font-size:1.15rem}.xs-consult h3{font-size:.98rem;margin:16px 0 6px}.xs-consult h4{font-size:.85rem;margin:12px 0 4px;color:var(--xs-text-secondary)}
+.xs-consult__head,.xs-consult__toolbar,.xs-consult__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.xs-consult__head{justify-content:space-between}
+.xs-consult button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-consult button:disabled{opacity:.5;cursor:not-allowed}
+.xs-btn--primary{background:var(--xs-accent);border-color:var(--xs-accent);color:var(--xs-accent-fg)}
+.xs-consult input,.xs-consult select,.xs-consult textarea{font:inherit;color:inherit;background:var(--xs-surface-card);border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:7px;box-sizing:border-box;max-width:100%}
+.xs-consult textarea{display:block;width:100%;min-height:72px}
+.xs-consult__block{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad);margin:12px 0}
+.xs-consult__row{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--xs-edge-card);flex-wrap:wrap}
+.xs-consult__row--locked{background:var(--xs-surface-card);border-radius:var(--xs-radius-control);padding:8px}
+.xs-consult__locked-hit{display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;background:transparent;border:0;padding:6px 0;cursor:pointer}
+.xs-consult__lock{font-size:1rem}
+.xs-consult__locked-card{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:10px;margin:6px 0 2px 24px}
+.xs-consult__row-name{font-weight:600}
+.xs-consult__badge{font-size:.72rem;padding:2px 8px;border:1px solid var(--xs-edge-card);border-radius:999px;color:var(--xs-text-secondary)}
+.xs-consult__note{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6}
+.xs-consult__field{display:block;margin:10px 0}
+.xs-consult__field>span{display:block;margin-bottom:4px;font-size:.85rem}
+.xs-consult__locked{list-style:none;margin:0;padding:0}
+.xs-consult__rows{list-style:none;margin:0;padding:0}
+.xs-consult__row-hit{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left}
+.xs-consult__shortid{font-family:var(--font-mono,monospace);color:var(--xs-text-code);font-size:.85rem}
+.xs-consult__summary{line-height:1.7}
+.xs-consult__nudge,.xs-consult__error{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:12px;margin:10px 0}
+.xs-consult__nudge-title{font-weight:600;margin:0 0 6px}
+.xs-consult__paths{margin:0 0 8px;padding-left:20px;line-height:1.7}
+.xs-consult__empty{text-align:left;padding:16px 0}
+.xs-consult__empty-why{font-weight:600;margin:0 0 6px}
+.xs-consult__messages{margin-top:12px}
+.xs-consult__message{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:10px 0;border-bottom:1px solid var(--xs-edge-card)}
+.xs-consult__role{color:var(--xs-text-secondary);font-size:.85rem}
+.xs-consult__text{margin:0;line-height:1.7;white-space:pre-wrap}
+@media(max-width:1100px){.xs-consult{padding:16px}.xs-consult__row-hit{flex-direction:column;gap:2px}}
+`;
+  document.head.appendChild(style);
+}
+
+// src/client/MingpanPanel.tsx
+var import_react6 = require("react");
 
 // src/client/bazi-style.ts
 function installBaziStyle() {
@@ -535,87 +1436,10 @@ function installBaziStyle() {
   document.head.appendChild(style);
 }
 
-// src/client/panel.ts
-var PANEL_ID = "overview";
-var PANEL_ORDER = 20;
-var PANEL_LABEL = "总览";
-var ONBOARDING_ID = "onboarding";
-var MINGPAN_ID = "mingpan";
-var ONBOARDING_LABEL = "填八字";
-var MINGPAN_LABEL = "命盘";
-var ONBOARDING_ORDER = 80;
-var MINGPAN_ORDER = 90;
-var PANEL_TITLE = "自我总览";
-var PANEL_HOME = "家";
-var PANEL_LOCAL_NOTE = "数据都在本地 ~/.dsh/xuanshu/";
-var CARD_TITLE = {
-  mingpan: "命盘 / 八字",
-  rike: "日课",
-  digao: "底稿",
-  quicklinks: "快捷入口"
-};
-var BADGE_READONLY = "只读 · 由出生信息与底座生成";
-var BADGE_DERIVED = "纯派生 · 不可手改";
-var QUICKLINK = {
-  consult: { title: "问事", subtitle: "书房" },
-  conversation: { title: "工作区", subtitle: "车间" },
-  workflow: { title: "工作流", subtitle: "流水线" }
-};
-var QUICKLINK_CONSULT_UNREADY = "底座未立 · 会先引导你填出生信息";
-var QUICKLINKS_BOUNDARY = "谱 / 藏 / 定时任务是管理入口，在侧栏「库」与设置里，不在本卡。";
-var EMPTY_COPY = {
-  mingpan: {
-    why: "底座还没立起来",
-    sub: "填一次出生信息，命盘就点亮了。（预计 1 分钟；之后不再重复录入）"
-  },
-  rike: {
-    why: "今天还没有生成日课。日课默认每天 07:30 生成。",
-    sub: "（底座未立时生成会失败）"
-  },
-  digaoUnready: {
-    why: "底座未立，还没有可提炼的来源。",
-    sub: "这里不会先有内容：提炼源是 0。"
-  },
-  digaoNeverRefreshed: {
-    why: "底稿还没生成过。",
-    sub: "刷新一次就会按三路来源拼出骨架。"
-  }
-};
-var ERROR_COPY = {
-  mingpan: "命盘快照读不出来（文件缺失或格式不符）。",
-  rike: "日课生成失败：底座未就绪 / 推运调用失败。",
-  digao: "底稿读不出来。"
-};
-var ACTION_COPY = {
-  startOnboarding: "开始填写出生信息 ->",
-  openDetail: "看详情 ->",
-  generate: "立即生成",
-  watchFull: "看完整日课 ->",
-  changeTime: "改时间 ->",
-  openDigao: "打开底稿 ->",
-  refresh: "刷新",
-  retry: "重试",
-  sourcePu: "谱",
-  sourceWorkspace: "工作区",
-  sourceWorkflow: "工作流",
-  adjustSource: "要改就改源头："
-};
-var DISABLED_REASON = {
-  consult: "问事面板还没装配（属票 10 · 问事闭环）",
-  workflow: "工作流面板还没装配（属票 16 · 工作流创建向导）",
-  pus: "谱面板还没装配（属票 09 · 谱管理）",
-  digao: "底稿面板还没装配（属票 13 · 底稿与日课）",
-  onboarding: "八字冷启动向导还没装配（属票 08）",
-  generate: "日课生成还没接上（属票 13 · 底稿与日课）",
-  refreshDigao: "底稿刷新还没接上（属票 13 · 底稿与日课）",
-  openDetail: "命盘详情还没装配（属票 08）",
-  retry: "取数重试还没接上（属票 08 / 13）"
-};
-
 // src/client/glyphs.tsx
-var import_jsx_runtime4 = require("react/jsx-runtime");
+var import_jsx_runtime6 = require("react/jsx-runtime");
 function GlyphOverview({ className = "xs-glyph", size = 20 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
     "svg",
     {
       className,
@@ -631,15 +1455,15 @@ function GlyphOverview({ className = "xs-glyph", size = 20 }) {
       "aria-hidden": "true",
       focusable: "false",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M4 10.5 L12 4.5 L20 10.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M6 9 V19.5 H18 V9" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M10 19.5 V14 H14 V19.5" })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M4 10.5 L12 4.5 L20 10.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M6 9 V19.5 H18 V9" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M10 19.5 V14 H14 V19.5" })
       ]
     }
   );
 }
 function GlyphCardMingpan({ className = "xs-glyph", size = 20 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
     "svg",
     {
       className,
@@ -654,15 +1478,15 @@ function GlyphCardMingpan({ className = "xs-glyph", size = 20 }) {
       "aria-hidden": "true",
       focusable: "false",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("circle", { cx: "10", cy: "10", r: "6.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M10 3.5 V16.5 M3.5 10 H16.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("circle", { cx: "10", cy: "10", r: "0.6", fill: "currentColor", stroke: "none" })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "10", cy: "10", r: "6.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M10 3.5 V16.5 M3.5 10 H16.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "10", cy: "10", r: "0.6", fill: "currentColor", stroke: "none" })
       ]
     }
   );
 }
 function GlyphCardRike({ className = "xs-glyph", size = 20 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
     "svg",
     {
       className,
@@ -677,15 +1501,15 @@ function GlyphCardRike({ className = "xs-glyph", size = 20 }) {
       "aria-hidden": "true",
       focusable: "false",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("circle", { cx: "10", cy: "10", r: "6.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M10 6.5 V10 L13 12.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M3.5 13.5 H16.5" })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "10", cy: "10", r: "6.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M10 6.5 V10 L13 12.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M3.5 13.5 H16.5" })
       ]
     }
   );
 }
 function GlyphCardDigao({ className = "xs-glyph", size = 20 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
     "svg",
     {
       className,
@@ -700,17 +1524,17 @@ function GlyphCardDigao({ className = "xs-glyph", size = 20 }) {
       "aria-hidden": "true",
       focusable: "false",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("rect", { x: "4.5", y: "3.5", width: "11", height: "13", rx: "1.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M8 3.5 V2 H12 A1.5 1.5 0 0 1 13.5 3.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M7.5 8 H12.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M7.5 11 H12.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M7.5 14 H10.5" })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("rect", { x: "4.5", y: "3.5", width: "11", height: "13", rx: "1.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M8 3.5 V2 H12 A1.5 1.5 0 0 1 13.5 3.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M7.5 8 H12.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M7.5 11 H12.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M7.5 14 H10.5" })
       ]
     }
   );
 }
 function GlyphQuickConsult({ className = "xs-glyph", size = 24 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
     "svg",
     {
       className,
@@ -725,16 +1549,16 @@ function GlyphQuickConsult({ className = "xs-glyph", size = 24 }) {
       "aria-hidden": "true",
       focusable: "false",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M4.5 6 H19.5 V15 H12 L8.5 18.5 V15 H4.5 Z" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M12 9.3 c0 .2 0 .3-.06.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M9.8 9.2 A2.2 2.2 0 1 1 13 11.3 c-.6.5-.8.9-.8 1.5" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M12 14.3 v.01" })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M4.5 6 H19.5 V15 H12 L8.5 18.5 V15 H4.5 Z" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M12 9.3 c0 .2 0 .3-.06.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M9.8 9.2 A2.2 2.2 0 1 1 13 11.3 c-.6.5-.8.9-.8 1.5" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M12 14.3 v.01" })
       ]
     }
   );
 }
 function GlyphQuickWorkspace({ className = "xs-glyph", size = 24 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
     "svg",
     {
       className,
@@ -748,12 +1572,12 @@ function GlyphQuickWorkspace({ className = "xs-glyph", size = 24 }) {
       strokeLinejoin: "round",
       "aria-hidden": "true",
       focusable: "false",
-      children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M4 7.5 A1.5 1.5 0 0 1 5.5 6 H10 L12 8 H18.5 A1.5 1.5 0 0 1 20 9.5 V16.5 A1.5 1.5 0 0 1 18.5 18 H5.5 A1.5 1.5 0 0 1 4 16.5 Z" })
+      children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M4 7.5 A1.5 1.5 0 0 1 5.5 6 H10 L12 8 H18.5 A1.5 1.5 0 0 1 20 9.5 V16.5 A1.5 1.5 0 0 1 18.5 18 H5.5 A1.5 1.5 0 0 1 4 16.5 Z" })
     }
   );
 }
 function GlyphQuickWorkflow({ className = "xs-glyph", size = 24 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
     "svg",
     {
       className,
@@ -768,53 +1592,53 @@ function GlyphQuickWorkflow({ className = "xs-glyph", size = 24 }) {
       "aria-hidden": "true",
       focusable: "false",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("circle", { cx: "5", cy: "8", r: "1.8" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("circle", { cx: "19", cy: "8", r: "1.8" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("circle", { cx: "12", cy: "17", r: "1.8" }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M6.7 9 L10.6 15.6 M15.4 15.6 L17.3 9" })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "5", cy: "8", r: "1.8" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "19", cy: "8", r: "1.8" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "12", cy: "17", r: "1.8" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M6.7 9 L10.6 15.6 M15.4 15.6 L17.3 9" })
       ]
     }
   );
 }
 function IllusMingpanEmpty({ className = "xs-empty__illus" }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("svg", { className, viewBox: "0 0 120 80", fill: "none", "aria-hidden": "true", focusable: "false", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("circle", { cx: "60", cy: "29", r: "21", stroke: "currentColor", strokeWidth: 1.5 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("circle", { cx: "60", cy: "29", r: "12", stroke: "currentColor", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.3 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M60 17v24M48 29h24", stroke: "currentColor", strokeWidth: 1, opacity: 0.3 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M60 50v15", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M60 50l7 5-7 5z", stroke: "currentColor", strokeWidth: 1.2, strokeLinejoin: "round" }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M52 65h16", stroke: "currentColor", strokeWidth: 1, strokeLinecap: "round", strokeDasharray: "4 3", opacity: 0.4 })
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("svg", { className, viewBox: "0 0 120 80", fill: "none", "aria-hidden": "true", focusable: "false", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "60", cy: "29", r: "21", stroke: "currentColor", strokeWidth: 1.5 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "60", cy: "29", r: "12", stroke: "currentColor", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.3 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M60 17v24M48 29h24", stroke: "currentColor", strokeWidth: 1, opacity: 0.3 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M60 50v15", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M60 50l7 5-7 5z", stroke: "currentColor", strokeWidth: 1.2, strokeLinejoin: "round" }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M52 65h16", stroke: "currentColor", strokeWidth: 1, strokeLinecap: "round", strokeDasharray: "4 3", opacity: 0.4 })
   ] });
 }
 function IllusRikeEmpty({ className = "xs-empty__illus" }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("svg", { className, viewBox: "0 0 120 80", fill: "none", "aria-hidden": "true", focusable: "false", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("circle", { cx: "86", cy: "22", r: "8", stroke: "currentColor", strokeWidth: 1.2, opacity: 0.4 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M86 8v-3M86 36v3M72 22h-3M100 22h3", stroke: "currentColor", strokeWidth: 1, opacity: 0.25 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("rect", { x: "22", y: "28", width: "58", height: "36", rx: "4", stroke: "currentColor", strokeWidth: 1.5 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M30 40h42M30 47h42M30 54h28", stroke: "currentColor", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.3 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M22 34h58", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" })
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("svg", { className, viewBox: "0 0 120 80", fill: "none", "aria-hidden": "true", focusable: "false", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "86", cy: "22", r: "8", stroke: "currentColor", strokeWidth: 1.2, opacity: 0.4 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M86 8v-3M86 36v3M72 22h-3M100 22h3", stroke: "currentColor", strokeWidth: 1, opacity: 0.25 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("rect", { x: "22", y: "28", width: "58", height: "36", rx: "4", stroke: "currentColor", strokeWidth: 1.5 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M30 40h42M30 47h42M30 54h28", stroke: "currentColor", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.3 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M22 34h58", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" })
   ] });
 }
 function IllusDigaoEmpty({ className = "xs-empty__illus" }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("svg", { className, viewBox: "0 0 120 80", fill: "none", "aria-hidden": "true", focusable: "false", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("rect", { x: "30", y: "16", width: "60", height: "48", rx: "4", stroke: "currentColor", strokeWidth: 1.5 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M30 24h60", stroke: "currentColor", strokeWidth: 1, strokeLinecap: "round", opacity: 0.4 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M38 34h30M38 42h42M38 50h24", stroke: "currentColor", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.3 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M44 58h8M60 58h8M76 58h8", stroke: "currentColor", strokeWidth: 1.2, strokeLinecap: "round", opacity: 0.4 })
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("svg", { className, viewBox: "0 0 120 80", fill: "none", "aria-hidden": "true", focusable: "false", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("rect", { x: "30", y: "16", width: "60", height: "48", rx: "4", stroke: "currentColor", strokeWidth: 1.5 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M30 24h60", stroke: "currentColor", strokeWidth: 1, strokeLinecap: "round", opacity: 0.4 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M38 34h30M38 42h42M38 50h24", stroke: "currentColor", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.3 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M44 58h8M60 58h8M76 58h8", stroke: "currentColor", strokeWidth: 1.2, strokeLinecap: "round", opacity: 0.4 })
   ] });
 }
 function IllusCardsError({ className = "xs-empty__illus" }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("svg", { className, viewBox: "0 0 120 80", fill: "none", "aria-hidden": "true", focusable: "false", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("rect", { x: "28", y: "20", width: "56", height: "40", rx: "5", stroke: "currentColor", strokeWidth: 1.5 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M28 32h56", stroke: "currentColor", strokeWidth: 1, opacity: 0.4 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M36 44h16M36 51h24", stroke: "currentColor", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.3 }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M88 44l6 6M94 44l-6 6", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round" }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M16 24l8 8M24 24l-8 8", stroke: "currentColor", strokeWidth: 1.2, strokeLinecap: "round", opacity: 0.35 })
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("svg", { className, viewBox: "0 0 120 80", fill: "none", "aria-hidden": "true", focusable: "false", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("rect", { x: "28", y: "20", width: "56", height: "40", rx: "5", stroke: "currentColor", strokeWidth: 1.5 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M28 32h56", stroke: "currentColor", strokeWidth: 1, opacity: 0.4 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M36 44h16M36 51h24", stroke: "currentColor", strokeWidth: 1, strokeDasharray: "3 3", opacity: 0.3 }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M88 44l6 6M94 44l-6 6", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round" }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M16 24l8 8M24 24l-8 8", stroke: "currentColor", strokeWidth: 1.2, strokeLinecap: "round", opacity: 0.35 })
   ] });
 }
 
 // src/client/watch.ts
-var import_react3 = require("react");
+var import_react5 = require("react");
 function createMainPanelsWatch(slots) {
   const read = () => {
     const keys = /* @__PURE__ */ new Set();
@@ -853,7 +1677,7 @@ function createMainPanelsWatch(slots) {
   };
 }
 function useMainPanels(watch) {
-  return (0, import_react3.useSyncExternalStore)(watch.subscribe, watch.getSnapshot, watch.getSnapshot);
+  return (0, import_react5.useSyncExternalStore)(watch.subscribe, watch.getSnapshot, watch.getSnapshot);
 }
 var EMPTY_MAIN_PANELS = {
   subscribe: () => () => {
@@ -863,7 +1687,7 @@ var EMPTY_MAIN_PANELS = {
 var EMPTY_KEYS = [];
 
 // src/client/cards.tsx
-var import_jsx_runtime5 = require("react/jsx-runtime");
+var import_jsx_runtime7 = require("react/jsx-runtime");
 function useAvailable(mainPanels) {
   return useMainPanels(mainPanels);
 }
@@ -872,7 +1696,7 @@ function isAvailable(available, target) {
 }
 function ActionButton({ action, children, primary, disabled, reason, onClick }) {
   const className = primary ? "xs-btn xs-btn--primary" : "xs-btn";
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
     "button",
     {
       type: "button",
@@ -886,7 +1710,7 @@ function ActionButton({ action, children, primary, disabled, reason, onClick }) 
   );
 }
 function NavLink({ target, children, disabled, reason, onClick }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
     "button",
     {
       type: "button",
@@ -900,20 +1724,20 @@ function NavLink({ target, children, disabled, reason, onClick }) {
   );
 }
 function XsCardShell({ card, title, state, icon, badge, children }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "xs-card", "data-xuanshu-card": card, "data-xs-state": state, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("header", { className: "xs-card__head", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "xs-card", "data-xuanshu-card": card, "data-xs-state": state, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("header", { className: "xs-card__head", children: [
       icon,
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { className: "xs-card__title", children: title }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { className: "xs-card__title", children: title }),
       badge
     ] }),
     children
   ] });
 }
 function XsReadonlyBadge() {
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-badge xs-badge--readonly", "data-xuanshu-badge": "readonly", children: BADGE_READONLY });
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-badge xs-badge--readonly", "data-xuanshu-badge": "readonly", children: BADGE_READONLY });
 }
 function XsPureDerivedBadge() {
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-badge xs-badge--derived", "data-xuanshu-badge": "derived", children: BADGE_DERIVED });
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-badge xs-badge--derived", "data-xuanshu-badge": "derived", children: BADGE_DERIVED });
 }
 function XsEmptyBlock({
   illus,
@@ -922,19 +1746,19 @@ function XsEmptyBlock({
   actions,
   variant = "empty"
 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: variant === "error" ? "xs-card__error" : "xs-card__empty", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: variant === "error" ? "xs-card__error" : "xs-card__empty", children: [
     illus,
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "xs-empty__why", children: why }),
-    sub === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "xs-empty__sub", children: sub }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-card__actions", children: actions })
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-empty__why", children: why }),
+    sub === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-empty__sub", children: sub }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-card__actions", children: actions })
   ] });
 }
 function XsSkeleton({ lines, blocks = 0, badgePlaceholder = false }) {
-  const bars = Array.from({ length: lines }, (_, index) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-skeleton__bar xs-skeleton__shimmer" }, `line-${String(index)}`));
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-skeleton", "data-xuanshu-skeleton": "card", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-skeleton__bar xs-skeleton__bar--head xs-skeleton__shimmer" }),
-    badgePlaceholder ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-skeleton__bar xs-skeleton__bar--badge xs-skeleton__shimmer" }) : null,
-    blocks > 0 ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-skeleton__blocks", children: Array.from({ length: blocks }, (_, index) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-skeleton__block xs-skeleton__shimmer" }, `block-${String(index)}`)) }) : null,
+  const bars = Array.from({ length: lines }, (_, index) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-skeleton__bar xs-skeleton__shimmer" }, `line-${String(index)}`));
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-skeleton", "data-xuanshu-skeleton": "card", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-skeleton__bar xs-skeleton__bar--head xs-skeleton__shimmer" }),
+    badgePlaceholder ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-skeleton__bar xs-skeleton__bar--badge xs-skeleton__shimmer" }) : null,
+    blocks > 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-skeleton__blocks", children: Array.from({ length: blocks }, (_, index) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-skeleton__block xs-skeleton__shimmer" }, `block-${String(index)}`)) }) : null,
     bars
   ] });
 }
@@ -956,23 +1780,23 @@ function XsDestinyCard({
   const onboardingDisabled = onStartOnboarding === void 0;
   const detailDisabled = onOpenDetail === void 0;
   const retryDisabled = onRetry === void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
     XsCardShell,
     {
       card: "mingpan",
       title: CARD_TITLE.mingpan,
       state,
-      icon: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(GlyphCardMingpan, { className: "xs-card__icon" }),
-      badge: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(XsReadonlyBadge, {}),
+      icon: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(GlyphCardMingpan, { className: "xs-card__icon" }),
+      badge: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(XsReadonlyBadge, {}),
       children: [
-        state === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(XsSkeleton, { lines: 1, blocks: 4, badgePlaceholder: true }) : null,
-        state === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        state === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(XsSkeleton, { lines: 1, blocks: 4, badgePlaceholder: true }) : null,
+        state === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           XsEmptyBlock,
           {
-            illus: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IllusMingpanEmpty, {}),
+            illus: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(IllusMingpanEmpty, {}),
             why: EMPTY_COPY.mingpan.why,
             sub: EMPTY_COPY.mingpan.sub,
-            actions: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            actions: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               ActionButton,
               {
                 action: "start-onboarding",
@@ -985,13 +1809,13 @@ function XsDestinyCard({
             )
           }
         ) : null,
-        state === "error" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        state === "error" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           XsEmptyBlock,
           {
             variant: "error",
-            illus: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IllusCardsError, {}),
+            illus: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(IllusCardsError, {}),
             why: ERROR_COPY.mingpan,
-            actions: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            actions: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               ActionButton,
               {
                 action: "retry",
@@ -1003,22 +1827,22 @@ function XsDestinyCard({
             )
           }
         ) : null,
-        state === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-card__body", "data-xuanshu-ready": "mingpan", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-pillars", children: PILLAR_ORDER.map(({ key, label }) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-pillar", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-pillar__name", children: label }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-pillar__value", children: snapshot?.pillars[key] ?? "—" })
+        state === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-card__body", "data-xuanshu-ready": "mingpan", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-pillars", children: PILLAR_ORDER.map(({ key, label }) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-pillar", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-pillar__name", children: label }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-pillar__value", children: snapshot?.pillars[key] ?? "—" })
           ] }, key)) }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "xs-basis", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { "data-xuanshu-basis": "true-solar", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-basis", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { "data-xuanshu-basis": "true-solar", children: [
               "真太阳时 ",
               snapshot?.basis.trueSolar ?? "—"
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { "data-xuanshu-basis": "clock", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { "data-xuanshu-basis": "clock", children: [
               "钟表时 ",
               snapshot?.basis.clock ?? "—"
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-card__actions", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-card__actions", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
             ActionButton,
             {
               action: "open-detail",
@@ -1038,23 +1862,23 @@ function XsRikkeCard({ state = "empty", today, content, navigate, mainPanels, on
   const schedulesReady = isAvailable(available, "schedules");
   const generateDisabled = onGenerate === void 0;
   const retryDisabled = onRetry === void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
     XsCardShell,
     {
       card: "rike",
       title: `${CARD_TITLE.rike} · 今天 ${today}`,
       state,
-      icon: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(GlyphCardRike, { className: "xs-card__icon" }),
+      icon: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(GlyphCardRike, { className: "xs-card__icon" }),
       children: [
-        state === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(XsSkeleton, { lines: 3 }) : null,
-        state === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        state === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(XsSkeleton, { lines: 3 }) : null,
+        state === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           XsEmptyBlock,
           {
-            illus: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IllusRikeEmpty, {}),
+            illus: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(IllusRikeEmpty, {}),
             why: EMPTY_COPY.rike.why,
             sub: EMPTY_COPY.rike.sub,
-            actions: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            actions: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                 ActionButton,
                 {
                   action: "generate-rikke",
@@ -1064,7 +1888,7 @@ function XsRikkeCard({ state = "empty", today, content, navigate, mainPanels, on
                   children: ACTION_COPY.generate
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                 NavLink,
                 {
                   target: "schedules",
@@ -1077,13 +1901,13 @@ function XsRikkeCard({ state = "empty", today, content, navigate, mainPanels, on
             ] })
           }
         ) : null,
-        state === "error" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        state === "error" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           XsEmptyBlock,
           {
             variant: "error",
-            illus: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IllusCardsError, {}),
+            illus: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(IllusCardsError, {}),
             why: ERROR_COPY.rike,
-            actions: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            actions: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               ActionButton,
               {
                 action: "retry",
@@ -1095,23 +1919,23 @@ function XsRikkeCard({ state = "empty", today, content, navigate, mainPanels, on
             )
           }
         ) : null,
-        state === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-card__body", "data-xuanshu-ready": "rike", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-lines", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "xs-line", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-line__label", children: "宜" }),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-line__value", children: content?.yi ?? "—" })
+        state === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-card__body", "data-xuanshu-ready": "rike", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-lines", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-line", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__label", children: "宜" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__value", children: content?.yi ?? "—" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "xs-line", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-line__label", children: "忌" }),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-line__value", children: content?.ji ?? "—" })
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-line", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__label", children: "忌" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__value", children: content?.ji ?? "—" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "xs-line", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-line__label", children: "流日" }),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-line__value", children: content?.liuri ?? "—" })
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-line", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__label", children: "流日" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-line__value", children: content?.liuri ?? "—" })
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-card__actions", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-card__actions", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               NavLink,
               {
                 target: "schedules",
@@ -1121,7 +1945,7 @@ function XsRikkeCard({ state = "empty", today, content, navigate, mainPanels, on
                 children: ACTION_COPY.watchFull
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               ActionButton,
               {
                 action: "generate-rikke",
@@ -1152,25 +1976,25 @@ function XsDigaoCard({
   const refreshDisabled = onRefresh === void 0;
   const retryDisabled = onRetry === void 0;
   const copy = baseplateEstablished ? EMPTY_COPY.digaoNeverRefreshed : EMPTY_COPY.digaoUnready;
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
     XsCardShell,
     {
       card: "digao",
       title: CARD_TITLE.digao,
       state,
-      icon: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(GlyphCardDigao, { className: "xs-card__icon" }),
-      badge: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(XsPureDerivedBadge, {}),
+      icon: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(GlyphCardDigao, { className: "xs-card__icon" }),
+      badge: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(XsPureDerivedBadge, {}),
       children: [
-        state === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(XsSkeleton, { lines: 2, badgePlaceholder: true }) : null,
-        state === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        state === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(XsSkeleton, { lines: 2, badgePlaceholder: true }) : null,
+        state === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           XsEmptyBlock,
           {
-            illus: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IllusDigaoEmpty, {}),
+            illus: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(IllusDigaoEmpty, {}),
             why: copy.why,
             sub: copy.sub,
             actions: baseplateEstablished ? (
               // 空因 (b)：底座已立、从未刷新 —— 冷启动期的 (a) 不提供 [刷新]（S4 文案表逐条说明）。
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                 ActionButton,
                 {
                   action: "refresh-digao",
@@ -1180,7 +2004,7 @@ function XsDigaoCard({
                   children: "立即刷新"
                 }
               )
-            ) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            ) : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               ActionButton,
               {
                 action: "start-onboarding",
@@ -1193,14 +2017,14 @@ function XsDigaoCard({
             )
           }
         ) : null,
-        state === "error" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        state === "error" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           XsEmptyBlock,
           {
             variant: "error",
-            illus: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IllusCardsError, {}),
+            illus: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(IllusCardsError, {}),
             why: ERROR_COPY.digao,
-            actions: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            actions: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                 ActionButton,
                 {
                   action: "retry",
@@ -1210,7 +2034,7 @@ function XsDigaoCard({
                   children: ACTION_COPY.retry
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                 NavLink,
                 {
                   target: "digao",
@@ -1223,17 +2047,17 @@ function XsDigaoCard({
             ] })
           }
         ) : null,
-        state === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-card__body", "data-xuanshu-ready": "digao", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("p", { className: "xs-digao-summary", children: [
+        state === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-card__body", "data-xuanshu-ready": "digao", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-digao-summary", children: [
             "关于我：",
             summary?.segments ?? 0,
             " 段 · 来源 ",
             summary?.sources ?? 0,
             " 路"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-source-links", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: ACTION_COPY.adjustSource }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-source-links", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: ACTION_COPY.adjustSource }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               NavLink,
               {
                 target: "pus",
@@ -1243,7 +2067,7 @@ function XsDigaoCard({
                 children: ACTION_COPY.sourcePu
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               NavLink,
               {
                 target: "conversation",
@@ -1253,7 +2077,7 @@ function XsDigaoCard({
                 children: ACTION_COPY.sourceWorkspace
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               NavLink,
               {
                 target: "workflow",
@@ -1264,8 +2088,8 @@ function XsDigaoCard({
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "xs-card__actions", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-card__actions", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               NavLink,
               {
                 target: "digao",
@@ -1275,7 +2099,7 @@ function XsDigaoCard({
                 children: ACTION_COPY.openDigao
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
               ActionButton,
               {
                 action: "refresh-digao",
@@ -1300,7 +2124,7 @@ function XsQuickLinks({
   const cells = [
     {
       target: "consult",
-      icon: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(GlyphQuickConsult, { className: "xs-cell__icon" }),
+      icon: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(GlyphQuickConsult, { className: "xs-cell__icon" }),
       title: QUICKLINK.consult.title,
       // 底座未立时问事格副标题换提示句，但格**仍可用**（S4 §3④）。
       subtitle: baseplateReady ? QUICKLINK.consult.subtitle : QUICKLINK_CONSULT_UNREADY,
@@ -1309,7 +2133,7 @@ function XsQuickLinks({
     },
     {
       target: "conversation",
-      icon: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(GlyphQuickWorkspace, { className: "xs-cell__icon" }),
+      icon: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(GlyphQuickWorkspace, { className: "xs-cell__icon" }),
       title: QUICKLINK.conversation.title,
       subtitle: QUICKLINK.conversation.subtitle,
       disabled: !isAvailable(available, "conversation"),
@@ -1317,15 +2141,15 @@ function XsQuickLinks({
     },
     {
       target: "workflow",
-      icon: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(GlyphQuickWorkflow, { className: "xs-cell__icon" }),
+      icon: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(GlyphQuickWorkflow, { className: "xs-cell__icon" }),
       title: QUICKLINK.workflow.title,
       subtitle: QUICKLINK.workflow.subtitle,
       disabled: !isAvailable(available, "workflow"),
       reason: DISABLED_REASON.workflow
     }
   ];
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(XsCardShell, { card: "quicklinks", title: CARD_TITLE.quicklinks, state: "ready", icon: null, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "xs-quicklinks", "data-xuanshu-quicklinks": "3", children: cells.map((cell) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(XsCardShell, { card: "quicklinks", title: CARD_TITLE.quicklinks, state: "ready", icon: null, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-quicklinks", "data-xuanshu-quicklinks": "3", children: cells.map((cell) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
       "button",
       {
         type: "button",
@@ -1336,13 +2160,13 @@ function XsQuickLinks({
         onClick: cell.disabled ? void 0 : () => navigate(cell.target),
         children: [
           cell.icon,
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-cell__title", children: cell.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "xs-cell__subtitle", children: cell.subtitle })
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-cell__title", children: cell.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-cell__subtitle", children: cell.subtitle })
         ]
       },
       cell.target
     )) }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "xs-quicklinks__note", "data-xuanshu-note": "boundary", children: QUICKLINKS_BOUNDARY })
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-quicklinks__note", "data-xuanshu-note": "boundary", children: QUICKLINKS_BOUNDARY })
   ] });
 }
 
@@ -1579,7 +2403,7 @@ function formatOffsetMinutes(minutes) {
 }
 
 // src/client/MingpanPanel.tsx
-var import_jsx_runtime6 = require("react/jsx-runtime");
+var import_jsx_runtime8 = require("react/jsx-runtime");
 var RERECORD_CONFIRM = "将重新录制出生信息并重新出盘。当前底座谱（~/.dsh/xuanshu/pus/_base/bazi.md）会被新结果原子替换；底稿会在下次刷新时随之更新，需要你手动点刷新。";
 var PILLAR_COLUMNS = [
   { key: "year", label: "年柱" },
@@ -1595,18 +2419,18 @@ function MingpanPanel({
   preloadedSnapshot,
   preloadedError
 }) {
-  const revision = (0, import_react4.useSyncExternalStore)(controller.subscribe, controller.getRevision, controller.getRevision);
+  const revision = (0, import_react6.useSyncExternalStore)(controller.subscribe, controller.getRevision, controller.getRevision);
   const seeded = preloadedError !== void 0 || preloadedSnapshot !== void 0;
-  const [view, setView] = (0, import_react4.useState)(() => {
+  const [view, setView] = (0, import_react6.useState)(() => {
     if (preloadedError !== void 0) return { kind: "error", message: preloadedError };
     if (preloadedSnapshot !== void 0) {
       return preloadedSnapshot === null ? { kind: "empty" } : { kind: "ready", snapshot: preloadedSnapshot };
     }
     return { kind: "loading" };
   });
-  const [confirming, setConfirming] = (0, import_react4.useState)(false);
-  const sequence = (0, import_react4.useRef)(0);
-  (0, import_react4.useEffect)(() => {
+  const [confirming, setConfirming] = (0, import_react6.useState)(false);
+  const sequence = (0, import_react6.useRef)(0);
+  (0, import_react6.useEffect)(() => {
     if (seeded) return;
     const mine = ++sequence.current;
     setView((current) => current.kind === "ready" ? current : { kind: "loading" });
@@ -1619,41 +2443,41 @@ function MingpanPanel({
       setView({ kind: "error", message: ERROR_COPY.mingpan });
     });
   }, [api, revision, seeded]);
-  const backToOverview = /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "back-overview", onClick: () => {
+  const backToOverview = /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "back-overview", onClick: () => {
     navigate("overview");
   }, children: "<- 回总览" });
-  const startOnboarding = /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "start-onboarding", onClick: () => {
+  const startOnboarding = /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "start-onboarding", onClick: () => {
     navigate("onboarding");
   }, children: "开始填写出生信息 ->" });
   const goRerecord = (snapshot) => {
     controller.requestRerecord(draftFromSnapshot(snapshot));
     navigate("onboarding");
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("main", { className: "xs-mingpan", "data-xuanshu-panel": MINGPAN_ID, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("header", { className: "xs-mingpan__head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h1", { children: "命盘卡详情" }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(XsReadonlyBadge, {}),
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("main", { className: "xs-mingpan", "data-xuanshu-panel": MINGPAN_ID, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "xs-mingpan__head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h1", { children: "命盘卡详情" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(XsReadonlyBadge, {}),
       backToOverview
     ] }),
-    view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-mingpan__loading", "data-xuanshu-view": "loading", children: "正在读命盘快照…" }) : null,
-    view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "xs-mingpan__empty", "data-xuanshu-view": "empty", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { children: "还没有命盘：出生信息还没录" }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-mingpan__hint", children: "命盘是只读快照：填一次出生信息就点亮了。" }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-mingpan__actions", children: startOnboarding })
+    view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__loading", "data-xuanshu-view": "loading", children: "正在读命盘快照…" }) : null,
+    view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-mingpan__empty", "data-xuanshu-view": "empty", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: "还没有命盘：出生信息还没录" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__hint", children: "命盘是只读快照：填一次出生信息就点亮了。" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "xs-mingpan__actions", children: startOnboarding })
     ] }) : null,
-    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "xs-mingpan__error", "data-xuanshu-view": "error", role: "alert", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { children: view.message }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-mingpan__actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "retry", onClick: () => {
+    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-mingpan__error", "data-xuanshu-view": "error", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: view.message }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "retry", onClick: () => {
           controller.invalidate();
         }, children: "重试" }),
         startOnboarding,
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord", onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord", onClick: () => {
           setConfirming(true);
         }, children: "去重新录制出生信息" })
       ] })
     ] }) : null,
-    view.kind === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+    view.kind === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
       MingpanBody,
       {
         snapshot: view.snapshot,
@@ -1683,53 +2507,53 @@ function MingpanBody({
   const missingSections = SNAPSHOT_SECTIONS.filter((key) => snapshot[key] === void 0);
   const coords = Number.isFinite(birth.lon) && Number.isFinite(birth.lat) ? formatCoords(birth.lon, birth.lat) : "坐标缺（快照未存）";
   const timeAlg = birth.timeAlg === 1 || birth.timeAlg === 3 ? birth.timeAlg : 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_jsx_runtime6.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "① 出生信息" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-mingpan__summary", "data-xuanshu-summary": "birth", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { "data-xuanshu-summary": "clock", children: `${birth.date ?? "—"} ${birth.time ?? "—"} 当地时间` }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("p", { "data-xuanshu-summary": "place", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { children: placeLabel({ place: birth.place ?? "" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-mingpan__coord", children: ` ${coords}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { children: `　时区 ${birth.zone === void 0 || birth.zone === "" ? "—" : birth.zone}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { children: ` ${formatOffsetMinutes(basis.offsetMinutes)}` })
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "① 出生信息" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__summary", "data-xuanshu-summary": "birth", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { "data-xuanshu-summary": "clock", children: `${birth.date ?? "—"} ${birth.time ?? "—"} 当地时间` }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { "data-xuanshu-summary": "place", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: placeLabel({ place: birth.place ?? "" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-mingpan__coord", children: ` ${coords}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: `　时区 ${birth.zone === void 0 || birth.zone === "" ? "—" : birth.zone}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: ` ${formatOffsetMinutes(basis.offsetMinutes)}` })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "② 四柱" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-mingpan__pillars", "data-xuanshu-pillars": "4", children: PILLAR_COLUMNS.map((column) => /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-mingpan__pillar", "data-xuanshu-pillar": column.key, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-mingpan__pillar-name", children: column.label }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-mingpan__pillar-value", children: snapshot.pillars?.[column.key] ?? "—" })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "② 四柱" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "xs-mingpan__pillars", "data-xuanshu-pillars": "4", children: PILLAR_COLUMNS.map((column) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__pillar", "data-xuanshu-pillar": column.key, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-mingpan__pillar-name", children: column.label }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-mingpan__pillar-value", children: snapshot.pillars?.[column.key] ?? "—" })
     ] }, column.key)) }),
-    missingSections.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-mingpan__hint", "data-xuanshu-note": "partial", children: `部分要点读不出来（${missingSections.join(" / ")}）` }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-mingpan__hint", "data-xuanshu-note": "schema-scope", children: "本快照（xuanshu/bazi-snapshot@1）只存四柱与口径；藏干 / 十神 / 大运 / 其它要点不在其中（扩 schema 属后续票）。" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "③ 起盘口径（只读）" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-mingpan__basis", "data-xuanshu-basis": "readonly", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { "data-xuanshu-basis": "time-alg", children: `时间算法 = ${timeAlgLabel(timeAlg)}` }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("p", { "data-xuanshu-basis": "gender", children: [
+    missingSections.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__hint", "data-xuanshu-note": "partial", children: `部分要点读不出来（${missingSections.join(" / ")}）` }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__hint", "data-xuanshu-note": "schema-scope", children: "本快照（xuanshu/bazi-snapshot@1）只存四柱与口径；藏干 / 十神 / 大运 / 其它要点不在其中（扩 schema 属后续票）。" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "③ 起盘口径（只读）" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__basis", "data-xuanshu-basis": "readonly", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { "data-xuanshu-basis": "time-alg", children: `时间算法 = ${timeAlgLabel(timeAlg)}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { "data-xuanshu-basis": "gender", children: [
         "性别 = ",
         genderLabel("unknown")
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { "data-xuanshu-basis": "other-knobs", children: "其余旋钮 = 引擎缺省（本盘未改）" }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { "data-xuanshu-basis": "two-clocks", children: `真太阳时 ${basis.trueSolar ?? "—"}　钟表时 ${basis.clock ?? "—"}　夏令时 ${basis.dst === true ? "有" : "无"}` })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { "data-xuanshu-basis": "other-knobs", children: "其余旋钮 = 引擎缺省（本盘未改）" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { "data-xuanshu-basis": "two-clocks", children: `真太阳时 ${basis.trueSolar ?? "—"}　钟表时 ${basis.clock ?? "—"}　夏令时 ${basis.dst === true ? "有" : "无"}` })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "④ 快照来源" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-mingpan__origin", "data-xuanshu-origin": "snapshot", children: `horosa ${snapshot.horosa?.version ?? "—"} / 出盘于 ${snapshot.generatedAt ?? "—"}` }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "⑤ 重新录制（唯一写操作）" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-mingpan__hint", children: "改命盘只能重新录制出生信息；本屏不出盘、不写任何文件。" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-mingpan__actions", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord", onClick: onAskRerecord, children: "重新录制出生信息 ->" }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-mingpan__confirm", "data-xuanshu-confirm": "rerecord", hidden: !confirming, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { "data-xuanshu-confirm-text": "rerecord", children: RERECORD_CONFIRM }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-mingpan__actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord-cancel", onClick: onCancelRerecord, children: "取消" }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord-go", onClick: onConfirmRerecord, children: "去重新录制 ->" })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "④ 快照来源" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__origin", "data-xuanshu-origin": "snapshot", children: `horosa ${snapshot.horosa?.version ?? "—"} / 出盘于 ${snapshot.generatedAt ?? "—"}` }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "⑤ 重新录制（唯一写操作）" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-mingpan__hint", children: "改命盘只能重新录制出生信息；本屏不出盘、不写任何文件。" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "xs-mingpan__actions", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord", onClick: onAskRerecord, children: "重新录制出生信息 ->" }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__confirm", "data-xuanshu-confirm": "rerecord", hidden: !confirming, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { "data-xuanshu-confirm-text": "rerecord", children: RERECORD_CONFIRM }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-mingpan__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord-cancel", onClick: onCancelRerecord, children: "取消" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord-go", onClick: onConfirmRerecord, children: "去重新录制 ->" })
       ] })
     ] })
   ] });
 }
 function MingpanIcon({ size = 20 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "12", cy: "12", r: "8" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("circle", { cx: "12", cy: "12", r: "3" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M12 4v2M12 18v2M4 12h2M18 12h2" })
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "12", cy: "12", r: "8" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "12", cy: "12", r: "3" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M12 4v2M12 18v2M4 12h2M18 12h2" })
   ] });
 }
 function installMingpan(ctx, deps) {
@@ -1751,7 +2575,7 @@ function installMingpan(ctx, deps) {
 }
 
 // src/client/onboarding.tsx
-var import_react6 = require("react");
+var import_react8 = require("react");
 
 // src/client/cities.ts
 var CITY_DEBOUNCE_MS = 180;
@@ -1953,8 +2777,8 @@ function createCityQuery(options) {
 }
 
 // src/client/onboarding-steps.tsx
-var import_react5 = require("react");
-var import_jsx_runtime7 = require("react/jsx-runtime");
+var import_react7 = require("react");
+var import_jsx_runtime9 = require("react/jsx-runtime");
 var STEP_TITLES = [
   "出生日期与钟表时间",
   "出生地（必填：缺经纬度不能出盘）",
@@ -1964,12 +2788,12 @@ var STEP_TITLES = [
 ];
 var STEP_SHORT = ["时间", "出生地", "时区", "口径", "确认"];
 function XsStepBar({ step }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("nav", { className: "xs-wizard__steps", "aria-label": "向导步骤", "data-xuanshu-stepbar": String(step), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__progress", children: `第 ${String(step)} / 5 步` }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ol", { className: "xs-wizard__step-list", children: STEP_TITLES.map((title, index) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("nav", { className: "xs-wizard__steps", "aria-label": "向导步骤", "data-xuanshu-stepbar": String(step), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__progress", children: `第 ${String(step)} / 5 步` }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ol", { className: "xs-wizard__step-list", children: STEP_TITLES.map((title, index) => {
       const number = index + 1;
       const state = number < step ? "done" : number === step ? "current" : "todo";
-      return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+      return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
         "li",
         {
           className: `xs-wizard__step xs-wizard__step--${state}`,
@@ -1977,8 +2801,8 @@ function XsStepBar({ step }) {
           "data-xs-current": number === step ? "true" : void 0,
           "data-xs-state": state,
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__step-index", children: String(number) }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__step-name", children: STEP_SHORT[index] })
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__step-index", children: String(number) }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__step-name", children: STEP_SHORT[index] })
           ]
         },
         title
@@ -1987,32 +2811,32 @@ function XsStepBar({ step }) {
   ] });
 }
 function StepShell({ step, title, hint, children }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "xs-wizard__step-body", "data-xs-step": String(step), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("header", { className: "xs-wizard__step-head", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: `第 ${String(step)} / 5 步 · ${title}` }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-wizard__cols", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-wizard__form", children }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("aside", { className: "xs-wizard__aside", children: hint })
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("section", { className: "xs-wizard__step-body", "data-xs-step": String(step), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("header", { className: "xs-wizard__step-head", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h2", { children: `第 ${String(step)} / 5 步 · ${title}` }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__cols", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-wizard__form", children }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("aside", { className: "xs-wizard__aside", children: hint })
     ] })
   ] });
 }
 function XsTimeStep({ draft, onChange, onNudge, onNow }) {
-  const [grain, setGrain] = (0, import_react5.useState)("fourMinute");
+  const [grain, setGrain] = (0, import_react7.useState)("fourMinute");
   const empty = draft.date.trim() === "" || draft.time.trim() === "";
   const activeLabel = NUDGE_GRAINS.find((row) => row.id === grain)?.label ?? "四分钟";
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
     StepShell,
     {
       step: 1,
       title: STEP_TITLES[0],
-      hint: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 公历即可；农历换算由底座做。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 「当地时间」是固定小字：你填的是**钟表时间**，不是真太阳时。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 微调粒度里的「四分钟」= 1° 经度时差，与真太阳时的换算粒度同源。" })
+      hint: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 公历即可；农历换算由底座做。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 「当地时间」是固定小字：你填的是**钟表时间**，不是真太阳时。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 微调粒度里的「四分钟」= 1° 经度时差，与真太阳时的换算粒度同源。" })
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__field", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "① 日期" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "① 日期" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "input",
             {
               type: "date",
@@ -2024,9 +2848,9 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__field", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "② 时间" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "② 时间" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "input",
             {
               type: "time",
@@ -2037,15 +2861,15 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
               }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("small", { className: "xs-wizard__note", "data-xuanshu-note": "local-clock", children: "当地时间" })
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { className: "xs-wizard__note", "data-xuanshu-note": "local-clock", children: "当地时间" })
         ] }),
-        empty ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-hint": "need-birth", children: "先填出生信息：日期与时刻都填上才能往下走（时刻填当地时间即可）。" }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-wizard__nudge", "data-xuanshu-nudge": "grains", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "③ 内联微调" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-minus", onClick: () => {
+        empty ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-hint": "need-birth", children: "先填出生信息：日期与时刻都填上才能往下走（时刻填当地时间即可）。" }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__nudge", "data-xuanshu-nudge": "grains", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "③ 内联微调" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-minus", onClick: () => {
             onNudge(grain, -1);
           }, children: "[-]" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__nudge-grains", children: NUDGE_GRAINS.map((row) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__nudge-grains", children: NUDGE_GRAINS.map((row) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "button",
             {
               type: "button",
@@ -2059,40 +2883,40 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
             },
             row.id
           )) }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-plus", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-plus", onClick: () => {
             onNudge(grain, 1);
           }, children: "[+]" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-now", onClick: onNow, children: "此刻" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-apply", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-now", onClick: onNow, children: "此刻" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-apply", onClick: () => {
             onNudge(grain, 0);
           }, children: "确定" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("small", { className: "xs-wizard__note", children: `当前粒度：${activeLabel}` })
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { className: "xs-wizard__note", children: `当前粒度：${activeLabel}` })
         ] })
       ]
     }
   );
 }
 function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onManual }) {
-  const [lonText, setLonText] = (0, import_react5.useState)("");
-  const [latText, setLatText] = (0, import_react5.useState)("");
+  const [lonText, setLonText] = (0, import_react7.useState)("");
+  const [latText, setLatText] = (0, import_react7.useState)("");
   const missing = missingCoordinates(draft);
   const searching = query.trim() !== "";
   const noMatch = searching && results.items.length === 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
     StepShell,
     {
       step: 2,
       title: STEP_TITLES[1],
-      hint: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 断网可用：小库随程序自带，即时出结果。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 有输入后 180ms 才去问大库；大库不在（没装 / 被裁掉）就静默只用小库。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 选城市即带出经纬度；海外与小地名走手输坐标。" })
+      hint: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 断网可用：小库随程序自带，即时出结果。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 有输入后 180ms 才去问大库；大库不在（没装 / 被裁掉）就静默只用小库。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 选城市即带出经纬度；海外与小地名走手输坐标。" })
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "① 通道 A — 离线城市库（推荐）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__field", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "搜索城市 / 区县" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "① 通道 A — 离线城市库（推荐）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "搜索城市 / 区县" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "input",
             {
               type: "text",
@@ -2105,20 +2929,20 @@ function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onMan
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ul", { className: "xs-wizard__cities", "data-xuanshu-cities": String(results.items.length), children: results.items.map((city) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { "data-xuanshu-city": city.name, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__city-name", children: city.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__city-region", children: city.region }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "pick-city", onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "xs-wizard__cities", "data-xuanshu-cities": String(results.items.length), children: results.items.map((city) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-city": city.name, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__city-name", children: city.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__city-region", children: city.region }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "pick-city", onClick: () => {
             onPick(city);
           }, children: "选中" })
         ] }, city.name)) }),
-        searching && results.pending ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "city-pending", children: "正在搜更大的城市库（小库结果已经在上面了）…" }) : null,
-        noMatch ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-note": "city-no-match", children: "无匹配城市，可改用手输经纬度" }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "② 通道 B — 手输经纬度（GPS 十进制）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-wizard__manual", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "经度（-180 ~ 180）" }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        searching && results.pending ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "city-pending", children: "正在搜更大的城市库（小库结果已经在上面了）…" }) : null,
+        noMatch ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-note": "city-no-match", children: "无匹配城市，可改用手输经纬度" }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "② 通道 B — 手输经纬度（GPS 十进制）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__manual", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "经度（-180 ~ 180）" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
               "input",
               {
                 type: "text",
@@ -2132,9 +2956,9 @@ function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onMan
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "纬度（-90 ~ 90）" }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "纬度（-90 ~ 90）" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
               "input",
               {
                 type: "text",
@@ -2148,24 +2972,24 @@ function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onMan
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "apply-manual", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "apply-manual", onClick: () => {
             onManual(lonText, latText);
           }, children: "应用" })
         ] }),
-        manualHint === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-note": "manual-rejected", children: manualHint }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "③ 地名与坐标（同框可见）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-wizard__place", "data-xuanshu-place": placeLabel(draft), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__place-name", children: placeLabel(draft) }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__place-coord", "data-xuanshu-coord": "frame", children: missing.length === 0 && draft.lon !== void 0 && draft.lat !== void 0 ? formatCoords(draft.lon, draft.lat) : `还没定（缺 ${missing.join(" / ")}）` }),
-          draft.place.trim() === "" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("small", { className: "xs-wizard__note", children: [
+        manualHint === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-note": "manual-rejected", children: manualHint }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "③ 地名与坐标（同框可见）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { className: "xs-wizard__place", "data-xuanshu-place": placeLabel(draft), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__place-name", children: placeLabel(draft) }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__place-coord", "data-xuanshu-coord": "frame", children: missing.length === 0 && draft.lon !== void 0 && draft.lat !== void 0 ? formatCoords(draft.lon, draft.lat) : `还没定（缺 ${missing.join(" / ")}）` }),
+          draft.place.trim() === "" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("small", { className: "xs-wizard__note", children: [
             "手输无地名时据实显示「",
             UNNAMED_PLACE,
             "」，不留旧地名"
           ] }) : null
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__status", "data-xuanshu-note": "has-coords", children: `当前：${missing.length === 0 ? "有经纬度" : `无经纬度（缺 ${missing.join(" / ")}）`}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "④ 地图选点" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-map", children: "地图选点：玄枢 v1 不做（无联网依赖）" })
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__status", "data-xuanshu-note": "has-coords", children: `当前：${missing.length === 0 ? "有经纬度" : `无经纬度（缺 ${missing.join(" / ")}）`}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "④ 地图选点" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-map", children: "地图选点：玄枢 v1 不做（无联网依赖）" })
       ]
     }
   );
@@ -2173,34 +2997,34 @@ function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onMan
 function XsZoneStep({ draft, zone, pending, onZone, onAuto }) {
   const unresolved = zone !== void 0 && zone.zone === null;
   const autoZone = zone?.zone ?? "";
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
     StepShell,
     {
       step: 3,
       title: STEP_TITLES[2],
-      hint: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 依据：经纬度 + 出生日期（客户端不自己算时区，一律问底座）。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 自动结果只归并 IANA 名，不写死偏移；夏令时由底座判。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 中国大陆统一北京时间：只把 `Asia/Urumqi` 并入 `Asia/Shanghai`，偏移仍按 IANA 算。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 时区只负责「钟表时间 → UTC」的偏移归一；真太阳时换算在引擎里，录入层不换算。" })
+      hint: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 依据：经纬度 + 出生日期（客户端不自己算时区，一律问底座）。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 自动结果只归并 IANA 名，不写死偏移；夏令时由底座判。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 中国大陆统一北京时间：只把 `Asia/Urumqi` 并入 `Asia/Shanghai`，偏移仍按 IANA 算。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 时区只负责「钟表时间 → UTC」的偏移归一；真太阳时换算在引擎里，录入层不换算。" })
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "① 自动结果" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-wizard__zone-auto", "data-xuanshu-zone": "auto", children: [
-          pending === true ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-zone": "pending", children: "重算中…" }) : zone === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", children: "先在第 2 步定下出生地，这里会自动推导。" }) : autoZone === "" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-zone": "unresolved", children: "自动推导失败（坐标越界或该点查不到时区）：请在下面手动指定一个 UTC 偏移，否则不能出盘。" }) : /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-wizard__zone-value", "data-xuanshu-zone": "resolved", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: autoZone }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: formatOffsetMinutes(zone.offsetMinutes) })
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "① 自动结果" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__zone-auto", "data-xuanshu-zone": "auto", children: [
+          pending === true ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-zone": "pending", children: "重算中…" }) : zone === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", children: "先在第 2 步定下出生地，这里会自动推导。" }) : autoZone === "" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-zone": "unresolved", children: "自动推导失败（坐标越界或该点查不到时区）：请在下面手动指定一个 UTC 偏移，否则不能出盘。" }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { className: "xs-wizard__zone-value", "data-xuanshu-zone": "resolved", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("strong", { children: autoZone }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: formatOffsetMinutes(zone.offsetMinutes) })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", children: `夏令时：${zone.dst === true ? "有" : "无"}` })
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", children: `夏令时：${zone.dst === true ? "有" : "无"}` })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", children: "依据：经纬度 + 出生日期" })
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", children: "依据：经纬度 + 出生日期" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "② 手动覆盖（仅当自动不对）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-wizard__zone-manual", "data-xuanshu-zone": "manual", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "固定 UTC 偏移（28 档）" }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "② 手动覆盖（仅当自动不对）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__zone-manual", "data-xuanshu-zone": "manual", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "固定 UTC 偏移（28 档）" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
               "select",
               {
                 "data-xuanshu-field": "zone-override",
@@ -2209,13 +3033,13 @@ function XsZoneStep({ draft, zone, pending, onZone, onAuto }) {
                   onZone(event.target.value);
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: "", children: "跟随自动结果" }),
-                  ZONE_OFFSETS.map((row) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: row.value, children: `${row.value} ${row.label}` }, row.value))
+                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "", children: "跟随自动结果" }),
+                  ZONE_OFFSETS.map((row) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: row.value, children: `${row.value} ${row.label}` }, row.value))
                 ]
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "button",
             {
               type: "button",
@@ -2226,30 +3050,30 @@ function XsZoneStep({ draft, zone, pending, onZone, onAuto }) {
               children: "自动"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "zone-current", children: draft.zoneManual ? `当前：手动指定 ${draft.zone}` : `当前：自动结果 ${draft.zone === "" ? "（未定）" : draft.zone}` })
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "zone-current", children: draft.zoneManual ? `当前：手动指定 ${draft.zone}` : `当前：自动结果 ${draft.zone === "" ? "（未定）" : draft.zone}` })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "③ 时区只负责一步" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "zone-boundary", children: "时区只负责「钟表时间 → UTC」的偏移归一；真太阳时换算在引擎里，录入层不换算。" })
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "③ 时区只负责一步" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "zone-boundary", children: "时区只负责「钟表时间 → UTC」的偏移归一；真太阳时换算在引擎里，录入层不换算。" })
       ]
     }
   );
 }
 function XsTimeAlgStep({ draft, onChange }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
     StepShell,
     {
       step: 4,
       title: STEP_TITLES[3],
-      hint: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 默认档 = 0（真太阳时）：实现上**省略该键**，不写默认值。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 「春分定卯时（= 2）」上游自身未实现 —— 界面上不出现，也不置灰。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 换算发生在**引擎内部**：录入层不换算（界面上没有「真太阳时修正」开关，找不到是设计）。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 其余旋钮玄枢不给：长生 / 神煞 / 晚子时 / 命宫 / 月律分野 / 流派 / 显示区（索引 D4）。" })
+      hint: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 默认档 = 0（真太阳时）：实现上**省略该键**，不写默认值。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 「春分定卯时（= 2）」上游自身未实现 —— 界面上不出现，也不置灰。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 换算发生在**引擎内部**：录入层不换算（界面上没有「真太阳时修正」开关，找不到是设计）。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 其余旋钮玄枢不给：长生 / 神煞 / 晚子时 / 命宫 / 月律分野 / 流派 / 显示区（索引 D4）。" })
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "① 时间算法（timeAlg）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-wizard__radio-group", "data-xuanshu-field": "time-alg", children: TIME_ALG_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__radio", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "① 时间算法（timeAlg）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-wizard__radio-group", "data-xuanshu-field": "time-alg", children: TIME_ALG_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__radio", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "input",
             {
               type: "radio",
@@ -2262,12 +3086,12 @@ function XsTimeAlgStep({ draft, onChange }) {
               }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: option.label }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("small", { className: "xs-wizard__note", children: option.hint })
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: option.label }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { className: "xs-wizard__note", children: option.hint })
         ] }, option.value)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "② 性别（排大运用）" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-wizard__radio-group", "data-xuanshu-field": "gender", children: GENDER_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__radio", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "② 性别（排大运用）" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-wizard__radio-group", "data-xuanshu-field": "gender", children: GENDER_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__radio", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "input",
             {
               type: "radio",
@@ -2280,13 +3104,13 @@ function XsTimeAlgStep({ draft, onChange }) {
               }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: option.label }),
-          option.hint === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("small", { className: "xs-wizard__note", children: option.hint })
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: option.label }),
+          option.hint === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("small", { className: "xs-wizard__note", children: option.hint })
         ] }, option.value)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "③ 其余旋钮" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-other-knobs", children: "一律由引擎缺省决定，界面不出现：长生 / 神煞查法 / 晚子时四态 / 命宫起法 / 月律分野 / 南半球月令 / 起运精度 / 藏干版本 / 生肖归属 / 断命流派 / 显示区。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "④ 换算发生在哪一层" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-conversion-here", children: "引擎内部；录入层不换算。" })
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "③ 其余旋钮" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-other-knobs", children: "一律由引擎缺省决定，界面不出现：长生 / 神煞查法 / 晚子时四态 / 命宫起法 / 月律分野 / 南半球月令 / 起运精度 / 藏干版本 / 生肖归属 / 断命流派 / 显示区。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "④ 换算发生在哪一层" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", "data-xuanshu-note": "no-conversion-here", children: "引擎内部；录入层不换算。" })
       ]
     }
   );
@@ -2310,59 +3134,59 @@ function XsConfirmStep({
   const coordinates = missingCoordinates(draft);
   const others = blockers.filter((blocker) => blocker !== "coordinates");
   const ready = blockers.length === 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
     StepShell,
     {
       step: 5,
       title: STEP_TITLES[4],
-      hint: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 五项逐行核对，每行 `[改]` 回跳对应步。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ 「不确定项」把「只知道大概」显式化，写进 `clarification_notes`（不是拒绝出盘）。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "▸ `[x] 以上信息我已核对` 是出盘的解锁条件；底座回问就地展开，回答后重出盘。" })
+      hint: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 五项逐行核对，每行 `[改]` 回跳对应步。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ 「不确定项」把「只知道大概」显式化，写进 `clarification_notes`（不是拒绝出盘）。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { children: "▸ `[x] 以上信息我已核对` 是出盘的解锁条件；底座回问就地展开，回答后重出盘。" })
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("fieldset", { className: "xs-wizard__confirm", "data-xuanshu-busy": busy ? "cast" : void 0, disabled: busy, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("legend", { children: "① 确认你的出生信息" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("ul", { className: "xs-wizard__confirm-list", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { "data-xuanshu-confirm": "time", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__confirm-label", children: "出生时间" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__confirm-value", children: `${draft.date === "" ? "（未填）" : draft.date} ${draft.time === "" ? "（未填）" : draft.time} 当地时间` }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-1", onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("fieldset", { className: "xs-wizard__confirm", "data-xuanshu-busy": busy ? "cast" : void 0, disabled: busy, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("legend", { children: "① 确认你的出生信息" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("ul", { className: "xs-wizard__confirm-list", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-confirm": "time", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-label", children: "出生时间" }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-value", children: `${draft.date === "" ? "（未填）" : draft.date} ${draft.time === "" ? "（未填）" : draft.time} 当地时间` }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-1", onClick: () => {
                 onEdit(1);
               }, children: "改" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { "data-xuanshu-confirm": "place", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__confirm-label", children: "出生地" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__confirm-value", children: `${placeLabel(draft)} ${coordinates.length === 0 && draft.lon !== void 0 && draft.lat !== void 0 ? formatCoords(draft.lon, draft.lat) : `（缺 ${coordinates.join(" / ")}）`}` }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-2", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-confirm": "place", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-label", children: "出生地" }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-value", children: `${placeLabel(draft)} ${coordinates.length === 0 && draft.lon !== void 0 && draft.lat !== void 0 ? formatCoords(draft.lon, draft.lat) : `（缺 ${coordinates.join(" / ")}）`}` }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-2", onClick: () => {
                 onEdit(2);
               }, children: "改" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { "data-xuanshu-confirm": "zone", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__confirm-label", children: "时区" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__confirm-value", children: `${draft.zone === "" ? "（未定）" : draft.zone}${draft.zoneManual ? "（手动指定）" : "（自动）"}${zone?.dst === true && !draft.zoneManual ? "，已判 DST" : ""}` }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-3", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-confirm": "zone", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-label", children: "时区" }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-value", children: `${draft.zone === "" ? "（未定）" : draft.zone}${draft.zoneManual ? "（手动指定）" : "（自动）"}${zone?.dst === true && !draft.zoneManual ? "，已判 DST" : ""}` }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-3", onClick: () => {
                 onEdit(3);
               }, children: "改" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { "data-xuanshu-confirm": "timeAlg", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__confirm-label", children: "时间算法" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__confirm-value", children: `${timeAlgLabel(draft.timeAlg)}${draft.timeAlg === 0 ? "（缺省省略 = 0）" : ` = ${String(draft.timeAlg)}`}` }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-4", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-confirm": "timeAlg", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-label", children: "时间算法" }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-value", children: `${timeAlgLabel(draft.timeAlg)}${draft.timeAlg === 0 ? "（缺省省略 = 0）" : ` = ${String(draft.timeAlg)}`}` }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-4", onClick: () => {
                 onEdit(4);
               }, children: "改" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { "data-xuanshu-confirm": "gender", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__confirm-label", children: "性别" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__confirm-value", children: genderLabel(draft.gender) }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-4", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { "data-xuanshu-confirm": "gender", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-label", children: "性别" }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__confirm-value", children: genderLabel(draft.gender) }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-step-4", onClick: () => {
                 onEdit(4);
               }, children: "改" })
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "② 不确定项 → clarification_notes" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-wizard__notes", children: NOTE_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__check", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "② 不确定项 → clarification_notes" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "xs-wizard__notes", children: NOTE_OPTIONS.map((option) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__check", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
               "input",
               {
                 type: "checkbox",
@@ -2373,11 +3197,11 @@ function XsConfirmStep({
                 }
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: option.label })
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: option.label })
           ] }, option.id)) }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "③ 澄清闸" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__check", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "③ 澄清闸" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__check", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
               "input",
               {
                 type: "checkbox",
@@ -2386,16 +3210,16 @@ function XsConfirmStep({
                 onChange: onToggleVerified
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "以上信息我已核对" })
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "以上信息我已核对" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__note", children: "勾选后才解锁出盘；底座若回问，会在这里就地展开（拦截期间不落谱、不点亮命盘卡）。" }),
-          gate === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-wizard__gate", "data-xuanshu-gate": "prompt", role: "alert", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { children: "底座需要你确认" }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__gate-prompt", "data-xuanshu-gate": "prompt-text", children: gate.promptToUser }),
-            gate.questions.map((question) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__gate-question", "data-xuanshu-gate": "question", children: question }, question)),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "xs-wizard__field", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: "你的回答（随 clarification_notes 一起给底座）" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__note", children: "勾选后才解锁出盘；底座若回问，会在这里就地展开（拦截期间不落谱、不点亮命盘卡）。" }),
+          gate === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__gate", "data-xuanshu-gate": "prompt", role: "alert", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { children: "底座需要你确认" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__gate-prompt", "data-xuanshu-gate": "prompt-text", children: gate.promptToUser }),
+            gate.questions.map((question) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__gate-question", "data-xuanshu-gate": "question", children: question }, question)),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "xs-wizard__field", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "你的回答（随 clarification_notes 一起给底座）" }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                 "textarea",
                 {
                   "data-xuanshu-field": "gate-answer",
@@ -2406,8 +3230,8 @@ function XsConfirmStep({
                 }
               )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-wizard__actions", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__actions", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                 "button",
                 {
                   type: "button",
@@ -2417,14 +3241,14 @@ function XsConfirmStep({
                   children: "回答并重新出盘"
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "edit-birth", onClick: () => {
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "edit-birth", onClick: () => {
                 onEdit(1);
               }, children: "改出生信息" })
             ] })
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-wizard__cast", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__cast", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "button",
             {
               type: "button",
@@ -2435,17 +3259,17 @@ function XsConfirmStep({
               children: busy ? "出盘中…" : "确认并出盘"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "xs-wizard__status", "data-xuanshu-status": ready ? "ready" : "blocked", children: ready ? "可出盘" : coordinates.length > 0 ? "缺经纬度（禁用）" : "信息未齐（禁用）" })
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-wizard__status", "data-xuanshu-status": ready ? "ready" : "blocked", children: ready ? "可出盘" : coordinates.length > 0 ? "缺经纬度（禁用）" : "信息未齐（禁用）" })
         ] }),
-        ready ? null : /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-wizard__reason", "data-xuanshu-reason": "cast-disabled", children: [
-          coordinates.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__reason-main", children: CAST_MISSING_REASON }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-wizard__actions", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "goto-place", onClick: onGotoPlace, children: "去填出生地" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "goto-manual", onClick: onGotoManual, children: "改用手输经纬度" })
+        ready ? null : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__reason", "data-xuanshu-reason": "cast-disabled", children: [
+          coordinates.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__reason-main", children: CAST_MISSING_REASON }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "xs-wizard__actions", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "goto-place", onClick: onGotoPlace, children: "去填出生地" }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { type: "button", "data-xuanshu-action": "goto-manual", onClick: onGotoManual, children: "改用手输经纬度" })
             ] })
           ] }),
-          others.map((blocker) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-wizard__reason-row", "data-xuanshu-reason-row": blocker, children: CAST_BLOCK_REASON[blocker] }, blocker))
+          others.map((blocker) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "xs-wizard__reason-row", "data-xuanshu-reason-row": blocker, children: CAST_BLOCK_REASON[blocker] }, blocker))
         ] })
       ]
     }
@@ -2453,41 +3277,41 @@ function XsConfirmStep({
 }
 
 // src/client/onboarding.tsx
-var import_jsx_runtime8 = require("react/jsx-runtime");
+var import_jsx_runtime10 = require("react/jsx-runtime");
 var MANUAL_REJECTED_HINT = "经纬度不合法，已忽略（经度在前，例如 118.78 / 32.06）";
 function useCityQuery(api, query) {
-  const controller = (0, import_react6.useMemo)(
+  const controller = (0, import_react8.useMemo)(
     () => createCityQuery({
       // 失败**不在这里吞**：让 `bazi.cities` 的拒绝走到调度器里，由它静默回落小库。
       loadFull: (keyword, signal) => api.cities({ query: keyword, limit: CITY_RESULT_LIMIT }, signal).then((result) => result.items)
     }),
     [api]
   );
-  (0, import_react6.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     controller.setQuery(query);
   }, [controller, query]);
-  (0, import_react6.useEffect)(() => () => {
+  (0, import_react8.useEffect)(() => () => {
     controller.dispose();
   }, [controller]);
-  return (0, import_react6.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  return (0, import_react8.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 }
 function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
-  const [draft, setDraft] = (0, import_react6.useState)(() => preloadedDraft ?? defaultDraft());
-  const [step, setStep] = (0, import_react6.useState)(1);
-  const [query, setQuery] = (0, import_react6.useState)("");
-  const [zone, setZone] = (0, import_react6.useState)(void 0);
-  const [zonePending, setZonePending] = (0, import_react6.useState)(false);
-  const [manualHint, setManualHint] = (0, import_react6.useState)(void 0);
-  const [gateAnswer, setGateAnswer] = (0, import_react6.useState)("");
-  const [result, setResult] = (0, import_react6.useState)(void 0);
-  const [busy, setBusy] = (0, import_react6.useState)(false);
-  const castSequence = (0, import_react6.useRef)(0);
-  const zoneSequence = (0, import_react6.useRef)(0);
+  const [draft, setDraft] = (0, import_react8.useState)(() => preloadedDraft ?? defaultDraft());
+  const [step, setStep] = (0, import_react8.useState)(1);
+  const [query, setQuery] = (0, import_react8.useState)("");
+  const [zone, setZone] = (0, import_react8.useState)(void 0);
+  const [zonePending, setZonePending] = (0, import_react8.useState)(false);
+  const [manualHint, setManualHint] = (0, import_react8.useState)(void 0);
+  const [gateAnswer, setGateAnswer] = (0, import_react8.useState)("");
+  const [result, setResult] = (0, import_react8.useState)(void 0);
+  const [busy, setBusy] = (0, import_react8.useState)(false);
+  const castSequence = (0, import_react8.useRef)(0);
+  const zoneSequence = (0, import_react8.useRef)(0);
   const cityResults = useCityQuery(api, query);
   const patch = (next) => {
     setDraft((current) => ({ ...current, ...next }));
   };
-  (0, import_react6.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     const prefill = controller.consumePrefill();
     if (prefill === void 0) return;
     setDraft(prefill);
@@ -2496,7 +3320,7 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
     setGateAnswer("");
   }, [controller]);
   const { lon, lat, date, time, zoneManual } = draft;
-  (0, import_react6.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     if (zoneManual) return;
     if (!Number.isFinite(lon) || !Number.isFinite(lat) || date.trim() === "") {
       setZone(void 0);
@@ -2571,14 +3395,14 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
     });
   };
   const gate = result?.phase === "gate" ? result.gate : void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("main", { className: "xs-wizard", "data-xuanshu-panel": ONBOARDING_ID, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "xs-wizard__head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h1", { children: "八字冷启动向导" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-wizard__note", children: "填一次出生信息 → 出盘 → 落底座谱 → 点亮命盘卡，之后不再重复录入。" })
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("main", { className: "xs-wizard", "data-xuanshu-panel": ONBOARDING_ID, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "xs-wizard__head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h1", { children: "八字冷启动向导" }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-wizard__note", children: "填一次出生信息 → 出盘 → 落底座谱 → 点亮命盘卡，之后不再重复录入。" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(XsStepBar, { step }),
-    step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(XsTimeStep, { draft, onChange: patch, onNudge: nudge, onNow: useNow }) : null,
-    step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(XsStepBar, { step }),
+    step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(XsTimeStep, { draft, onChange: patch, onNudge: nudge, onNow: useNow }) : null,
+    step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
       XsPlaceStep,
       {
         draft,
@@ -2590,7 +3414,7 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
         onManual: applyManual
       }
     ) : null,
-    step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+    step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
       XsZoneStep,
       {
         draft,
@@ -2604,8 +3428,8 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
         }
       }
     ) : null,
-    step === 4 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(XsTimeAlgStep, { draft, onChange: patch }) : null,
-    step === 5 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+    step === 4 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(XsTimeAlgStep, { draft, onChange: patch }) : null,
+    step === 5 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
       XsConfirmStep,
       {
         draft,
@@ -2635,42 +3459,42 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft }) {
         }
       }
     ) : null,
-    result === void 0 || result.phase === "gate" ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+    result === void 0 || result.phase === "gate" ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
       "div",
       {
         className: "xs-wizard__cast-result",
         "data-xuanshu-cast": result.phase,
         role: result.phase === "ok" ? "status" : "alert",
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: result.message }),
-          result.phase === "ok" ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "xs-wizard__actions", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "cast-retry", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { children: result.message }),
+          result.phase === "ok" ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-wizard__actions", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "cast-retry", onClick: () => {
               cast();
             }, children: "重试" }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "cast-edit", onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "cast-edit", onClick: () => {
               gotoStep(1);
             }, children: "改出生信息" })
           ] })
         ]
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("footer", { className: "xs-wizard__footer", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "prev", disabled: step === 1, onClick: () => {
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("footer", { className: "xs-wizard__footer", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "prev", disabled: step === 1, onClick: () => {
         gotoStep(step - 1);
       }, children: "<- 上一步" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "next", disabled: step === 5, onClick: () => {
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "next", disabled: step === 5, onClick: () => {
         gotoStep(step + 1);
       }, children: "下一步 ->" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "xs-wizard__spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", "data-xuanshu-action": "cancel", onClick: cancel, children: "取消向导" })
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-wizard__spacer" }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", "data-xuanshu-action": "cancel", onClick: cancel, children: "取消向导" })
     ] })
   ] });
 }
 function OnboardingIcon({ size = 20 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M4 20h16" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M6 20V9.5L12 4l6 5.5V20" }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M9.5 20v-5h5v5" })
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("path", { d: "M4 20h16" }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("path", { d: "M6 20V9.5L12 4l6 5.5V20" }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("path", { d: "M9.5 20v-5h5v5" })
   ] });
 }
 function installOnboarding(ctx, deps) {
@@ -2692,14 +3516,14 @@ function installOnboarding(ctx, deps) {
 }
 
 // src/client/OverviewIcon.tsx
-var import_jsx_runtime9 = require("react/jsx-runtime");
+var import_jsx_runtime11 = require("react/jsx-runtime");
 function OverviewIcon({ size = 20 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "xs-overview-icon", "data-xuanshu-panel": PANEL_ID, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(GlyphOverview, { className: "xs-overview-icon__glyph", size }) });
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-overview-icon", "data-xuanshu-panel": PANEL_ID, children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(GlyphOverview, { className: "xs-overview-icon__glyph", size }) });
 }
 
 // src/client/OverviewPanel.tsx
-var import_react7 = require("react");
-var import_jsx_runtime10 = require("react/jsx-runtime");
+var import_react9 = require("react");
+var import_jsx_runtime12 = require("react/jsx-runtime");
 function localDate(now = /* @__PURE__ */ new Date()) {
   const pad = (value) => String(value).padStart(2, "0");
   return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -2735,11 +3559,11 @@ function destinyStateFromStatus(status) {
 function useBaziStatus(options) {
   const { api, controller, preloaded } = options;
   const active = controller ?? NO_CONTROLLER;
-  const revision = (0, import_react7.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
-  const [status, setStatus] = (0, import_react7.useState)(
+  const revision = (0, import_react9.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
+  const [status, setStatus] = (0, import_react9.useState)(
     preloaded ?? (api === void 0 ? { state: "empty" } : void 0)
   );
-  (0, import_react7.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     if (preloaded !== void 0) {
       setStatus(preloaded);
       return;
@@ -2781,32 +3605,32 @@ function OverviewPanel({
   const destiny = useBaziStatus({ api: bazi, controller: baziController, preloaded: preloadedBaziStatus });
   const injected = { navigate, mainPanels, onStartOnboarding, onOpenDetail, onGenerate, onRefresh, onRetry };
   const quicklinkReady = baseplateReady ?? destiny.state === "ready";
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-overview", "data-xuanshu-panel": PANEL_ID, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { className: "xs-overview__header", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("h1", { className: "xs-overview__title", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "xs-overview__home", children: PANEL_HOME }),
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "xs-overview", "data-xuanshu-panel": PANEL_ID, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("header", { className: "xs-overview__header", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("h1", { className: "xs-overview__title", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-overview__home", children: PANEL_HOME }),
         " · ",
         PANEL_TITLE
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-overview__localnote", "data-xuanshu-note": "local-data", children: PANEL_LOCAL_NOTE })
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-overview__localnote", "data-xuanshu-note": "local-data", children: PANEL_LOCAL_NOTE })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-overview__grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(XsDestinyCard, { state: destiny.state, snapshot: destiny.snapshot, ...injected }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(XsRikkeCard, { state: "empty", today: date, ...injected }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(XsDigaoCard, { state: "empty", ...injected }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(XsQuickLinks, { baseplateReady: quicklinkReady, navigate, mainPanels })
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "xs-overview__grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(XsDestinyCard, { state: destiny.state, snapshot: destiny.snapshot, ...injected }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(XsRikkeCard, { state: "empty", today: date, ...injected }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(XsDigaoCard, { state: "empty", ...injected }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(XsQuickLinks, { baseplateReady: quicklinkReady, navigate, mainPanels })
     ] })
   ] });
 }
 
 // src/client/PuPanel.tsx
-var import_react8 = require("react");
-var import_jsx_runtime11 = require("react/jsx-runtime");
+var import_react10 = require("react");
+var import_jsx_runtime13 = require("react/jsx-runtime");
 var pendingJob;
 var pendingView = "create";
 var pendingSelected;
 var blank = { name: "", level: "optional", description: "", body: "# 概览\n", summary: "" };
-var errorText = (error) => error instanceof Error ? error.message : String(error);
+var errorText2 = (error) => error instanceof Error ? error.message : String(error);
 async function fileData(file) {
   const data = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -2817,21 +3641,21 @@ async function fileData(file) {
   return { name: file.name, data };
 }
 function PuPanel({ ctx }) {
-  const [rows, setRows] = (0, import_react8.useState)([]);
-  const [loading, setLoading] = (0, import_react8.useState)(true);
-  const [query, setQuery] = (0, import_react8.useState)("");
-  const [level, setLevel] = (0, import_react8.useState)("");
-  const [source, setSource] = (0, import_react8.useState)("");
-  const [view, setView] = (0, import_react8.useState)(pendingJob ? pendingView : "list");
-  const [step, setStep] = (0, import_react8.useState)(pendingJob ? 3 : 1);
-  const [job, setJob] = (0, import_react8.useState)(pendingJob);
-  const [text, setText] = (0, import_react8.useState)("");
-  const [files, setFiles] = (0, import_react8.useState)([]);
-  const [draft, setDraft] = (0, import_react8.useState)(pendingJob && pendingView === "detail" && pendingSelected ? pendingSelected : blank);
-  const [selected, setSelected] = (0, import_react8.useState)(pendingSelected);
-  const [original, setOriginal] = (0, import_react8.useState)(pendingSelected ? JSON.stringify(pendingSelected) : "");
-  const [error, setError] = (0, import_react8.useState)("");
-  const [busy, setBusy] = (0, import_react8.useState)(false);
+  const [rows, setRows] = (0, import_react10.useState)([]);
+  const [loading, setLoading] = (0, import_react10.useState)(true);
+  const [query, setQuery] = (0, import_react10.useState)("");
+  const [level, setLevel] = (0, import_react10.useState)("");
+  const [source, setSource] = (0, import_react10.useState)("");
+  const [view, setView] = (0, import_react10.useState)(pendingJob ? pendingView : "list");
+  const [step, setStep] = (0, import_react10.useState)(pendingJob ? 3 : 1);
+  const [job, setJob] = (0, import_react10.useState)(pendingJob);
+  const [text, setText] = (0, import_react10.useState)("");
+  const [files, setFiles] = (0, import_react10.useState)([]);
+  const [draft, setDraft] = (0, import_react10.useState)(pendingJob && pendingView === "detail" && pendingSelected ? pendingSelected : blank);
+  const [selected, setSelected] = (0, import_react10.useState)(pendingSelected);
+  const [original, setOriginal] = (0, import_react10.useState)(pendingSelected ? JSON.stringify(pendingSelected) : "");
+  const [error, setError] = (0, import_react10.useState)("");
+  const [busy, setBusy] = (0, import_react10.useState)(false);
   const call = (method, payload) => rpcCall(ctx, method, payload);
   const reload = async () => {
     setLoading(true);
@@ -2839,15 +3663,15 @@ function PuPanel({ ctx }) {
     try {
       setRows(await call("pu.list"));
     } catch (e) {
-      setError(errorText(e));
+      setError(errorText2(e));
     } finally {
       setLoading(false);
     }
   };
-  (0, import_react8.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     void reload();
   }, []);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (job?.status !== "running") return;
     let disposed = false;
     let timer;
@@ -2866,7 +3690,7 @@ function PuPanel({ ctx }) {
           void poll();
         }, 1200);
       } catch (e) {
-        if (!disposed) setError(errorText(e));
+        if (!disposed) setError(errorText2(e));
       }
     };
     void poll();
@@ -2875,7 +3699,7 @@ function PuPanel({ ctx }) {
       clearTimeout(timer);
     };
   }, [job?.id, job?.status]);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (job?.status === "ready" && job.draft && step === 3 && view === "create") {
       setDraft(job.draft);
       setStep(4);
@@ -2887,7 +3711,7 @@ function PuPanel({ ctx }) {
     try {
       await operation();
     } catch (e) {
-      setError(errorText(e));
+      setError(errorText2(e));
     } finally {
       setBusy(false);
     }
@@ -2905,30 +3729,30 @@ function PuPanel({ ctx }) {
     setError("");
   };
   const field = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
-  const levels = /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+  const levels = /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
     "级别 ",
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("select", { value: draft.level, onChange: (e) => field("level", e.target.value), children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "base", children: "基础输入级 base" }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "optional", children: "可选输入级 optional" })
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { value: draft.level, onChange: (e) => field("level", e.target.value), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "base", children: "基础输入级 base" }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "optional", children: "可选输入级 optional" })
     ] })
   ] });
-  const preview = /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "xs-pu-detail", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+  const preview = /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "xs-pu-detail", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
       "名称",
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { value: draft.name, onChange: (e) => field("name", e.target.value) })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { value: draft.name, onChange: (e) => field("name", e.target.value) })
     ] }),
     levels,
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
       "描述（manifest 概览，AI 优先读）",
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("textarea", { value: draft.description, onChange: (e) => field("description", e.target.value) })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("textarea", { value: draft.description, onChange: (e) => field("description", e.target.value) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
       "细节（Markdown 一级标题分节，须含概览）",
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("textarea", { className: "xs-pu-body", value: draft.body, onChange: (e) => field("body", e.target.value) })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("textarea", { className: "xs-pu-body", value: draft.body, onChange: (e) => field("body", e.target.value) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
       "汇总 summary.md（AI 快速定位，人可改）",
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("textarea", { value: draft.summary, onChange: (e) => field("summary", e.target.value) })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("textarea", { value: draft.summary, onChange: (e) => field("summary", e.target.value) })
     ] })
   ] });
   const generate = () => void run(async () => {
@@ -2942,103 +3766,103 @@ function PuPanel({ ctx }) {
   const filtered = rows.filter((p) => (!level || p.level === level) && (!source || p.source === source) && (!query || `${p.name}
 ${p.description}
 ${p.body}`.toLowerCase().includes(query.toLowerCase())));
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("main", { className: "xs-pu", "aria-label": "谱管理", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("header", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("h1", { children: view === "create" ? "创建新谱" : view === "detail" ? `谱管理 / ${selected?.name}` : "谱管理" }),
-      view !== "list" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: back, children: "← 返回列表" })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("main", { className: "xs-pu", "aria-label": "谱管理", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("header", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h1", { children: view === "create" ? "创建新谱" : view === "detail" ? `谱管理 / ${selected?.name}` : "谱管理" }),
+      view !== "list" && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: back, children: "← 返回列表" })
     ] }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { role: "alert", children: [
+    error && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { role: "alert", children: [
       error,
       " ",
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => void reload(), children: "重试" }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: "数据目录：$DSH_HOME/xuanshu/pus/" })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => void reload(), children: "重试" }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "数据目录：$DSH_HOME/xuanshu/pus/" })
     ] }),
-    view === "list" && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "xs-pu-toolbar", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { "aria-label": "搜索谱", placeholder: "搜索 名称 / 描述 / 正文", value: query, onChange: (e) => setQuery(e.target.value) }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("select", { "aria-label": "级别筛选", value: level, onChange: (e) => setLevel(e.target.value), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "", children: "全部级别" }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "base", children: "基础输入级" }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "optional", children: "可选输入级" })
+    view === "list" && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "xs-pu-toolbar", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { "aria-label": "搜索谱", placeholder: "搜索 名称 / 描述 / 正文", value: query, onChange: (e) => setQuery(e.target.value) }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { "aria-label": "级别筛选", value: level, onChange: (e) => setLevel(e.target.value), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "", children: "全部级别" }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "base", children: "基础输入级" }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "optional", children: "可选输入级" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("select", { "aria-label": "来源筛选", value: source, onChange: (e) => setSource(e.target.value), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "", children: "全部来源" }),
-          ["manual", "ai-assisted", "sediment", "workflow"].map((s) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { children: s }, s))
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { "aria-label": "来源筛选", value: source, onChange: (e) => setSource(e.target.value), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "", children: "全部来源" }),
+          ["manual", "ai-assisted", "sediment", "workflow"].map((s) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { children: s }, s))
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => {
           setView("create");
           setStep(pendingJob ? 3 : 1);
           setJob(pendingJob);
           if (!pendingJob) setDraft(blank);
         }, children: "＋ 创建新谱" })
       ] }),
-      loading ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { role: "status", children: "正在读取谱…" }) : /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("h2", { children: [
+      loading ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { role: "status", children: "正在读取谱…" }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("h2", { children: [
             "基础输入级 base · ",
             filtered.filter((p) => p.level === "base").length,
             " 个"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: "进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。" }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。" }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
             "🔒 底座（八字） · 只读 · 由出生信息与底座生成 · 默认在场 · 不可关 ",
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => window.alert("底座默认在场、不可关；要修改，请重新录制出生信息并确认。"), children: "打开" })
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => window.alert("底座默认在场、不可关；要修改，请重新录制出生信息并确认。"), children: "打开" })
           ] })
         ] }),
-        ["base", "optional"].map((group) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("section", { children: [
-          group === "optional" && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("h2", { children: [
+        ["base", "optional"].map((group) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { children: [
+          group === "optional" && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("h2", { children: [
               "可选输入级 optional · ",
               filtered.filter((p) => p.level === group).length,
               " 个"
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: "底稿不采 · 问事时按需追加" })
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "底稿不采 · 问事时按需追加" })
           ] }),
-          filtered.filter((p) => p.level === group || group === "optional" && p.error).map((p) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("article", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: p.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: p.description }),
-              /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("small", { children: [
+          filtered.filter((p) => p.level === group || group === "optional" && p.error).map((p) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("article", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("strong", { children: p.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: p.description }),
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("small", { children: [
                 p.source,
                 " · ",
                 p.updatedAt,
                 p.stale && " · 汇总可能过期"
               ] }),
-              p.error && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { role: "alert", children: p.error })
+              p.error && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { role: "alert", children: p.error })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { disabled: !!p.error || busy, onClick: () => open(p.slug), children: "打开 / 编辑" })
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: !!p.error || busy, onClick: () => open(p.slug), children: "打开 / 编辑" })
           ] }, p.slug))
         ] }, group)),
-        !filtered.length && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: rows.length ? "没有匹配的谱" : "还没有可选谱：谱由你积累，非必填、不阻塞使用。" }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => {
+        !filtered.length && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: rows.length ? "没有匹配的谱" : "还没有可选谱：谱由你积累，非必填、不阻塞使用。" }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => {
             setQuery("");
             setLevel("");
             setSource("");
           }, children: "清空筛选" })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: "本列表只收谱。工作区 / 工作流与谱并列独立、不是谱。你自己的本地文件在藏库里，永不进 AI。" })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "本列表只收谱。工作区 / 工作流与谱并列独立、不是谱。你自己的本地文件在藏库里，永不进 AI。" })
     ] }),
-    view === "detail" && selected && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
+    view === "detail" && selected && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
       preview,
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
         draft.level === "base" ? "本谱是底稿提炼源（进底稿）" : "底稿不采；问事时按需追加",
         " · 级别变更下次底稿刷新生效。"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
         "元信息：spec pu/1 · source ",
         selected.source,
         " · updated_at ",
         selected.updatedAt,
         " · 签：预留字段，暂不启用"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
         "数据目录：$DSH_HOME/xuanshu/pus/",
         selected.slug,
         "/"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { disabled: busy, onClick: () => void run(async () => {
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: busy, onClick: () => void run(async () => {
         if (draft.body !== selected.body && draft.summary !== selected.summary && !window.confirm(`正文与汇总均改变。${draft.level === "base" ? "会影响底稿提炼源。" : "只在问事按需追加。"}确认保存这些事实？`)) return;
         const saved = await call("pu.update", { slug: selected.slug, draft, confirmed: true });
         setSelected(saved);
@@ -3046,7 +3870,7 @@ ${p.body}`.toLowerCase().includes(query.toLowerCase())));
         setOriginal(JSON.stringify(saved));
         await reload();
       }), children: "保存" }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { disabled: busy || job?.status === "running", onClick: () => void run(async () => {
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: busy || job?.status === "running", onClick: () => void run(async () => {
         const created = await call("pu.generate", { name: draft.name, level: draft.level, text: `# 当前谱
 ${draft.description}
 ${draft.body}`, summaryOnly: true });
@@ -3055,57 +3879,57 @@ ${draft.body}`, summaryOnly: true });
         pendingSelected = { ...selected, ...draft };
         setJob(created);
       }), children: "重建 summary（AI 提炼）" }),
-      job?.status === "ready" && job.draft && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => {
+      job?.status === "ready" && job.draft && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => {
         field("summary", job.draft.summary);
         pendingJob = void 0;
         setJob(void 0);
       }, children: "采用候选汇总（保存后落盘）" })
     ] }),
-    view === "create" && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { "aria-label": "创建步骤", children: "① 给资料 → ② 定义谱名 → ③ AI 转换中 → ④ 生成预览 → ⑤ 确认落盘" }),
-      step === 1 && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+    view === "create" && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { "aria-label": "创建步骤", children: "① 给资料 → ② 定义谱名 → ③ AI 转换中 → ④ 生成预览 → ⑤ 确认落盘" }),
+      step === 1 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
           "资料文字",
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("textarea", { value: text, onChange: (e) => setText(e.target.value), placeholder: "把你知道的先写进来" })
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("textarea", { value: text, onChange: (e) => setText(e.target.value), placeholder: "把你知道的先写进来" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
           "附件（MD / PDF / 任意文件）",
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { type: "file", multiple: true, onChange: (e) => setFiles(Array.from(e.target.files ?? [])) })
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { type: "file", multiple: true, onChange: (e) => setFiles(Array.from(e.target.files ?? [])) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("ul", { children: files.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("li", { children: f.name }, i)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: "语音输入 v2 再做。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { disabled: !text.trim() && !files.length, onClick: () => setStep(2), children: "下一步" })
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("ul", { children: files.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("li", { children: f.name }, i)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "语音输入 v2 再做。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: !text.trim() && !files.length, onClick: () => setStep(2), children: "下一步" })
       ] }),
-      step === 2 && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
+      step === 2 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { children: [
           "谱名",
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { value: draft.name, onChange: (e) => field("name", e.target.value) })
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { value: draft.name, onChange: (e) => field("name", e.target.value) })
         ] }),
         levels,
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: "谱名唯一 · 目录名小写、- 连接、可含中文。所有谱均非必填。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "谱名唯一 · 目录名小写、- 连接、可含中文。所有谱均非必填。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
           "预览：pus/",
           draft.name.trim().normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}-]+/gu, "-").replace(/^-+|-+$/g, ""),
           "/"
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => setStep(1), children: "返回改资料" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { disabled: busy || !draft.name.trim(), onClick: generate, children: "开始转换" })
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => setStep(1), children: "返回改资料" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: busy || !draft.name.trim(), onClick: generate, children: "开始转换" })
       ] }),
-      step === 3 && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { role: "status", children: [
+      step === 3 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { role: "status", children: [
         job?.status === "running" ? "AI 正在读取资料、分节并提炼汇总。" : job?.error ?? "转换已中断，可重新开始。",
         " 借用 DSH coding 工具；中断不落盘。",
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { disabled: job?.status !== "running", onClick: () => void run(async () => {
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: job?.status !== "running", onClick: () => void run(async () => {
           const canceled = await call("pu.cancel", { id: job?.id });
           setJob(canceled);
           pendingJob = void 0;
         }), children: "中断" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => setStep(2), children: "返回改" })
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => setStep(2), children: "返回改" })
       ] }),
-      step === 4 && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
+      step === 4 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
         preview,
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: "这一步只是预览，pus/ 下还没有任何文件。落盘后会出现在谱列表。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => setStep(2), children: "返回改" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { disabled: busy || job?.status !== "ready", onClick: () => void run(async () => {
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "这一步只是预览，pus/ 下还没有任何文件。落盘后会出现在谱列表。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => setStep(2), children: "返回改" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { disabled: busy || job?.status !== "ready", onClick: () => void run(async () => {
           await call("pu.confirm", { id: job?.id, draft, level: draft.level, confirmed: true });
           pendingJob = void 0;
           setJob(void 0);
@@ -3113,26 +3937,26 @@ ${draft.body}`, summaryOnly: true });
           await reload();
         }), children: "确认落盘" })
       ] }),
-      step === 5 && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(import_jsx_runtime11.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { children: "已落盘：manifest.md + content.md + summary.md" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: back, children: "回谱列表" })
+      step === 5 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { children: "已落盘：manifest.md + content.md + summary.md" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: back, children: "回谱列表" })
       ] })
     ] }),
-    job?.status === "running" && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("p", { children: [
+    job?.status === "running" && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { children: [
       "审批由 DSH 决定，玄枢不自建审批。",
-      ctx.uiWorkspace && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => ctx.uiWorkspace?.openSession(job.sessionId), children: "在会话里看审批" }),
-      view === "detail" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { onClick: () => void run(async () => {
+      ctx.uiWorkspace && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => ctx.uiWorkspace?.openSession(job.sessionId), children: "在会话里看审批" }),
+      view === "detail" && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { onClick: () => void run(async () => {
         const canceled = await call("pu.cancel", { id: job.id });
         setJob(canceled);
         pendingJob = void 0;
       }), children: "中断汇总提炼（不落盘）" }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: "返回「谱」可继续查看生成预览。" })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { children: "返回「谱」可继续查看生成预览。" })
     ] })
   ] });
 }
 function installPuPanel(ctx) {
   ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: "pus", inject: () => ({ ctx }) }, PuPanel));
-  ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: "pus", order: 40, label: "谱" }, () => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { "aria-hidden": "true", children: "谱" })));
+  ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: "pus", order: 40, label: "谱" }, () => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { "aria-hidden": "true", children: "谱" })));
   if (typeof document === "undefined" || document.getElementById("xs-pu-style")) return;
   const style = document.createElement("style");
   style.id = "xs-pu-style";
@@ -4027,6 +4851,15 @@ function apply(ctx) {
   const bazi = createBaziApi(rpc);
   const baziController = createBaziUiController();
   const baziDeps = { api: bazi, controller: baziController, navigate };
+  const consultApi = createConsultApi(rpc);
+  const uiWorkspace = ctx.uiWorkspace;
+  const sessionCatalog = ctx.sessions;
+  const openSession = typeof uiWorkspace?.openSession === "function" ? (sessionId) => {
+    uiWorkspace.openSession(sessionId);
+  } : void 0;
+  const refreshSessions = typeof sessionCatalog?.refresh === "function" ? async () => {
+    await sessionCatalog.refresh?.();
+  } : void 0;
   const injected = () => ({
     navigate,
     mainPanels,
@@ -4064,6 +4897,7 @@ function apply(ctx) {
   installCangClient(rpc);
   installOnboarding(rpc, baziDeps);
   installMingpan(rpc, baziDeps);
+  installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
 }
 		// 包体中途执行过 module.exports = __toCommonJS(...)，上面的 exports 已过期；
 		// 必须重新读取 module.exports，逐个补拷会漏掉将来的新导出。

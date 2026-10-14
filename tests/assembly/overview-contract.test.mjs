@@ -246,7 +246,9 @@ describe('票 07 · 首屏 = 自我总览（产物物化）', () => {
     // 顺序有意义：overview 必须仍是**第一个** main 注册（默认面板与 S3 的 `find('main')` 都取首个）。
     const mainKeys = registers.filter((r) => r.name === 'main').map((r) => r.options.key)
     const rowIds = registers.filter((r) => r.name === 'sidebar.panellist').map((r) => r.options.id)
-    expect(mainKeys).toEqual(['overview', 'pus', 'cang', 'onboarding', 'mingpan'])
+    // 票 10 追加 `consult`（问事门厅），仍在末尾：**只扩容期望数组，断言语义未变**。
+    // 票 13 客户端半还会各自追加自己的 key —— 合并时的最终顺序由 Lead 在集成分支上收口。
+    expect(mainKeys).toEqual(['overview', 'pus', 'cang', 'onboarding', 'mingpan', 'consult'])
     // 「每个侧栏行 id 必须与某个 main key 同字符串」是行与面板配对的唯一依据。
     expect(rowIds).toEqual(mainKeys)
     expect(registers.map((r) => r.name)).toEqual([
@@ -255,6 +257,7 @@ describe('票 07 · 首屏 = 自我总览（产物物化）', () => {
       'main', 'sidebar.panellist',
       // 藏登记浮层：`installCangClient` 里就挂在 `cang` 那对之后。
       'shell.overlay',
+      'main', 'sidebar.panellist',
       'main', 'sidebar.panellist',
       'main', 'sidebar.panellist',
     ])
@@ -307,12 +310,14 @@ describe('票 07 · 槽位遮蔽不 fail-loud（加性注册）', () => {
     expect(() => plugin.apply(ctx)).not.toThrow()
     expect([...registry.cells.keys()].sort()).toEqual([
       'main\u0000cang',
+      'main\u0000consult',
       'main\u0000mingpan',
       'main\u0000onboarding',
       'main\u0000overview',
       'main\u0000pus',
       'shell.overlay\u0000xuanshu-cang-drawer',
       'sidebar.panellist\u0000cang',
+      'sidebar.panellist\u0000consult',
       'sidebar.panellist\u0000mingpan',
       'sidebar.panellist\u0000onboarding',
       'sidebar.panellist\u0000overview',
