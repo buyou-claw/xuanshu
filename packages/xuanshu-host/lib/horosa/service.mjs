@@ -601,6 +601,44 @@ export function createHorosaRuntime({ ctx, config, log, paths, plan } = {}) {
   }
 
   /**
+   * 通用工具调用（裸信封）：给「不是八字」的技法用（票 13 的日课要 `horosa_cn_huangli`）。
+   *
+   * 与 `baziBirth()` 的**同族**语义：只负责「取端点 → `mcpCallTool` → 原样回信封」，
+   * **不替你起 serve**（起没起由 `start` / `ensure` / apply 期的 autostart 决定，与 `baziBirth` 一致）。
+   * 之所以要有它：票 06 冻结的服务面只有 `baziBirth` 一个业务方法，而「自己起 serve / 直连 8765」
+   * 是票 08 明令禁止的第二条通道 —— 缺这一口，票 13 的日课就没有合法通道。
+   *
+   * @param {string} name MCP 工具名（如 `horosa_cn_huangli`）。
+   * @param {object} [args] 工具参数。
+   * @param {{timeoutMs?: number}} [options] 超时（缺省用八字那一档：首调会拉起 runtime）。
+   * @returns {Promise<{ok: boolean, envelope: object|null, tool: string|null, detail: string, code: string|null, from: object|null, evidence: object|null}>}
+   *   `ok` 的语义 = **调用走到了信封**（不是「业务成功」）——判业务要看信封的 `ok` 与各技法的口径，
+   *   与 `mcpCallTool` 同口径。
+   */
+  async function callTool(name, args = {}, options = {}) {
+    const tool = typeof name === 'string' && name.trim() !== '' ? name.trim() : null
+    if (tool === null) {
+      return { ok: false, envelope: null, tool: null, code: 'missing-tool-name', detail: 'callTool 需要一个非空工具名（如 horosa_cn_huangli）。', from: null, evidence: null }
+    }
+    const planRead = ensurePlan()
+    const port = planRead.ok ? planRead.port : effectivePort(cfg)
+    const timeoutMs = typeof options.timeoutMs === 'number' && options.timeoutMs > 0 ? options.timeoutMs : DEFAULT_BAZI_TIMEOUT_MS
+    const called = await mcpCallTool({ name: tool, args, host: HOROSA_DEFAULT_HOST, port, path: HOROSA_MCP_PATH, timeoutMs })
+    if (!called.ok || !called.envelope) {
+      return {
+        ok: false,
+        envelope: null,
+        tool,
+        code: 'mcp-call-failed',
+        detail: `${tool} 没走到信封：${called.detail}`,
+        from: called.from ?? null,
+        evidence: called.evidence ?? null,
+      }
+    }
+    return { ok: true, envelope: called.envelope, tool, code: null, detail: `调用 ${tool} 成功（信封已回，业务成败看信封 ok）。`, from: called.from ?? null, evidence: called.evidence ?? null }
+  }
+
+  /**
    * 收尾（dispose 用）：清状态 + 停掉自己起的 serve（`keepServeOnDispose` 可留）。
    * 与 `stop()` 同一套「并集」收尾：`state.serve.pid` ∪ 登记表里还没收掉的 pid ——
    * 失败路径留下的孤儿即使没记进状态，也在这里被收掉（R5）。
@@ -631,6 +669,7 @@ export function createHorosaRuntime({ ctx, config, log, paths, plan } = {}) {
     stop,
     waitReady,
     baziBirth,
+    callTool,
     /** 紧凑快照（给命令/排障用：路径、config、plan、状态）。 */
     snapshot() {
       const planRead = planCache
