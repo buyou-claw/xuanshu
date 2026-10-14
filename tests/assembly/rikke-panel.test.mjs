@@ -28,6 +28,7 @@ import { RIKKE_ID, RIKKE_LABEL, RIKKE_ORDER } from '../../packages/xuanshu-clien
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..', '..')
 const RIKKE_SRC = resolve(REPO_ROOT, 'packages', 'xuanshu-client', 'src', 'client', 'rikke.tsx')
+const OVERVIEW_SRC = resolve(REPO_ROOT, 'packages', 'xuanshu-client', 'src', 'client', 'OverviewPanel.tsx')
 
 const render = (element) => renderToStaticMarkup(element)
 
@@ -172,6 +173,30 @@ describe('票 13 · 日课生成只能由人点触发', () => {
     for (const body of bodies) {
       expect(body, 'useEffect 里不许自动生成日课（生成只能由人点）').not.toMatch(/\.generate\(|\.setTime\(/)
     }
+  })
+
+  it('概览面板（日课卡的宿主）里也没有 useEffect 自动生成 / 自动刷新', () => {
+    const source = readFileSync(OVERVIEW_SRC, 'utf8')
+    const bodies = useEffectBodies(source)
+    expect(bodies.length, 'OverviewPanel.tsx 里应当有取数用的 useEffect（不是空转断言）').toBeGreaterThan(0)
+    for (const body of bodies) {
+      expect(body, 'useEffect 里只许读 status（generate / refresh 都是人点的）').not.toMatch(/\.generate\(|\.refresh\(|\.setTime\(/)
+    }
+  })
+
+  it('卡级 [重试] 清掉上一次生成结果并广播重取（点了必须动）', async () => {
+    const spy = spyApi({
+      async generate() { return { ok: false, date: '2026-10-15', reason: '底座未立' } },
+    })
+    const controller = createRikkeUiController(spy.api)
+    await controller.generate()
+    expect(controller.getOutcome()).toEqual({ ok: false, date: '2026-10-15', reason: '底座未立' })
+    let notified = 0
+    controller.subscribe(() => { notified += 1 })
+    controller.clearOutcome()
+    expect(controller.getOutcome()).toBeUndefined()
+    expect(controller.getRevision()).toBe(2)
+    expect(notified).toBe(1)
   })
 })
 

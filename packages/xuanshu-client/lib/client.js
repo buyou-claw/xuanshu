@@ -500,6 +500,11 @@ function createDigaoUiController(api) {
       };
     },
     getOutcome: () => outcome,
+    clearOutcome() {
+      outcome = void 0;
+      revision += 1;
+      notify();
+    },
     refresh() {
       if (running !== void 0) return running;
       running = api.refresh().then(() => {
@@ -3300,6 +3305,12 @@ function OverviewPanel({
   const refreshDigao = digaoController === void 0 ? onRefresh : () => {
     void digaoController.refresh();
   };
+  const retryRikke = rikkeController === void 0 ? onRetry : () => {
+    rikkeController.clearOutcome();
+  };
+  const retryDigao = digaoController === void 0 ? onRetry : () => {
+    digaoController.clearOutcome();
+  };
   const injected = {
     navigate,
     mainPanels,
@@ -3327,7 +3338,8 @@ function OverviewPanel({
           today: rikkeState.date === void 0 || rikkeState.date === "" ? date : rikkeState.date,
           content: rikkeState.content,
           reason: rikkeState.reason,
-          ...injected
+          ...injected,
+          onRetry: retryRikke
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
@@ -3337,7 +3349,8 @@ function OverviewPanel({
           summary: digaoState.summary,
           reason: digaoState.reason,
           baseplateEstablished: baseplate,
-          ...injected
+          ...injected,
+          onRetry: retryDigao
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(XsQuickLinks, { baseplateReady: baseplate, navigate, mainPanels })
@@ -3730,6 +3743,11 @@ function createRikkeUiController(api) {
       };
     },
     getOutcome: () => outcome,
+    clearOutcome() {
+      outcome = void 0;
+      revision += 1;
+      notify();
+    },
     generate(date) {
       if (running !== void 0) return running;
       running = api.generate(date === void 0 ? {} : { date }).then(settle).catch((error) => {

@@ -29,6 +29,11 @@ export interface RikkeUiController {
   /** 最近一次人点的生成结果（没跑过 = undefined；卡片据此显示失败理由）。 */
   getOutcome(): RikkeOutcome | undefined;
   /**
+   * 抹掉上一次的生成结果（卡级 `[重试]` 走它）：理由不再挂在卡上，并广播一次取数
+   * 让卡片回到「宿主说了算」的状态（今天有没有内容，重读一次就知道）。
+   */
+  clearOutcome(): void;
+  /**
    * **人点的生成**（单飞：连点只跑一次）。
    *
    * 失败**不抛**：宿主给的理由（或 RPC 的拒绝原因）落进 `outcome.reason` 返回给调用方，
@@ -76,6 +81,11 @@ export function createRikkeUiController(api: RikkeApi): RikkeUiController {
       };
     },
     getOutcome: () => outcome,
+    clearOutcome() {
+      outcome = undefined;
+      revision += 1;
+      notify();
+    },
     generate(date) {
       if (running !== undefined) return running; // 单飞：连点不叠加
       running = api

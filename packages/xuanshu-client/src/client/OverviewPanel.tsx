@@ -395,6 +395,26 @@ export function OverviewPanel({
           void digaoController.refresh();
         };
 
+  /**
+   * 卡级重试（D2：只重跑该卡取数，其它卡不动）。
+   *
+   * 票 13 的两张卡各自有「上一次人点动作的结果」挂在控制器上，重试必须**清掉它**再重读宿主事实
+   * ——否则 `[重试]` 点了界面不动（失败理由还在），看起来像坏了。
+   * 命盘卡仍走票 08 的注入面回调（快照代次）。
+   */
+  const retryRikke =
+    rikkeController === undefined
+      ? onRetry
+      : (): void => {
+          rikkeController.clearOutcome();
+        };
+  const retryDigao =
+    digaoController === undefined
+      ? onRetry
+      : (): void => {
+          digaoController.clearOutcome();
+        };
+
   // 卡面的注入面刻意**不含**数据面：四卡只吃回调与快照，拿不到 RPC 面。
   const injected = {
     navigate,
@@ -425,6 +445,7 @@ export function OverviewPanel({
           content={rikkeState.content}
           reason={rikkeState.reason}
           {...injected}
+          onRetry={retryRikke}
         />
         <XsDigaoCard
           state={digaoState.state}
@@ -432,6 +453,7 @@ export function OverviewPanel({
           reason={digaoState.reason}
           baseplateEstablished={baseplate}
           {...injected}
+          onRetry={retryDigao}
         />
         <XsQuickLinks baseplateReady={baseplate} navigate={navigate} mainPanels={mainPanels} />
       </div>
