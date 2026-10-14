@@ -8,8 +8,15 @@
  *   - `shell.overlay`（list/root，加性、层本身 click-through）→ `XsSedimentNotice`。
  * 三处都在 `conversation` 子树里/框架浮层上：**不新开 main key、不碰 root、不声明 children、不加 priority**。
  *
- * 会话座位（`sessionId`）由槽按 scope 发放（`DSH槽位映射.md` §1.5/§12：session 作用域 → SessionStandardProps）。
- * 拿不到会话、或那个会话不是问事会话时，三个组件一律 `return null` —— **绝不猜一个会话去写**。
+ * 会话座位（`sessionId`）由槽按 scope 发放（`DSH槽位映射.md` §1.5/§12：session 作用域 → `SessionStandardProps`，
+ * 座位里含 `sessionId`）。拿不到会话、或那个会话不是问事会话时，三个组件一律 `return null`
+ * —— **绝不猜一个会话去写**。
+ *
+ * **未确认（如实登记）**：rc.2 的 `@deepseek-ai/dsh-client-ui-slots` 不在本 profile 的 node_modules 里，
+ * `SessionStandardProps` 的精确形状只能从文档推断。本实现只读 **`props.sessionId`**（同表 §12 的座位名）；
+ * 若真机上的发放方式不是 props（例如组件内 `useSession()` 座位），需要在真机上补一次接线 ——
+ * 读取点只有本文件里的 `XsSedimentEntry` / `XsSedimentDraftCard` 两处参数表，改动量很小。
+ * 非 DOM 环境下这一点无法证伪（没有真 registry），所以交付报告里按「未验」记。
  *
  * **为什么整套长在会话语境里**（S10 §1 D5 + F1）：`conversation.*` 子槽只在 DSH 原生 `conversation`
  * 面板在屏时渲染（审批卡也只在那一刻可见），所以从 `consult` 门厅发起沉淀时要先切回会话面板。

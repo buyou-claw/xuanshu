@@ -4885,6 +4885,7 @@ function diffParagraphs(currentBody, draftBody) {
   const counts = { unchanged: 0, replaced: 0, added: 0, removed: 0 };
   for (let index = 0; index < draft.length; index += 1) {
     const text = draft[index];
+    if (text === void 0) continue;
     const sameSpot = remaining[index];
     if (sameSpot !== void 0 && sameSpot.used !== true && sameSpot.text === text) {
       sameSpot.used = true;

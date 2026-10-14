@@ -24,7 +24,7 @@ import { ensureConsultAgent } from './agent.mjs'
 import { createSedimentPromptMessage } from './message.mjs'
 import { buildSedimentPrompt, lastAssistantText, parseDraftAnswer, resolveTarget } from './plan.mjs'
 import { sedimentSkillText } from './skill.mjs'
-import { normalizeDraftDraft, sedimentDraftPath, createSedimentStore } from './store.mjs'
+import { normalizeDraftDraft, createSedimentStore } from './store.mjs'
 
 /** 取消（人关掉了卡片 / RPC 断开）时的统一说法：**没落盘**要写清楚。 */
 const ABORTED_MESSAGE = '已取消：这次导出汇总被中止，草稿没有落盘。'
@@ -207,11 +207,3 @@ export function createSedimentMethods(ctx, config = {}) {
     },
   }
 }
-
-/** 草稿文件的绝对路径（诊断/界面展示用；导出是为了让调用方不必自己拼路径）。 */
-export function sedimentPathOf(dataDir, draftId) {
-  return sedimentDraftPath(dataDir, draftId)
-}
-
-/** 宿主尚未就绪时的软取（本模块只用到一次，留在这里免得 service 里再抄一遍 softGet）。 */
-export { softGet }

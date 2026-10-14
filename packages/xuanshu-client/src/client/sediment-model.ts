@@ -98,7 +98,9 @@ export function diffParagraphs(currentBody: string, draftBody: string): { items:
   const counts: DiffCounts = { unchanged: 0, replaced: 0, added: 0, removed: 0 };
 
   for (let index = 0; index < draft.length; index += 1) {
+    // `index < draft.length` 保证有值；这一行只为把类型收窄（`noUncheckedIndexedAccess`）。
     const text = draft[index];
+    if (text === undefined) continue;
     const sameSpot = remaining[index];
     if (sameSpot !== undefined && sameSpot.used !== true && sameSpot.text === text) {
       sameSpot.used = true;
