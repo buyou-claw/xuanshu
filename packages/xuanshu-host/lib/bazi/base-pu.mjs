@@ -61,6 +61,7 @@ export function renderBaziSection({ birth, pillars, basis, horosa, generatedAt }
     '',
     `- 出生日期：${birth.date}`,
     `- 钟表时间：${basis.clock}（时区 ${birth.zone}）`,
+    ...(typeof basis.trueSolar === 'string' && basis.trueSolar !== '' ? [`- 真太阳时：${basis.trueSolar}（引擎按出生地经度与均时差换算）`] : []),
     `- 出生地：${placeLine(birth)}`,
     `- 时间算法：${timeAlgLabel(birth.timeAlg)}（timeAlg=${birth.timeAlg}，换算由星阙引擎内部完成）`,
     `- 时区偏移：${offsetLine}`,

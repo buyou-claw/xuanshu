@@ -12,9 +12,9 @@
  *   3. **快照必须能点亮命盘卡**才算 ready：schema 对 + `birth` 是对象 + 四柱四键齐。
  *      四柱不全的旧文件按 error 处置，而不是给出一张空盘（半个盘比没有盘更危险）。
  *
- * `basis.trueSolar`：契约 §1 要求它**只能**来自 horosa 信封里的真太阳时字段。
- * 票 06 的冻结接缝 `baziBirth()` 只回传分类结果（`techniqueCard` / 四柱 / timeAlg），
- * **不包含** `data.snapshot_text`；所以这里按契约的兜底**省略该键**，绝不拿经度自己算一个假值
+ * `basis.trueSolar`：契约 §1 要求它**只能**来自 horosa 信封里的真太阳时。
+ * 该版本信封没有结构化字段，`extractTrueSolarTime`（票 06 的接缝库）从 `data.snapshot_text`
+ * 的口径行里取出 `真太阳时：<时间戳>`；**取不到就省略该键**，绝不拿经度自己算一个假值
  * （录入层不换算 —— 那是上游引擎的职责，spec §Implementation Decisions 明文）。
  */
 
@@ -42,26 +42,35 @@ export function hhmm(value) {
  * `clock` = 用户填的**钟表时间**（录入层的唯一时间事实）；`offsetMinutes` / `dst` 由 `Intl`
  * 按出生地时区 + 出生日期算出（历史 DST 才算得对：上海 1990-06-01 = +09:00）。
  * 时区是固定偏移串（`'+08:00'`）时 `dst` 为 null —— 归一后的偏移里没有 DST 可言，不假装知道。
+ *
+ * `trueSolar` 只在**信封里读得出**时出现（见文件头）；`'HH:mm:ss'` 归一成 `'HH:mm'`，
+ * 与命盘卡口径行的另一行 `clock` 同粒度。
+ *
+ * @param {object} birth - 出生信息（`{date,time,zone,…}`）。
+ * @param {{date: string, time: string}|null} [trueSolarTime] - `extractTrueSolarTime` 的结果。
  */
-export function buildBasis(birth) {
-  return {
+export function buildBasis(birth, trueSolarTime = null) {
+  const basis = {
     clock: hhmm(birth.time),
     offsetMinutes: zoneOffsetMinutes(birth.zone, birth.date, birth.time),
     dst: zoneIsDst(birth.zone, birth.date),
   }
+  const solar = typeof trueSolarTime?.time === 'string' ? hhmm(trueSolarTime.time) : ''
+  if (solar !== '') basis.trueSolar = solar
+  return basis
 }
 
 /**
  * 组装快照（纯函数，可复现：`generatedAt` 由调用方给，便于断言与重放）。
- * @param {{birth: object, pillars: object, horosa: {version: string|null, tool: string|null}, generatedAt?: string}} input
+ * @param {{birth: object, pillars: object, trueSolarTime?: object|null, horosa: {version: string|null, tool: string|null}, generatedAt?: string}} input
  */
-export function buildSnapshot({ birth, pillars, horosa, generatedAt = new Date().toISOString() }) {
+export function buildSnapshot({ birth, pillars, trueSolarTime = null, horosa, generatedAt = new Date().toISOString() }) {
   const snapshot = {
     schema: BAZI_SNAPSHOT_SCHEMA,
     generatedAt,
     birth: { ...birth },
     pillars: { year: pillars.year, month: pillars.month, day: pillars.day, hour: pillars.hour },
-    basis: buildBasis(birth),
+    basis: buildBasis(birth, trueSolarTime),
     horosa: { version: horosa?.version ?? null, tool: horosa?.tool ?? null },
   }
   // `birth.place` 没给就**省略该键**（不写空串：空地方名比没有地方名更容易被界面当成「填过了」）。

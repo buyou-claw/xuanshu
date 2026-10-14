@@ -238,6 +238,31 @@ function extractPillars(data) {
 }
 
 /**
+ * 从信封里取**真太阳时**（票 08 的命盘卡「口径行」要用，票 06 的接缝原本没把它带出来）。
+ *
+ * 为什么只能解析 `data.snapshot_text`：该版本信封里**没有**结构化的真太阳时字段 ——
+ * 结构化的 `data.bazi.directTime` 是「<直运日期> + <本次口径下实际采用的那个时刻>」，
+ * 它的**时间部分随 timeAlg 变**（实测同一出生：timeAlg=0 → `12:02:34`、=1 → `12:00:00`、
+ * =3 → `12:05:56`），而「真太阳时」按定义恒为真太阳时那一档，只出现在口径文本里。
+ * 三份实测信封（`bazi-ok-default` / `-clock` / `-meansolar`）里该行逐字相同：
+ *   `直接时间：1990-01-01 12:00:00　真太阳时：1990-01-01 12:02:34`
+ *
+ * **读不出就返回 null**（调用方省略该键），绝不拿经度自己算一个假值 ——
+ * 「录入层不换算」是 spec 明文，真太阳时只能来自上游引擎。
+ *
+ * @param {object|null} data - 信封的 `data`。
+ * @returns {{date: string, time: string}|null} 形如 `{date:'1990-01-01', time:'12:02:34'}`。
+ */
+export function extractTrueSolarTime(data) {
+  const raw = data?.snapshot_text
+  if (typeof raw !== 'string' || raw === '') return null
+  // 锚在 `真太阳时：<时间戳>` 上（全角/半角冒号都收）：`时间基准：真太阳时(…)` 那行后面没有时间戳，不会命中。
+  const match = /真太阳时\s*[：:]\s*(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/.exec(raw)
+  if (match === null) return null
+  return { date: match[1], time: match[2] }
+}
+
+/**
  * 分类八字信封（纯函数，契约 §4.2）。
  *
  * phase 判据（**实测**，不是规范猜的）：
@@ -262,6 +287,7 @@ export function classifyBaziEnvelope(envelope) {
     pillars: null,
     pillarSource: null,
     techniqueCard: null,
+    trueSolarTime: null,
     code: null,
     message: null,
     questions: [],
@@ -316,6 +342,8 @@ export function classifyBaziEnvelope(envelope) {
       ? `四柱 ${[pillars.year, pillars.month, pillars.day, pillars.hour].join(' ')}`
       : '四柱不可读（data.bazi.fourColumns 不全，按 null 处理）'
 
+    const trueSolarTime = extractTrueSolarTime(data)
+
     return {
       ...base,
       ok: true,
@@ -327,9 +355,11 @@ export function classifyBaziEnvelope(envelope) {
       pillars,
       pillarSource,
       techniqueCard,
+      trueSolarTime,
       detail:
         `出盘成功：tool=${tool ?? '?'}，version=${version ?? '?'}，${pillarNote}，`
         + `timeAlg=${timeAlg ?? '?'}（来源 ${timeAlgSource ?? '未知'}），technique_card=${techniqueCard ? '有' : '缺'}`
+        + `，真太阳时=${trueSolarTime ? `${trueSolarTime.date} ${trueSolarTime.time}` : '信封里读不出（省略）'}`
         + `${tool !== null && tool !== HOROSA_BAZI_ENVELOPE_TOOL ? `（注意：tool 不是 ${HOROSA_BAZI_ENVELOPE_TOOL}）` : ''}。`,
     }
   }

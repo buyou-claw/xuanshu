@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { classifyBaziEnvelope } from '../../packages/xuanshu-host/lib/horosa/bazi.mjs'
+import { classifyBaziEnvelope, extractTrueSolarTime } from '../../packages/xuanshu-host/lib/horosa/bazi.mjs'
 import { ENVELOPES_DIR } from './lib/paths.mjs'
 
 function fixture(name) {
@@ -214,5 +214,49 @@ describe('P4 · classifyBaziEnvelope（真实信封）', () => {
     expect(second.phase).toBe(first.phase)
     expect(second.pillars).toEqual(first.pillars)
     expect(second.timeAlg).toBe(first.timeAlg)
+  })
+
+  /**
+   * 真太阳时（票 08 的命盘卡口径行要用）。
+   *
+   * 抓的真实缺陷/风险：该版本信封**没有**结构化的真太阳时字段 —— 看起来像的那个
+   * `data.bazi.directTime` 的**时间部分随 timeAlg 变**（下面这条断言就是它的反证），
+   * 拿它当「真太阳时」会在用户选钟表时/平太阳时时报错一个不是真太阳时的值。
+   * 真太阳时只在口径文本的 `真太阳时：<时间戳>` 行里，且三档下**恒为同一个值**。
+   */
+  describe('真太阳时（extractTrueSolarTime，真实信封）', () => {
+    it('三档 timeAlg 下真太阳时是同一个值（真太阳时按定义不随口径选择而变）', () => {
+      for (const envelope of [OK_DEFAULT, OK_CLOCK, OK_MEAN]) {
+        expect(extractTrueSolarTime(envelope.data)).toEqual({ date: '1990-01-01', time: '12:02:34' })
+        expect(classifyBaziEnvelope(envelope).trueSolarTime).toEqual({ date: '1990-01-01', time: '12:02:34' })
+      }
+    })
+
+    it('反证：data.bazi.directTime 的时间部分**随 timeAlg 变**，所以它不能当真太阳时', () => {
+      const timeOf = (envelope) => String(envelope.data.bazi.directTime).split(' ')[1]
+      const times = [OK_DEFAULT, OK_CLOCK, OK_MEAN].map(timeOf)
+      expect(new Set(times).size, `三档 directTime 相同（${times.join(' / ')}）——这条反证失去意义，请复核 fixture`).toBe(3)
+      // 只有 `timeAlg=0`（真太阳时那一档）恰好等于真太阳时；另两档分别是钟表时与平太阳时。
+      // 也就是说：把它当真太阳时用，在 2/3 的口径选择下会报出一个**不是**真太阳时的值 —— 这正是要害。
+      expect(timeOf(OK_DEFAULT)).toBe('12:02:34')
+      expect(timeOf(OK_CLOCK)).toBe('12:00:00')
+      expect(timeOf(OK_MEAN)).toBe('12:05:56')
+      for (const envelope of [OK_CLOCK, OK_MEAN]) {
+        expect(timeOf(envelope), '非真太阳时档的 directTime 不该等于真太阳时').not.toBe('12:02:34')
+      }
+    })
+
+    it('读不出就 null（不抛、不编）：缺 snapshot_text / 文本里没有那一行 / 非对象', () => {
+      expect(extractTrueSolarTime(null)).toBe(null)
+      expect(extractTrueSolarTime({})).toBe(null)
+      expect(extractTrueSolarTime({ snapshot_text: '' })).toBe(null)
+      expect(extractTrueSolarTime({ snapshot_text: '时间基准：真太阳时(经度+均时差校正)\n' })).toBe(null)
+      expect(extractTrueSolarTime({ snapshot_text: '真太阳时：看起来像但不是时间戳' })).toBe(null)
+    })
+
+    it('非 ok 相位的 trueSolarTime 恒为 null（口径行只在成功信封里有意义）', () => {
+      expect(classifyBaziEnvelope(GATE).trueSolarTime).toBe(null)
+      expect(classifyBaziEnvelope(ERROR).trueSolarTime).toBe(null)
+    })
   })
 })

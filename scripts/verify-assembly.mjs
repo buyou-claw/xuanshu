@@ -305,11 +305,11 @@ export function extractInsertedRows(patchText, layer) {
 
 // ─────────────────────────────── CLI 调用 ───────────────────────────────
 
-function runCli(cli, opts, args, timeoutMs) {
+function runCli(cli, opts, args, timeoutMs, extraEnv = {}) {
   const started = Date.now()
   const result = spawnSync(process.execPath, [cli.binJs, '--profile', opts.profile, ...args], {
     cwd: REPO_ROOT,
-    env: { ...process.env, DSH_HOME: opts.dshHome, DSH_TELEMETRY_DISABLED: '1', NO_COLOR: '1' },
+    env: { ...process.env, DSH_HOME: opts.dshHome, DSH_TELEMETRY_DISABLED: '1', NO_COLOR: '1', ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: timeoutMs,
     encoding: 'utf8',
@@ -792,7 +792,16 @@ function checkS5(cli, opts) {
   try {
     // `--help` 走的是官方 CLI 的正常启动路径：prepareProfile → 挂载整棵树 → app 打印帮助并 exit 0
     // （实测 3.1s，exit 0）。它不提交 task，所以不调 LLM、不联网。
-    run = runCli(cli, opts, ['--help'], opts.timeoutMs)
+    //
+    // **必须显式选 headless 面**（票 07 在 profile 补丁层加了三行 `disabled` 开关）：
+    //   `web-startup` 在 web 面（`XUANSHU_SURFACE` 未设或非 headless）拥有 cmdlineArgs，
+    //   它把 `--help` 当自己的用法打印后**在挂载插件树之前就 exit 0** —— 那时 apply 根本没跑，
+    //   报告自然写不出来。这条 seam 要验的是「真 CLI 启动 → 插件 apply → 报告写出」，
+    //   所以取**能挂载整棵树**的那一面；web 面的启动本身由 tests/isolation 的 web 冒烟覆盖。
+    // 证据（2026-10-15 实测；同一 profile、同一命令，只差这一个环境变量）：
+    //   未设 → `[S5] FAIL 本次运行没有写出 assembly-report.json（插件没 apply？）`（3505ms）；
+    //   headless → `[S5] PASS report 新写出 ok=true，plugins=xuanshu-host+xuanshu-client，patchRowIds=189`（4288ms）。
+    run = runCli(cli, opts, ['--help'], opts.timeoutMs, { XUANSHU_SURFACE: 'headless' })
   } finally {
     restoreRootConfig(snapshot)
   }

@@ -103,9 +103,12 @@ describe('bazi.cast · 出盘成功（真实信封 bazi-ok-default）', () => {
     expect(snapshot.basis.clock).toBe('04:00')
     expect(snapshot.basis.offsetMinutes).toBe(540)
     expect(snapshot.basis.dst).toBe(true)
-    // baseline.trueSolar **只能**来自信封；票 06 的冻结接缝不回传 data.snapshot_text，
-    // 所以按契约 §1「拿不到就省略该键」——绝不自己拿经度算一个假值。
-    expect(Object.prototype.hasOwnProperty.call(snapshot.basis, 'trueSolar')).toBe(false)
+    // basis.trueSolar **只能**来自信封。该版本信封没有结构化字段，所以票 06 的
+    // `extractTrueSolarTime` 从 `data.snapshot_text` 的口径行取 `真太阳时：<时间戳>`。
+    // 本用例回放的是真机捕获（`bazi-ok-default`），那一行逐字是
+    //   `直接时间：1990-01-01 12:00:00　真太阳时：1990-01-01 12:02:34`
+    // → 归一成 `HH:mm` 的 `'12:02'`。**绝不自己拿经度算一个假值**（录入层不换算）。
+    expect(snapshot.basis.trueSolar).toBe('12:02')
 
     // ③ 底座谱：`_base` 三件（契约 §1）。
     expect(sandbox.files()).toEqual([

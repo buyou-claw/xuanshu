@@ -226,7 +226,9 @@ export async function castBazi({ ctx, dataDir, request }) {
 
   const generatedAt = new Date().toISOString()
   const horosaMeta = { version: classified.version ?? null, tool: classified.tool ?? null }
-  const snapshot = buildSnapshot({ birth, pillars, horosa: horosaMeta, generatedAt })
+  // 真太阳时取自信封口径文本（票 06 的 `extractTrueSolarTime`）；读不出就是 null，快照省略该键。
+  const trueSolarTime = classified.trueSolarTime ?? null
+  const snapshot = buildSnapshot({ birth, pillars, trueSolarTime, horosa: horosaMeta, generatedAt })
 
   // ⑦ 先谱后盘（见文件头）：两步都成了才算出盘成功。
   try {
