@@ -275,8 +275,22 @@ export function XsBestofActions({ view, running, actions }: { view: BestofView; 
   );
 }
 
-/** 设置里的开关行（S9 §2.7；`settings.general.item` 是更轻的一项设置行）。 */
-export function XsBestofSettingsRow({ state, actions }: { state: BestofUiState; actions: { onToggle(enabled: boolean): void } }) {
+/**
+ * 会话 composer 旁的触发按钮（S9 §1：`/多模型` 与按钮是**等价入口**）。
+ *
+ * 落位用设计稿 §8 给「当前态 UI」指的那一档（`conversation.composer.dock`）。
+ * **未确认**：该槽名在本版 DSH 里是否存在（事实笔记 §6.7 明说槽位键清单没有穷举）；
+ * 槽不存在时 `slots.inject` 只是不回调 —— 命令入口照常可用（不会抛、不会空占位）。
+ */
+export function XsBestofTriggerButton({ onTrigger }: { onTrigger(): void }) {
+  return (
+    <button type="button" className="xs-btn--primary" data-xs-bestof="trigger" onClick={onTrigger}>
+      多 AI 合参
+    </button>
+  );
+}
+
+/** 设置里的开关行（S9 §2.7；`settings.general.item` 是更轻的一项设置行）。 */export function XsBestofSettingsRow({ state, actions }: { state: BestofUiState; actions: { onToggle(enabled: boolean): void } }) {
   return (
     <div className="xs-bestof__settings" data-xs-bestof="settings">
       <div>

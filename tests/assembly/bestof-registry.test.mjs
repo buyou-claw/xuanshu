@@ -21,7 +21,7 @@ import { DSH_MAIN_KEYS, DSH_SIDEBAR_IDS, expectedCells } from './lib/panel-surfa
 
 import { createBestofApi } from '../../packages/xuanshu-client/src/client/bestof-api.ts'
 import { BESTOF_COMMAND_NAMES, createBestofController } from '../../packages/xuanshu-client/src/client/bestof-model.ts'
-import { BESTOF_OVERLAY_ID, BESTOF_SETTINGS_ID, installBestOf } from '../../packages/xuanshu-client/src/client/bestof.tsx'
+import { BESTOF_OVERLAY_ID, BESTOF_SETTINGS_ID, BESTOF_TRIGGER_ID, installBestOf } from '../../packages/xuanshu-client/src/client/bestof.tsx'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..', '..')
@@ -114,18 +114,21 @@ describe('票 11 · 产物（lib/client.js）与注册面', () => {
     expect([...new Set(requested)].sort()).toEqual(['react', 'react/jsx-runtime'])
   })
 
-  it('浮层与设置行落在约定的 cell 上，且 `/多模型` 三个名字都注册进命令面', () => {
+  it('浮层 / 设置行 / 触发按钮落在约定的 cell 上，且 `/多模型` 三个名字都注册进命令面', () => {
     const { calls, commands, ctx } = recordingCtx()
     plugin.apply(ctx)
 
     const registers = calls.filter((call) => call.kind === 'register')
     const overlay = registers.filter((row) => row.name === 'shell.overlay').map((row) => row.options.id)
     const settings = registers.filter((row) => row.name === 'settings.general.item').map((row) => row.options.id)
+    const trigger = registers.filter((row) => row.name === 'conversation.composer.dock').map((row) => row.options.id)
 
     expect(overlay).toContain(BESTOF_OVERLAY_ID)
     expect(BESTOF_OVERLAY_ID).toBe('xuanshu-bestof-overlay')
     expect(settings).toEqual([BESTOF_SETTINGS_ID])
     expect(BESTOF_SETTINGS_ID).toBe('xuanshu.bestof')
+    expect(trigger).toEqual([BESTOF_TRIGGER_ID])
+    expect(BESTOF_TRIGGER_ID).toBe('xuanshu-bestof-trigger')
 
     expect(commands.map((contribution) => contribution.name).sort()).toEqual([...BESTOF_COMMAND_NAMES].sort())
     expect(BESTOF_COMMAND_NAMES).toEqual(['多模型', '合参', 'bestof'])
@@ -220,12 +223,13 @@ describe('票 11 · 安装函数在无 document 的 Node 里安全', () => {
     expect(typeof document).toBe('undefined')
   })
 
-  it('installBestOf：注册浮层 + 设置行 + 三个命令名，不抛、不切面板', () => {
+  it('installBestOf：注册浮层 + 设置行 + 触发按钮 + 三个命令名，不抛、不切面板', () => {
     const { registrations, commands, ctx } = installCtx()
     expect(() => installBestOf(ctx, deps())).not.toThrow()
     expect(registrations.map((row) => ({ name: row.name, id: row.id, order: row.order }))).toEqual([
       { name: 'shell.overlay', id: BESTOF_OVERLAY_ID, order: undefined },
       { name: 'settings.general.item', id: BESTOF_SETTINGS_ID, order: 60 },
+      { name: 'conversation.composer.dock', id: BESTOF_TRIGGER_ID, order: undefined },
     ])
     expect(commands.map((contribution) => contribution.name)).toEqual(BESTOF_COMMAND_NAMES)
     expect(Object.keys(registrations[0].inject()).sort()).toEqual(['api', 'controller'])
@@ -235,7 +239,25 @@ describe('票 11 · 安装函数在无 document 的 Node 里安全', () => {
     const { registrations, ctx } = installCtx()
     delete ctx.commandUi
     expect(() => installBestOf(ctx, deps())).not.toThrow()
-    expect(registrations).toHaveLength(2)
+    expect(registrations).toHaveLength(3)
+  })
+
+  it('触发按钮：拿不到 sessionId 也照常进费用确认（由控制器说「还没有问事会话」）', async () => {
+    const { registrations, ctx } = installCtx()
+    const install = deps()
+    install.controller.setEnabled(true) // 开关默认关：先打开（设置行的职责）
+    install.controller.editQuestion('这次转岗该不该去')
+    installBestOf(ctx, install)
+
+    const button = registrations.find((row) => row.name === 'conversation.composer.dock')
+    const { onTrigger } = button.inject()
+    onTrigger()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const state = install.controller.snapshot()
+    expect(state.phase).toBe('confirm')
+    expect(state.sessionId).toBe('')
+    await install.controller.confirm()
+    expect(install.controller.snapshot().error).toMatch(/还没有问事会话/u)
   })
 
   it('命令的 run(session) 把 sessionId 带进控制器（关着时进禁用态，一个请求都不发）', () => {

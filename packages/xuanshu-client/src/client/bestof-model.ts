@@ -248,7 +248,8 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
         set({ phase: 'confirm', error: '写上要合参的问题。' });
         return;
       }
-      if (state.sessionId === undefined) {
+      // 空串也是「没有会话」：按钮触发那条路径拿不到 sessionId 时会走到这里。
+      if (state.sessionId === undefined || state.sessionId === '') {
         set({ phase: 'confirm', error: '还没有问事会话：先去「问事」开一次会话。' });
         return;
       }

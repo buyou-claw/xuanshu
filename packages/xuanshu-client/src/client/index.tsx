@@ -235,6 +235,20 @@ export function apply(ctx: Context): void {
   installRikke(rpc, { api: rikke, navigate });
 
   // ⑨ 票 11：多 AI 合参（`shell.overlay` 浮层 + `settings.general.item` 开关行 + `/多模型` 命令
-  //    与别名 `/合参` · `bestof`）。三条注册都是纯加性；浮层无内容时 `return null`（click-through）。
-  installBestOf(ctx, { api: bestof, controller: bestofController });
+  //    与别名 `/合参` · `bestof` + 会话 composer 旁的触发按钮）。四条注册都是纯加性；
+  //    浮层无内容时 `return null`（click-through）。
+  //    命令面能给当前 sessionId；**按钮给不了**，所以由回调退到「最近一次问事会话」
+  //    （`consult.list` 按 createdAt 倒序，门厅里显示的就是它）。
+  installBestOf(ctx, {
+    api: bestof,
+    controller: bestofController,
+    resolveSessionId: async () => {
+      try {
+        const { items } = await consultApi.list();
+        return items[0]?.sessionId;
+      } catch {
+        return undefined;
+      }
+    },
+  });
 }

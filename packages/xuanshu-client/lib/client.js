@@ -243,7 +243,7 @@ function createBestofController({ api, pollMs = 400 }) {
         set({ phase: "confirm", error: "写上要合参的问题。" });
         return;
       }
-      if (state.sessionId === void 0) {
+      if (state.sessionId === void 0 || state.sessionId === "") {
         set({ phase: "confirm", error: "还没有问事会话：先去「问事」开一次会话。" });
         return;
       }
@@ -542,6 +542,9 @@ function XsBestofActions({ view, running, actions }) {
     ] })
   ] });
 }
+function XsBestofTriggerButton({ onTrigger }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "xs-btn--primary", "data-xs-bestof": "trigger", onClick: onTrigger, children: "多 AI 合参" });
+}
 function XsBestofSettingsRow({ state, actions }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "xs-bestof__settings", "data-xs-bestof": "settings", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -559,6 +562,7 @@ function XsBestofSettingsRow({ state, actions }) {
 var import_jsx_runtime2 = require("react/jsx-runtime");
 var BESTOF_OVERLAY_ID = "xuanshu-bestof-overlay";
 var BESTOF_SETTINGS_ID = "xuanshu.bestof";
+var BESTOF_TRIGGER_ID = "xuanshu-bestof-trigger";
 function bestofActions(deps) {
   const { controller } = deps;
   return {
@@ -605,25 +609,44 @@ function installBestOf(ctx, deps) {
     () => ctx.slots.register({ name: "settings.general.item", id: BESTOF_SETTINGS_ID, order: 60, inject: () => deps }, BestofSettingsRowHost)
   );
   const commandUi = ctx.commandUi;
-  if (typeof commandUi?.register !== "function") return;
-  for (const name of BESTOF_COMMAND_NAMES) {
-    ctx.effect(
-      () => commandUi.register({
-        name,
-        label: () => "多 AI 合参",
-        description: () => "一个问题多路 AI 并列给答案、分歧可见、拍板在人",
-        // 关着的时候命令也在（S9 §1：关闭时触发一次提示 + 给「去设置打开」）。
-        available: () => true,
-        ui: {
-          kind: "action",
-          run: (session) => {
-            const snapshot = deps.controller.snapshot();
-            deps.controller.ask({ question: snapshot.question, sessionId: session.sessionId });
+  if (typeof commandUi?.register === "function") {
+    for (const name of BESTOF_COMMAND_NAMES) {
+      ctx.effect(
+        () => commandUi.register({
+          name,
+          label: () => "多 AI 合参",
+          description: () => "一个问题多路 AI 并列给答案、分歧可见、拍板在人",
+          // 关着的时候命令也在（S9 §1：关闭时触发一次提示 + 给「去设置打开」）。
+          available: () => true,
+          ui: {
+            kind: "action",
+            run: (session) => {
+              const snapshot = deps.controller.snapshot();
+              deps.controller.ask({ question: snapshot.question, sessionId: session.sessionId });
+            }
           }
-        }
-      })
-    );
+        })
+      );
+    }
   }
+  const trigger = () => {
+    const snapshot = deps.controller.snapshot();
+    const resolve = deps.resolveSessionId;
+    if (resolve === void 0) {
+      deps.controller.ask({ question: snapshot.question, sessionId: "" });
+      return;
+    }
+    void resolve().then((sessionId) => {
+      deps.controller.ask({ question: deps.controller.snapshot().question, sessionId: sessionId ?? "" });
+    });
+  };
+  ctx.slots.inject(
+    "conversation.composer.dock",
+    () => ctx.slots.register({ name: "conversation.composer.dock", id: BESTOF_TRIGGER_ID, inject: () => ({ onTrigger: trigger }) }, BestofTriggerHost)
+  );
+}
+function BestofTriggerHost({ onTrigger }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofTriggerButton, { onTrigger });
 }
 
 // src/client/CangPanel.tsx
@@ -6315,7 +6338,18 @@ function apply(ctx) {
   installConsult(rpc, { api: consultApi, navigate, openSession, refreshSessions });
   installDigao(rpc, { api: digao, navigate });
   installRikke(rpc, { api: rikke, navigate });
-  installBestOf(ctx, { api: bestof, controller: bestofController });
+  installBestOf(ctx, {
+    api: bestof,
+    controller: bestofController,
+    resolveSessionId: async () => {
+      try {
+        const { items } = await consultApi.list();
+        return items[0]?.sessionId;
+      } catch {
+        return void 0;
+      }
+    }
+  });
 }
 		// 包体中途执行过 module.exports = __toCommonJS(...)，上面的 exports 已过期；
 		// 必须重新读取 module.exports，逐个补拷会漏掉将来的新导出。
