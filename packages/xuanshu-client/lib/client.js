@@ -991,14 +991,17 @@ function createCangController() {
         listeners.delete(listener);
       };
     },
+    /** 打开抽屉编辑某条登记（`draft` 在场 = 抽屉展开）。 */
     edit: (draft) => {
       state = { ...state, draft };
       notify();
     },
+    /** 关抽屉（草稿丢弃由调用方决定 —— controller 不管「要不要保存」）。 */
     close: () => {
       state = { ...state, draft: void 0 };
       notify();
     },
+    /** 列表可能过时了：面板与抽屉各取一次（**只由人点触发**）。 */
     changed: () => {
       state = { ...state, revision: state.revision + 1 };
       notify();
