@@ -242,6 +242,11 @@ S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带�
 **没动的三处口径**（不是遗漏）：判官与合并槽不带上下文（H4）；`consult.send`「受理即回」；
 ADR-0009 的三条禁令（不碰 `meta` / 不新增会话事件 `type` / 不拿 `agentPreset` 当标签）。
 
+> **§11 里已被 §12 换掉的机制**（复核实测它们仍有洞）：③ 的「确认那一刻注入 + `mountsInjected` 幂等」、
+> ④ 的「候选只带上下文快照」、⑤ 的「首轮上下文在 create 那一刻灌」、以及下面两条 code-review 处置
+> （`mountsInjected` 只在 `delivered` 时写、注入判据改成「灌过没有」）。上下文与挂载现在只有一条通道：
+> `boundary.mjs` → `agent/pre-step`（ADR-0012）。这一段保留原文是为了看清「当时为什么那么改」。
+
 **验收数字**（都抄工具输出）：
 
 ```
@@ -280,9 +285,9 @@ ADR-0009 的三条禁令（不碰 `meta` / 不新增会话事件 `type` / 不拿
 | **`sediment.draft` 只看旁挂清单的 `turns`**：一场只从原生 composer 问过的问事会被「还没问过」拒掉 | `sediment.draft` 也先按会话日志核对一次（复用 `reconcileTurns`）；补一条用例（旁挂说 0 轮、日志里两问 → 正常出草稿，并把账补成 2） |
 | 清单门其余三处小账：`known` 拼成 `file::title` 再 `split` （标题里带 `::` 会被截断）、mtime 判据在粗粒度文件系统上会假红、`now` 注入点没人用 | `known` 改返回对象；判据留 2 秒宽容并补一条「同秒写入不算旧件」的用例；`now` 真的被那条「旧件」用例用上了 |
 
-**一处刻意的边界（不是缺陷）**：合参候选拿到的是这场问事的**上下文快照**（底座谱 / 底稿 / 勾选谱 / 挂载），
-**不含**会话历史与采用稿 —— 候选流本来就是不带历史的独立流；采用稿由 `bestof.adopt` 投进**会话**，
-所以下一场问事（`consult.send`）看得见，而下一轮合参的候选看不见。要改这条得先冻结一个新的接口面。
+**一处刻意的边界（§11 当时的口径；已由 §12 的 R5 修掉）**：合参候选当时拿到的是这场问事的**上下文快照**
+（底座谱 / 底稿 / 勾选谱 / 挂载），**不含**会话历史与采用稿。本轮复核判定这违反 ADR-0010 第 5 条与 S9
+的历史窗口要求 —— 现在候选另外带一段**窗口裁剪后的会话文本历史**（含被采用的合参稿，见 §12）。
 
 **另外修掉的一处（本轮一并做，2026-10-15 晚）**：`docs/tickets/` 里 9 份票面（07–11、13–16）曾是乱码 ——
 `1876303`（「票 07–16 状态与追踪器对齐」）那一笔把**没改动的行**写成了双层编码（读错编码再写回，而且**有损**：
@@ -294,6 +299,93 @@ Status 行取坏文件里那一行，逐字未动；写盘前核两条 —— �
 而「新写的行」是好的。只扫「文件里有没有乱码字符」还不够，得看**同一份文件里一半干净一半乱**这种形状
 （本次是靠逐行比对才发现那一笔其实只改了 Status 一行）。
 
+### 12. 复核轮：`a2ceaf3` 的 5 条发现（2026-10-15 深夜，全修）
+
+复核报告入库在 `docs/reviews/spec001-a2ceaf3-review.md`（结论：本轮不通过，5 条本轮发现）。
+它写的每一处都是真的，逐条处置如下；**机制换了的那些，§11 里对应的说法以本节为准**。
+
+| # | 复核实测的发现 | 处置 |
+|---|---|---|
+| R1 | **清单门仍会漏掉 hook / suite 失败**：`beforeAll` 抛错时真实 vitest 报的是「文件 `status:'failed'` + 用例全 `skipped` + `numFailedTests 0`」，而判据只看 `assertion.status === 'failed'` ⇒ 报告新鲜、条数不减，门照样通过 | `collectReport` 多收一类 `suiteFailures`（文件级失败且**没有**任何用例级失败，附报告里那句 message），`violationsFor` 把它当违规；再加一条「`success=false` 却一条失败都核不出来」（未处理错误）的判据。回归用例 4 条：合成报告 2 条 + **真 vitest 跑一次那个 beforeAll 抛错的夹具**（`tests/lib/fixtures/inventory-hook/`，故意不叫 `.test.mjs`）+ 一条「文件里已有用例级失败就不重复报」。复核自己的探针复跑：`vitestExit 1 / reportSuccess false / failures [] / suiteFailures 1` → **violations 1 条**（修复前 0 条） |
+| R2 | **空白会话恢复后仍漏上下文**：旧实现的「在场」靠 `inject()` 排进 inbox，而正常 `dispose()` 会追加 `outcome:"canceled"` 把待消费消息撤掉；原生 composer 又不经过 `consult.send` ⇒ 「空白开会话 → 关应用 → 恢复后原生问第一句」一个字都不剩 | 上下文改走 **`agent/pre-step` 边界**（`lib/consult/boundary.mjs`）：每一轮的**第一步**判断「缺什么」再补。交付的落点是**会话日志**（loop 在 `dsh-agent-loop/lib/index.js:1061` 把这一步的消息 append 成 `user/message`）⇒ 一次交付即永久在场（重启 / dispose / 原生 composer 都读同一份日志）。实装依据：`:906-918` 的 pre-step waterfall；随包先例 `dsh-time-context/lib/index.js:242-246`。ADR-0012 记了决定与代价 |
+| R3 | **重启后先确认挂载、再从原生会话续问 → 挂载不生效**：`syncMountsIntoSession()` 找不到活 agent 就返回 false | 同一条边界按**变化**补挂载：`consult.setMounts` 只落清单（不再需要「那一刻有活 agent」），下一问第一步发现「这一层还没进过日志」就补投它 |
+| R4 | **部分挂载读取失败被整体记为已交付**：`.some(layer.kept)` 因 A 成功而 true ⇒ `mountsInjected = [A,B]`，B 恢复后永不重读 | `mountsInjected` 改成**逐层**只记「内容真的纳入」（`layer.kept === true`）：读不出来的层留在外面 ⇒ 下一问自动重试。用例直接复刻 A 可读 / B 缺失 → 补上文件 → 下一问带上 B 的正文 |
+| R5 | **合参候选仍无文本历史与采用稿**：候选只有「材料 + 当前问题」，用户说「沿用刚才采用的方案」时候选取不到上一轮 | `bestof.run` 给候选加**会话文本历史**（`history.mjs` 的 `buildCandidateHistory` + `projectConsultMessages`）：窗口复用模型窗口探测（新 `resolveHistoryBudget`，S9「历史长度按合参模型统一处理」），按**整条**消息从最新往回裁并把裁剪事实写进文本；只带**被采用的**合参稿（`xuanshu-bestof-adopted`，ADR-0010 第 5 条），注入过的材料不进历史。判官与合并槽继续不带（H4 原样） |
+
+**这轮换掉的机制（别按旧文档找）**：`consult.create` / `consult.send` / `consult.setMounts` **都不再注入**；
+`lib/consult/inject.mjs` 的 `buildMountChange`、`context.mjs` 的 `buildMountUpdateContext`、
+`service.mjs` 的 `injectFirstRound` / `syncMountsIntoSession` 全部删除；
+`store.mjs` 的 `mountsInjected` / `mountsKey` **按新的判据重写**（逐层「内容已交付」，见 R4）。
+上下文与挂载现在只有一条通道：`boundary.mjs` → `agent/pre-step`。
+
+**实装探针（钉版 rc.2，打桩 LLM、跑真的一轮）**：`.scratch/review-a2-boundary-probe.mjs`
+用真 `Context` + `SessionStore` + `AgentRegistry` + `AgentLoop` + 真 `SystemPrompt` 建会话，按生产方式注册边界，
+再让**真的一轮**跑起来（`ctx.provide('llm', {stream, prepareCall})` 打桩，不联网、不调模型）。
+输出留档 `.scratch/review-a2-boundary-probe-output.jsonl`：
+
+```
+{"stage":"first-turn","firstTurnEnded":true,"eventTypes":["agent/inbox/spliced","turn/start","agent/inbox/spliced","step/start","system/message","user/message","user/message","request/header","request/context","assistant/message","step/end","turn/end"],"derivedMessages":["system/system-prompt","user/xuanshu-consult","user/user","assistant/model"],"turnEnd":"[{\"turn\":1,\"reason\":{\"kind\":\"completed\"}}]","injectedMessages":1,"hasBaseOrMissingBase":true,"hasDigao":true,"hasPu":true,"hasMount":false}
+{"stage":"second-turn-no-change","secondTurnEnded":true,"injectedMessages":1}
+{"stage":"mount-added","mountTurnEnded":true,"injectedMessages":2,"lastHasMountContent":true,"lastHasDisclosure":true,"lastHasMaterial":false}
+{"stage":"mount-removed","removeTurnEnded":true,"injectedMessages":3,"lastHasRetraction":true,"lastNamesIt":true}
+{"stage":"after-restart-replay","replayTurnEnded":true,"injectedMessages":3,"materialStillPresent":true,"noNewInjection":true}
+```
+
+四行合起来说明四件事：① 材料**真的落进了日志**（`derivedMessages` 里那条 `user/xuanshu-consult`）且模型看得到；
+② 材料**不重复发**（第二轮仍是 1 条）；③ 加挂载 → 补投它的正文与披露（2 条）；撤下 → 说一句「不再适用」（3 条）；
+④ 换一台引擎重放日志（= 重启）再问，材料还在、且**不再多发**（R2 的机器证据）。
+
+
+**复核自己那两个探针在本轮之后不再是判据**（如实交代）：`.scratch/review-a2-mount-probe.mjs` 读的是
+旧字段（已随机制删除）、`.scratch/review-a2-spec-inbox-probe.mjs` 打的是 inbox 排队（已不用于投递）——
+它们复跑会报错。同一批场景改由上面这条实装探针与断言台 `tests/consult/boundary.test.mjs` 覆盖
+（R2 的恢复、R3 的重启 + 挂载、R4 的部分层失败 → 恢复各一条）。R1 那个探针
+（`.scratch/review-a2-standards/probe-hook.mjs`）**原样复跑即可**，已复跑（见上表）。
+
+**这一轮由两轴 code-review 抓出并当场修掉的三处**（都记在这儿，免得下一轮再犯）：
+
+| 复核发现 | 处置 |
+|---|---|
+| **「不写会话日志」是错的**（规格轴 blocking）：`agent/pre-step` 返回的消息会被 loop **原样 append** 成 `user/message`（`:1061`），所以「每轮现算、不进日志」既不是事实、也会让 `hasLoggedContext` 这条门自我否掉 —— 第一轮之后它匹配到自己注入的那条，从此**整条会话不再补任何东西**（挂载也跟着死） | 交付模型改成「**落点是日志，只补缺的**」：材料按日志判据补一次、挂载按 `mountsInjected`（逐层）的变化补；缓存只记**肯定**的结论（`false` 不缓存，否则每轮重发一份材料）。探针改成跑真的一轮，直接观察 `deriveMessages()` |
+| **老会话 + 挂载 = 旧病复发**（标准轴 HARD 2）：材料已在日志的会话整条跳过 ⇒ 「挂了却看不见」在旧会话上原地复活 | 材料与挂载**分开判**（材料缺席才发全量；否则只走挂载增量），补一条「老会话 + 挂了东西 → 只补挂载段」的用例 |
+| 契约与实现不一致的三处小账：`inventory-gate.test.mjs` 头注释说「零 vitest」（新用例真跑 vitest）、`send.test.mjs` 留着一个没人用的 import、`inject.mjs` 导出了没人用的 `softGet` | 三条都按实际改（注释说清哪一条例外；删死 import 与死导出）。另补两条覆盖：**撤下挂载**的纯文本口径（R3/R4 之后曾被删掉且没补回）、`resolveHistoryBudget` 的同源口径 |
+
+
+**这轮的边界与代价（如实登记）**：
+
+- 材料是**会话开始时的那一份**：底稿在会话中途刷新（票 13 的定时任务）不会自动重发 —— 材料里给的是
+  **文件路径**，要看最新版让模型自己去读；要一份新快照就开新会话。
+- 每一问的第一步都要读一次旁挂清单（一个小 JSON），有挂载变化时再按预算读一次挂载内容；
+  读取量由既有预算（`mounts/budget.mjs`）封顶。
+- `mountsInjected` 是我们记的账，而「交付」发生在 loop 的 append 里：两者之间有极窄的窗口
+  （写账 → 落日志）。进程恰好死在这中间时那一层会被当成「已交付」；再改一次挂载就会重新交付。
+- 合参候选的历史窗口按**字**裁、按整条丢；预算未知（拿不到模型窗口）时**不裁**并如实写一句 ——
+  与挂载预算同一套「不编数字」的口径。
+- 复核报告里另有 **4 条上一轮就登记过的问题** —— 本轮把其中两条**顺手修了**（见下），
+  另两条（日课生成链、工作流挂载占位）见各自小节。
+
+**顺手修掉的两条上一轮遗留**（都不属于 R1–R5，但复核点名列在同一张表里）：
+
+| 遗留项 | 处置与证据 |
+|---|---|
+| Standards 3/4：copy 安装漏运行时依赖 + 丢锁文件（`scripts/install-profile.mjs:159/166`） | copy 模式不再把自有包写成 `link:<仓库绝对路径>`，而是**物化进目标** `<target>/packages/<name>` + `file:./packages/<name>`；`pnpm-lock.yaml` 一并复制并只改写自有包路径。依据：`link:` 只建联接、**不装**被链接包自己的依赖（离网探针：目标里 `xs-fixture-runtime` 解析 `UNRESOLVED (MODULE_NOT_FOUND)`，仓库挪走后连插件文件都找不到），`file:` 则装齐且插件能加载。文件头本来就写着「copy（--copy，真分发包语义）」——自足是原文口径，不是这次新加的。回归：`tests/setup/install-profile-copy.test.mjs` 8 条（零 pnpm/零网络），同一份用例 **修复前 `8 tests \| 7 failed` → 修复后 `8 passed`**；pnpm 层证据在 `.scratch/install-fix/`（真 profile 离网 copy 装 526 包、`--frozen-lockfile` exit 0、锁文件 sha 不变）。断言台不跑真 pnpm 这条边界写进了 `tests/setup/README.md` |
+| Spec 1：日课定时任务未接可执行生成链（`rikke/daily-tasks.mjs:142` 裸建 agent） | ① 142 行的裸建换成 `consult/agent.mjs` 的 `createConsultAgent` / `consultAgentCapability`（preset + 默认模型 + setup；缺服务或抛错时仍退回裸建并把理由进 `notes`）；② 生成链抽成**唯一一份** `lib/rikke/generate.mjs`（`generateRikke()`），`rikke.generate`（`manual:true`）与定时到点（`lib/rikke/delivery.mjs` 在 `agent/pre-step` 上跑，`manual:false`）走同一段代码；③ `RIKKE_PROMPT` 改成与事实一致（产物已由宿主生成）。回归：`tests/rikke/daily-chain.test.mjs` 9 条，**修复前 `9 failed`（`expected undefined to be 'standard'`、`agent/pre-step 上没有钩子`）→ 修复后 `9 passed`**；`tests/rikke` + `tests/digao` = `10 passed / 70 passed`。探针（真 Context + AgentLoop + 打桩 LLM）：`artifactExists:true, manual:false, horosaCalls:1`，普通一轮后仍 `horosaCallsAfter:1` |
+| Spec 1 续：底稿 03:30 **同样**没有确定性链（只把 `DIGAO_PROMPT` 投进会话，而 `digao.json` 的 meta / 骨架渲染 / `condenseWithLlm` 只有宿主做得对） | 见「底稿到点」一段（同一轮收尾修） |
+
+**底稿到点（Spec 1 的另一半）**：`digao.refresh` 的那条链同样抽成唯一一份（`lib/digao/generate.mjs`），
+`delivery.mjs` 加认 `session-xs-digao-` + `source.kind === 'schedule'` + 第一步，跑同一条链、不依赖模型、永不抛；
+`digao/service.mjs → rikke/daily-tasks.mjs` 的 import 环在这一步解开（共享常量挪到中立模块，环的解法写在文件头）。
+回归与探针输出见 `tests/digao/*` 与 `.scratch/rikke-chain/`（Lead 已独立复跑 `tests/rikke` / `tests/digao`）。
+
+**一条仍未修、且需要先做设计决定的**（复核报告里的 Spec 5）：**工作流挂载仍是占位**。
+`mounts/content.mjs` 对 `kind:'workflow'` 返回带 `hint` 的空层，真话是「工作流内容的数据源属票 16，还没接上」——
+而 `lib/workflow/store.mjs` 的工作流清单里**只有** `{schema, id, sessionId, name, createdAt, exportedAt?}`：
+没有任何可注入的正文（没有 summary / 描述 / skill 路径字段）。要接上有两条候选路：
+① 读该工作流**导出的 skill**（`<dshHome>/skills/<kebab>/SKILL.md`，但 kebab 名映射与「导出过没有」都没冻结）；
+② 在工作流清单里加一个可注入字段（要动票 16 的 schema `xuanshu/workflow@1`）。
+两条都要先落一个设计决定（客户端还缺「工作流选择」入口，需要 `workflow.list` 接到挂载抽屉）。
+**本轮不编一个数据源**：编出来的内容会让「挂载了却没有任何工作流内容」这个真问题变成看不见的假问题。
+
 ## 验证边界
 
 完整装配五条 seam 的当前结果：S2（进程内启动）、S3（客户端产物）、S4（上游行基线）、S5（真实 CLI 报告）通过；
@@ -303,24 +395,32 @@ Status 行取坏文件里那一行，逐字未动；写盘前核两条 —— �
 而同版本官方 web bundle 自带的 `@deepseek-ai/dsh-agent-preset` 是另一种 carrier，报
 `unrecognized Loader tree carrier`。真实 web 与宿主启动正常。测试保留失败，无上游源码改动、无放宽断言。
 
-当前全仓基线（`node scripts/check-test-inventory.mjs`，2026-10-15 晚评审修复轮之后）：
+当前全仓基线（`node scripts/check-test-inventory.mjs`，2026-10-16 复核修复轮之后）：
 
 ```
-[inventory] 用例 1057 条（基线 1057）/ 文件 99 个 / 失败 2 条（已知红 2 条） / 跳过 10 条 / vitest exit 1
-[inventory] 通过：没有用例消失、没有已知红之外的失败。
+[inventory] 用例 1097 条（基线 1097）/ 文件 103 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 ```
 
 2 条失败 = **S1 装配树** 与由它连带的 **CLI 退出码为 0**（就是基线 `knownRed` 里那两条，理由见上）。
 跳过的 10 条 = `tests/horosa/p0-fixtures` 2 条（`.scratch` 里的 `gt06-*` 原始捕获仍缺）+ `tests/horosa/p10-e2e` 8 条
 （真机前置件不在）。**同一条命令在「没有 profile」的干净环境里也必须给出同样的条数并判过**
-（评审修复轮实测：1057 / 99 文件 / 0 失败 / 51 跳过）—— 这就是 §11 ② 的机器判据；
+（复核修复轮实测：1097 / 103 文件 / 0 失败 / 51 跳过 / exit 0）—— 这就是 §11 ② 的机器判据；
+
 「干净环境」用 `XUANSHU_DSH_HOME` 指向一个空目录来模拟（CI 上那个目录本来就不存在）。
 **基线之外的红色一律是本轮引入的回归。**
 （历史：票 08 后 448 passed；票 10/13 后 684；票 11/12/15/16 后 992；code-review 修复后 1020；
 清理轮 +3 条用例，并把两处「证据没了」从「静默跳过 / 不收集」顶成红；评审修复轮 +24 条用例、新增
-`tests/lib/inventory-gate.test.mjs` 一个文件，并把 5 个测试文件的条数与环境解耦。）
+`tests/lib/inventory-gate.test.mjs` 一个文件，并把 5 个测试文件的条数与环境解耦；复核修复轮 **+40 条用例**
+（1057 → 1097）：新增 `tests/consult/boundary.test.mjs` 18 条、`tests/lib/fixtures/inventory-hook/`（真 vitest 夹具）、
+`tests/setup/install-profile-copy.test.mjs` 8 条、`tests/rikke/daily-chain.test.mjs` 9 条、`tests/digao/daily-chain.test.mjs` 6 条，
+以及 history +5 / inventory-gate +4 / bestof-run +1 / mounts-preview +1；同时据实删掉 12 条「验旧注入机制」的用例
+（`send` 6 条 / `mounts-inject` 6 条），其覆盖搬到边界用例 —— 所以 `--update` 时那两处「用例变少」
+是**有意的**，理由写在提交信息与本节。）
+
 同一时刻的装配五 seam：**S2 / S3 / S4（185 行基线全命中）/ S5 PASS，S1 FAIL**；`tsc --noEmit` exit 0；
 `build-client --check` in sync（386627 B）。
+
 
 **S5 的面依赖（已修）**：票 07 在 profile 补丁层加了三行 `disabled` 开关后，web 面（`XUANSHU_SURFACE` 未设）
 由 `web-startup` 拥有 cmdlineArgs，它把 `--help` 当自己的用法打印后**在挂载插件树之前就 exit 0** ——

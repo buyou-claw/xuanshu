@@ -65,3 +65,70 @@ export function isSessionNotFound(error) {
   if (error?.code === 'SESSION_QUERY_SESSION_NOT_FOUND') return true
   return error?.name === 'SessionQueryError' && /not found/iu.test(String(error?.message ?? ''))
 }
+
+/** 合参候选的历史里**不**出现的 kind：注入进去的谱资料（它已经作为「材料」单独给了候选）。 */
+const HISTORY_EXCLUDED_KINDS = new Set(['xuanshu-consult'])
+
+/** 已采用的合参稿（ADR-0010 第 5 条：历史只带采用稿）——单独标一行，模型才知道那是一份被拍板的稿子。 */
+const ADOPTED_KIND = 'xuanshu-bestof-adopted'
+
+/** 一条历史消息的说话人标签（采用稿单独标，别让模型以为那是用户自己写的）。 */
+function labelOf(message) {
+  if (message.source === ADOPTED_KIND) return '已采用的合参稿'
+  return message.role === 'user' ? '用户' : '助手'
+}
+
+/**
+ * 候选流要带的**会话文本历史**（S9 每路独立的历史窗口 → 玄枢 v1 按合参模型统一处理）。
+ *
+ * 为什么候选需要它（评审 R5）：候选直接走 `ctx.llm.stream()`，没有会话历史；只带「材料 + 当前问题」时，
+ * 用户下一轮说「沿用刚才预算比较已经采用的方案」，候选**取不到**上一轮的方案与预算。
+ *
+ * 三条口径：
+ *   ① 只带**文本**（`projectConsultMessages` 已经滤掉工具调用与执行复盘：S9 排除的是图片历史，
+ *      不是全部文本历史）；
+ *   ② 落选 / 被否决的候选**不在其中** —— 它们从来没进过会话日志，日志里只有被采用的那一份
+ *      （`xuanshu-bestof-adopted`），这里如实标成「已采用的合参稿」；
+ *   ③ 窗口**按整条**消息裁剪（从最新往回装）：半条被截断的历史比少一条更难查；一条都装不下时，
+ *      最新那条照样带上（宁可超窗口，也不许候选对刚发生的事一无所知），并把裁剪事实写在文本里。
+ *
+ * @param {{messages?: Array<{role: string, text: string, source?: string}>, budget: number|null}} input
+ *        `messages` 是 `projectConsultMessages()` 的产物；`budget` 单位是**字**（`null` = 预算未知）。
+ * @returns {{text: string, included: number, omitted: number, chars: number}}
+ */
+export function buildCandidateHistory({ messages, budget }) {
+  const all = (Array.isArray(messages) ? messages : []).filter(
+    (message) => (message?.role === 'user' || message?.role === 'assistant')
+      && typeof message.text === 'string' && message.text.trim() !== ''
+      && !HISTORY_EXCLUDED_KINDS.has(message.source),
+  )
+  if (all.length === 0) return { text: '', included: 0, omitted: 0, chars: 0 }
+
+  const take = []
+  let chars = 0
+  for (let index = all.length - 1; index >= 0; index -= 1) {
+    const message = all[index]
+    const cost = labelOf(message).length + message.text.length + 1
+    if (budget !== null && take.length > 0 && chars + cost > budget) break
+    take.unshift(message)
+    chars += cost
+    if (budget !== null && chars > budget) break
+  }
+
+  const omitted = all.length - take.length
+  const lines = take.map((message) => `${labelOf(message)}：${message.text}`)
+  const notes = []
+  if (omitted > 0) notes.push(`（历史按 ${budget} 字窗口裁剪：省略了更早的 ${omitted} 条消息）`)
+  else if (budget === null) notes.push('（预算未知：拿不到模型窗口，本次不做裁剪，历史全部带上）')
+
+  return {
+    text: [
+      '【这场问事的历史】（只保留被采用的合参稿；落选候选不在其中）',
+      ...lines,
+      ...notes,
+    ].join('\n'),
+    included: take.length,
+    omitted,
+    chars,
+  }
+}

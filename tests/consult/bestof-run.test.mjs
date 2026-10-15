@@ -18,7 +18,7 @@ import { createBestOfMethods } from '../../packages/xuanshu-host/lib/consult/bes
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
 import { fakeAgentDefaultModel, fakeAgents } from './lib/sandbox.mjs'
 import { fakeLlm, STUB_USAGE } from './lib/bestof-llm.mjs'
-import { makeHost, makeSandbox, seedPu } from './lib/sandbox.mjs'
+import { assistantEvent, fakeSessionQuery, makeHost, makeSandbox, seedPu, userEvent } from './lib/sandbox.mjs'
 
 const roots = []
 afterEach(() => roots.splice(0).forEach((sandbox) => sandbox.cleanup()))
@@ -33,12 +33,11 @@ const CANDIDATE_TEXTS = ['经典派：先看大方向。', '审慎派：先核�
  * @param {object} options `judgePlan` 覆盖 judge 那一次调用的剧本；`now` 注入候选耗时用的时钟；
  *        `pus` / `digao` 用来验「候选看到的是这场问事的上下文」（下面那条哨兵用例）
  */
-async function scene({ judgePlan, plans, price, now, pus = [], digao = false, pu } = {}) {
+async function scene({ judgePlan, plans, price, now, pus = [], digao = false, pu, sessionQuery } = {}) {
   const sandbox = makeSandbox('bestof')
   roots.push(sandbox)
   if (digao) sandbox.write('digao.md', '# 底稿\nDIGAO_SENTINEL\n')
-  // 谱必须在**开会话之前**落盘：首轮上下文在 create 那一刻就灌进去了（见 service.mjs），
-  // 晚一步就只能注入一段「读不出来」。
+  // 谱要在**读它之前**落盘：候选的材料与边界的上下文都是「那一刻现读」的，晚一步就只能读到「读不出来」。
   if (pu !== undefined) seedPu(sandbox, pu)
   const agents = fakeAgents()
   const llm = fakeLlm(
@@ -61,6 +60,7 @@ async function scene({ judgePlan, plans, price, now, pus = [], digao = false, pu
       agentPresets: { resolve: async () => ({ id: 'standard' }), mount: async () => ({}) },
       agentDefaultModel: fakeAgentDefaultModel().service,
       llm: llm.service,
+      ...(sessionQuery === undefined ? {} : { sessionQuery: sessionQuery.service }),
     },
   })
   const consult = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir })
@@ -161,6 +161,40 @@ describe('bestof.run · 2 路并行（票面「首版 2 路并列流式，不带
     const judgeCall = llm.calls.at(-1)
     expect(JSON.stringify(judgeCall.messages)).not.toContain('PU_SUMMARY_SENTINEL')
     expect(JSON.stringify(judgeCall.messages)).not.toContain('DIGAO_SENTINEL')
+  })
+
+  it('候选带上**会话文本历史**（含被采用的合参稿）；判官与合并槽不带（评审 R5）', async () => {
+    // 评审的场景：第二轮说「沿用刚才已经采用的那份方案」——候选必须能取到上一轮的问答与采用稿。
+    const query = fakeSessionQuery()
+    const { bestof, llm, session } = await scene({ sessionQuery: query })
+    query.events[session.sessionId] = [
+      userEvent(1, { id: 'm-1', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '第一轮：预算怎么定？' }] }),
+      assistantEvent(2, 'ANSWER_SENTINEL：先按 3000/月 试算。'),
+      // 被采用的那一份合参稿（ADR-0010 第 5 条：历史只带采用稿；落选候选根本不在日志里）。
+      userEvent(3, { id: 'm-3', role: 'user', source: { kind: 'xuanshu-bestof-adopted' }, content: [{ type: 'text', text: 'ADOPTED_SENTINEL：方案 A，3000/月。' }] }),
+      // 我们注入过的资料不该再进历史（它已经作为「材料」单独给了候选）。
+      userEvent(4, { id: 'm-4', role: 'user', source: { kind: 'xuanshu-consult' }, content: [{ type: 'text', text: 'MATERIAL_SENTINEL' }] }),
+    ]
+
+    await runToEnd(bestof, { sessionId: session.sessionId, question: '沿用刚才采用的方案，下一步做什么？' })
+
+    const candidateCalls = llm.calls.filter((call) => call.system?.includes('本候选视角'))
+    expect(candidateCalls).toHaveLength(2)
+    for (const call of candidateCalls) {
+      const prompt = call.messages[0].content.map((block) => block.text).join('\n')
+      expect(prompt).toContain('【这场问事的历史】')
+      expect(prompt).toContain('用户：第一轮：预算怎么定？')
+      expect(prompt).toContain('助手：ANSWER_SENTINEL：先按 3000/月 试算。')
+      expect(prompt).toContain('已采用的合参稿：ADOPTED_SENTINEL：方案 A，3000/月。')
+      expect(prompt, '注入的资料不该重复进历史').not.toContain('MATERIAL_SENTINEL')
+      // 历史排在材料之后、问题之前（同一份 user 消息里的顺序也是被验的东西）。
+      expect(prompt.indexOf('【这场问事的历史】')).toBeGreaterThan(prompt.indexOf('【来源：底座谱】'))
+      expect(prompt.indexOf('【这场问事的历史】')).toBeLessThan(prompt.indexOf('【本次合参的问题】'))
+    }
+    // 判官 / 合并槽继续遵守各自的边界：不带历史（也不带材料）。
+    const judgeCall = llm.calls.at(-1)
+    expect(JSON.stringify(judgeCall.messages)).not.toContain('【这场问事的历史】')
+    expect(JSON.stringify(judgeCall.messages)).not.toContain('ADOPTED_SENTINEL')
   })
 
   it('记录落 <dataDir>/consult/<sessionId>.bestof.json（schema xuanshu/bestof@1）', async () => {

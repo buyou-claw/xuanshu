@@ -1,72 +1,62 @@
 /**
- * packages/xuanshu-host/lib/rikke/daily-tasks.mjs — 票 13 两条 daily 定时任务的共用装配。
+ * packages/xuanshu-host/lib/rikke/daily-tasks.mjs — 票 13 两条 daily 任务的共用装配。
  *
  * 日课（07:30）与底稿刷新（03:30）是**同一件事的两条**：找一个绑定会话 → 建一条 daily 任务 →
  * 之后能改时间。所以只写一份，避免两处各自漂移（比如一处按 title 去重、另一处不去重，
  * 用户就会收到两份日课提醒）。
  *
  * 放在 `lib/rikke/` 下的理由（写作用域相关，明写在案）：task-7 只给了 `lib/digao/` 与 `lib/rikke/`
- * 两个目录，而契约 §2「定时投递」把这条机制写全了（`agents.create` + `schedule.create` + `setTime`
- * 的 compare-and-update）。**不**再新开 `lib/schedule/` 目录免得越过写作用域。若 Lead 认为该独立成模块，
- * 整文件平移即可（引用点只有本目录的 service.mjs、digao 的 service.mjs 与 lib/index.js 三处）。
+ * 两个目录，而契约 §2「定时投递」把这条机制写全了。**不**再新开 `lib/schedule/` 目录免得越过写作用域。
+ *
+ * 复核 Spec 1 的修复（2026-10-16）：这里的绑定会话**不再裸 create**（原来那行在 142 行），
+ * 而是走与问事同一份「跑得起来的会话」组合；并且两条任务**到点那一刻都真跑生成链**
+ * （`delivery.mjs` 在 `agent/pre-step` 上跑 `rikke/generate.mjs` / `digao/generate.mjs`）——
+ * 原来只投一句话给一个没有模型、没有工具的会话，一个字节都不落盘。
+ *
+ * **本文件只留「装配」**（task-3 拆过）：两条任务的身份（名字 / 提示词 / 默认时刻 / 会话前缀）与
+ * schedule 读面在 `../digao/tasks.mjs`（中立叶子），到点的两条链在 `./delivery.mjs`。
+ * 拆法是解 import 环的两刀之一 —— 完整解法写在 `../digao/tasks.mjs` 的文件头。
+ * 下面的 `export { … }` 是同一份绑定的**再导出**（不是副本），老引用点不用跟着搬。
  *
  * API 出处（本机实装 0.2.0-rc.2，只读核对）：
  *   - `ctx.schedule.create(sessionId, {title, prompt, daily:{time, time_zone}})`：`dsh-schedule/lib/types/index.d.ts:68`；
- *   - `ctx.schedule.catalog()`：同文件 `:81`（**所有**任务的 sessionId 绑定都在这儿 —— 幂等的唯一依据）；
- *   - `ctx.schedule.update({sessionId, id, expected, change})`：同文件 `:111`（**compare-and-update**，
- *     `expected` 必须是完整 observed record：`dsh-schedule/lib/types/types.d.ts:359-364`）；
- *   - `ctx.agents.create({sessionId, meta:{cwd}})`：`dsh-agent/lib/types/index.d.ts:278` +
- *     ADR-0009（专用 cwd 归属；会话 id 用玄枢自铸前缀）。
+ *   - 到点投递：`dsh-schedule/lib/index.js:1576-1597`（`resolveAgent` → `followup` → 真开一个 turn）。
  */
 
-import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-/** 任务名（**同时是幂等键**：catalog 里按它找自己那条）。 */
-export const RIKKE_TASK_TITLE = '日课'
-export const DIGAO_TASK_TITLE = '底稿刷新'
+import { consultAgentCapability, createConsultAgent } from '../consult/agent.mjs'
+import { installDailyDelivery } from './delivery.mjs'
+import {
+  DEFAULT_TIME_ZONE, DIGAO_DEFAULT_TIME, DIGAO_PROMPT, DIGAO_TASK_TITLE,
+  RIKKE_DEFAULT_TIME, RIKKE_PROMPT, RIKKE_TASK_TITLE,
+  findDailyTask, newSessionId, normalizeDailyTime, scheduleService, scheduleSummary,
+} from '../digao/tasks.mjs'
 
-/** 缺省时刻（契约 §1/§2 定值；错开一小时，免得两条任务在同一分钟抢会话）。 */
-export const RIKKE_DEFAULT_TIME = '07:30:00'
-export const DIGAO_DEFAULT_TIME = '03:30:00'
+// 兼容面：这些名字原来定义在本文件里（`rikke/service.mjs`、`lib/index.js`、`tests/**` 都在用；
+// `digao/service.mjs` 这一轮已改成直接 import 自己的 `./tasks.mjs`，不再绕经 rikke）。
+// 单一来源是 `../digao/tasks.mjs` —— 这里是同一份绑定的再导出，不是副本。
+export {
+  DEFAULT_TIME_ZONE, DIGAO_DEFAULT_TIME, DIGAO_PROMPT, DIGAO_SESSION_PREFIX, DIGAO_TASK_TITLE,
+  RIKKE_DEFAULT_TIME, RIKKE_PROMPT, RIKKE_SESSION_PREFIX, RIKKE_TASK_TITLE,
+  displayTime, findDailyTask, newSessionId, normalizeDailyTime, scheduleService, scheduleSummary,
+} from '../digao/tasks.mjs'
 
-/** 缺省时区（底座还没立、快照里没有 zone 时用）。 */
-export const DEFAULT_TIME_ZONE = 'Asia/Shanghai'
-
-/**
- * `'HH:mm'` / `'HH:mm:ss'` / `'HH:mm:ss.SSS'` → `'HH:mm:ss'`；非法 → null。
- *
- * 为什么要收 `.SSS`：真机 `DailyScheduleRecord.time` 的注释是
- * 「Local time normalized to **HH:mm:ss.SSS**」（`dsh-schedule/lib/types/types.d.ts:63-64`）——
- * 只认 `HH:mm` 的实现会把真机读回来的时间当成非法值。
- */
-export function normalizeDailyTime(value) {
-  const match = /^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?$/.exec(String(value ?? '').trim())
-  if (!match) return null
-  const hour = Number(match[1])
-  const minute = Number(match[2])
-  const second = Number(match[3] ?? '0')
-  if (hour > 23 || minute > 59 || second > 59) return null
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`
+/** 装配期日志（拿不到 logger 就静默；断言台/裁剪宿主是这种现场）。 */
+function softLogger(ctx) {
+  try {
+    if (typeof ctx?.logger === 'function') {
+      const scoped = ctx.logger('xuanshu-host')
+      if (scoped !== null && scoped !== undefined) return scoped
+    }
+  } catch {
+    /* 落到静默替身 */
+  }
+  return { info() {}, warn() {} }
 }
 
-/** 展示用 `HH:mm`（`'07:30:00.000'` → `'07:30'`）；连 `HH:mm` 都认不出 → 原样回。 */
-export function displayTime(value) {
-  const match = /^(\d{1,2}):(\d{2})/.exec(String(value ?? '').trim())
-  if (!match) return String(value ?? '')
-  const hour = Number(match[1])
-  const minute = Number(match[2])
-  if (hour > 23 || minute > 59) return String(value ?? '')
-  return `${String(hour).padStart(2, '0')}:${match[2]}`
-}
-
-/** 玄枢自铸会话 id（ADR-0009：`session-xs-<kind>-<uuid>`）。 */
-export function newSessionId(kind) {
-  return `session-xs-${kind}-${randomUUID()}`
-}
-
-/** 非严格读 cordis service。 */
+/** 非严格读一个 cordis service（拿不到就 undefined，绝不抛）。 */
 function softGet(ctx, name) {
   try {
     return typeof ctx?.get === 'function' ? ctx.get(name, false) : undefined
@@ -75,41 +65,58 @@ function softGet(ctx, name) {
   }
 }
 
-/** 读 schedule 服务；不可得 → null（调用方给可读理由，不抛）。 */
-export function scheduleService(ctx) {
-  const schedule = softGet(ctx, 'schedule') ?? ctx?.schedule
-  return schedule && typeof schedule.create === 'function' ? schedule : null
-}
-
 /**
- * 在 catalog 里找自己那条任务（按名字）。
+ * 建一条每日定时任务的绑定会话 —— **不能裸 create**（复核 Spec 1 指的就是这一行）。
  *
- * 为什么用 `catalog()` 而不是自己存一份 id：task 表已经是权威（`catalog` 返回**所有**任务及其
- * sessionId 绑定），再存一份旁挂 id 就是第二份权威 —— 会出现「旁挂说任务在、表里其实被删了」。
- * @returns {Promise<object|null>} 完整 observed record（sessionId/status/lastDelivery 都在里面）
+ * 裸 `ctx.agents.create({sessionId, meta:{cwd}})` 建出来的会话没有 provider/model、也没有 preset
+ * 挂出来的工具：宿主到点把它唤醒时**一个 turn 都跑不起来**（实装 `dsh-agent-loop/lib/index.js:1185`
+ * 在第一轮请求前抛 `has no provider/model: …`）。所以走**与问事会话同一份**组合
+ * （`consult/agent.mjs` 的 `createConsultAgent`：resolve preset + 默认模型 + 把 preset 挂进 agent scope）。
+ * 那是本仓库里「建一个跑得起来的会话」的唯一一份实现 —— 复制一份就是平行实现，迟早漂移
+ * （`pruneStale` 六份复制后判据写反，是本仓库已付过的学费）。
+ *
+ * **软降级**（与 consult 同一口径，且「失败不许把定时任务本身弄挂」）：
+ *   - `agentPresets` / `agentDefaultModel` 不在场（裁剪 profile / 断言台）→ 退回契约 §4 字面的裸
+ *     create，**不算失败、不记理由**（那是 profile 的缺口，由装配报告 S2/S3 去报）；
+ *   - 组合过程真的抛了 → 退回裸 create 并把理由带回去（装配期记一条 warn）。
+ * 两种情况下**会话都建得出来**：定时任务要有绑定对象，而且日课产物由宿主侧的确定性链产出
+ * （`delivery.mjs`），不依赖模型 —— 模型不可得只是那一轮说不出话，不是日课生成不了。
+ *
+ * 为什么先问 `consultAgentCapability()` 再建：`createConsultAgent` **自己**就会软降级成裸 create
+ * （它不抛），只凭「没抛」分不出「真组合了 preset/模型」与「其实退回了裸建」。能力判据问的是同一个
+ * 来源（那两行 service 在不在），所以我们记的 `composed` 是**事实**，不是猜的。
+ *
+ * @returns {Promise<{composed: boolean, reason: string|null}>}
  */
-export async function findDailyTask(ctx, title) {
-  const schedule = scheduleService(ctx)
-  if (schedule === null || typeof schedule.catalog !== 'function') return null
-  try {
-    const entries = await schedule.catalog()
-    return (Array.isArray(entries) ? entries : []).find((entry) => entry?.title === title) ?? null
-  } catch {
-    return null
+async function createDailySession({ ctx, agents, sessionId, cwd }) {
+  const capable = consultAgentCapability(ctx)
+  if (!capable.ok) {
+    softLogger(ctx).warn('定时会话降级为裸建（缺 %s）：%s', capable.missing.join('、'), capable.detail)
+    await agents.create({ sessionId, meta: { cwd } })
+    return { composed: false, reason: null }
   }
-}
-
-/** 任务的对外摘要（`{time, timeZone, id}`；契约修订 2026-10-15 的三个字段）。 */
-export function scheduleSummary(task) {
-  if (!task || typeof task !== 'object') return null
-  return { time: displayTime(task.time), timeZone: String(task.timeZone ?? ''), id: String(task.id ?? '') }
+  try {
+    await createConsultAgent(ctx, { sessionId, cwd })
+    return { composed: true, reason: null }
+  } catch (error) {
+    const detail = String(error?.message ?? error)
+    try {
+      await agents.create({ sessionId, meta: { cwd } })
+    } catch (bareError) {
+      // 两条路都没成就没得降级了：这里抛，由调用方折成可读理由（任务不建，但装配不受影响）。
+      throw new Error(`组合与裸建都没成（${detail} / ${String(bareError?.message ?? bareError)}）`)
+    }
+    return { composed: false, reason: `组合 agent preset / 默认模型失败（${detail}）` }
+  }
 }
 
 /**
  * 保证某条 daily 任务在场（**幂等**：已有同名任务就复用，不重复建）。
  *
  * @param {{ctx: object, dataDir: string, kind: string, title: string, prompt: string, time: string, timeZone: string}} input
- * @returns {Promise<{ok: boolean, reason: string|null, task: object|null, reused: boolean}>}
+ * @returns {Promise<{ok: boolean, reason: string|null, task: object|null, reused: boolean,
+ *                    agent: {composed: boolean, reason: string|null}|null}>}
+ *          `agent`：新建会话时的组合结果（`null` = 没建会话，比如任务已存在、或建之前就失败了）。
  */
 export async function ensureDailyTask({ ctx, dataDir, kind, title, prompt, time, timeZone }) {
   const schedule = scheduleService(ctx)
@@ -118,6 +125,7 @@ export async function ensureDailyTask({ ctx, dataDir, kind, title, prompt, time,
       ok: false,
       reused: false,
       task: null,
+      agent: null,
       reason: 'ctx.schedule 不可得：profile 没启用 `@deepseek-ai/dsh-experimental-schedule-bundle`（'
         + '本仓库 `packages/xuanshu-host/cordis.patch.yml` 插了它的三行；装完要重跑 `node scripts/install-profile.mjs --home .dsh-home`）。',
     }
@@ -126,29 +134,30 @@ export async function ensureDailyTask({ ctx, dataDir, kind, title, prompt, time,
 
   const existing = await findDailyTask(ctx, title)
   if (existing !== null) {
-    return { ok: true, reused: true, task: scheduleSummary(existing), reason: null }
+    return { ok: true, reused: true, task: scheduleSummary(existing), agent: null, reason: null }
   }
 
   const agents = softGet(ctx, 'agents') ?? ctx?.agents
   if (!agents || typeof agents.create !== 'function') {
-    return { ok: false, reused: false, task: null, reason: 'ctx.agents 不可得：定时任务必须绑在一个会话上（宿主建会话的能力没就绪）。' }
+    return { ok: false, reused: false, task: null, agent: null, reason: 'ctx.agents 不可得：定时任务必须绑在一个会话上（宿主建会话的能力没就绪）。' }
   }
 
   const sessionId = newSessionId(kind)
   const cwd = join(dataDir, kind)
+  let agent
   try {
     // 专用 cwd = ADR-0009 的归属载体之一（不是 workspace）；先建目录，别让建会话去猜。
     mkdirSync(cwd, { recursive: true })
-    await agents.create({ sessionId, meta: { cwd } })
+    agent = await createDailySession({ ctx, agents, sessionId, cwd })
   } catch (error) {
-    return { ok: false, reused: false, task: null, reason: `建定时会话失败（${String(error?.message ?? error)}）。` }
+    return { ok: false, reused: false, task: null, agent: null, reason: `建定时会话失败（${String(error?.message ?? error)}）。` }
   }
 
   try {
     const record = await schedule.create(sessionId, { title, prompt, daily: { time: daily, time_zone: timeZone } })
-    return { ok: true, reused: false, task: scheduleSummary(record), reason: null }
+    return { ok: true, reused: false, task: scheduleSummary(record), agent, reason: null }
   } catch (error) {
-    return { ok: false, reused: false, task: null, reason: `建 daily 任务失败（${String(error?.message ?? error)}）。` }
+    return { ok: false, reused: false, task: null, agent, reason: `建 daily 任务失败（${String(error?.message ?? error)}）。` }
   }
 }
 
@@ -184,24 +193,34 @@ export async function updateDailyTime({ ctx, title, time }) {
   }
 }
 
-/** 日课的提示词（到期由宿主把这条当 followup 投进绑定会话并唤醒它）。 */
-export const RIKKE_PROMPT = '现在做日课：读底座谱 + 当前时刻调 horosa 黄历，产出今日宜忌与注意事项。'
-/** 底稿刷新的提示词。 */
-export const DIGAO_PROMPT = '现在刷新底稿：读谱 / 工作区 / 工作流三路来源，按规则骨架生成底稿（要改就改源头）。'
-
 /**
- * 装配两条 daily 任务（**永不抛**；每条各自成败，理由原样带回）。
- * @returns {Promise<{rikke: object, digao: object, timeZone: string, notes: string[]}>}
+ * 装配两条 daily 任务 + **到点的生成链**（**永不抛**；每条各自成败，理由原样带回）。
+ *
+ * 到点那两条链（`installDailyDelivery`）装在这里而不是 `lib/index.js`：它跟这两条任务是同一件事的
+ * 两半（任务负责到点、链负责到点之后真的生成），装在一起才不会出现「任务建了、链没装」的半截装配。
+ * 装不上（没有 `ctx.on`）**不进 `notes`**：`notes` 的语义是「任务为什么没建」，而这条由本函数
+ * 自己记一条 warn —— 而且此时任务照建，界面上的空态与 [改时间] 都还在。
+ *
+ * @param {{ctx: object, dataDir: string, timeZone?: string, now?: () => Date}} input `now` 只为断言台留
+ * @returns {Promise<{rikke: object, digao: object, timeZone: string, notes: string[], delivery: {ok: boolean, reason: string|null}}>}
  */
-export async function installDailyTasks({ ctx, dataDir, timeZone = DEFAULT_TIME_ZONE }) {
+export async function installDailyTasks({ ctx, dataDir, timeZone = DEFAULT_TIME_ZONE, now }) {
   const notes = []
   const rikke = await ensureDailyTask({
     ctx, dataDir, kind: 'rikke', title: RIKKE_TASK_TITLE, prompt: RIKKE_PROMPT, time: RIKKE_DEFAULT_TIME, timeZone,
   })
   if (!rikke.ok) notes.push(`日课定时未建：${rikke.reason}`)
+  // 组合失败是非致命的（会话已退回裸建、任务照建），但**不静默**：它是「到点那一轮说不出话」的根因。
+  if (rikke.ok && rikke.agent?.reason) notes.push(`日课定时会话降级：${rikke.agent.reason}`)
+
   const digao = await ensureDailyTask({
     ctx, dataDir, kind: 'digao', title: DIGAO_TASK_TITLE, prompt: DIGAO_PROMPT, time: DIGAO_DEFAULT_TIME, timeZone,
   })
   if (!digao.ok) notes.push(`底稿刷新定时未建：${digao.reason}`)
-  return { rikke, digao, timeZone, notes }
+  if (digao.ok && digao.agent?.reason) notes.push(`底稿刷新定时会话降级：${digao.agent.reason}`)
+
+  const delivery = installDailyDelivery(ctx, { dataDir, timeZone, now })
+  if (!delivery.ok) softLogger(ctx).warn('票13 定时到点的生成链没装上：%s', delivery.reason)
+
+  return { rikke, digao, timeZone, notes, delivery: { ok: delivery.ok, reason: delivery.reason } }
 }

@@ -25,7 +25,6 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
-import { CONSULT_MESSAGE_SOURCE_KIND } from '../../packages/xuanshu-host/lib/consult/message.mjs'
 import {
   envelope,
   fakeAgentDefaultModel,
@@ -52,28 +51,11 @@ const DIGAO_TEXT = '# 底稿\n底稿正文第一行：最近在做的事。\n底
 const QUESTION = '帮我看这次转岗的时机'
 
 /** 起一套方法 + 沙箱；`pus` 是这次会话勾选的谱。 */
-async function scene({ pus = ['紫微笔记'], digao = true, basePu = true, sessionQuery, failFirstInject = false } = {}) {
+async function scene({ pus = ['紫微笔记'], digao = true, basePu = true, sessionQuery } = {}) {
   const sandbox = makeSandbox('send')
   roots.push(sandbox)
   const fake = fakeHorosa(envelope('bazi-ok-default'))
   const agents = fakeAgents()
-  if (failFirstInject) {
-    // 让 create 那一刻的首灌抛一次（模拟「那一刻读谱 / 读底稿失败」），之后恢复正常。
-    const realCreate = agents.service.create
-    agents.service.create = async (options) => {
-      const handle = await realCreate(options)
-      const realInject = handle.agent.inject
-      let failed = false
-      handle.agent.inject = (message) => {
-        if (!failed) {
-          failed = true
-          throw new Error('FAULT INJECTION: create 时首灌失败')
-        }
-        return realInject(message)
-      }
-      return handle
-    }
-  }
   const sessions = fakeSessionStore()
   const workspaces = fakeWorkspaceRegistry()
   const host = makeHost({
@@ -100,107 +82,33 @@ async function scene({ pus = ['紫微笔记'], digao = true, basePu = true, sess
 /** 取某个会话的假 agent（send 之后才有调用记录）。 */
 const callsOf = (agents, sessionId) => agents.live.get(sessionId).calls
 
-/** 注入文本（第一条 inject 消息的正文）。 */
-function injectionText(agents, sessionId) {
-  const injected = callsOf(agents, sessionId).filter((call) => call.kind === 'inject')
-  expect(injected).toHaveLength(1)
-  return injected[0].message
-}
-
-describe('consult.send · 首轮注入（契约 §3）', () => {
-  it('注入消息排在用户问题之前，source.kind = xuanshu-consult；问题是普通用户消息', async () => {
+describe('consult.send · 只受理与记账（上下文不在这里注入）', () => {
+  it('一次 send = 一条 followup：它自己不注入任何东西（注入在 agent/pre-step 边界，见 boundary.test.mjs）', async () => {
+    // 为什么判据敢这么硬：那条「inject 排在 followup 之前」的路**会丢** ——
+    // dispose 会把排队待消费的消息取消掉，而原生 composer 根本不走这里。
+    // 上下文改由发问边界在每一轮第一步现算（评审 R2/R3/R4），send 只剩受理与记账。
     const { api, agents, session } = await scene()
     const response = await api['consult.send']({ sessionId: session.sessionId, text: QUESTION, requestId: 'r-1' })
 
     expect(response).toEqual({ accepted: true })
     const calls = callsOf(agents, session.sessionId)
-    // 顺序是被验的东西：注入必须先于唤醒那一轮（`inject()` 不唤醒，`followup()` 才唤醒）。
-    expect(calls.map((call) => call.kind)).toEqual(['inject', 'followup'])
-
-    const injection = calls[0].message
-    expect(injection.role).toBe('user')
-    expect(Object.keys(injection).sort()).toEqual(['content', 'id', 'role', 'source'])
-    expect(injection.source.kind).toBe(CONSULT_MESSAGE_SOURCE_KIND)
-    expect(injection.content.every((block) => block.type === 'text' && typeof block.text === 'string')).toBe(true)
-
-    const question = calls[1].message
+    expect(calls.map((call) => call.kind)).toEqual(['followup'])
+    const question = calls[0].message
     expect(question.source.kind).toBe('user')
     expect(question.content).toEqual([{ type: 'text', text: QUESTION }])
   })
-
-  it('三段来源标记齐、内容只给概览 + summary + 路径（正文留给 AI 自己读）', async () => {
-    const { api, agents, session, sandbox } = await scene()
-    await api['consult.send']({ sessionId: session.sessionId, text: QUESTION })
-    const text = injectionText(agents, session.sessionId).content.map((block) => block.text).join('\n')
-
-    expect(text).toContain('【来源：底座谱】')
-    expect(text).toContain('【来源：底稿】')
-    expect(text).toContain('【来源：谱 紫微笔记】')
-
-    // 底座谱：票 08 的 manifest 概览 + summary + 文件路径（`pus/_base/**` 的真实路径）。
-    expect(text).toContain('出生信息与八字底盘') // renderBaseDescription 的开头
-    expect(text).toContain('四柱 己巳 丙子 丙寅 甲午') // renderBaseSummary 的原文
-    expect(text).toContain(join(sandbox.dataDir, 'pus', '_base', 'manifest.md'))
-    expect(text).toContain(join(sandbox.dataDir, 'pus', '_base', 'bazi.md'))
-
-    // 底稿：契约要的是**全文**（它本身就是摘要层）+ 路径。
-    expect(text).toContain('底稿正文第二行：手上有的谱。')
-    expect(text).toContain(join(sandbox.dataDir, 'digao.md'))
-
-    // 勾选谱：概览 + summary + 路径；**正文不进来**（票面第 3 条：AI 自己按需读）。
-    expect(text).toContain('紫微斗数的读书笔记。')
-    expect(text).toContain('紫微：十四主星与四化的笔记。')
-    expect(text).toContain(join(sandbox.dataDir, 'pus', '紫微笔记', 'manifest.md'))
-    expect(text).toContain(join(sandbox.dataDir, 'pus', '紫微笔记', 'summary.md'))
-    expect(text).toContain(join(sandbox.dataDir, 'pus', '紫微笔记', 'content.md'))
-    expect(text).not.toContain('这里是《紫微笔记》的正文')
-
-    // 非勾选谱：连路径痕迹都不许有（勾选区失去意义就是从这种地方开始的）。
-    expect(text).not.toContain('【来源：谱 软件开发】')
-    expect(text).not.toContain('软件开发：项目、排期与复盘。')
-    expect(text).not.toContain(join(sandbox.dataDir, 'pus', '软件开发'))
-  })
-
-  it('底稿还没生成（票 13 的产物）：照样注入，但写明「底稿未生成」', async () => {
-    const { api, agents, session, sandbox } = await scene({ digao: false })
-    await api['consult.send']({ sessionId: session.sessionId, text: QUESTION })
-    const text = injectionText(agents, session.sessionId).content.map((block) => block.text).join('\n')
-    expect(text).toContain('【来源：底稿】')
-    expect(text).toMatch(/底稿未生成/u)
-    expect(text).toContain(join(sandbox.dataDir, 'digao.md'))
-    // 探测 ≠ 生产：不要顺手造一份空底稿。
-    expect(sandbox.exists('digao.md')).toBe(false)
-  })
-
-  it('还没起过盘：底座段写明「底座未立」，其余照常', async () => {
-    const { api, agents, session } = await scene({ basePu: false })
-    await api['consult.send']({ sessionId: session.sessionId, text: QUESTION })
-    const text = injectionText(agents, session.sessionId).content.map((block) => block.text).join('\n')
-    expect(text).toContain('【来源：底座谱】')
-    expect(text).toMatch(/底座未立/u)
-    expect(text).toContain('【来源：底稿】')
-  })
-
-  it('一个可选谱都没勾：注入里只有底座与底稿两段，没有任何「谱 …」段', async () => {
-    const { api, agents, session } = await scene({ pus: [] })
-    await api['consult.send']({ sessionId: session.sessionId, text: QUESTION })
-    const text = injectionText(agents, session.sessionId).content.map((block) => block.text).join('\n')
-    expect(text).toContain('【来源：底座谱】')
-    expect(text).toContain('【来源：底稿】')
-    expect(text).not.toMatch(/【来源：谱 /u)
-  })
 })
 
-describe('consult.send · 一轮只灌一次（契约 §3：首轮才注入）', () => {
-  it('第二问不再注入，而是普通用户消息；turns 与标题按首问落账', async () => {
+describe('consult.send · 记账（turns / 标题 / 会话内串行）', () => {
+  it('第二问：普通用户消息；turns 与标题按首问落账', async () => {
     const { api, agents, session, sandbox } = await scene()
     await api['consult.send']({ sessionId: session.sessionId, text: QUESTION })
     await api['consult.send']({ sessionId: session.sessionId, text: '那如果不去呢' })
 
     const calls = callsOf(agents, session.sessionId)
-    expect(calls.map((call) => call.kind)).toEqual(['inject', 'followup', 'followup'])
-    expect(calls[2].message.source.kind).toBe('user')
-    expect(calls[2].message.content).toEqual([{ type: 'text', text: '那如果不去呢' }])
+    expect(calls.map((call) => call.kind)).toEqual(['followup', 'followup'])
+    expect(calls[1].message.source.kind).toBe('user')
+    expect(calls[1].message.content).toEqual([{ type: 'text', text: '那如果不去呢' }])
 
     const manifest = sandbox.json('consult', 'sessions', `${session.sessionId}.json`)
     expect(manifest.turns).toBe(2)
@@ -215,7 +123,7 @@ describe('consult.send · 一轮只灌一次（契约 §3：首轮才注入）',
     expect(sandbox.json('consult', 'sessions', `${session.sessionId}.json`).title).toBe('转岗时机')
   })
 
-  it('同一会话两问并发：只灌一次上下文，turns 不丢更新（send 按会话串行）', async () => {
+  it('同一会话两问并发：turns 不丢更新（send 按会话串行）', async () => {
     const { api, agents, session, sandbox } = await scene()
     await Promise.all([
       api['consult.send']({ sessionId: session.sessionId, text: '第一问' }),
@@ -223,11 +131,11 @@ describe('consult.send · 一轮只灌一次（契约 §3：首轮才注入）',
     ])
 
     const calls = callsOf(agents, session.sessionId)
-    expect(calls.filter((call) => call.kind === 'inject')).toHaveLength(1)
     expect(calls.filter((call) => call.kind === 'followup')).toHaveLength(2)
     expect(sandbox.json('consult', 'sessions', `${session.sessionId}.json`).turns).toBe(2)
   })
 })
+
 
 describe('consult.send · 等一轮结束看 turn/end（不是 whenIdle）', () => {
   it('turn/end 到账即记 lastTurnAt，并当场退订（不留监听器）', async () => {
@@ -264,13 +172,12 @@ describe('consult.send · 等一轮结束看 turn/end（不是 whenIdle）', () 
   })
 })
 
-describe('consult.send · 原生 composer 那条路（评审发现的那一处）', () => {
+describe('consult.send · 原生 composer 那条路（轮次账）', () => {
   it('原生 composer 说的第一句也算一轮：turns / 标题按**会话日志**核对（那条路不经过 consult.send）', async () => {
     const query = fakeSessionQuery()
     const { api, agents, session, sandbox } = await scene({ sessionQuery: query })
     // 用户从原生 composer 说了第一句：会话日志里有这条 `user/message`（`source.kind = 'user'`），
-    // 而旁挂清单的 `turns` 仍是 0 —— 两个下游会因此出错（票 15 的 sediment 据此拒绝；
-    // 首轮判据会以为「还没灌过」）。
+    // 而旁挂清单的 `turns` 仍是 0 —— 票 15 的 sediment 据此拒绝，历史列表也看不出「已经问过一轮」。
     query.events[session.sessionId] = [
       userEvent(1, { id: 'm-native-1', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '原生输入的首问' }] }),
     ]
@@ -281,56 +188,11 @@ describe('consult.send · 原生 composer 那条路（评审发现的那一处�
     // 原生那一句 + 这一句 = 2 轮；标题取**首问**（原生那一句），不许被这一句顶掉。
     expect(manifest.turns).toBe(2)
     expect(manifest.title).toBe('原生输入的首问')
-    // 上下文在 create 时就灌过了（同进程判据），这一问不再灌一遍。
-    expect(callsOf(agents, session.sessionId).map((call) => call.kind)).toEqual(['inject', 'followup'])
-  })
-
-  it('create 时首灌失败 + 原生 composer 说过话 → 下一问仍然补灌（宁可晚一轮，不许一直没有）', async () => {
-    // 两个条件同时成立才是那条缝：create 的注入没成（`injected` 里没有），而首问又不经过 consult.send
-    // （会话日志里有问句、旁挂清单被核对成 turns=1）。**注入判据看「灌过没有」，不看 turns** ——
-    // 否则这一场问事会永远没有上下文，而每一处都显示正常。
-    const query = fakeSessionQuery()
-    const { api, agents, session, sandbox } = await scene({ sessionQuery: query, failFirstInject: true })
-    expect(callsOf(agents, session.sessionId).filter((call) => call.kind === 'inject')).toHaveLength(0)
-    query.events[session.sessionId] = [
-      userEvent(1, { id: 'm-native-1', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '原生输入的首问' }] }),
-    ]
-
-    await api['consult.send']({ sessionId: session.sessionId, text: '接着问一句' })
-
-    const calls = callsOf(agents, session.sessionId)
-    expect(calls.map((call) => call.kind)).toEqual(['inject', 'followup'])
-    const text = calls[0].message.content.map((block) => block.text).join('\n')
-    expect(text).toContain('【来源：底座谱】')
-    expect(text).toContain('【来源：底稿】')
-    // 账也补上了：原生那一句 + 这一句。
-    expect(sandbox.json('consult', 'sessions', `${session.sessionId}.json`).turns).toBe(2)
-  })
-
-  it('别的进程建的会话：日志里已有上下文 → 不重复灌一遍（turns 为 0 也不再灌）', async () => {
-    const query = fakeSessionQuery()
-    const { agents, session, sandbox } = await scene({ sessionQuery: query })
-    // 会话日志里已经有 create 时灌的那一条（source.kind = 我们的上下文 kind）。
-    query.events[session.sessionId] = [
-      userEvent(1, { id: 'm-ctx-1', role: 'user', source: { kind: CONSULT_MESSAGE_SOURCE_KIND }, content: [{ type: 'text', text: '【玄枢·问事上下文】…' }] }),
-    ]
-    agents.live.clear()
-
-    const host2 = makeHost({
-      services: {
-        agents: agents.service,
-        agentPresets: fakeAgentPresets().service,
-        agentDefaultModel: fakeAgentDefaultModel().service,
-        sessionQuery: query.service,
-      },
-    })
-    const api2 = createConsultMethods(host2.ctx, { dataDir: sandbox.dataDir })
-    await api2['consult.send']({ sessionId: session.sessionId, text: '第二句' })
-
-    // resume 之后重建的假 agent：只有问题，没有第二条上下文（历史里那一份已经在了）。
+    // 这一问照旧只有一条 followup：上下文归发问边界，send 不掺一手。
     expect(callsOf(agents, session.sessionId).map((call) => call.kind)).toEqual(['followup'])
   })
 })
+
 
 describe('consult.send · 会话来源与拒绝路径', () => {
   it('进程重启后（另一个 service 实例）也能接着问：走 ctx.agents.resume', async () => {
@@ -349,7 +211,7 @@ describe('consult.send · 会话来源与拒绝路径', () => {
 
     expect(agents.resumed.map((options) => options.resumeSessionId)).toEqual([session.sessionId])
     const calls = callsOf(agents, session.sessionId)
-    expect(calls.map((call) => call.kind)).toEqual(['inject', 'followup'])
+    expect(calls.map((call) => call.kind)).toEqual(['followup'])
   })
 
   it('没有旁挂清单的会话：拒绝，且不碰 agents', async () => {

@@ -30,34 +30,60 @@ export function toRepoPath(absolute, repoRoot) {
 }
 
 /**
- * vitest JSON 报告 → `{files, failures, skipped, total}`。
+ * vitest JSON 报告 → `{files, failures, suiteFailures, skipped, total, reportFailed}`。
  *
  * `files` 记的是**收集到的用例数**（含 skip）——「文件收集失败」在摘要里只是「passed 变少」，
  * 所以这里的 0 条与变少才是要抓的形状。
+ *
+ * **`suiteFailures` 是评审 R1 补上的一类**：`beforeAll` / `beforeEach` 抛错、或 suite 级未处理错误时，
+ * 真实 vitest 的报告形状是 **文件 `status: 'failed'` + 里面的用例全是 `skipped`**
+ * （`numFailedTests: 0`、`numFailedTestSuites: 1`、`success: false`）——
+ * 只看 `assertion.status === 'failed'` 会**完全漏掉**这一类：报告新鲜、条数不减，门照样判通过。
+ * 判据因此分两层：用例级失败（`failures`）+ 文件级失败（`suiteFailures`，附报告里给的那句 message）。
  */
 export function collectReport(report, { repoRoot }) {
   const files = {}
   const failures = []
+  const suiteFailures = []
   let skipped = 0
   for (const result of report?.testResults ?? []) {
     const key = toRepoPath(result.name, repoRoot)
     const assertions = result.assertionResults ?? []
     files[key] = assertions.length
+    let failedAssertions = 0
     for (const assertion of assertions) {
-      if (assertion.status === 'failed') failures.push({ file: key, title: assertion.title })
+      if (assertion.status === 'failed') {
+        failedAssertions += 1
+        failures.push({ file: key, title: assertion.title })
+      }
       if (assertion.status !== 'passed' && assertion.status !== 'failed') skipped += 1
     }
+    // 文件级失败且**没有任何用例级失败**：用例根本没能跑（hook/suite 抛错、收集后的执行期崩溃）。
+    // 若文件里有用例级失败，那一份已经由 `failures` 记账，不重复报。
+    if (result.status === 'failed' && failedAssertions === 0) {
+      suiteFailures.push({ file: key, message: typeof result.message === 'string' ? result.message : '' })
+    }
   }
-  return { files, failures, skipped, total: Object.values(files).reduce((sum, count) => sum + count, 0) }
+  return {
+    files,
+    failures,
+    suiteFailures,
+    skipped,
+    total: Object.values(files).reduce((sum, count) => sum + count, 0),
+    reportFailed: report?.success === false,
+  }
 }
 
 /**
  * 这一轮结果 vs 基线 → 违规清单。
  *
- * 三条判据都指向「数量/身份」而不是「某条断言的值」：
+ * 四条判据都指向「数量/身份」而不是「某条断言的值」：
  *   1. 文件收集到 0 条（收集期报错，用例从总数里静默消失）；
  *   2. 比基线少 / 文件消失（不许悄悄删或悄悄跳过）；
- *   3. 已知红名单之外的失败（名单在基线文件里逐条写明理由）。
+ *   3. 已知红名单之外的**用例级**失败（名单在基线文件里逐条写明理由）；
+ *   4. **文件级失败**（hook / suite / 执行期未处理错误）：用例被标成 skipped、一个失败用例都没有，
+ *      只看用例级失败会判它通过（评审 R1 的真实反例）。这一条没有豁免名单 ——
+ *      真要有已知的文件级失败，先把它变成一条看得见的失败用例再谈豁免。
  *
  * @returns {{violations: string[], known: Array<{file: string, title: string}>}}
  *          `known` 是**放过**的已知红（逐条打印，别静默）；用对象而不是拼好的字符串，
@@ -81,6 +107,16 @@ export function violationsFor({ current, baseline }) {
   for (const failure of current.failures) {
     if (knownRed.has(`${failure.file}\u0000${failure.title}`)) known.push({ file: failure.file, title: failure.title })
     else violations.push(`新失败：「${failure.file}」· ${failure.title}`)
+  }
+
+  for (const failure of current.suiteFailures ?? []) {
+    const detail = failure.message === '' ? '' : `：${failure.message.slice(0, 200)}`
+    violations.push(`文件级失败（hook / suite / 未处理错误，用例全被标成跳过）：「${failure.file}」${detail}`)
+  }
+
+  // 报告说这一轮失败，却既没有用例级失败也没有文件级失败可核对（未处理错误 / 环境问题的形状）。
+  if (current.reportFailed === true && current.failures.length === 0 && (current.suiteFailures ?? []).length === 0) {
+    violations.push('报告 success=false，但没有任何可核对的失败条目（未处理错误 / 环境问题？先看 vitest 的 stderr）')
   }
 
   return { violations, known }

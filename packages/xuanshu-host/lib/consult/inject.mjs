@@ -20,13 +20,34 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { createBaziMethods, resolveDataDir } from '../bazi/service.mjs'
+import { resolveHistoryBudget } from '../mounts/budget.mjs'
 import { buildMountPreview } from '../mounts/preview.mjs'
 import { createPuMethods } from '../pu/service.mjs'
-import { buildConsultContext, buildMountUpdateContext } from './context.mjs'
-import { mountsKey } from './store.mjs'
+import { buildConsultContext, buildMountDeltaContext } from './context.mjs'
+import { buildCandidateHistory, isSessionNotFound, projectConsultMessages } from './history.mjs'
 
 /** 底稿文件名（契约 §2/§3：`<dataDir>/digao.md`，由票 13 生产，本模块只探测与注入）。 */
 export const DIGAO_FILENAME = 'digao.md'
+
+/** 非严格读一个 cordis service（拿不到就 undefined，绝不抛）。本模块自用。 */
+function softGet(ctx, name) {
+  try {
+    return typeof ctx?.get === 'function' ? ctx.get(name, false) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 解析官方 `@deepseek-ai/dsh-llm/message` 的锚点顺序：profile 目录优先（真机就在这里）。
+ *
+ * 两处都要用它（`consult.*` 的消息工厂、`agent/pre-step` 边界补进来的上下文），
+ * 所以收在这里一份 —— 各写一份必然漂移。
+ */
+export function messageSearchDirs(ctx) {
+  const profile = softGet(ctx, 'profileContext')
+  return [typeof profile?.dir === 'string' ? profile.dir : null, process.cwd()].filter((dir) => typeof dir === 'string' && dir !== '')
+}
 
 /** 底稿路径。 */
 export function digaoPath(dataDir) {
@@ -48,25 +69,19 @@ export function readDigao(dataDir) {
 }
 
 /**
- * 建一个「这场问事的上下文」装配器（同一份实现给 consult 与 bestof 用）。
+ * 建一个「这场问事的上下文」装配器（同一份实现给 consult / bestof / 发问边界用）。
  *
  * @param {object} ctx cordis 宿主上下文
  * @param {{dataDir?: string, mountBudget?: number}} [config]
- * @returns {{dataDir: string, buildInjection: (manifest: object) => Promise<string>,
- *            buildMountChange: (manifest: object) => Promise<string|null>}}
+ * @returns {{dataDir: string, buildInjection: (manifest: object) => Promise<string>}}
  */
 export function createContextAssembly(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
   const basePu = async () => createBaziMethods(ctx, { dataDir })['bazi.basePu']()
   const readPu = async (slug) => createPuMethods(ctx, { dataDir })['pu.read']({ slug })
 
-  /**
-   * 全量上下文（底座谱 → 底稿 → 勾选谱 → 临时挂载）。
-   *
-   * 挂载只在**真有挂载**时才多出那一段（`mounts` 为空时输出与票 10 逐字节相同）——
-   * 这是「加性」在这里的具体含义：改动不许影响没有挂载的会话。
-   */
-  async function buildInjection(manifest) {
+  /** 读材料（底座谱 / 底稿 / 勾选谱）——两个入口共用，免得各读一份。 */
+  async function readMaterial(manifest) {
     const read = await basePu()
     const selected = []
     for (const slug of manifest.pus ?? []) {
@@ -77,35 +92,97 @@ export function createContextAssembly(ctx, config = {}) {
         selected.push({ slug, error: String(error?.message ?? error) })
       }
     }
-    const mounts = (manifest.mounts ?? []).length > 0
-      ? await buildMountPreview(ctx, config, manifest.mounts)
-      : undefined
-    return buildConsultContext({ dataDir, basePu: read?.pu ?? null, digao: readDigao(dataDir), selected, mounts })
+    return { basePu: read?.pu ?? null, digao: readDigao(dataDir), selected }
+  }
+
+  /** 挂载预览 → 「内容真的进了这段文本」的那些层对应的挂载（`kept` 才算交付；R4）。 */
+  function deliveredFromPreview(preview, candidates) {
+    const kept = new Set((preview?.layers ?? []).filter((layer) => layer.kept === true).map((layer) => layer.id))
+    return candidates.filter((mount) => kept.has(`${mount.kind}:${mount.id}`))
   }
 
   /**
-   * 挂载变更段：**没有变更**（当前挂载与已经注入过的那一份一致）→ `null`。
+   * **首次**注入：底座谱 → 底稿 → 勾选谱 →（有挂载时）全量挂载段。
    *
-   * `manifest.mountsInjected` 是旁挂清单里记的「已经交给模型的那一份」（见 store.mjs）；
-   * 它缺省 = 还没注入过任何挂载（新会话的 `mounts` 也是空，于是不会凭空冒出一段）。
+   * 为什么是「首次」而不是「每一轮」：`agent/pre-step` 返回的消息会被 loop **原样追加进会话日志**
+   * （`dsh-agent-loop/lib/index.js:1061` 在首次尝试时 `append("user/message", …)`）—— 也就是
+   * 「模型可见 ⟺ 已落日志」这条不变量的具体形态。所以交付一次就**永久在场**（重启、dispose、
+   * 原生 composer 都一样，因为读的是日志），每轮再发一遍只会把同一份大文本重复写进 JSONL。
+   * 每一轮要看的是**变化**：那一半在 `buildMountDelta` 里。
    *
-   * 返回值里的 `delivered` 是**内容有没有真的进去**：挂载内容读不出来（`ctx.fs` 那一刻不可得）
-   * 或整层被裁掉时，披露块照样进（那是事实），但**不算交付** —— 调用方据此不写 `mountsInjected`，
-   * 于是下一问会再试一次（读不出来往往是一时的）。
+   * 边界如实登记：底稿在会话中途刷新（票 13 的定时任务）不会自动重发 —— 材料里给的是**文件路径**，
+   * 模型要看最新版自己去读那个文件；要一份新快照就开新会话。
    *
-   * @returns {Promise<null | {text: string, delivered: boolean}>}
+   * @returns {Promise<{text: string, mountsInjected: Array<object>|null}>}
+   *          `mountsInjected` 非 null 时 = 这段文本之后「内容已经交给模型」的完整挂载清单（待落盘）。
    */
-  async function buildMountChange(manifest) {
-    const current = Array.isArray(manifest.mounts) ? manifest.mounts : []
-    const injected = Array.isArray(manifest.mountsInjected) ? manifest.mountsInjected : []
-    if (mountsKey(current) === mountsKey(injected)) return null
-    const preview = current.length > 0 ? await buildMountPreview(ctx, config, current) : undefined
-    return {
-      text: buildMountUpdateContext({ mounts: preview }),
-      // 清空也是一种交付（「已全部移除」那句话就是全部内容）；否则至少有一层真的纳入了才算。
-      delivered: current.length === 0 || (preview?.layers ?? []).some((layer) => layer.kept === true),
-    }
+  async function buildInjection(manifest) {
+    const material = await readMaterial(manifest)
+    const mounts = (manifest.mounts ?? []).length > 0
+      ? await buildMountPreview(ctx, config, manifest.mounts)
+      : undefined
+    const text = buildConsultContext({ dataDir, ...material, mounts })
+    const delivered = mounts === undefined ? null : deliveredFromPreview(mounts, manifest.mounts ?? [])
+    return { text, mountsInjected: delivered }
   }
 
-  return { dataDir, buildInjection, buildMountChange }
+  /**
+   * **增量**注入：只补「模型还没见过内容」的层，以及「已经撤下」的层。
+   *
+   * 判据是旁挂清单的 `mountsInjected`（**逐层**记的「内容已经交给模型」）：
+   *   - `pending` = 当前挂载里不在 `mountsInjected` 的（新增，或上次内容没读出来 ⇒ 这一问重试，R4）；
+   *   - `removed` = `mountsInjected` 里有、当前清单里没有的（撤下 ⇒ 说一句「不再适用」）。
+   *
+   * 两者都空 → 返回空文本（这一问不必注入任何东西）。
+   *
+   * @returns {Promise<{text: string, mountsInjected: Array<object>|null}>}
+   */
+  async function buildMountDelta(manifest) {
+    const current = Array.isArray(manifest.mounts) ? manifest.mounts : []
+    const delivered = Array.isArray(manifest.mountsInjected) ? manifest.mountsInjected : []
+    const keyOf = (mount) => `${mount?.kind ?? ''}:${mount?.id ?? ''}`
+    const currentKeys = new Set(current.map(keyOf))
+    const deliveredKeys = new Set(delivered.map(keyOf))
+    const pending = current.filter((mount) => !deliveredKeys.has(keyOf(mount)))
+    const removed = delivered.filter((mount) => !currentKeys.has(keyOf(mount)))
+    if (pending.length === 0 && removed.length === 0) return { text: '', mountsInjected: null }
+
+    const preview = pending.length > 0 ? await buildMountPreview(ctx, config, pending) : undefined
+    const text = buildMountDeltaContext({ preview, removed })
+    // 交付账：撤下的划掉，读到了内容的补上（没读到的**留在外面** —— 下一问再试）。
+    const stillDelivered = delivered.filter((mount) => currentKeys.has(keyOf(mount)))
+    return { text, mountsInjected: [...stillDelivered, ...deliveredFromPreview(preview, pending)] }
+  }
+
+  /**
+   * 这场问事的**文本历史**（给合参候选；S9：窗口按合参模型统一裁 —— 评审 R5）。
+   *
+   * 返回的是**一段文本**（不是对象）：调用方（`bestof.run`）把它与材料、问题拼成同一条候选消息。
+   * 裁剪了几条、按多少字裁 —— 那几句话写在文本里（`buildCandidateHistory`），
+   * 模型看得到，回看也看得到：不留「悄悄少了几条」的形状。
+   *
+   * 三条边界：
+   *   - 读不到会话日志（`sessionQuery` 不在场 / 读不动）→ `null`：候选按「没有历史」跑，
+   *     **不编一段假的**；
+   *   - 会话还没落盘（`SESSION_QUERY_SESSION_NOT_FOUND`）→ 那是「确实还没有历史」，不是错误；
+   *   - 算出来是空串（还没有任何消息）→ 也返回 `null`：调用方据此连标题都不加。
+   *
+   * @returns {Promise<string|null>}
+   */
+  async function buildHistory(sessionId) {
+    const sessionQuery = softGet(ctx, 'sessionQuery')
+    if (typeof sessionQuery?.readSession !== 'function') return null
+    let snapshot
+    try {
+      snapshot = await sessionQuery.readSession(sessionId)
+    } catch (error) {
+      if (!isSessionNotFound(error)) return null
+      snapshot = { events: [] }
+    }
+    const resolved = await resolveHistoryBudget(ctx, config)
+    const built = buildCandidateHistory({ messages: projectConsultMessages(snapshot), budget: resolved.budget })
+    return built.text === '' ? null : built.text
+  }
+
+  return { dataDir, buildInjection, buildMountDelta, buildHistory }
 }

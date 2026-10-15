@@ -9,40 +9,33 @@
  *   - **黄历**：本地 horosa 的 `horosa_cn_huangli`（只走 `xuanshuHorosa.callTool`）；
  *   - **时间基准**：底座里登记的时区 + 本机时钟（`Intl`）。**不联网、不调 LLM**。
  *
+ * **生成链只有一份**：`generate.mjs` 的 `generateRikke()`。`rikke.generate`（人点，`manual:true`）
+ * 与定时到点（`delivery.mjs`，`manual:false`）走的是同一段代码 —— 这个约定在本文件原来那句
+ * 「将来定时路径复用同一份代码时显式传 manual:false」里就写下了，2026-10-16 兑现（复核 Spec 1）。
+ *
  * 契约修订（Lead 2026-10-15，纯加性）：`rikke.status` 回传 `generatedAt` / `zone` /
  * `huangli:{ok,version,tool}` / `schedule:{time,timeZone,id}`，**拿不到就省略该键**（不写 null、不写空串）——
  * 与票 08 快照的 `place` 同款：「空值比没有值更容易被界面当成填过了」。
  */
 
 import { DEFAULT_TIME_ZONE, RIKKE_TASK_TITLE, findDailyTask, scheduleSummary, updateDailyTime } from './daily-tasks.mjs'
-import { callHuangli } from './huangli.mjs'
-import { RIKKE_SCHEMA, dateInZone, hourInZone, isDate, readRikke, writeRikke } from './store.mjs'
+import { generateRikke, zoneFor } from './generate.mjs'
+import { dateInZone, isDate, readRikke } from './store.mjs'
 import { resolveDataDir } from '../bazi/service.mjs'
-import { readSnapshot } from '../bazi/snapshot.mjs'
 
 /** 请求对象兜底（非对象一律当空请求）。 */
 function requestOf(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 }
 
-/** 底座里登记的时区（快照读不出就用缺省；它只影响「今天是哪一天」）。 */
+/**
+ * 底座里登记的时区（快照读不出就用缺省；它只影响「今天是哪一天」）。
+ *
+ * 判据的唯一实现在 `generate.mjs` 的 `zoneFor()`：定时那条路（`delivery.mjs`）也要它，
+ * 两处各写一份就会漂移（本仓库吃过六份复制的亏）。
+ */
 export function baseZone(dataDir) {
-  const read = readSnapshot(dataDir)
-  const zone = read.state === 'ready' ? read.snapshot?.birth?.zone : null
-  return typeof zone === 'string' && zone !== '' ? zone : DEFAULT_TIME_ZONE
-}
-
-/** 这一天的日课产物记录（`rikke.generate` 写的就是它）。 */
-export function buildRikkeRecord({ date, zone, content, huangli, manual, generatedAt = new Date().toISOString() }) {
-  return {
-    schema: RIKKE_SCHEMA,
-    date,
-    generatedAt,
-    zone,
-    content: { yi: content.yi, ji: content.ji, liuri: content.liuri },
-    huangli: { ok: huangli.ok === true, version: huangli.version ?? null, tool: huangli.tool ?? null },
-    manual,
-  }
+  return zoneFor(dataDir, DEFAULT_TIME_ZONE)
 }
 
 /**
@@ -54,8 +47,8 @@ export function createRikkeMethods(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
   const now = typeof config.now === 'function' ? config.now : () => new Date()
 
-  /** 目标日期：请求给了就用（校验格式），没给就是时区里的今天。 */
-  const pickDate = (source, zone) => (isDate(source.date) ? source.date : dateInZone(zone, now()))
+  /** 目标日期：请求给了就用（校验格式），没给就是时区里的今天；`at` 只为「一次生成只读一次钟」。 */
+  const pickDate = (source, zone, at = now()) => (isDate(source.date) ? source.date : dateInZone(zone, at))
 
   return {
     /**
@@ -85,42 +78,17 @@ export function createRikkeMethods(ctx, config = {}) {
     /**
      * 生成当日日课（人点 [立即生成] 走它）。**失败一律给可读理由，不静默**：
      * 底座未立 / horosa 没调通 / 写盘失败，三种都回 `{ok:false, date, reason}`。
+     *
+     * 实现只剩「算时区与日期」+ 调那一份共用链（`generate.mjs`）：**定时到点那条路走的是同一份代码**
+     * （`delivery.mjs`，`manual:false`），这样两条路产出的产物形状不会各漂各的。
      */
     'rikke.generate': async (request) => {
       const source = requestOf(request)
+      const at = now()
       const zone = baseZone(dataDir)
-      const date = pickDate(source, zone)
-
-      const snapshot = readSnapshot(dataDir)
-      if (snapshot.state !== 'ready') {
-        return {
-          ok: false,
-          date,
-          reason: snapshot.state === 'empty'
-            ? '底座未立：还没有出过盘。先完成出生信息（八字冷启动向导 / `bazi.cast`），日课要读底座与时间基准。'
-            : `底座快照读不出来：${snapshot.reason}`,
-        }
-      }
-
-      const called = await callHuangli({ ctx, date, hour: hourInZone(zone, now()) })
-      if (!called.ok) return { ok: false, date, reason: called.reason }
-
-      const record = buildRikkeRecord({
-        date,
-        zone,
-        content: called.content,
-        huangli: { ok: true, version: called.version, tool: called.tool },
-        // `manual` 区分「人点出来的这一份」与「定时产出的那一份」：本方法只被人点调用，
-        // 所以缺省 true；将来定时路径复用同一份代码时显式传 `manual:false`。
-        manual: source.manual !== false,
-        generatedAt: now().toISOString(),
-      })
-      try {
-        writeRikke(dataDir, record)
-      } catch (error) {
-        return { ok: false, date, reason: `日课写盘失败：${String(error?.message ?? error)}` }
-      }
-      return { ok: true, date, content: record.content }
+      const date = pickDate(source, zone, at)
+      // `manual` 区分「人点出来的这一份」与「定时产出的那一份」：本方法只被人点调用，所以缺省 true。
+      return await generateRikke({ ctx, dataDir, zone, date, manual: source.manual !== false, at })
     },
 
     /**

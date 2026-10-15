@@ -28,9 +28,6 @@ export function sourceMarkMount(label) {
 /** 挂载披露块的标记（S8 §5 步骤 7：注入内容里必须能看到「砍了多少、为什么砍」）。 */
 export const SOURCE_MARK_MOUNT_DISCLOSURE = '【来源：临时挂载·披露】'
 
-/** 挂载**变更**段的标记（票 12：首轮之后挂上/换掉的挂载，在下一问之前补一段）。 */
-export const SOURCE_MARK_MOUNT_UPDATE = '【来源：临时挂载·变更】'
-
 /** 勾选谱的段标记：`【来源：谱 <name>】`。 */
 export function sourceMarkPu(name) {
   return `【来源：谱 ${name}】`
@@ -63,10 +60,13 @@ function summaryLine(summary) {
 }
 
 /**
- * 装配首轮注入的正文（纯函数）。
+ * 装配注入正文（纯函数）。
  *
  * `mounts`（票 12）是 `buildMountPreview()` 的产物：**已经在读 + 裁之后**，这里只负责装文本。
  * `mounts` 缺省 / 没有层时**一个字符都不加** —— 没有挂载的会话，注入文本与票 10 逐字节相同。
+ *
+ * 谁调它：`agent/pre-step` 边界在**材料还没落进日志**时（首次交付）、以及 `bestof.run`（候选流的
+ * 资料快照）。**只在有变化时才补**的那一半走 `buildMountDeltaContext`（另一条路，不经过这里）。
  *
  * @param {{dataDir: string, basePu: object|null, digao: string|null,
  *          selected?: Array<{slug: string, pu?: object, error?: string}>, mounts?: object}} input
@@ -76,7 +76,8 @@ export function buildConsultContext({ dataDir, basePu, digao, selected = [], mou
   const blocks = [
     [
       '【玄枢·问事上下文】',
-      '这是本次问事开始时自动注入的**谱资料概览**（谱的加载协议：manifest 概览 + summary 优先）。',
+      '这是本次问事的**谱资料概览**（谱的加载协议：manifest 概览 + summary 优先）——'
+      + '它由玄枢在每次提问前按当前状态装配（改过挂载、补过底稿都算）。',
       '下面只给概览、摘要与文件路径 —— 正文请按需用文件工具自己读，不要凭概览推断正文。',
       '底座谱与底稿恒定在场、不可关；' + (selected.length === 0 ? '本次没有勾选可选谱（只带底座与底稿）。' : `本次勾选的可选谱 ${selected.length} 个。`),
     ].join('\n'),
@@ -137,35 +138,47 @@ export function buildConsultContext({ dataDir, basePu, digao, selected = [], mou
   return `${blocks.join('\n\n')}\n`
 }
 
+/** 挂载**撤下**的标记（票 12：撤掉的挂载要说一句「不再适用」，否则模型继续拿它当现况）。 */
+export const SOURCE_MARK_MOUNT_RETRACTION = '【来源：临时挂载·撤下】'
+
 /**
- * 挂载**变更**段的装配（票 12；评审发现的那一处「静默失效」）。
+ * 挂载**增量段**的装配（票 12；复核 R3/R4 改定）。
  *
- * 为什么要有这一段：挂载内容只在**首轮上下文**里进会话，而挂载清单是随时可改的
- * （S8 抽屉 `consult.setMounts`）。首轮之后再挂一个工作区，模型**看不见它** ——
- * 抽屉上字数状态一切正常，问出来的答案却与那个工作区无关：界面上工作、模型侧不工作。
- * 于是「当前挂载」与「已经注入过的挂载」不一致时，在**下一问之前**补这一段。
+ * 为什么需要它：挂载内容一旦注进去就进了会话日志（模型看得见、也就是「已交付」），
+ * 而挂载清单随时可改。所以每一问之前要比一次：**哪些层的内容模型还没见过**（新增的、或者
+ * 上次没读出来的）、**哪些层已经撤下**。两件事都只在这一段里说 —— 没有变化就一个字符都不产出。
  *
- * 移除也要说：以前注入的挂载正文已经进了历史，不声明一句「不再适用」，
- * 模型会继续拿它当现况（越来越旧的上下文比没有上下文更难查）。
+ * `preview` 只装**待补的那些层**（`buildMountPreview()` 对子集的产物）：所以它的披露块说的是
+ * 「这几层读到了多少 / 为什么没读到」，而不是整份挂载的账 —— 整份的账在首次注入那一段里已经给过。
  *
- * @param {{mounts?: object}} input `mounts` 是 `buildMountPreview()` 的产物（**读 + 裁之后**）；
- *        空 / 没有层 → 输出「已全部移除」那一句。
- * @returns {string}
+ * @param {{preview?: object, removed?: Array<{kind: string, id: string, label: string}>}} input
+ * @returns {string} 空串 = 没有可说的（调用方据此什么都不注入）
  */
-export function buildMountUpdateContext({ mounts } = {}) {
-  const blocks = buildMountBlocks(mounts)
-  if (blocks.length === 0) {
-    return [
-      SOURCE_MARK_MOUNT_UPDATE,
-      '这一场问事的临时挂载**已全部移除**：此前注入的挂载内容不再适用于后面的问题，不要再用它。',
-    ].join('\n') + '\n'
+export function buildMountDeltaContext({ preview, removed = [] } = {}) {
+  const blocks = []
+  const layerBlocks = buildMountBlocks(preview)
+  if (layerBlocks.length > 0) {
+    blocks.push('【玄枢·问事上下文】本次补投临时挂载：下面只列**模型还没见过内容**（新增，或上次没读出来）的层。')
+    blocks.push(...layerBlocks)
   }
+  if (removed.length > 0) blocks.push(buildMountRetraction({ removed }))
+  return blocks.length === 0 ? '' : `${blocks.join('\n\n')}\n`
+}
+
+/**
+ * 「这些挂载已经撤下」那一段（票 12）。
+ *
+ * 为什么必须说：此前注入的挂载正文已经在会话历史里，不声明一句「不再适用」，
+ * 模型会继续拿它当现况（越来越旧的上下文比没有上下文更难查）。
+ */
+export function buildMountRetraction({ removed = [] } = {}) {
+  if (removed.length === 0) return ''
+  const names = removed.map((mount) => `${mount?.kind === 'workflow' ? '工作流' : '工作区'}「${mount?.label ?? mount?.id ?? '?'}」`)
   return [
-    SOURCE_MARK_MOUNT_UPDATE,
-    '这一场问事的临时挂载变了：以**下面这一份**为当前挂载（此前注入的挂载内容已被它取代）。',
-    '',
-    blocks.join('\n\n'),
-  ].join('\n') + '\n'
+    SOURCE_MARK_MOUNT_RETRACTION,
+    `以下临时挂载**已撤下、不再适用**：${names.join('、')}。`,
+    '此前注入的它们的正文不要再当现况用；需要的话重新挂上。',
+  ].join('\n')
 }
 
 /**

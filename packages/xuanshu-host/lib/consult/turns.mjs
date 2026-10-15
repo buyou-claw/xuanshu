@@ -5,7 +5,11 @@
  * `openSession(id)` —— 用户完全可能直接在**原生 composer** 里说第一句，那条路不经过 `consult.send`。
  * 于是「问过 3 轮」与「一句没问过」在旁挂清单里长得一样，两个下游会因此出错：
  *   - 票 15 的 `sediment.draft` 读 `turns >= 1` 决定「有没有可沉淀的东西」→ 用户明明问过却被拒；
- *   - 首轮注入的判据会以为「还没灌过」→ 历史里出现**两份**底座谱（`inspectSessionLog().hasContext` 就是防这一条的）。
+ *   - 历史列表的「上一次问完是什么时候」也只看它（`lastTurnAt` 同理）。
+ *
+ * 随带一个只读事实：`hasContext`（这条会话的日志里有没有注入过的上下文）。它现在**不是**任何
+ * 注入判据 —— 注入改在 `boundary.mjs` 的 `agent/pre-step` 边界上（ADR-0012），那里用
+ * `agent.session.snapshotEvents()` 同步自查一次（并按会话缓存）。这里留着这一位是给探针 / 回看核对用。
  *
  * 判据只有一条：**会话日志**（正文的权威，ADR-0009 Consequences）。`user/message` 且
  * `source.kind === 'user'` 的是「人说的」（含玄枢代发的那一问）；我们注入的上下文

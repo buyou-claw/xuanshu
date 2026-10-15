@@ -17,6 +17,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
+import { buildCandidateHistory } from '../../packages/xuanshu-host/lib/consult/history.mjs'
 import {
   assistantEvent,
   envelope,
@@ -170,5 +171,63 @@ describe('consult.rename · 改名落到旁挂清单', () => {
   it('没有旁挂清单的会话：拒绝', async () => {
     const { api } = await scene()
     await expect(api['consult.rename']({ sessionId: 'session-xs-consult-不存在', title: 'x' })).rejects.toThrow(/问事记录|不存在/u)
+  })
+})
+
+/**
+ * `buildCandidateHistory()` —— 合参候选带的那段会话历史（评审 R5；纯函数，窗口与口径都在这里钉住）。
+ *
+ * 判据都打在**文本**上：模型看到的就是这段文本，回看也是这段文本。
+ */
+describe('合参候选的会话历史 · 窗口与口径（评审 R5）', () => {
+  const messages = [
+    { role: 'user', text: '第一轮：预算怎么定？', source: 'user' },
+    { role: 'assistant', text: 'ANSWER_1：先按 3000/月 试算。' },
+    { role: 'user', text: 'MATERIAL：底座谱概览', source: 'xuanshu-consult' },
+    { role: 'user', text: 'ADOPTED：方案 A，3000/月。', source: 'xuanshu-bestof-adopted' },
+    { role: 'assistant', text: 'ANSWER_2：那按 A 走。' },
+  ]
+
+  it('注入的谱资料不进历史（它已经作为「材料」单独给了候选）；采用稿单独标；顺序照日志', () => {
+    const built = buildCandidateHistory({ messages, budget: null })
+    expect(built.text).toContain('用户：第一轮：预算怎么定？')
+    expect(built.text).toContain('助手：ANSWER_1：先按 3000/月 试算。')
+    expect(built.text).toContain('已采用的合参稿：ADOPTED：方案 A，3000/月。')
+    expect(built.text).not.toContain('MATERIAL')
+    expect(built.included).toBe(4)
+    expect(built.omitted).toBe(0)
+    // 顺序 = 日志顺序（采用稿夹在第一条回答之后）。
+    expect(built.text.indexOf('ANSWER_1')).toBeLessThan(built.text.indexOf('ADOPTED'))
+    expect(built.text.indexOf('ADOPTED')).toBeLessThan(built.text.indexOf('ANSWER_2'))
+  })
+
+  it('预算未知（拿不到模型窗口）：不做裁剪，全部带上，并如实说一句', () => {
+    const built = buildCandidateHistory({ messages, budget: null })
+    expect(built.omitted).toBe(0)
+    expect(built.text).toContain('预算未知')
+    expect(built.text).not.toMatch(/省略了/u)
+  })
+
+  it('窗口按**整条**消息裁（从最新往回装），并写明省略了几条', () => {
+    // 只够装最后两条（"助手：ANSWER_2：那按 A 走。" + "已采用的合参稿：ADOPTED：方案 A，3000/月。"）。
+    const built = buildCandidateHistory({ messages, budget: 60 })
+    expect(built.included).toBe(2)
+    expect(built.omitted).toBe(2)
+    expect(built.text).toContain('ANSWER_2')
+    expect(built.text).toContain('ADOPTED')
+    expect(built.text).not.toContain('ANSWER_1')
+    expect(built.text).toMatch(/历史按 60 字窗口裁剪：省略了更早的 2 条消息/u)
+  })
+
+  it('最新一条自己就超窗口：照样带上（宁可超窗口，也不许候选对刚发生的事一无所知）', () => {
+    const built = buildCandidateHistory({ messages: [{ role: 'user', text: 'x'.repeat(500) }], budget: 10 })
+    expect(built.included).toBe(1)
+    expect(built.omitted).toBe(0)
+    expect(built.text).toContain('x'.repeat(500))
+  })
+
+  it('没有历史（空会话 / 只有注入行）：返回空串，调用方据此连标题都不加', () => {
+    expect(buildCandidateHistory({ messages: [], budget: null }).text).toBe('')
+    expect(buildCandidateHistory({ messages: [{ role: 'user', text: 'MATERIAL', source: 'xuanshu-consult' }], budget: 100 }).text).toBe('')
   })
 })

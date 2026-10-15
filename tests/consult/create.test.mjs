@@ -16,15 +16,14 @@
  *      这条路上没人做（`:445-448` 那段在 controller 里）→ 真机上会话建不出来。
  *   ⑤ **旁挂清单写失败却把会话留下**：一个跑得起来但列表里看不见的会话，比报错更难查；
  *      create 失败必须把刚建的 agent 回滚掉。
- *   ⑥ **首轮上下文等到第一问才灌**（本轮评审发现）：会话一建出来门厅就 `openSession`，
- *      用户完全可能直接在原生 composer 里说第一句 —— 那条路不经过 `consult.send`，
- *      于是「第一问」是在没有底座谱 / 底稿 / 勾选谱的情况下答的，而且不报错。
- *      所以注入提前到 create 这一刻（`inject()` 不唤醒，仍然必然落在第一问之前）。
+ *   ⑥ **把「第一问一定有上下文」挂在 inbox 排队上**（本轮复核 R2 的真实反例）：门厅一建会话就
+ *      `openSession`，用户可能直接在原生 composer 里说第一句 —— 那条路不经过 `consult.send`；
+ *      而排队待消费的消息又会被 `dispose()` 取消掉。所以 create **不注入**：上下文改由
+ *      `agent/pre-step` 边界在每一轮第一步现算（见 boundary.test.mjs）。
  */
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
-import { CONSULT_MESSAGE_SOURCE_KIND } from '../../packages/xuanshu-host/lib/consult/message.mjs'
 import { consultRoot, isConsultSessionId } from '../../packages/xuanshu-host/lib/consult/store.mjs'
 import {
   fakeAgentDefaultModel,
@@ -99,20 +98,15 @@ describe('consult.create · 会话身份与归属（契约 §1）', () => {
     expect(first.session.sessionId).not.toBe(second.session.sessionId)
   })
 
-  it('**首轮上下文在 create 那一刻就灌**：门厅一开会话就 openSession，用户可能从原生 composer 说第一句', async () => {
+  it('create **不注入**任何东西：上下文归 `agent/pre-step` 边界（评审 R2：inbox 排队会被 dispose 取消）', async () => {
     const { agents, api } = scene()
     const { session } = await api['consult.create']({ pus: ['紫微笔记'] })
 
     const calls = agents.live.get(session.sessionId).calls
-    expect(calls.map((call) => call.kind)).toEqual(['inject'])
-    const injection = calls[0].message
-    expect(injection.source.kind).toBe(CONSULT_MESSAGE_SOURCE_KIND)
-    const text = injection.content.map((block) => block.text).join('\n')
-    expect(text).toContain('【来源：底座谱】')
-    expect(text).toContain('【来源：底稿】')
-    // 没起过盘 / 没生成底稿时也照灌：写明「底座未立 / 底稿未生成」，绝不假装有。
-    expect(text).toMatch(/底座未立|底稿未生成/u)
-    // 会话确实建出来了（注入不是「建完就报错」）。
+    // 开会话这一刻一条投递都没有：没有 `inject` 可丢（dispose 会把待消费消息取消），
+    // 上下文由边界在**每一轮第一步**现算并进模型输入（见 boundary.test.mjs）。
+    expect(calls).toEqual([])
+    // 会话确实建出来了（不注入 ≠ 建不出来）。
     expect(agents.created).toHaveLength(1)
   })
 })

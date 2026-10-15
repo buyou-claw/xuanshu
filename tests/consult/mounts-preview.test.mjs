@@ -19,7 +19,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
 import { createConsultStore } from '../../packages/xuanshu-host/lib/consult/store.mjs'
-import { MOUNT_BUDGET_CHARS_PER_TOKEN, MOUNT_BUDGET_WINDOW_SHARE, resolveMountBudget } from '../../packages/xuanshu-host/lib/mounts/budget.mjs'
+import { MOUNT_BUDGET_CHARS_PER_TOKEN, MOUNT_BUDGET_WINDOW_SHARE, resolveHistoryBudget, resolveMountBudget } from '../../packages/xuanshu-host/lib/mounts/budget.mjs'
 import { fakeFsReader, fakeWorkspaceRegistryForMounts, makeHost, makeSandbox } from './lib/sandbox.mjs'
 
 const roots = []
@@ -136,6 +136,25 @@ describe('票 12 · 预算：config → 模型窗口 → null（不编数）', (
       expect(read).toEqual({ budget: null, source: 'unknown', detail: expect.any(String) })
     }
     expect(await resolveMountBudget(host.ctx, { mountBudget: 60000 })).toEqual({ budget: 60000, source: 'config' })
+  })
+
+  it('resolveHistoryBudget（合参候选的历史窗口，评审 R5）与挂载同源：覆盖值优先，否则走同一套窗口探测', async () => {
+    // 为什么挂在同一个文件里验：它是「同一套模型窗口口径」的第二处使用者，
+    // 两处漂移就是 S9「历史长度按合参模型统一处理」没落地。
+    const bare = makeHost({ services: {} })
+    // 没有 `agentDefaultModel` / `llm.resolveModelInfo` → 预算未知（合法结果，不猜一个数）。
+    expect(await resolveHistoryBudget(bare.ctx, {})).toEqual({ budget: null, source: 'unknown', detail: expect.any(String) })
+    expect(await resolveHistoryBudget(bare.ctx, { historyBudget: 1234 })).toEqual({ budget: 1234, source: 'config' })
+    // 配置非法（0 / 负数 / 非数）当没给，继续往下探。
+    expect((await resolveHistoryBudget(bare.ctx, { historyBudget: 0 })).source).toBe('unknown')
+
+    // 探到窗口时与挂载预算同一个换算（同一份常量）。
+    const window = 128_000
+    const { host } = scene({ window })
+    const expected = Math.floor(window * MOUNT_BUDGET_WINDOW_SHARE * MOUNT_BUDGET_CHARS_PER_TOKEN)
+    const read = await resolveHistoryBudget(host.ctx, {})
+    expect(read.budget).toBe(expected)
+    expect(read.source).toBe('model-window')
   })
 })
 

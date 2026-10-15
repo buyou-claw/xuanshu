@@ -134,12 +134,14 @@ packages/xuanshu-host/lib/consult/
   store.mjs     旁挂清单：<dataDir>/consult/sessions/<sessionId>.json（schema xuanshu/consult@1）+ id 前缀与 slug 归一
   agent.mjs     把会话接上 agent：缺省 preset 组合（mount）+ 模型选择；能力门（缺服务就拒绝发问）
   context.mjs   注入正文的装配（纯函数：底座谱 → 底稿 → 勾选谱 → 挂载；每段带【来源：…】）
-                + buildMountUpdateContext（挂载**变更**段，票 12）
-  inject.mjs    上下文读取 + 装配的**单一来源**：consult.create/send 与 bestof.run 都从这里取
+  inject.mjs    上下文读取 + 装配的**单一来源**：发问边界与 bestof.run 都从这里取
+                （buildInjection 材料 / buildHistory 会话文本历史 —— 后者给合参候选，评审 R5）
+  boundary.mjs  **统一发问边界**（ADR-0012）：`ctx.on('agent/pre-step', …)`，每轮第一步把材料并进模型输入
   message.mjs   注入消息载体：source.kind = 'xuanshu-consult'（自定义 MessageSourceMap 合并点）
   turn.mjs      waitForTurnEnd：等一轮结束看 turn/end，不是 whenIdle()
   turns.mjs     轮次账核对：按**会话日志**把 turns / 标题补齐（原生 composer 说的那一句也算）
   history.mjs   会话事件流 → ConsultMessage（只读投影；isSessionNotFound 认上游错误码）
+                + buildCandidateHistory（候选的历史窗口：整条裁、只带采用稿、裁剪事实写进文本）
   bestof*.mjs   多 AI 合参（票 11）：run / state / adopt / cancel + 落 <sessionId>.bestof.json
   service.mjs   六个方法：create / send / list / read / rename / defaults（+ setMounts，票 12）
 ```
@@ -151,15 +153,15 @@ packages/xuanshu-host/lib/consult/
 | `sessionId` | `session-xs-consult-<uuid>` | `SessionId` 只是未校验的 branded string，自铸前缀零成本可筛 |
 | `cwd` | `<dataDir>/consult`（**全部问事会话共用**） | `cwd` 是唯一受支持的会话过滤（`filterSessions([{kind:'cwd',…}])`）；**刻意不挂 workspace**（那会破坏「与工作区并列」） |
 | 旁挂清单 | `<dataDir>/consult/sessions/<sessionId>.json` | 「问过哪些事、这次勾了哪些谱」的权威；列表只读它，不扫会话日志 |
-| 注入消息来源 | `source.kind = 'xuanshu-consult'` | 官方允许的 `MessageSourceMap` 合并点；轨迹里显示成「注入」行 |
+| 注入消息来源 | `source.kind = 'xuanshu-consult'` | 官方允许的 `MessageSourceMap` 合并点。**现在这份材料不写进会话日志**（每轮现算并进模型输入，见 ADR-0012），这个 kind 只标「这条消息是我们加的」 |
 
 **六个方法**（`/xuanshu` 通道，契约 §2 冻结）：
 
 | method | 做什么 |
 |---|---|
 | `consult.defaults` | `{required:[底座谱,底稿], optional:[可勾选谱]}`；底座走票 08 `bazi.basePu`，底稿探测 `<dataDir>/digao.md`（**不存在就 `present:false`，不造空底稿**），可选谱来自票 09 `pu.list()`（读不出来的谱不进列表） |
-| `consult.create` | 铸 id → `mkdir -p <dataDir>/consult` → **`ctx.agents.create(...)`**（组合口径见下）→ 写旁挂清单 → **首轮上下文注入**（`agent.inject()`，不唤醒）；清单写失败就把刚建的会话 `dispose` 掉（不留「跑得起来但列表里看不见」的会话） |
-| `consult.send` | 先过**能力门**（preset / 模型服务缺一个就拒绝，不给假 `accepted`）→ 首轮上下文**已在 create 时灌过**，这里只在「create 没灌成 / 会话是别的进程建的」时补（补之前先核会话日志，见下）→ 挂载变更的增量（票 12）→ `agent.followup(问题)`，**受理即回 `{accepted:true}`**（不等答完）；同会话发问串行（并发两问不许丢 `turns` 更新、不许灌两遍上下文）；进程重启后会 `agents.resume(...)` 接回来（preset 取会话 header 里存的那个） |
+| `consult.create` | 铸 id → `mkdir -p <dataDir>/consult` → **`ctx.agents.create(...)`**（组合口径见下）→ 写旁挂清单；**不注入任何东西**（材料由发问边界在每一轮第一步现算，见下）；清单写失败就把刚建的会话 `dispose` 掉（不留「跑得起来但列表里看不见」的会话） |
+| `consult.send` | 先过**能力门**（preset / 模型服务缺一个就拒绝，不给假 `accepted`）→ 把轮次账与会话日志核对一次 → `agent.followup(问题)`，**受理即回 `{accepted:true}`**（不等答完）；同会话发问串行（并发两问不许丢 `turns` 更新）；进程重启后会 `agents.resume(...)` 接回来（preset 取会话 header 里存的那个） |
 | `consult.list` | 读旁挂目录，`createdAt` 倒序（坏文件跳过，不拖垮整张列表） |
 | `consult.read` | 旁挂清单给标题/勾选谱，正文走 **`ctx.sessionQuery.readSession(id)`**（本机是 `session.v4.jsonl.zstd`，**不自己解压**）；刚建好还没落盘的会话 → `messages: []` |
 | `consult.rename` | 改名落到旁挂清单（列表与阅读器都读它） |
@@ -179,23 +181,34 @@ packages/xuanshu-host/lib/consult/
 所以 `consult.send` 当场可读地失败（说清缺哪个服务 + 指一条修复路径），**不许**回一个
 `accepted:true` 然后什么都不发生。与票 08「缺经纬度禁止出盘」「确认闸拦下不落盘」同一条纪律。
 
-**注入载体（契约 §3 让实现者择一，这里记明）**：**单独一条注入消息**，不是「同一个 content part 数组」。
-理由：多 content part 只有**一个** `source.kind`，把用户的问题也标成注入（轨迹里显示成「注入」行）就错了；
-所以注入用 `agent.inject()`（不唤醒）排在 `agent.followup()`（唤醒）之前 —— 于是它必然落在这一轮的问题之前，
-且各自带各自的 kind。
+**材料怎么进模型：`agent/pre-step` 边界（ADR-0012；复核 R2/R3/R4 改定，别再退回「排队 + 一次性」）**：
 
-**注入时机与三处判据**（评审修复轮改定，别再退回「只在第一问注入」）：
+旧口径是「`consult.create` 灌首轮上下文、`consult.setMounts` 补变更段、`consult.send` 兜底，`agent.inject()`
+排进 inbox」。复核实测它**会丢**：`inject()` 只是排进 inbox（还不是 `user/message`），正常 `handle.dispose()`
+会追加 `outcome:"canceled"` 把待消费消息撤掉；而原生 composer 那一问又不经过 `consult.send`。
+现在只有一条通道 —— `boundary.mjs` 注册 `ctx.on('agent/pre-step', handler, { prepend: true })`
+（随包先例 `dsh-time-context/lib/index.js:242-246`；loop 在这一步 `.claim()` 后调同一个 waterfall，
+`dsh-agent-loop/lib/index.js:906-918`）：
 
-| 时机 | 干什么 | 为什么 |
+**交付的落点是会话日志**：loop 会把这一步的消息原样 append 成 `user/message`（`:1061`，首次尝试时）
+—— 一次交付即**永久在场**（重启 / dispose / 原生 composer 都读同一份日志），所以**不该每轮重发**。
+边界每一问只判断「缺什么」：
+
+| 判据 | 定值 | 为什么 |
 |---|---|---|
-| `consult.create` | 灌**首轮上下文**（底座谱 + 底稿 + 勾选谱 + 挂载） | 门厅一开会话就 `openSession(id)`，用户完全可能直接在**原生 composer** 里说第一句 —— 那条路不经过 `consult.send`。判断「灌过没有」：同进程看内存、跨进程看**会话日志**里有没有 `source.kind='xuanshu-consult'` 的消息（`turns === 0` 时才去读一次） |
-| `consult.setMounts`（确认那一刻） | 挂载**变更**段（新增 / 换掉 / 全部移除都算） | 用户可能在抽屉里挂完再回会话里问；挂载清单写进旁挂清单 ≠ 模型看得到 |
-| `consult.send` | 上面两处的**兜底**（会话不在本进程活着 / create 时注入失败）；并把轮次账与会话日志核对一次 | 兜底必须落在问题之前；`turns` 只记过玄枢受理过的轮次，用户从原生 composer 说的第一句也要算（票 15 的 `sediment.draft` 读它） |
+| 哪一步 | `step === 1` | 一轮只在第一步判断；后面几步是同一轮的工具循环 |
+| 有没有用户输入 | `messages.length > 0` 才补 | 收尾步骤塞进一条消息会打破 loop 的 `turnEnds && nextStep.length === 0` 判据 ⇒ **凭空多一次模型调用** |
+| 材料 | 日志里已有带 `【来源：底座谱】` 的 `xuanshu-consult` 消息 → 跳过；否则**发一次**（连同当时的挂载全量） | 材料进日志就永久在场；每轮重发只会把同一份大文本反复写进 JSONL |
+| 挂载（新增 / 上次没读出来） | 不在旁挂清单 `mountsInjected`（**逐层**记「内容已交付」）里的层 → 补投 | 某一层暂时读不出来时它不记账 ⇒ 下一问自动重试（R4）；改过挂载马上生效（R3） |
+| 挂载（撤下） | `mountsInjected` 里有、当前清单里没有 → 说一句「已撤下、不再适用」 | 旧正文还在历史里，不声明就会被当成现况 |
+| 失败 | 只记日志，原样交出这一步的输入 | 辅助材料不许弄挂别人的一轮问答 |
 
-「已经交给模型的那一份挂载」记在旁挂清单的 `mountsInjected`（增量判据：当前 `mounts` 与它不同才补一段；
-**只有内容真的纳入**才算交付 —— 读不出来 / 全被裁掉时留着，下一问再试）。
-**合参的候选流**（票 11）不走会话历史，所以 `bestof.run` 用**同一份装配**（`inject.mjs`）把上下文并进候选的
-用户消息 —— 判官与合并槽**不带**（判官只看问题与候选）。
+**合参的候选流**（票 11）不走会话历史，所以 `bestof.run` 自己带两段（都用 `inject.mjs` 的同一份装配）：
+**材料**（`buildInjection()`：底座谱 + 底稿 + 勾选谱 + 挂载）与**会话文本历史**
+（`buildHistory()` → `buildCandidateHistory()`：窗口复用模型窗口探测，按整条从最新往回裁，
+只带被采用的合参稿 —— 复核 R5）。判官与合并槽**都不带**（H4：判官只看问题与候选）。
+候选流不落会话日志，所以它**不去动**「挂载已交付」那本账（那是边界的事）。
+
 
 **`turns` 是「核对过的」轮数**：它由 `lib/consult/turns.mjs` 在**玄枢接手这个会话的那一刻**与会话日志核对
 （`consult.send` / `sediment.draft`）—— 日志里 `source.kind='user'` 的 `user/message` 都算一轮，

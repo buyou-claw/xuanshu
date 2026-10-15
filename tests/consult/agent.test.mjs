@@ -176,7 +176,7 @@ describe('发问前的门：缺服务时不许回一个假的 accepted:true', ()
     const { api, agents, session } = await scene()
     const response = await api['consult.send']({ sessionId: session.sessionId, text: '问一句' })
     expect(response).toEqual({ accepted: true })
-    expect(agents.live.get(session.sessionId).calls.map((call) => call.kind)).toEqual(['inject', 'followup'])
+    expect(agents.live.get(session.sessionId).calls.map((call) => call.kind)).toEqual(['followup'])
   })
 
   it('consultAgentCapability 的形状：ok/missing/detail', () => {

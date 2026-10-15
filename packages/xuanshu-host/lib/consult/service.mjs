@@ -24,8 +24,8 @@ import { createPuMethods } from '../pu/service.mjs'
 import { buildMountPreview, requireMountableWorkspaces } from '../mounts/preview.mjs'
 import { consultAgentCapability, createConsultAgent, resumeConsultAgent } from './agent.mjs'
 import { isSessionNotFound, projectConsultMessages } from './history.mjs'
-import { createContextAssembly, readDigao } from './inject.mjs'
-import { createConsultContextMessage, createConsultQuestionMessage } from './message.mjs'
+import { readDigao, messageSearchDirs } from './inject.mjs'
+import { createConsultQuestionMessage } from './message.mjs'
 import { DEFAULT_CONSULT_TITLE, consultRoot, createConsultStore, isConsultSessionId, newConsultSessionId, normalizeMounts, normalizePus, normalizeTitle, titleFromQuestion, toConsultSummary } from './store.mjs'
 import { waitForTurnEnd } from './turn.mjs'
 import { reconcileTurns } from './turns.mjs'
@@ -52,33 +52,17 @@ function softGet(ctx, name) {
 export function createConsultMethods(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
   const store = createConsultStore(dataDir)
-  /** 上下文装配（读底座谱 / 底稿 / 勾选谱 / 挂载）——与 `bestof.run` 共用同一份实现（`inject.mjs`）。 */
-  const assembly = createContextAssembly(ctx, config)
   /** 本进程建过/接过的会话句柄（`consult.send` 复用；进程重启后靠 `agents.resume` 重新接）。 */
   const handles = new Map()
-  /**
-   * 本进程已经灌过首轮上下文的会话。
-   *
-   * 首轮上下文现在在 `consult.create` 就灌（见那里的长注释），所以这个集合不再只服务 send：
-   * 它是「**同一个进程里**这一场问事已经有上下文了」的判据。
-   * 跨进程那一半看会话日志（`inspectSessionLog()`）—— 旁挂清单的 `turns` 只记玄枢受理过的轮次，
-   * 用户从原生 composer 说的第一句不在里面。
-   */
-  const injected = new Set()
   /** 每个会话最多一个「等这一轮结束」的订阅（免得并发发问堆监听器）。 */
   const turnWaiters = new Map()
-  /** 每个会话一条串行队列：同一会话的两问不许交错改旁挂清单（否则丢更新）也不许各灌一次上下文。 */
+  /** 每个会话一条串行队列：同一会话的两问不许交错改旁挂清单（否则丢更新）。 */
   const sendChains = new Map()
 
   // 票 08 / 票 09 的读面：现建一次方法组再调它 —— 与 RPC 上的同名方法是同一批函数。
   const basePu = async () => createBaziMethods(ctx, { dataDir })['bazi.basePu']()
   const listPus = async () => createPuMethods(ctx, { dataDir })['pu.list']({})
 
-  /** 解析官方 `@deepseek-ai/dsh-llm/message` 的锚点顺序：profile 目录优先（真机就在这里）。 */
-  const messageSearchDirs = () => {
-    const profile = softGet(ctx, 'profileContext')
-    return [typeof profile?.dir === 'string' ? profile.dir : null, process.cwd()].filter((dir) => typeof dir === 'string' && dir !== '')
-  }
   /** 带作用域的 logger；宿主没装就静默替身（后台记账失败不该把发问拖下水）。 */
   const logger = (() => {
     try {
@@ -114,54 +98,6 @@ export function createConsultMethods(ctx, config = {}) {
     const handle = await resumeConsultAgent(ctx, { sessionId })
     handles.set(sessionId, handle)
     return handle.agent
-  }
-
-  /**
-   * 把首轮上下文灌进会话（`consult.create` 建好会话那一刻就灌，见那里的长注释）。
-   *
-   * 失败**不把开会话拖下水**：如实记日志，`injected` 不置位 —— 于是第一问经 `consult.send` 时还会再试一次
-   * （宁可晚一轮带上谱资料，也不许把「会话建不出来」当成错误）。
-   */
-  async function injectFirstRound(sessionId, agent, manifest) {
-    if (typeof agent?.inject !== 'function') return false
-    try {
-      const context = await assembly.buildInjection(manifest)
-      agent.inject(await createConsultContextMessage(context, { searchDirs: messageSearchDirs() }))
-      injected.add(sessionId)
-      return true
-    } catch (error) {
-      logger.warn('首轮上下文没灌进 %s（第一问经 consult.send 时会再试一次）：%s', sessionId, String(error?.message ?? error))
-      return false
-    }
-  }
-
-  /**
-   * 挂载一改，**立刻**把增量排进会话的下一条消息（`consult.setMounts` 确认那一刻调）。
-   *
-   * 为什么不等下一问：会话打开着的时候，用户完全可能回到门厅挂上工作区、再在**原生 composer**
-   * 里问 —— 只在 `consult.send` 里补的话，那一问看不到挂载内容（抽屉字数一切正常，模型侧什么都没有）。
-   * `inject()` 不唤醒：它排在队里，谁先开下一轮（原生或玄枢）都必然落在那一轮之前。
-   *
-   * 拿不到活着的 agent（会话不在本进程 / resume 之前）→ 返回 false，交给 `consult.send` 的兜底补。
-   * 注入失败**不上抛**：挂载清单已经落盘（用户点的是「确认」），失败只如实记日志 ——
-   * 上抛会让界面以为「挂载没存上」，而它其实存上了。
-   *
-   * @returns {Promise<boolean>} 是否在那一刻就排进了会话
-   */
-  async function syncMountsIntoSession(sessionId, manifest) {
-    try {
-      const change = await assembly.buildMountChange(manifest)
-      if (change === null) return false
-      const live = handles.get(sessionId)?.agent ?? softGet(ctx, 'agents')?.get?.(sessionId)
-      if (typeof live?.inject !== 'function') return false
-      live.inject(await createConsultContextMessage(change.text, { searchDirs: messageSearchDirs() }))
-      // 只有内容真的进去了才记「已交给模型」；读不出来 / 全被裁掉时留着，下一问再试。
-      if (change.delivered) store.update(sessionId, { mountsInjected: manifest.mounts })
-      return true
-    } catch (error) {
-      logger.warn('挂载变更没排进 %s（下一次 consult.send 会补）：%s', sessionId, String(error?.message ?? error))
-      return false
-    }
   }
 
   /**
@@ -248,15 +184,9 @@ export function createConsultMethods(ctx, config = {}) {
         }
         throw new Error(`问事记录（旁挂清单）写不进去：${String(error?.message ?? error)}（已回滚刚建的会话）。`)
       }
-      // **首轮上下文就在这一刻灌**（不再是「等到第一问」）。
-      //
-      // 为什么必须提前（评审实测的那条洞）：会话一建出来，门厅就 `openSession(id)` 把它打开了 ——
-      // 于是用户完全可能直接在**原生 composer** 里说第一句。那条路不经过 `consult.send`，
-      // 而首轮注入挂在 `consult.send` 上 ⇒ 第一问没有底座谱、没有底稿、没有勾选谱，
-      // 模型答完了谁也不知道它少了东西（界面、旁挂清单、日志都正常）。
-      // 注入排在队里（`inject()` 不唤醒），谁先问第一句，它都必然落在问题之前 ——
-      // 与 `consult.send` 里 `inject → followup` 是同一条机制，只是把时刻提前到了「会话建好」。
-      await injectFirstRound(sessionId, handle.agent, manifest)
+      // 上下文**不在这里灌**（评审 R2/R3/R4 改定）：它由 `agent/pre-step` 边界在**每一轮的第一步**
+      // 现算并并进模型输入（见 `boundary.mjs`）。理由：`inject()` 只是排进 inbox，`dispose()` 会把
+      // 待消费的消息撤掉；而原生 composer 也不经过本模块 —— 两条路都会漏掉第一问的底座谱 / 底稿。
       return { session: toConsultSummary(manifest) }
     },
 
@@ -264,11 +194,8 @@ export function createConsultMethods(ctx, config = {}) {
      * 问一句话（契约 §2/§3）：**受理即回**（与 DSH `SessionPromptValue{accepted:true}` 同语义），
      * 不等这一轮答完 —— 等答完会让 RPC 挂上几分钟，客户端的取消/流式都没了着力点。
      *
-     * 注入用 `inject()`（不唤醒）排在 `followup()`（唤醒）之前 —— 于是它必然落在这一轮的问题之前。
-     * 两处注入都发生在这里：
-     *   ① **首轮上下文**：`consult.create` 已经灌过（`injected`）；只有「create 时没灌成」或
-     *      「会话是别的进程建的」才在这里补一次（补之前先看会话日志里有没有 —— 免得重复灌）；
-     *   ② **挂载变更**（票 12）：首轮之后挂上 / 换掉 / 移除的挂载，在**这一问之前**补一段增量。
+     * 上下文与挂载都不由这里注入（那是 `agent/pre-step` 边界的事，见 `boundary.mjs`）：
+     * 这条路只负责**受理与记账** —— 能力门、`turns`、标题、`lastTurnAt`。
      */
     'consult.send': async (request) => {
       const source = request && typeof request === 'object' && !Array.isArray(request) ? request : {}
@@ -293,32 +220,9 @@ export function createConsultMethods(ctx, config = {}) {
         // （用户从原生 composer 说的第一句不在旁挂清单的 `turns` 里，见 turns.mjs）。
         const reconciled = await reconcileTurns(ctx, store, sessionId)
         manifest = reconciled.manifest ?? manifest
-        const log = reconciled.log
 
         const patch = { turns: manifest.turns + 1 }
-        // 首轮上下文在不在这条会话里：本进程灌过 → 在；会话日志里读到了 → 在。
-        // 读不到日志（`log === null`）时**只有已经问过一轮**才敢认为它在 ——
-        // 那一轮必然带着 create 时灌的那一份；否则一律补灌（**宁可晚一轮带上谱资料，也不许一直没有**）。
-        const knownInSession = injected.has(sessionId) || log?.hasContext === true || (log === null && manifest.turns > 0)
-        if (!knownInSession) {
-          const context = await assembly.buildInjection(manifest)
-          agent.inject(await createConsultContextMessage(context, { searchDirs: messageSearchDirs() }))
-          // 全量注入里已经带了当前挂载 → 记下「这一份已经交给模型」。
-          patch.mountsInjected = manifest.mounts
-          injected.add(sessionId)
-        } else {
-          // 挂载变更（票 12）的**兜底**：正常路径在 `consult.setMounts` 那一刻就排进会话了，
-          // 这里管的是「那一刻会话不在本进程活着」（跨进程 / resume 之前）—— 补在**这一问之前**。
-          const change = await assembly.buildMountChange(manifest)
-          if (change !== null) {
-            agent.inject(await createConsultContextMessage(change.text, { searchDirs: messageSearchDirs() }))
-            // 只有**内容真的进去了**才记「已交给模型」；全被裁掉 / 读不出来时留着，
-            // 下一问再试（读不出来往往是暂时的：ctx.fs 那一刻不在）。
-            if (change.delivered) patch.mountsInjected = manifest.mounts
-          }
-          if (log?.hasContext === true || manifest.turns > 0) injected.add(sessionId)
-        }
-        agent.followup(await createConsultQuestionMessage(text, { searchDirs: messageSearchDirs() }))
+        agent.followup(await createConsultQuestionMessage(text, { searchDirs: messageSearchDirs(ctx) }))
 
         // 标题由**首问**决定；改名过的会话不再被下一问覆盖。
         if (manifest.turns === 0 && manifest.title === DEFAULT_CONSULT_TITLE) patch.title = titleFromQuestion(text)
@@ -430,9 +334,10 @@ export function createConsultMethods(ctx, config = {}) {
       if (source.preview !== true) {
         const updated = store.update(sessionId, { mounts })
         if (updated === null) throw new Error(`问事记录不存在：${sessionId}。`)
-        // 确认即注入（S8 §5 步骤 7 的「确认后注入」）：增量排在会话的下一条消息之前，
-        // 原生 composer 那一问也看得到；排不进去就交给下一问的兜底（见 syncMountsIntoSession）。
-        await syncMountsIntoSession(sessionId, updated)
+        // 这里**不注入**：挂载由 `agent/pre-step` 边界在**每一问之前**按当前清单现读现裁（S8 §5 步骤 7
+        // 的字面口径「发送消息 → 按已确认的裁剪结果注入」）—— 于是
+        // ① 会话不在本进程活着（重启后还没 resume）也照样生效，
+        // ② 某一层暂时读不出来时，下一问自然重试（没有任何「已交付」状态会拦住它）。
         return { session: toConsultSummary(updated) }
       }
       return { session: toConsultSummary(manifest), preview: await buildMountPreview(ctx, config, mounts) }

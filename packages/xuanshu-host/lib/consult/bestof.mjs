@@ -263,7 +263,7 @@ export function createBestOfMethods(ctx, config = {}) {
    * 后台跑一次合参：N 路并行 → judge → 落记录。任何一路失败都只标那一张卡（S9 §6 部分失败态），
    * 整次失败（全部候选都没文本）也照样落记录，界面看得见「为什么没成」。
    */
-  async function execute(record, { question, context, routes, signal }) {
+  async function execute(record, { question, context, history, routes, signal }) {
     const completionOrder = []
     await Promise.all(
       record.candidates.map(async (candidate, index) => {
@@ -273,6 +273,7 @@ export function createBestOfMethods(ctx, config = {}) {
           angle: resolveAngles([candidate.angle])[0],
           question,
           context,
+          history,
           signal,
           now,
           // 流式回填：界面轮询 `bestof.state` 就能看到半成品（写盘节流在下面）。
@@ -391,10 +392,14 @@ export function createBestOfMethods(ctx, config = {}) {
         throw new Error(`问事记录不存在：${sessionId}（合参挂在问事会话上，先 consult.create）。`)
       }
       // 候选流不带会话历史（它直接走 `ctx.llm.stream()`），所以把这场问事的上下文**读出来带上**：
-      // 底座谱 + 底稿 + 勾选谱 + 挂载，与首轮注入**同一份装配**。
+      // 底座谱 + 底稿 + 勾选谱 + 挂载，与 `agent/pre-step` 边界**同一份装配**。
       // 评审实测的缺陷正是这一处：候选只拿到一句裸问题 —— 问「结合我的信息建议怎么做？」
       // 时，答出来的东西与这场问事毫无关系，而界面上一切正常。
-      const context = await assembly.buildInjection(manifest)
+      // 这里**只取文本**：候选流不落会话日志，所以不去动「挂载已交付」那本账（那是边界的事）。
+      const { text: context } = await assembly.buildInjection(manifest)
+      // 评审 R5 补的另一半：**会话文本历史**（含被采用的合参稿）。只有候选槽带 —— 判官与合并槽
+      // 继续遵守各自的边界（H4：判官只看问题与候选）。读不到历史就是 `null`（不编一段假的）。
+      const history = await assembly.buildHistory(sessionId)
 
       const angles = resolveAngles(source.angles)
       const routes = await resolveRoutes(ctx, { profileIds: source.profileIds, count: angles.length })
@@ -425,7 +430,7 @@ export function createBestOfMethods(ctx, config = {}) {
       const controller = new AbortController()
       aborts.set(record.runId, controller)
       // 后台跑：不 await（见文件头第 1 条）。失败已折进记录，这里只兜住「连记录都没写成」。
-      void execute(record, { question, context, routes, signal: controller.signal })
+      void execute(record, { question, context, history, routes, signal: controller.signal })
         .catch((error) => {
           record.finishedAt = new Date().toISOString()
           record.judge = { mode: 'failed', adoptedId: null, ranking: [], error: `合参执行失败：${String(error?.message ?? error)}` }

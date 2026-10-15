@@ -11,9 +11,12 @@
  *      → 干净 CI 必红。这一半的修法在被测文件里（恒 8 条，见 `tests/assembly/assembly-contract.test.mjs`），
  *      这一份只管「报告新鲜度」与三条数量判据。
  *
- * 环境：真文件系统（临时目录），零网络、零 vitest —— `spawn` 是**注入的替身**，
- * 于是「子进程跑挂了」这种现场可以当场造出来（真跑一次全仓 vitest 不是单测该做的事）。
+ * 环境：真文件系统（临时目录），零网络。**大部分用例的 `spawn` 是注入的替身**
+ * （「子进程跑挂了」这种现场可以当场造出来），**但有一条例外**：`文件级失败` 那一组里
+ * 「真实 vitest 跑一次 beforeAll 抛错的夹具」会真的 spawn 一次 `node_modules/vitest/vitest.mjs`
+ * —— 因为那条发现本身就是「vitest 报出来的形状和我以为的不一样」，合成报告证明不了它。
  */
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -22,6 +25,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { collectReport, runSuiteReport, violationsFor } from '../../scripts/lib/inventory-gate.mjs'
 
 const REPO_ROOT = resolve(tmpdir(), 'not-a-real-repo')
+/** R1 的真实形状夹具：`beforeAll` 抛错的那个文件（见 fixtures/inventory-hook/）。 */
+const HOOK_FIXTURE = 'tests/lib/fixtures/inventory-hook/hook-failure.mjs'
+const HOOK_FIXTURE_CONFIG = join(process.cwd(), 'tests', 'lib', 'fixtures', 'inventory-hook', 'vitest.config.mjs')
 const litter = []
 afterEach(() => {
   for (const path of litter.splice(0)) rmSync(path, { recursive: true, force: true })
@@ -142,7 +148,75 @@ describe('清单门 · 读报告（这一轮的报告才算数）', () => {
   })
 })
 
-describe('清单门 · 三条数量判据', () => {
+describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）', () => {
+  /** 评审给的那份真实报告形状（`beforeAll` 抛错）：文件 failed、用例全 skipped、numFailedTests 0。 */
+  const hookReport = {
+    numTotalTestSuites: 2,
+    numPassedTestSuites: 0,
+    numFailedTestSuites: 2,
+    numTotalTests: 1,
+    numPassedTests: 0,
+    numFailedTests: 0,
+    numPendingTests: 1,
+    success: false,
+    testResults: [
+      {
+        name: '/repo/tests/hook-failure.test.mjs',
+        status: 'failed',
+        message: '',
+        assertionResults: [{ title: 'collected assertion remains present', status: 'skipped', ancestorTitles: ['suite with a broken setup'] }],
+      },
+    ],
+  }
+
+  it('合成报告：文件 failed + 用例全 skipped（用例级失败为 0）→ 「文件级失败」违规', () => {
+    const current = collectReport(hookReport, { repoRoot: '/repo' })
+    expect(current.failures, '用例级失败为 0 —— 这正是漏报的来源').toEqual([])
+    expect(current.suiteFailures).toEqual([{ file: 'tests/hook-failure.test.mjs', message: '' }])
+    const { violations } = violationsFor({ current, baseline: { files: { 'tests/hook-failure.test.mjs': 1 }, knownRed: [] } })
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatch(/文件级失败/u)
+  })
+
+  it('文件里有用例级失败时不再重复报「文件级失败」（那一份已按用例记账）', () => {
+    const current = collectReport(
+      { success: false, testResults: [{ name: '/repo/tests/a.test.mjs', status: 'failed', assertionResults: [{ title: 'x', status: 'failed' }] }] },
+      { repoRoot: '/repo' },
+    )
+    expect(current.suiteFailures).toEqual([])
+    const { violations } = violationsFor({ current, baseline: { files: { 'tests/a.test.mjs': 1 }, knownRed: [{ file: 'tests/a.test.mjs', title: 'x', reason: '已知' }] } })
+    expect(violations).toEqual([])
+  })
+
+  it('报告 success=false 却一条失败都核不出来（未处理错误）→ 违规', () => {
+    const current = collectReport(
+      { success: false, testResults: [{ name: '/repo/tests/a.test.mjs', status: 'passed', assertionResults: [{ title: 'x', status: 'passed' }] }] },
+      { repoRoot: '/repo' },
+    )
+    const { violations } = violationsFor({ current, baseline: { files: { 'tests/a.test.mjs': 1 }, knownRed: [] } })
+    expect(violations).toEqual(['报告 success=false，但没有任何可核对的失败条目（未处理错误 / 环境问题？先看 vitest 的 stderr）'])
+  })
+
+  it('**真实 vitest** 跑一次 beforeAll 抛错的夹具：形状与合成报告一致，门判红', () => {
+    const reportPath = reportPathOf('hook-real')
+    const run = runSuiteReport({
+      vitest: join(process.cwd(), 'node_modules', 'vitest', 'vitest.mjs'),
+      reportPath,
+      repoRoot: process.cwd(),
+      spawn: (command, args, options) => spawnSync(command, [...args, '--config', HOOK_FIXTURE_CONFIG], options),
+    })
+    const current = collectReport(run.report, { repoRoot: process.cwd() })
+    expect(run.report.numFailedTests, '真实 vitest 在这种形状下没有用例级失败').toBe(0)
+    expect(current.failures).toEqual([])
+    expect(current.suiteFailures.map((entry) => entry.file)).toEqual([HOOK_FIXTURE])
+    expect(typeof current.suiteFailures[0].message).toBe('string')
+    const { violations } = violationsFor({ current, baseline: { files: { [HOOK_FIXTURE]: 1 }, knownRed: [] } })
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatch(/文件级失败/u)
+  })
+})
+
+describe('清单门 · 数量判据', () => {
   const baseline = {
     total: 3,
     files: { 'tests/a.test.mjs': 2, 'tests/b.test.mjs': 1 },

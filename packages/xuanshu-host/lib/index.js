@@ -70,6 +70,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createBaziMethods } from './bazi/service.mjs';
 import { createBestOfMethods } from './consult/bestof.mjs';
+import { installConsultBoundary } from './consult/boundary.mjs';
 import { createCangMethods } from './cang/service.mjs';
 import { createConsultMethods } from './consult/service.mjs';
 import { createDigaoMethods } from './digao/service.mjs';
@@ -472,6 +473,11 @@ export function apply(ctx, config) {
       // 记录落 `<dataDir>/consult/<sessionId>.bestof.json`；`consult.*` 的六个方法一字不动。
       ...createBestOfMethods(ctx, { dataDir }),
     });
+    // 票 10/12 的**统一发问边界**（评审 R2/R3/R4）：底座谱 / 底稿 / 勾选谱 / 临时挂载在
+    // `agent/pre-step` 处按当前状态现算并并进每一步的模型输入 —— 谁发起的那一轮都一样
+    // （门厅 composer / 原生 composer / 沉淀的 followup / 重启后恢复），且**不靠 inbox 排队**
+    // （`dispose()` 会把待消费的消息撤掉）。细节与三条门写在 `lib/consult/boundary.mjs`。
+    installConsultBoundary(ctx, { dataDir });
   } catch (error) {
     log.warn('谱 / 藏 / 八字 / 底稿 / 日课 / 工作流 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
   }

@@ -1,34 +1,18 @@
 /**
- * 票 12 · 挂载进首轮注入（S8 §5 步骤 7；契约 §2「注入前按预算分层裁剪并披露」）
+ * 票 12 · 挂载进注入文本（S8 §5 步骤 7；契约 §2「注入前按预算分层裁剪并披露」）
  *
- * 两半都验：
- *   ① **纯函数**（`buildConsultContext`）：装出来的文本里有披露块、有纳入层的正文、
- *      有「此处裁去 N 字」，**没有被丢弃层的内容**；
- *   ② **服务端到端**（`consult.setMounts` → `consult.send`）：挂载真的进了首轮注入消息，
- *      而不是只躺在旁挂清单里。
+ * 这一份只验**纯函数的文本口径**（`buildConsultContext`）：披露块、纳入层的正文、
+ * 「此处裁去 N 字」、以及**没有被丢弃层的内容**。
+ *
+ * 谁把这段文本送进模型、什么时候送 —— 归 `tests/consult/boundary.test.mjs`
+ * （`agent/pre-step` 边界：每一问按当前挂载现读现裁，读不出来的层下一问自动重试）。
  *
  * 还有一条**加性**判据：没有挂载的会话，注入文本与加挂载之前**逐字节相同** ——
  * 票 12 不许改变任何「没挂东西」的问事行为（票 10 的 send/turn 断言台也是靠这条继续绿的）。
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
-import { buildConsultContext, buildMountUpdateContext, sourceMarkMount } from '../../packages/xuanshu-host/lib/consult/context.mjs'
-import {
-  envelope,
-  fakeAgentDefaultModel,
-  fakeAgentPresets,
-  fakeAgents,
-  fakeFsReader,
-  fakeHorosa,
-  fakeWorkspaceRegistryForMounts,
-  makeHost,
-  makeSandbox,
-  seedPu,
-} from './lib/sandbox.mjs'
-
-const roots = []
-afterEach(() => roots.splice(0).forEach((sandbox) => sandbox.cleanup()))
+import { buildConsultContext, buildMountDeltaContext, buildMountRetraction, sourceMarkMount } from '../../packages/xuanshu-host/lib/consult/context.mjs'
 
 /** 一个装好的预览结果（形状 = `buildMountPreview()` 的产物；不手搓层以外的字段）。 */
 const PREVIEW = {
@@ -82,7 +66,8 @@ describe('票 12 · 注入文本：披露块 + 纳入层正文 + 裁减注明', 
   it('**加性**：没有挂载时输出与不传 mounts 逐字节相同', () => {
     expect(buildConsultContext({ ...base })).toBe(buildConsultContext({ ...base, mounts: undefined }))
     expect(buildConsultContext({ ...base, mounts: { layers: [] } })).toBe(buildConsultContext({ ...base }))
-    expect(buildConsultContext({ ...base })).not.toContain('挂载')
+    // 判据打在**挂载段的标记**上（正文里提到「改过挂载」不算多出挂载段）。
+    expect(buildConsultContext({ ...base })).not.toContain('【来源：临时挂载')
   })
 
   it('有挂载：披露块在前（含 notice 与逐层 Tag），纳入层的正文在后', () => {
@@ -124,185 +109,41 @@ describe('票 12 · 注入文本：披露块 + 纳入层正文 + 裁减注明', 
     expect(text).toContain('预算未知')
     expect(text).not.toMatch(/预算\s*\d/u)
   })
-
-  it('挂载**变更**段：带变更标记 + 披露 + 纳入层正文，并声明「此前注入的已被取代」', () => {
-    const text = buildMountUpdateContext({ mounts: PREVIEW })
-    expect(text).toContain('【来源：临时挂载·变更】')
-    expect(text).toContain('已被它取代')
-    expect(text).toContain('【来源：临时挂载·披露】')
-    expect(text).toContain(PREVIEW.notice)
-    expect(text).toContain(sourceMarkMount('工作区「打印车间」（E:\\work\\print-shop）'))
-    expect(text).toContain('排产表在这里。')
-    // 被整层丢弃的那一层，正文一个字符都不进（与首轮注入同一条纪律）。
-    expect(text).not.toContain('x'.repeat(50))
-  })
-
-  it('挂载**清空**段：说清「已全部移除」，不留一段没有内容的挂载标记', () => {
-    const text = buildMountUpdateContext({ mounts: undefined })
-    expect(text).toContain('【来源：临时挂载·变更】')
-    expect(text).toContain('已全部移除')
-    expect(text).not.toContain('【来源：临时挂载·披露】')
-    expect(text).toBe(buildMountUpdateContext({ mounts: { layers: [] } }))
-  })
 })
 
-describe('票 12 · 端到端：挂载真的进了会话', () => {
-  /** 一套带挂载的现场：真目录 + 假 registry/fs + 假 agents + 真旁挂清单。`withFs:false` = 读不到内容。 */
-  async function scene({ withFs = true } = {}) {
-    const sandbox = makeSandbox('mounts-inject')
-    roots.push(sandbox)
-    sandbox.write('work/README.md', '# 打印车间\n排产表在这里。\n')
-    sandbox.write('work/logo.png', 'PNGDATA')
-    const root = sandbox.path('work')
-    const registry = fakeWorkspaceRegistryForMounts({ workspaces: [{ id: 'ws-print', path: root, title: '打印车间' }] })
-    const fs = withFs ? fakeFsReader() : undefined
-    const agents = fakeAgents()
-    const host = makeHost({
-      services: {
-        xuanshuHorosa: fakeHorosa(envelope('bazi-ok-default')).service,
-        agents: agents.service,
-        workspaceRegistry: registry.service,
-        ...(fs === undefined ? {} : { fs: fs.service }),
-        agentPresets: fakeAgentPresets().service,
-        agentDefaultModel: fakeAgentDefaultModel().service,
-      },
-    })
-    seedPu(sandbox, { name: '软件开发', level: 'base', description: '手上的项目。', summary: '项目摘要。' })
-    const api = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir, mountBudget: 10_000 })
-    const { session } = await api['consult.create']({ pus: [] })
-    return { sandbox, api, agents, session, host }
-  }
+/**
+ * 挂载**增量段**（票 12；复核 R3/R4）：只补「模型还没见过内容的层」+「已经撤下的层」。
+ *
+ * 端到端（谁在什么时机用它、逐层记账怎么走）在 `tests/consult/boundary.test.mjs`；
+ * 这里只钉文本口径 —— 特别是**撤下**那一句：它是 R3/R4 之后补回来的覆盖
+ * （旧实现删掉 `buildMountUpdateContext` 时把这条一起弄丢了）。
+ */
+describe('票 12 · 增量段：只补没见过的层 + 撤下的层', () => {
+  it('只补投的层：带一句话说明 + 披露 + 正文；没有可补的就一个字符都不产出', () => {
+    expect(buildMountDeltaContext({})).toBe('')
+    expect(buildMountDeltaContext({ preview: { layers: [] }, removed: [] })).toBe('')
 
-  /** 这个会话收到的投递（按顺序）：`{kind, text}`。 */
-  function deliveries(agents, sessionId) {
-    return agents.live.get(sessionId).calls.map((call) => ({
-      kind: call.kind,
-      text: call.message.content.map((block) => block.text).join('\n'),
-    }))
-  }
-  const SPEC = { kind: 'workspace', id: 'ws-print', label: '打印车间' }
-  const manifestOf = (sandbox, sessionId) => sandbox.json('consult', 'sessions', `${sessionId}.json`)
-
-  it('setMounts 确认那一刻就把挂载排进会话（首轮上下文之后、下一问之前）', async () => {
-    const { api, agents, session } = await scene()
-    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [SPEC] })
-    await api['consult.send']({ sessionId: session.sessionId, text: '排产表怎么看' })
-
-    const log = deliveries(agents, session.sessionId)
-    // 顺序是被验的东西：首轮上下文（create 时灌）→ 挂载变更 → 问题。
-    expect(log.map((row) => row.kind)).toEqual(['inject', 'inject', 'followup'])
-    expect(log[0].text).toContain('【来源：底座谱】')
-    expect(log[0].text).not.toContain('临时挂载')
-
-    const mount = log[1].text
-    expect(mount).toContain('【来源：临时挂载·变更】')
-    expect(mount).toContain('【来源：临时挂载·披露】')
-    expect(mount).toContain('【来源：挂载 工作区「打印车间」')
-    expect(mount).toContain('排产表在这里。')
-    // 二进制既不进正文，也不把 base64/乱码带进来（文件级排除的清单在抽屉里看，注入文本保持精简）
-    expect(mount).not.toContain('PNGDATA')
-    // 预算来自 config（10000）：没超预算 → 披露里说「没有裁剪」
-    expect(mount).toContain('没有裁剪')
+    const text = buildMountDeltaContext({ preview: PREVIEW })
+    expect(text).toContain('本次补投临时挂载')
+    expect(text).toContain('【来源：临时挂载·披露】')
+    expect(text).toContain('排产表在这里。')
+    expect(text).not.toContain('【来源：临时挂载·撤下】')
   })
 
-  it('**迟到挂载不再静默失效**：首轮之后再挂 → 下一问之前补一段（评审发现的那一处）', async () => {
-    const { api, agents, session, sandbox } = await scene()
-    await api['consult.send']({ sessionId: session.sessionId, text: '先随便问一句' })
-    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [SPEC] })
+  it('撤下的层：说清「已撤下、不再适用」并点名；没有撤下就一个字都不说', () => {
+    expect(buildMountRetraction({ removed: [] })).toBe('')
 
-    // 改挂载的那一刻就排进了会话（不等下一问）。
-    expect(deliveries(agents, session.sessionId).map((row) => row.kind)).toEqual(['inject', 'followup', 'inject'])
-    await api['consult.send']({ sessionId: session.sessionId, text: '现在看排产表' })
-
-    const log = deliveries(agents, session.sessionId)
-    const mountIndex = log.findIndex((row) => row.text.includes('【来源：临时挂载·变更】'))
-    const questionIndex = log.findIndex((row) => row.kind === 'followup' && row.text.includes('现在看排产表'))
-    expect(mountIndex).toBeGreaterThan(-1)
-    // 判据是**顺序**：挂载内容必须排在它要影响的那一问之前。
-    expect(mountIndex).toBeLessThan(questionIndex)
-    expect(log[mountIndex].text).toContain('排产表在这里。')
-    // 旁挂清单记下「这一份已经交给模型」：下一问不再重复灌。
-    expect(manifestOf(sandbox, session.sessionId).mountsInjected).toEqual([SPEC])
+    const text = buildMountDeltaContext({ removed: [{ kind: 'workspace', id: 'ws-print', label: '打印车间' }] })
+    expect(text).toContain('【来源：临时挂载·撤下】')
+    expect(text).toContain('工作区「打印车间」')
+    expect(text).toContain('不再适用')
+    // 撤下不是「没有挂载段」：一条正文都不该顺带装进来。
+    expect(text).not.toContain('【来源：临时挂载·披露】')
   })
 
-  it('同一份挂载重复确认：不重复注入（幂等）', async () => {
-    const { api, agents, session } = await scene()
-    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [SPEC] })
-    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [SPEC] })
-    await api['consult.send']({ sessionId: session.sessionId, text: '问一句' })
-
-    const mounts = deliveries(agents, session.sessionId).filter((row) => row.text.includes('【来源：临时挂载·变更】'))
-    expect(mounts).toHaveLength(1)
-  })
-
-  it('移除挂载：说清「已全部移除」，此前注入的挂载不再适用', async () => {
-    const { api, agents, session } = await scene()
-    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [SPEC] })
-    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [] })
-
-    const changes = deliveries(agents, session.sessionId).filter((row) => row.text.includes('【来源：临时挂载·变更】'))
-    expect(changes).toHaveLength(2)
-    expect(changes[0].text).toContain('排产表在这里。')
-    expect(changes[1].text).toContain('已全部移除')
-    expect(changes[1].text).not.toContain('排产表在这里。')
-  })
-
-  it('setMounts 那一刻拿不到活 agent（跨进程）→ 由下一问兜底补上', async () => {
-    const { api, agents, session, sandbox } = await scene()
-    // 先让这一场问事「已经问过一轮」：兜底那一段是给首轮之后的挂载变更用的。
-    await api['consult.send']({ sessionId: session.sessionId, text: '先问一句' })
-
-    // 模拟「这条会话是别的进程建的」：新实例没有句柄，进程里也没有这个 agent。
-    const host2 = makeHost({
-      services: {
-        agents: agents.service,
-        agentPresets: fakeAgentPresets().service,
-        agentDefaultModel: fakeAgentDefaultModel().service,
-        workspaceRegistry: fakeWorkspaceRegistryForMounts({ workspaces: [{ id: 'ws-print', path: sandbox.path('work'), title: '打印车间' }] }).service,
-        fs: fakeFsReader().service,
-      },
-    })
-    const other = createConsultMethods(host2.ctx, { dataDir: sandbox.dataDir, mountBudget: 10_000 })
-    agents.live.clear()
-
-    await other['consult.setMounts']({ sessionId: session.sessionId, mounts: [SPEC] })
-    // 那一刻排不进去 → 旁挂清单不许假装「已经交给模型」。
-    expect(manifestOf(sandbox, session.sessionId).mountsInjected).toBeUndefined()
-
-    await other['consult.send']({ sessionId: session.sessionId, text: '现在看排产表' })
-    const log = deliveries(agents, session.sessionId) // resume 之后重建的假 agent
-    expect(log.map((row) => row.kind)).toEqual(['inject', 'followup'])
-    expect(log[0].text).toContain('【来源：临时挂载·变更】')
-    expect(log[0].text).toContain('排产表在这里。')
-    expect(manifestOf(sandbox, session.sessionId).mountsInjected).toEqual([SPEC])
-  })
-
-  it('挂载内容读不出来时**不算交付**：留着不记账，下一问读到内容了才记「已交给模型」', async () => {
-    const { api, agents, session, sandbox, host } = await scene({ withFs: false })
-    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [SPEC] })
-    // 那一刻读不出来（`ctx.fs` 不在）：披露照进（那是事实），但不能假装「内容已经交给模型」。
-    expect(manifestOf(sandbox, session.sessionId).mountsInjected).toBeUndefined()
-    expect(deliveries(agents, session.sessionId).at(-1).text).toMatch(/读不出来|不可得/u)
-
-    await api['consult.send']({ sessionId: session.sessionId, text: '先问一句' })
-    expect(manifestOf(sandbox, session.sessionId).mountsInjected).toBeUndefined()
-
-    // fs 回来了（真机上这是常态：那一刻服务还没就位）→ 再问一次就补上真实内容。
-    host.services.fs = fakeFsReader().service
-    await api['consult.send']({ sessionId: session.sessionId, text: '现在看排产表' })
-    const log = deliveries(agents, session.sessionId)
-    expect(log.at(-2).text).toContain('排产表在这里。')
-    expect(log.at(-1).text).toContain('现在看排产表')
-    expect(manifestOf(sandbox, session.sessionId).mountsInjected).toEqual([SPEC])
-  })
-
-  it('没挂载的会话：没有挂载块（票 10 的行为一字不改）', async () => {
-    const { api, agents, session } = await scene()
-    await api['consult.send']({ sessionId: session.sessionId, text: '随便问一句' })
-    const log = deliveries(agents, session.sessionId)
-    expect(log).toHaveLength(2)
-    expect(log[0].text).not.toContain('临时挂载')
-    expect(log[0].text).toContain('【来源：底座谱】')
-    expect(log[0].text).toContain('【来源：底稿】')
+  it('工作流挂载的撤下也点名（kind 决定称呼，不写成「工作区」）', () => {
+    const text = buildMountRetraction({ removed: [{ kind: 'workflow', id: 'wf-1', label: '周报' }] })
+    expect(text).toContain('工作流「周报」')
+    expect(text).not.toContain('工作区「周报」')
   })
 })

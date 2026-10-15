@@ -80,12 +80,12 @@ for (const entry of known) {
 
 console.log(
   `[inventory] 用例 ${current.total} 条（基线 ${baseline.total}）/ 文件 ${Object.keys(current.files).length} 个 / 失败 ${current.failures.length} 条（已知红 ${known.length} 条）`
-  + ` / 跳过 ${current.skipped} 条 / vitest exit ${exitCode ?? 'null'}`,
+  + ` / 文件级失败 ${current.suiteFailures.length} 个 / 跳过 ${current.skipped} 条 / vitest exit ${exitCode ?? 'null'}`,
 )
 if (violations.length > 0) {
   console.error(`\n[inventory] 违规 ${violations.length} 条：`)
   for (const violation of violations) console.error(`  ✗ ${violation}`)
-  console.error('\n[inventory] 这是清单门，不是断言台：断言红绿看测试本身；这里只问「用例还在不在、数对不对」。')
+  console.error('\n[inventory] 这是清单门，不是断言台：断言红绿看测试本身；这里只问「用例还在不在、数对不对、有没有整个文件没跑成」。')
   process.exit(1)
 }
-console.log('[inventory] 通过：没有用例消失、没有已知红之外的失败。')
+console.log('[inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。')

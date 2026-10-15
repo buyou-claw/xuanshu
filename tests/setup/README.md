@@ -21,6 +21,7 @@
 | `report-and-gates.test.mjs` | **A4**（`--verify-only` 在一份没有 uvx 的 PATH 上 exit 0；同一 PATH 真跑 exit 3）、**A5**（失败也写报告 / 真实 home 被拒仍零写入）、**A6**（`HOROSA_SKILL_DATA_DIR` 指向真实 `~/.horosa` → 忽略 + note）、**A11**（C1 的 `evidence.logFile` 指向真文件） |
 | `probe-pin.test.mjs` | **A9**：探针的期望版本只有 pin 一个来源 —— 把 `scripts/horosa/**` 抄进沙箱、`scripts/setup/` 留空，`checkBaziTool()` 必须回 `ok:false`（不猜版本、不发请求） |
 | `fixtures.test.mjs` | **替身自检**：先证明 fixture 自己是对的（计数 server、Range+断连、假 uvx 的 doctor/install/MCP、两个 stub、zip 字节） |
+| `install-profile-copy.test.mjs` | **copy 模式回归门**（复核报告 Standards 3 / Standards 4）：自有插件包必须**物化进目标**（`<target>/packages/<name>`）且说明符是 `file:./packages/<name>`（`link:` 不装被链接包自己的依赖 → 目标里没有 `tz-lookup`）；`pnpm-lock.yaml` 必须一并复制并把自有包路径改写成目标内相对路径（`--skip-install` 装出来的 profile 也要能被 `--frozen-lockfile` 校验）。**零 pnpm / 零网络**：把真脚本原样拷进临时 fixture 仓库跑（脚本按自身位置推 REPO_ROOT），所以跑的是真代码、不碰真仓库与真 DSH_HOME。**复现「修复前红」**：`XUANSHU_INSTALL_PROFILE_BIN` 指向修复前的脚本副本即可（默认=仓库里的真实现） |
 | `fixtures/bin/uvx.mjs` | **假 uvx**：回放真机形状的 `doctor` / `install` / `runtime status` / `serve`（含真 MCP HTTP） |
 | `fixtures/stubs/install-profile.mjs` | `scripts/install-profile.mjs` 替身（**零 pnpm**） |
 | `fixtures/stubs/verify-assembly.mjs` | `scripts/verify-assembly.mjs` 替身（C1 的 0/1 两态） |
@@ -147,6 +148,7 @@ pnpm vitest run tests/setup/fixtures.test.mjs   # 只想确认 fixture 没坏
 |---|---|---|
 | 真下载 719MB 的 runtime、真 `install --archive` 解包 | 断言台禁止读/用那份工件（任务书硬约束）；取件/校验/续传三段逻辑都在我们这侧，用同形 fixture 验 | Lead 的真机 E2E（`captures/setup-*`） |
 | 真 `pnpm install` / 真 DSH CLI 启动（C1） | 同上：会真联网、真装、分钟级；C1 的契约在 `tests/assembly/**` 另有断言台 | `pnpm test:assembly` |
+| copy 模式下真 `pnpm install` 的依赖落地（目标 `node_modules/xuanshu-host` 能不能 import 到 `tz-lookup`、`--frozen-lockfile` 认不认复制的锁文件） | 断言台禁真装；`install-profile-copy.test.mjs` 只断言**机制**（物化 + `file:` 说明符 + 锁文件改写） | 离网探针 `.scratch/install-fix/probe2-copy.mjs`（fixture 图）与 `probe5-real-copy.mjs`（真 profile，`--offline` + 死 registry） |
 | `--mirror` 在真 github 上的吞吐（21.9 MB/s 那种实测） | 真机网络事实，不是代码性质 | `captures/setup-e2e-groundtruth.md` §1 |
 | 真 horosa runtime 的 MCP 120 工具全量面 | 假 uvx 只回放 12 个（含 `horosa_cn_bazi_birth`）；全量面归 `scripts/horosa/**` 的探针 | 票 06 |
 | 8765 被别的进程占用（`occupied-foreign` → exit 3） | 需要先有一个真实占用者；票 04 的四态守卫已在自己的断言台里验过 | `tests/isolation/port-guard.test.mjs` |

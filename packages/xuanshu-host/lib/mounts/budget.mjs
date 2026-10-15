@@ -94,3 +94,21 @@ export async function resolveMountBudget(ctx, config = {}) {
     detail: '拿不到当前模型的上下文窗口（rc.2 的采样参数 maxTokens 不是窗口；agentDefaultModel/llm.resolveModelInfo 任一不在场也一样）——按「预算未知」处理，不编一个数。',
   }
 }
+
+/**
+ * **会话历史**的窗口预算（字；给合参候选用，评审 R5）。
+ *
+ * 为什么跟挂载共用一套口径：S9 的裁剪栏写着「玄枢 v1 历史长度按合参模型统一处理」——
+ * 「按 model 统一」正是本文件的模型窗口探测；两张票各算一遍必然漂移。
+ * 与挂载不同的是**占比**：历史吃的是同一个窗口的另一部分，这里沿用同一个保守换算
+ * （`MOUNT_BUDGET_WINDOW_SHARE` 已经把「谱 / 底稿 / 历史 / 回答」都算在剩下的 3/4 里）。
+ *
+ * @param {object} ctx cordis 宿主上下文。
+ * @param {{historyBudget?: number}} [config] 运维 / 测试覆盖（第一优先）。
+ * @returns {Promise<{budget: number|null, source: 'config'|'model-window'|'unknown', detail?: string}>}
+ */
+export async function resolveHistoryBudget(ctx, config = {}) {
+  const override = config?.historyBudget
+  if (Number.isFinite(override) && override > 0) return { budget: Math.floor(override), source: 'config' }
+  return resolveMountBudget(ctx, {})
+}
