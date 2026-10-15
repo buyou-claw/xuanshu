@@ -2,7 +2,7 @@
 
 核对日期：2026-10-15。集成分支：`codex/spec-001-integration`（**已推 origin**）。
 
-GitHub issue/PR 的 open 状态不等于未实现，反之亦然：票 01–06 的代码在本地提交并由 stacked PR 承载（#2/#3/#4/#6/#7/#9 仍 open，其改动**全部已包含在集成分支**里）；票 07–16 已实现并**已在 GitHub 上关闭**（#10–#19）。
+GitHub issue/PR 的 open 状态不等于未实现，反之亦然：票 01–06 的代码在本地提交并由 stacked PR 承载（#2/#3/#4/#6/#7/#9 已**全部关闭且未合并**，其改动**全部已包含在集成分支**里、由 PR #20 覆盖取代）；票 07–16 已实现，其 issue 已在 GitHub 上关闭（#11–#19；票 04/06/07 的 #5/#8/#10 于 2026-10-15 晚补关闭，见 §10）。
 
 ## 票 → issue 对照
 
@@ -180,6 +180,39 @@ S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带�
 - 票 12 的**第二个挂载入口**（S8 §1 的 conversation 面板输入区上沿按钮）同样未做。
   两条都在 `待实测登记处.md` **V106**。
 
+### 10. 清理轮：找回票 13 客户端半的最后一棒（2026-10-15 晚）
+
+**发现的一处真丢活**：票 13 客户端半有**两笔从未并回集成分支**的提交 —— `1818ec7`（卡级 `[重试]`
+必须先 `clearOutcome()` 清掉上一次人点结果、再重读宿主事实，否则点了界面不动）+ `279c876`（补记
+「面板直调 api 而不经控制器」的理由）。合并方向走了一半：02:56 集成分支并入该分支时拿到的是
+`b1f6c98`，之后客户端又把集成分支并回来（`4f636de` 02:57）、再提交一笔（`279c876` 03:02）——
+**最后一棒没回来**。
+
+判据（能证否）：`git log -S'clearOutcome' --oneline HEAD` 在合并前输出 **NONE** —— 这段代码在集成分支
+历史里从来没出现过；`git cherry -v HEAD feat/13-digao-rikke-client` 也把它标 `+`。
+
+处置：并回（`8a2165c`）。冲突六处，四张契约测试与 `index.tsx` **取集成分支侧** —— 注册面清单已收口到
+`tests/assembly/lib/panel-surface.mjs`（§6），分支侧那份是收口前的手写穷举数组；`lib/client.js` 按合并后
+源码重建（386169 → 386627 B）。**产物一变，`install-profile` 必须重跑，否则 S3 红**（同 §「操作陷阱」1）。
+
+**其它清理**
+
+- `main` 的 `README.md` **add/add**：集成分支那份已是超集（同样开头与文档索引 + runbook 行，另加仓库结构 /
+  命令 / 安装 / horosa 底座四节），取集成分支侧；main 那份的「状态」还写着「代码尚未开工」。README 的
+  「状态」一节随后按最终数字重写。
+- 13 个实现者 worktree 全部 deregister 并删除（t08 里未提交的 `birth*` 草稿先 `git stash` 存档，没丢）。
+- `.scratch/assembly-foundation/captures/` 里的**两份 pin 离线副本**（`horosa-SHA256SUMS.txt` /
+  `horosa-runtime-manifest.json`）缺失 → `tests/setup/pin.test.mjs` **收集期 ENOENT**：整个文件 9 条用例
+  从总数里消失（1030 → 1021），而摘要只会显示「passed 变少」，不会在失败名单里出现这 9 条。已按
+  `horosa-pin.json` 的 release URL 经镜像取回**真件**（wheel `feb377…9f83`、win32-x64 `2b3cce…86d7`、
+  size 718649254，与 pin 逐值一致），9 条恢复。
+- 同目录的 **raw 捕获 `gt06-*.json`（2026-10-13 真机探针产物）仍缺** → `tests/horosa/p0-fixtures` 两条由
+  「skip」变「红」。**证据缺失时它们故意红**（`it.skipIf(!HAS_CAPTURES)` 只在整目录缺失时让位），如实、不是回归；
+  要补齐得重跑一次真机捕获（探针脚本 `gt06-probe.mjs` 本身也在该目录，随目录一起丢了）。
+
+**这一轮的教训**：**测试总数也会说谎**。文件级收集失败在摘要里是「少了几条 passed」，而
+`skipIf(证据存在)` 会把「证据没了」渲染成「跳过」——两种都不会红在自己的名字上。见下节陷阱 3。
+
 ## 验证边界
 
 完整装配五条 seam 的当前结果：S2（进程内启动）、S3（客户端产物）、S4（上游行基线）、S5（真实 CLI 报告）通过；
@@ -189,15 +222,19 @@ S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带�
 而同版本官方 web bundle 自带的 `@deepseek-ai/dsh-agent-preset` 是另一种 carrier，报
 `unrecognized Loader tree carrier`。真实 web 与宿主启动正常。测试保留失败，无上游源码改动、无放宽断言。
 
-当前全仓基线（`node ./node_modules/vitest/vitest.mjs run`）：
+当前全仓基线（`node ./node_modules/vitest/vitest.mjs run`，2026-10-15 晚清理轮之后）：
 
 ```
-Test Files  1 failed | 96 passed | 1 skipped (98)
-Tests       2 failed | 1020 passed | 8 skipped (1030)
+Test Files  2 failed | 95 passed | 1 skipped (98)
+Tests       4 failed | 1021 passed | 8 skipped (1033)
 ```
 
-那 2 条失败即上述 S1（`S1 装配树` 与由它连带的 `CLI 退出码为 0`）。**基线之外的红色一律是本轮引入的回归。**
-（历史：票 08 后 448 passed；票 10/13 后 684；票 11/12/15/16 后 992；code-review 修复后 1020。）
+4 条失败 = **2 条 S1**（`S1 装配树` 与由它连带的 `CLI 退出码为 0`）+ **2 条 `tests/horosa/p0-fixtures`**
+（`gt06-*` 原始捕获在 `.scratch` 里缺失，见 §10 —— 证据缺失时它们故意红）。
+总数比 04:29 那次的 1030 多 3 条，正是 §10 找回的票 13 客户端两笔带来的回归用例。
+**基线之外的红色一律是本轮引入的回归。**
+（历史：票 08 后 448 passed；票 10/13 后 684；票 11/12/15/16 后 992；code-review 修复后 1020；
+清理轮 +3 条用例，并把两处「证据没了」从「静默跳过 / 不收集」顶成红。）
 同一时刻的装配五 seam：**S2 / S3 / S4（185 行基线全命中）/ S5 PASS，S1 FAIL**；`tsc --noEmit` exit 0；
 `build-client --check` in sync（386169 B）。
 
@@ -213,10 +250,12 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 （避免与 autostart 抢着起、也避免把服务的生命周期职责漏进业务层）——失败如实回报，由界面给可读理由。
 热启动实测 ≈ 22s（票 06 数据），属正常路径。
 
-本机 PATH 中的 `pnpm` shim 指向已不存在的 executable。所有构建 / vitest / tsc 通过现有 Node 直接执行；
-需要 pnpm 时照 `scripts/install-profile.mjs` 内部的调用方式走。未修改机器全局配置。
+本机 `pnpm` 可用（清理轮实测 11.21.0；`scripts/install-profile.mjs` 内部调的那份是 11.28.5），
+`pnpm install --frozen-lockfile` 在仓库根可直接跑（依赖硬链自 `E:\.pnpm-store\v11`）。
+构建 / vitest / tsc 仍可直接用现有 Node 执行（如 `node ./node_modules/vitest/vitest.mjs run`）。
+未修改机器全局配置。
 
-### 两条会让"没验"伪装成"验过"的操作陷阱（实测踩到，记下来）
+### 三条会让"没验"伪装成"验过"的操作陷阱（实测踩到，记下来）
 
 1. **merge 集成 tip 之后必须重跑 `node scripts/install-profile.mjs --home .dsh-home`。**
    否则 S3 会红：profile 里装的 `lib/client.js` 与仓库不一致（merge 带进来的客户端源文件不会自动同步）。
@@ -225,6 +264,19 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
    中文注释会变乱码，进而让 vitest 报 **`no tests`**。危险的不是乱码本身，而是它的**失败形态**：
    一个「测试根本没跑」被读成「测试通过」或「实现被改坏」。**用 `read`/`edit`/`write` 工具改文件。**
    同一类问题的另一面：`--reporter=basic` 在 vitest 4 不支持（要用 `dot`）、`fileParallelism: false` 是刻意设的。
+   （本轮又踩到同类一次：`Get-Content -Raw | ConvertFrom-Json` 读中文 `package.json` 直接把 JSON 读成乱码报错 ——
+   读取中文文件一律用 `read` 工具。）
+3. **别用 PowerShell 的 `Remove-Item -Recurse` 删 worktree / 依赖目录** —— 它会**跟随 pnpm 的 junction**，
+   删掉的可能是仓库根 `node_modules` 里的真件。实测（清理轮）：删完 `.scratch/worktrees/*` 之后，仓库根
+   `node_modules/.pnpm` 只剩 72 个目录，`@esbuild/win32-x64`、`@jridgewell/sourcemap-codec` 消失
+   → `vitest` 起动即 `ERR_MODULE_NOT_FOUND`、`build-pipeline` 两条红；而**删之前一分钟**同一条
+   `build-client --check` 还是 exit 0（时间线就是判据）。修法：`pnpm install`（含 `--force`）会认为
+   「已经最新」而不肯重链（虚拟 store 的 `lock.yaml` 仍在），必须
+   `Rename-Item node_modules <bak>` → `pnpm install --frozen-lockfile` → `cmd /c rmdir /s /q <bak>`。
+   **删目录一律用 `cmd /c rmdir /s /q`**（`rmdir /s` 不跟随 reparse point）。
+   同族的一条：**测试总数也会说谎** —— `tests/setup/pin.test.mjs` 因证据副本缺失在**收集期** ENOENT，
+   整个文件 9 条用例从总数里消失（1030 → 1021），摘要里只是「passed 变少」；而 `skipIf(证据存在)`
+   把「证据没了」渲染成「跳过」。**看到总数变了先数一数，不要只看红绿。**
 
 ## 工作方式
 

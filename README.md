@@ -71,12 +71,11 @@ node scripts/horosa/bazi-contract.mjs --json    # 直打回环，验信封结构
 
 ## 状态
 
-- 产品与架构已定稿；Spec 001（装配基座：setup → 冷启动八字 → 自我总览四卡 → 问事闭环 → 谱）已发布为 [issue #1](https://github.com/buyou-claw/xuanshu/issues/1)（ready-for-agent）。
-- **票 01（空壳立起）已实现**：分发包骨架三件套齐备、客户端预编译构建管线跑通、headless 启动 `xuanshu` profile 成功、装配契约测试台绿。
-- **票 04（开发期双实例隔离）已实现**（[issue #5](https://github.com/buyou-claw/xuanshu/issues/5)）：`scripts/isolation/` 启动器 + `docs/runbook/dual-instance.md` + `tests/isolation/`。顺带修好票 01 测试台的两处环境依赖（profile 未自持 CLI、补丁行缺 provider 包），`pnpm verify:assembly` 现在五条 seam 全绿。
-- 票 02/03（设计稿与素材）、05（setup）、06（horosa）已有实现提交，相关 GitHub PR 尚未合并。
-- 票 07（自我总览四卡）已接入 web；四卡/构建/隔离 web 冒烟通过。完整装配测试的 S1 仍报告上游 `dsh-agent-preset` carrier 不受 schema 导出器支持；S2–S5 通过，未将该失败隐藏。
-- 继续开发的 ticket、验证证据与上游限制见 [开发进度](docs/development-status.md)。
+- **Spec 001（装配基座）16 张票全部实现完毕**，收在集成分支 `codex/spec-001-integration`，由 [PR #20](https://github.com/buyou-claw/xuanshu/pull/20) 承载（覆盖并取代已关闭的 stacked PR #2 / #3 / #4 / #6 / #7 / #9）；父 issue [#1](https://github.com/buyou-claw/xuanshu/issues/1)。
+- 交付面：setup 一键安装（钉版 + SHA256 硬门）→ horosa 底座静态挂载与宿主托管 → 冷启动八字向导 → 自我总览四卡 → 谱管理 → 问事闭环 → 多 AI 合参 → 临时挂载 → 底稿 / 日课 → 藏库 → 沉淀闭环 → 工作流向导。零 DSH 源码改动（ADR-0001）。
+- 验证（集成分支 tip，2026-10-15）：`vitest run` → **1021 passed / 4 failed / 8 skipped（1033）**；装配五 seam **S2 / S3 / S4 / S5 PASS，S1 FAIL**（钉版 `dsh-app-boot@0.2.0-rc.2` 的 schema 导出器只收 native carrier，而同版官方 web bundle 自带的 `dsh-agent-preset` 是另一种 —— 上游缺陷；测试保留失败、不放宽断言、不改上游源码）；`tsc --noEmit` exit 0；`build-client --check` in sync（386627 B）。
+- 那 4 条失败里：**2 条是 S1 及其连带**；另 **2 条是 `tests/horosa/p0-fixtures` 的原始捕获缺失**（`.scratch/assembly-foundation/captures/gt06-*` 是本机真机取证、未纳入版本库）—— 不是代码回归：证据缺失时它们**故意红**，此前只是被 `skipIf` 掩盖（见 [开发进度](docs/development-status.md) §10）。
+- 真机未覆盖的项（浏览器点击链、客户端↔宿主合流、真 LLM 路径、两处未做槽位）逐条登记在 [待实测登记处](docs/design/ui-v1/待实测登记处.md) §6 与 [开发进度](docs/development-status.md)。
 
 ## 许可
 
