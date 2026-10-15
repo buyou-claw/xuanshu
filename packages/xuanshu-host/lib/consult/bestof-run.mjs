@@ -201,19 +201,30 @@ export function failureOf(finish) {
  * 跑一路候选（一次 `stream()` + 采集）。异常一律折算成 `{ok:false, error}`，
  * 让「某一路失败」不拖垮整次合参（S9 §6 的部分失败态）。
  *
+ * `context` 是这场问事的上下文（底座谱 + 底稿 + 勾选谱 + 挂载；由调用方用**与
+ * `consult.send` 同一份装配**读出来，见 `inject.mjs`）。为什么必须带上：
+ * 候选流是直接调 `ctx.llm.stream()`、**不走会话历史**，而用户在这一场问事里问的常常是
+ * 「结合我的信息」——不带这一段，候选只能凭问题本身答，答出来的东西与这场问事无关。
+ * 判官与合并槽**不带**（H4：判官只看问题与候选，免得把上下文当判据）。
+ *
  * `now` 是**可注入的时钟**（缺省 `Date.now`）：`elapsedMs` 是「这次调用花了多久」的**唯一**证据，
  * 而拿 `Date.now()` 差值写的断言恒 ≥ 0、永远不会红 —— 断言台要能证否，就得让耗时可控。
  * 调用方（`bestof.mjs`）把 `config.now` 透传进来，测试注入一个每次 +250ms 的计数时钟。
  */
-export async function runCandidate(ctx, { route, angle, question, signal, onText, now = Date.now }) {
+export async function runCandidate(ctx, { route, angle, question, context, signal, onText, now = Date.now }) {
   const started = now()
+  // 上下文与问题合成**一条** user 消息：候选流没有会话历史，分开成连续两条 user 消息
+  // 在部分 provider 上会被拒（同角色连发），而它们本来就是「一份材料 + 一个问题」。
+  const prompt = typeof context === 'string' && context.trim() !== ''
+    ? `${context.trimEnd()}\n\n【本次合参的问题】\n${question}`
+    : question
   try {
     const result = await collectStream(
       requireLlm(ctx).stream({
         provider: route.provider,
         model: route.model,
         system: `${CANDIDATE_SYSTEM}\n【本候选视角】${angle.name}：${angle.directive}`,
-        messages: [{ role: 'user', content: [{ type: 'text', text: question }] }],
+        messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
         tools: [],
         signal,
       }),

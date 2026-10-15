@@ -192,8 +192,24 @@ describe('票 15 · sediment.draft：只认问事会话（分类载体 = 自铸 
 
   it('这场问事一句话都没问过（turns=0）：没有可沉淀的东西，拒收', async () => {
     const sc = scene({ seed: [{ name: '事业与行业', description: '总览。' }], turns: 0 })
+    // 「真的没问过」= 旁挂清单与会话日志**都**是空的。场景默认会注册两句问话（那是给成功路径用的），
+    // 这里必须清掉 —— 否则测的就不是「没问过」，而是「旁挂清单与会话日志不一致」（见下一条用例）。
+    sc.query.events[sc.consult.sessionId] = []
     await expect(sc.api['sediment.draft']({ sessionId: sc.consult.sessionId })).rejects.toThrow(/还没有|没问/u)
     expect(sc.agents.resumed).toEqual([])
+  })
+
+  it('旁挂清单说 0 轮、会话日志里真的问过（原生 composer 说的那两句）→ 按日志补账，不拒收', async () => {
+    // 评审发现的那条洞：`turns` 只记玄枢受理过的轮次，用户从原生 composer 说的话不在里面 ——
+    // 只看旁挂清单的话，一场真问过的问事会被这里拒掉。判据是**会话日志**（consult/turns.mjs）。
+    const sc = scene({ seed: [{ name: '事业与行业', description: '总览。' }], turns: 0 })
+    expect(sc.store.read(sc.consult.sessionId).turns).toBe(0)
+    answerRound(sc, sc.consult.sessionId, draftAnswer())
+
+    const answer = await sc.api['sediment.draft']({ sessionId: sc.consult.sessionId })
+    expect(answer.draft.body).toContain('# 概览')
+    // 账补上了：日志里那两句 = 2 轮（并且这一步不是「编一个数」，是数出来的）。
+    expect(sc.store.read(sc.consult.sessionId).turns).toBe(2)
   })
 })
 

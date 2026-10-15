@@ -151,6 +151,10 @@ describe('发问前的门：缺服务时不许回一个假的 accepted:true', ()
   it('缺 agentPresets / agentDefaultModel：send 可读地失败，且不注入、不 followup、不落账', async () => {
     const { api, agents, sandbox, session } = await scene({ presets: false, model: false })
     const before = sandbox.read('consult', 'sessions', `${session.sessionId}.json`)
+    // 首轮上下文在 `consult.create` 那一刻就灌了（见 service.mjs），所以判据是
+    // 「send 被拒时**一条新投递都没有**」，而不是「调用列表是空的」。
+    // 比的是**整条投递**（含消息体），不是只比 kind —— 同一种 kind 多投一条也要红。
+    const callsBefore = [...agents.live.get(session.sessionId).calls]
 
     const failure = await api['consult.send']({ sessionId: session.sessionId, text: '帮我看时机' }).catch((error) => error)
     expect(failure).toBeInstanceOf(Error)
@@ -159,7 +163,7 @@ describe('发问前的门：缺服务时不许回一个假的 accepted:true', ()
     expect(failure.message).toMatch(/agentDefaultModel/u)
     expect(failure.message).toMatch(/dump-config|xuanshu-report/u)
 
-    expect(agents.live.get(session.sessionId).calls).toEqual([])
+    expect(agents.live.get(session.sessionId).calls, '能力门没过却往会话里投了东西').toEqual(callsBefore)
     expect(sandbox.read('consult', 'sessions', `${session.sessionId}.json`)).toBe(before) // turns 仍是 0
   })
 

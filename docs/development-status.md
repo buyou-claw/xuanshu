@@ -225,6 +225,71 @@ S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带�
 
 **环境事实（省下下一次的摸索）**：`github.com:443` 会间歇性 reset（本轮 `git push` 重试到第 4 次才成功，`ls-remote` 也时通时断），而 **GitHub MCP 走另一条路、一直可用** —— push/fetch 用重试循环更省事。仓库根依赖硬链自 `E:\.pnpm-store\v11`。`captures/` 里那两份 pin 副本是**公开 release 资产**（可按 pin 的 `evidence` URL 取回并逐值核对），`gt06-*` 那份真机捕获取不回来、只能重跑探针。
 
+### 11. 评审修复轮：两个探针提出的 5 条（2026-10-15 晚）
+
+评审基线 `main...d1ce6b3`，证据只在 `.scratch/`（未入库）：`.scratch/review-spec001-probe.mjs`（4 条）、
+`.scratch/review-inventory-stale-probe.mjs`（1 条）。**5 条都修了，并且都落成了正式用例**（探针仍然是探针，
+回归判据在 `tests/` 里）。
+
+| # | 探针实测的发现 | 处置 |
+|---|---|---|
+| ① | **清单门假绿**：故障注入把 `spawnSync` 换成「exit 73、不写报告」，报告路径上留着上一轮的旧报告 → 门读到旧报告，判「用例都在、都通过」，exit 0 | `scripts/lib/inventory-gate.mjs`（把「读报告」拆成可单测的一半）：跑之前**先删旧报告** → 子进程起不来 / 没写出报告 / 报告比这一轮启动还旧 / 报告不是合法 JSON，四种都 exit 2 并明说「不许拿旧报告顶上」。`tests/lib/inventory-gate.test.mjs` 11 条（含故障注入复现）。**退出码非 0 不再是失败信号**（已知红在跑，vitest 自己就 exit 1）——判据是报告新鲜度 |
+| ② | **清单门假红**：未装 profile 时 `assembly-contract` 只收集 1 条（基线 8 条）⇒ 干净 CI 必红。同一类还有 `tests/isolation/{dual-instance,port-guard,resolve}`（8/13/16 → 1/1/7）与 `tests/rikke/schedule-bundle`（装了 1 条、没装 2 条）——探针只测到第一处，全量模拟跑才把后面四处照出来 | 五处统一成「**用例条数与环境解耦**」（`assembly-contract` + 隔离三件 + `schedule-bundle`；共享门在 `tests/isolation/lib/verifier.mjs`）：`it.skipIf` / `describe.skipIf`（照样收集、只标跳过），`XUANSHU_REQUIRE_ASSEMBLY=1` 仍硬失败（`assembly-contract` 8 条逐条红；隔离三件 = 同一批用例照收 + 另加一条点名原因的失败 ⇒ 那 3 个文件在强制模式下条数比基线多 1，清单门只拦「变少」，红得清楚）。实测（下表）：装了与没装，逐文件条数完全相同 |
+| ③ | **迟到挂载静默失效**：`create → send(首问) → setMounts → send(第二问)`，第二问看不到新挂载（`secondQuestionHadUpdatedMount=false`）；抽屉字数一切正常，模型侧什么都没有 | 挂载变更**在确认那一刻**注入（`consult.setMounts` → `syncMountsIntoSession`，`inject()` 不唤醒），`consult.send` 兜底（会话不在本进程活着时补在问题之前）；「已经交给模型的那一份」记旁挂清单 `mountsInjected` ⇒ 幂等（同一份不重复灌）、移除也声明「已全部移除」 |
+| ④ | **合参候选看不到这场问事的上下文**：候选只拿到一句裸问题（`candidatesHadPu/Digao=false`）⇒ 问「结合我的信息」时答不出 | `bestof.run` 用**与首轮注入同一份装配**（新模块 `lib/consult/inject.mjs`）把上下文并进候选的用户消息；**判官与合并槽不带**（H4 的断言原样保留） |
+| ⑤ | **原生 composer 的首问没有上下文**：`consult.create` 之后门厅就 `openSession`，用户直接在原生输入框说第一句 → `contextInjections=0`、`turns` 仍为 0 | 首轮上下文**提前到 `consult.create`**（与 `send` 里 `inject→followup` 同一机制，只是把时刻提前）；`consult.send` 只在「create 没灌成 / 会话是别的进程建的」时补，且补前先核**会话日志**（`source.kind='xuanshu-consult'`）以免重复灌；`turns` / 标题与会话日志核对一次（原生那一句也算一轮 —— 票 15 的 `sediment.draft` 读 `turns ≥ 1`） |
+
+**没动的三处口径**（不是遗漏）：判官与合并槽不带上下文（H4）；`consult.send`「受理即回」；
+ADR-0009 的三条禁令（不碰 `meta` / 不新增会话事件 `type` / 不拿 `agentPreset` 当标签）。
+
+**验收数字**（都抄工具输出）：
+
+```
+# 本机（profile 已装）
+[inventory] 用例 1057 条（基线 1057）/ 文件 99 个 / 失败 2 条（已知红 2 条） / 跳过 10 条 / vitest exit 1
+[inventory] 通过：没有用例消失、没有已知红之外的失败。
+# 同一份代码、干净环境（XUANSHU_DSH_HOME 指向空目录 ⇒ 没有 profile）
+[inventory] 用例 1057 条（基线 1057）/ 文件 99 个 / 失败 0 条（已知红 0 条） / 跳过 51 条 / vitest exit 0
+[inventory] 通过：没有用例消失、没有已知红之外的失败。
+```
+
+两行的**条数逐文件相同**（8/13/16 的隔离三件、`assembly-contract` 的 8 条、`schedule-bundle` 的 1 条，
+在两种环境里各自相等）——这就是 ② 的机器判据，也是 §10 那条教训（「测试总数也会说谎」）的正面用法。
+干净环境多出来的 41 条跳过 = 未装 profile 的那些组（8 + 8 + 13 + 11 + 1）。
+两条证据留档：`.scratch/postfix2-local-gate.txt` / `.scratch/postfix2-clean-ci-gate.txt`
+（报告本体 `.scratch/postfix2-*-report.json`）。
+
+**探针 ① 之外的一条边界（别误读）**：`review-spec001-probe.mjs` 最后那行读的是
+`.scratch/spec001-review-no-profile.json` —— 评审当时那份**冻结**的运行输出（而且只是 `tests/assembly`
+的子集）。它是**改动前**的现场，修复后重跑探针仍会打印 `actual:1 … inventoryWouldReject:true`；
+② 的判据是全量干净环境跑（上面那两行），不是那一行。
+
+探针复跑（修复后）：`late-mount` 的 `injectionsAfter 1→2`、`secondQuestionHadUpdatedMount false→true`；
+`bestof-context` 的 `candidatesHadDigao/candidatesHadPu` 双双 `false→true`；
+`blank-consult-native-composer` 的 `contextInjections 0→1`（`turns` 仍是 0：那一问不经过玄枢，
+要等玄枢下一次接手这个会话时按日志补账 —— 见 `lib/consult/turns.mjs`）；
+`review-inventory-stale-probe` 现在 **exit 2** 并打印「测试进程起不来 … 不许拿旧报告顶上」（修复前 exit 0 + 「门 returned success」）。
+
+**两轴 code-review 自查后又改的五处**（都在同一轮里，都是「报告里说的」与「代码真做的」对不上的地方）：
+
+| 审查发现 | 处置 |
+|---|---|
+| **兜底注入被 `turns` 挡掉**：核对把 `turns` 抬到 1 之后，`knownInSession` 那道门的 `turns === 0` 条件不再成立 —— 「create 首灌失败 + 原生 composer 说过话」这一场会**永远没有上下文** | 注入判据改成只看「**灌过没有**」（本进程 / 会话日志 / 已问过一轮），不再看 `turns`；并补一条把两个条件叠在一起的用例（`send.test.mjs`） |
+| `inspectSessionLog` 把「会话还没落盘」与「读不动」当成同一件事 | 用 `isSessionNotFound()` 分开：还没落盘 → `{questions:[],hasContext:false}`；读不动 → `null`（不编数）。判据与投影一起收进 `lib/consult/turns.mjs`（`history.mjs` 的取文本逻辑也复用它，不再各写一份） |
+| **`mountsInjected` 在内容没读出来时也写**（披露块进了、正文没进）⇒ 那一份挂载再也不会重试 | 只有**内容真的纳入**（`delivered`）才记；读不出来 / 全被裁掉时留着，**下一问再试** —— 补了一条「fs 不在 → fs 回来 → 补上」的用例。代价说清楚：内容一直读不出来的环境里，每一问都会重试（多一段「读不出来」的披露），这是「宁可多说一次，也不许一直没有」的选择（真机上 `ctx.fs` 在场的常态路径只注入一次） |
+| **`sediment.draft` 只看旁挂清单的 `turns`**：一场只从原生 composer 问过的问事会被「还没问过」拒掉 | `sediment.draft` 也先按会话日志核对一次（复用 `reconcileTurns`）；补一条用例（旁挂说 0 轮、日志里两问 → 正常出草稿，并把账补成 2） |
+| 清单门其余三处小账：`known` 拼成 `file::title` 再 `split` （标题里带 `::` 会被截断）、mtime 判据在粗粒度文件系统上会假红、`now` 注入点没人用 | `known` 改返回对象；判据留 2 秒宽容并补一条「同秒写入不算旧件」的用例；`now` 真的被那条「旧件」用例用上了 |
+
+**一处刻意的边界（不是缺陷）**：合参候选拿到的是这场问事的**上下文快照**（底座谱 / 底稿 / 勾选谱 / 挂载），
+**不含**会话历史与采用稿 —— 候选流本来就是不带历史的独立流；采用稿由 `bestof.adopt` 投进**会话**，
+所以下一场问事（`consult.send`）看得见，而下一轮合参的候选看不见。要改这条得先冻结一个新的接口面。
+
+**另外发现的一处（未修，如实登记）**：`docs/tickets/` 里 9 份票面（07–11、13–16）是**乱码** ——
+`1876303`（「票 07–16 状态与追踪器对齐」）那一笔把它们做成了双层编码（PowerShell 往返的已知陷阱，见下节陷阱 2），
+现在人读不了。同一提交之前的版本（`git show 1876303^:docs/tickets/<file>`）是干净的，但那一笔要加的
+「Status/证据指向」改动**不可逐字复原**（坏文件里有 44 处替换字符）。修法：取 `1876303^` 的正文重贴，
+再按 `docs/tickets/12` 的格式补回 Status 行 —— 这一轮没做，因为它不属于这次评审的 5 条。
+
 ## 验证边界
 
 完整装配五条 seam 的当前结果：S2（进程内启动）、S3（客户端产物）、S4（上游行基线）、S5（真实 CLI 报告）通过；
@@ -234,21 +299,24 @@ S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带�
 而同版本官方 web bundle 自带的 `@deepseek-ai/dsh-agent-preset` 是另一种 carrier，报
 `unrecognized Loader tree carrier`。真实 web 与宿主启动正常。测试保留失败，无上游源码改动、无放宽断言。
 
-当前全仓基线（`node ./node_modules/vitest/vitest.mjs run`，2026-10-15 晚清理轮之后）：
+当前全仓基线（`node scripts/check-test-inventory.mjs`，2026-10-15 晚评审修复轮之后）：
 
 ```
-Test Files  2 failed | 95 passed | 1 skipped (98)
-Tests       4 failed | 1021 passed | 8 skipped (1033)
+[inventory] 用例 1057 条（基线 1057）/ 文件 99 个 / 失败 2 条（已知红 2 条） / 跳过 10 条 / vitest exit 1
+[inventory] 通过：没有用例消失、没有已知红之外的失败。
 ```
 
-4 条失败 = **2 条 S1**（`S1 装配树` 与由它连带的 `CLI 退出码为 0`）+ **2 条 `tests/horosa/p0-fixtures`**
-（`gt06-*` 原始捕获在 `.scratch` 里缺失，见 §10 —— 证据缺失时它们故意红）。
-总数比 04:29 那次的 1030 多 3 条，正是 §10 找回的票 13 客户端两笔带来的回归用例。
+2 条失败 = **S1 装配树** 与由它连带的 **CLI 退出码为 0**（就是基线 `knownRed` 里那两条，理由见上）。
+跳过的 10 条 = `tests/horosa/p0-fixtures` 2 条（`.scratch` 里的 `gt06-*` 原始捕获仍缺）+ `tests/horosa/p10-e2e` 8 条
+（真机前置件不在）。**同一条命令在「没有 profile」的干净环境里也必须给出同样的条数并判过**
+（评审修复轮实测：1057 / 99 文件 / 0 失败 / 51 跳过）—— 这就是 §11 ② 的机器判据；
+「干净环境」用 `XUANSHU_DSH_HOME` 指向一个空目录来模拟（CI 上那个目录本来就不存在）。
 **基线之外的红色一律是本轮引入的回归。**
 （历史：票 08 后 448 passed；票 10/13 后 684；票 11/12/15/16 后 992；code-review 修复后 1020；
-清理轮 +3 条用例，并把两处「证据没了」从「静默跳过 / 不收集」顶成红。）
+清理轮 +3 条用例，并把两处「证据没了」从「静默跳过 / 不收集」顶成红；评审修复轮 +24 条用例、新增
+`tests/lib/inventory-gate.test.mjs` 一个文件，并把 5 个测试文件的条数与环境解耦。）
 同一时刻的装配五 seam：**S2 / S3 / S4（185 行基线全命中）/ S5 PASS，S1 FAIL**；`tsc --noEmit` exit 0；
-`build-client --check` in sync（386169 B）。
+`build-client --check` in sync（386627 B）。
 
 **S5 的面依赖（已修）**：票 07 在 profile 补丁层加了三行 `disabled` 开关后，web 面（`XUANSHU_SURFACE` 未设）
 由 `web-startup` 拥有 cmdlineArgs，它把 `--help` 当自己的用法打印后**在挂载插件树之前就 exit 0** ——
@@ -277,7 +345,8 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
    一个「测试根本没跑」被读成「测试通过」或「实现被改坏」。**用 `read`/`edit`/`write` 工具改文件。**
    同一类问题的另一面：`--reporter=basic` 在 vitest 4 不支持（要用 `dot`）、`fileParallelism: false` 是刻意设的。
    （本轮又踩到同类一次：`Get-Content -Raw | ConvertFrom-Json` 读中文 `package.json` 直接把 JSON 读成乱码报错 ——
-   读取中文文件一律用 `read` 工具。）
+   读取中文文件一律用 `read` 工具。**代价最大的一次是 `1876303`**：那一笔把 `docs/tickets/` 里 9 份票面
+   （07–11、13–16）全写成了双层编码，现在人读是乱码，且那一笔的改动不可逐字复原 —— 见 §11 末。）
 3. **别用 PowerShell 的 `Remove-Item -Recurse` 删 worktree / 依赖目录** —— 它会**跟随 pnpm 的 junction**，
    删掉的可能是仓库根 `node_modules` 里的真件。实测（清理轮）：删完 `.scratch/worktrees/*` 之后，仓库根
    `node_modules/.pnpm` 只剩 72 个目录，`@esbuild/win32-x64`、`@jridgewell/sourcemap-codec` 消失

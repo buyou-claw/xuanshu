@@ -18,7 +18,7 @@ import { createBestOfMethods } from '../../packages/xuanshu-host/lib/consult/bes
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
 import { fakeAgentDefaultModel, fakeAgents } from './lib/sandbox.mjs'
 import { fakeLlm, STUB_USAGE } from './lib/bestof-llm.mjs'
-import { makeHost, makeSandbox } from './lib/sandbox.mjs'
+import { makeHost, makeSandbox, seedPu } from './lib/sandbox.mjs'
 
 const roots = []
 afterEach(() => roots.splice(0).forEach((sandbox) => sandbox.cleanup()))
@@ -30,11 +30,16 @@ const CANDIDATE_TEXTS = ['经典派：先看大方向。', '审慎派：先核�
 
 /**
  * 起一套宿主：consult（建会话）+ bestof（本票）+ 假 llm。
- * @param {object} options `judgePlan` 覆盖 judge 那一次调用的剧本；`now` 注入候选耗时用的时钟
+ * @param {object} options `judgePlan` 覆盖 judge 那一次调用的剧本；`now` 注入候选耗时用的时钟；
+ *        `pus` / `digao` 用来验「候选看到的是这场问事的上下文」（下面那条哨兵用例）
  */
-async function scene({ judgePlan, plans, price, now } = {}) {
+async function scene({ judgePlan, plans, price, now, pus = [], digao = false, pu } = {}) {
   const sandbox = makeSandbox('bestof')
   roots.push(sandbox)
+  if (digao) sandbox.write('digao.md', '# 底稿\nDIGAO_SENTINEL\n')
+  // 谱必须在**开会话之前**落盘：首轮上下文在 create 那一刻就灌进去了（见 service.mjs），
+  // 晚一步就只能注入一段「读不出来」。
+  if (pu !== undefined) seedPu(sandbox, pu)
   const agents = fakeAgents()
   const llm = fakeLlm(
     plans ?? [
@@ -59,7 +64,7 @@ async function scene({ judgePlan, plans, price, now } = {}) {
     },
   })
   const consult = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir })
-  const { session } = await consult['consult.create']({ pus: [] })
+  const { session } = await consult['consult.create']({ pus })
   const bestof = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir, prices: price, now })
   return { sandbox, host, llm, consult, bestof, session }
 }
@@ -94,7 +99,15 @@ describe('bestof.run · 2 路并行（票面「首版 2 路并列流式，不带
       expect(call.tools ?? [], '候选流带了工具：候选能动手是产品明令禁止的').toEqual([])
       expect(call.provider).toBe('deepseek')
       expect(call.model).toBe('deepseek-chat')
-      expect(call.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: QUESTION }] }])
+      // ② **候选带上这场问事的上下文**（底座谱 + 底稿 + 勾选谱 + 挂载，与首轮注入同一份装配）：
+      //    候选流不走会话历史，不带这一段的话「结合我的信息」这类问题在合参里答不出来 ——
+      //    评审的探针实测过一次（候选只拿到一句裸问题）。
+      expect(call.messages).toHaveLength(1)
+      const prompt = call.messages[0].content.map((block) => block.text).join('\n')
+      expect(prompt).toContain('【来源：底座谱】')
+      expect(prompt).toContain('【来源：底稿】')
+      expect(prompt).toContain('【本次合参的问题】')
+      expect(prompt).toContain(QUESTION)
     }
     // ③ 两路视角必须不同（否则「2 路」只是同一份答案发两遍）。
     const [first, second] = candidateCalls.map((call) => call.system)
@@ -122,6 +135,32 @@ describe('bestof.run · 2 路并行（票面「首版 2 路并列流式，不带
     expect(Object.keys(schema.properties)).toEqual(['judgement'])
     // H4：判官只看问题与候选，不带挂载 / 谱的正文。
     expect(JSON.stringify(judgeCall.messages)).not.toContain('【来源：')
+  })
+
+  it('**候选看到的是这场问事的上下文**：底座谱 / 底稿 / 勾选谱都进了候选的提示（评审发现的那一处）', async () => {
+    const { bestof, llm, session } = await scene({
+      pus: ['软件开发'],
+      digao: true,
+      pu: { name: '软件开发', level: 'base', description: '手上的项目。', summary: 'PU_SUMMARY_SENTINEL' },
+    })
+
+    await runToEnd(bestof, { sessionId: session.sessionId, question: '结合我的信息建议怎么做？' })
+
+    const candidateCalls = llm.calls.filter((call) => call.system?.includes('本候选视角'))
+    expect(candidateCalls).toHaveLength(2)
+    for (const call of candidateCalls) {
+      const prompt = call.messages[0].content.map((block) => block.text).join('\n')
+      // 三个哨兵各来自一个来源：底座谱（没起盘 → 写明「底座未立」也算带上了这一段）、
+      // 底稿全文、勾选谱的概览 / summary。
+      expect(prompt).toContain('【来源：底座谱】')
+      expect(prompt).toContain('DIGAO_SENTINEL')
+      expect(prompt).toContain('【来源：谱 软件开发】')
+      expect(prompt).toContain('PU_SUMMARY_SENTINEL')
+    }
+    // judge 仍然**不带**上下文（H4：判官只看问题与候选）——候选带了不等于判官也带。
+    const judgeCall = llm.calls.at(-1)
+    expect(JSON.stringify(judgeCall.messages)).not.toContain('PU_SUMMARY_SENTINEL')
+    expect(JSON.stringify(judgeCall.messages)).not.toContain('DIGAO_SENTINEL')
   })
 
   it('记录落 <dataDir>/consult/<sessionId>.bestof.json（schema xuanshu/bestof@1）', async () => {

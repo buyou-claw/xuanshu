@@ -8,6 +8,10 @@
  *
  * 环境门（与 `tests/assembly/assembly-contract.test.mjs` 同款）：profile 没安装就显式 skip 并打印修复命令，
  * 绝不让「没装」看起来像「装配成立」。
+ *
+ * **不许再往「未安装」那条分支里塞一条占位用例**（本轮评审发现）：那样会让收集到的用例数随环境变
+ * （装了 1 条 / 没装 2 条），而 `scripts/check-test-inventory.mjs` 的基线是**一个数**。
+ * `describe.skipIf` 已经保证「照样收集、只标跳过」——条数一致，跳过本身也在报告里看得见。
  */
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -49,7 +53,4 @@ if (!INSTALLED) {
   console.warn(
     `\n⚠️  schedule bundle 测试 SKIPPED：profile "${PROFILE}" 未安装在 ${PROFILE_DIR}\n   先安装：${INSTALL_HINT}\n`,
   )
-  describe.skip(`schedule bundle（SKIPPED：profile 未安装；${INSTALL_HINT}）`, () => {
-    it('未安装时不做任何断言', () => {})
-  })
 }

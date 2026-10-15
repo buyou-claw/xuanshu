@@ -64,15 +64,26 @@ export function runVerifier(args, { timeoutMs = VERIFIER_TIMEOUT_MS, env } = {})
 }
 
 /**
- * 环境门：profile 已装 → 真跑真断言；未装 → 显式 skip 并打印原因与修复命令；
- * `XUANSHU_REQUIRE_ASSEMBLY=1` → 把「没装」变成硬失败（交付/CI 用）。
+ * 环境门：profile 已装 → 真跑真断言；未装 → **同一批用例照收、逐条 skip** 并打印原因与修复命令；
+ * `XUANSHU_REQUIRE_ASSEMBLY=1` → 把「没装」变成硬失败（交付/CI 用这个）。
+ *
+ * **为什么用例条数不许随环境变**（本轮评审发现，别再改回「未装时只注册一条占位」）：
+ * 未装时只注册 1 条，`scripts/check-test-inventory.mjs` 就会判「用例变少」——
+ * 干净 CI（没有 profile）上必红，而红的原因与本仓无关。改用 `describe.skipIf`：里面的用例
+ * **照样被收集**、只是标成跳过，于是「装了」与「没装」收集到的条数一致
+ * （实测：`describe.skipIf(true)` 里的用例仍被收集、状态 skipped）。
+ * 未装但要求硬失败时不跳过 —— 那一组真跑并红在明处（CI / 交付前验收用这个）。
  */
 export function withProfileGate(title, body) {
-  if (INSTALLED) {
-    describe(title, () => body({ installed: true }))
-    return
-  }
-  if (REQUIRE_INSTALL) {
+  if (!INSTALLED && REQUIRE_INSTALL) {
+    // 硬失败模式（交付 / 交付前验收）：同一批用例照收（跳过），**另加一条点名原因的失败**。
+    // 为什么另加而不让这一组真跑：真跑会逐个 spawn 验收台、报一堆次级错误，红的地方反而不清楚；
+    // 而「条数」这边只多不少（清单门只拦「变少」），红得清楚又不破坏「总数不随环境缩水」。
+    console.warn(
+      `\n⚠️  ${title}：profile "${PROFILE}" 未安装，而 XUANSHU_REQUIRE_ASSEMBLY=1 —— 这一组按硬失败处理。\n`
+      + `   先安装：${INSTALL_HINT}\n`,
+    )
+    describe.skipIf(true)(title, () => body({ installed: false }))
     describe(`${title}（强制模式）`, () => {
       it('profile 必须已安装（XUANSHU_REQUIRE_ASSEMBLY=1）', () => {
         expect.fail(`profile "${PROFILE}" 未安装在 ${PROFILE_DIR}；先跑：${INSTALL_HINT}`)
@@ -80,15 +91,15 @@ export function withProfileGate(title, body) {
     })
     return
   }
-  // 绝不静默：把「为什么整组没跑」写进测试输出。
-  console.warn(
-    `\n⚠️  ${title} SKIPPED：profile "${PROFILE}" 未安装在 ${PROFILE_DIR}\n`
-    + `   先安装：${INSTALL_HINT}\n`
-    + '   交付/CI 校验请设 XUANSHU_REQUIRE_ASSEMBLY=1，让「没装」变成硬失败。\n',
-  )
-  describe.skip(`${title}（SKIPPED：profile 未安装，见上面的原因；${INSTALL_HINT}）`, () => {
-    it('未安装时不做任何断言', () => {})
-  })
+  if (!INSTALLED) {
+    // 绝不静默：把「为什么整组没跑」写进测试输出。
+    console.warn(
+      `\n⚠️  ${title} SKIPPED：profile "${PROFILE}" 未安装在 ${PROFILE_DIR}\n`
+      + `   先安装：${INSTALL_HINT}\n`
+      + '   交付/CI 校验请设 XUANSHU_REQUIRE_ASSEMBLY=1，让「没装」变成硬失败。\n',
+    )
+  }
+  describe.skipIf(!INSTALLED)(title, () => body({ installed: INSTALLED }))
 }
 
 /* ───────────────────── 对照组服务端（一律 listen(0) 拿空闲端口） ───────────────────── */

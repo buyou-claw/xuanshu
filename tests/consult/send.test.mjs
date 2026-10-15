@@ -5,6 +5,8 @@
  *   ① **首轮注入**：底座谱（票 08 的 `bazi.basePu`）+ 底稿（`<dataDir>/digao.md` 全文）
  *      + 勾选谱的 manifest 概览 / summary / 文件路径；每段带【来源：…】标记；
  *      **非勾选谱一个字符都不出现**；正文不灌，让 AI 自己按路径去读（票面第 3 条）。
+ *      注入发生在 **`consult.create` 那一刻**（第一问可能从原生 composer 来，见 create.test.mjs）；
+ *      `consult.send` 只在「create 没灌成 / 会话是别的进程建的」时补，并且负责挂载变更的增量。
  *   ② **注入只发生一次**：会话历史里之后都在，再次问事不重复灌。
  *   ③ **等一轮结束看 `turn/end`**：假 agent 的 `whenIdle()` 直接抛（证据
  *      `dsh-agent/lib/types/runtime-types.d.ts:164`），所以任何「用 whenIdle 判结束」的写法都会在这里红。
@@ -30,12 +32,14 @@ import {
   fakeAgentPresets,
   fakeAgents,
   fakeHorosa,
+  fakeSessionQuery,
   fakeSessionStore,
   fakeWorkspaceRegistry,
   makeHost,
   makeSandbox,
   seedBasePu,
   seedPu,
+  userEvent,
 } from './lib/sandbox.mjs'
 
 const roots = []
@@ -48,11 +52,28 @@ const DIGAO_TEXT = '# 底稿\n底稿正文第一行：最近在做的事。\n底
 const QUESTION = '帮我看这次转岗的时机'
 
 /** 起一套方法 + 沙箱；`pus` 是这次会话勾选的谱。 */
-async function scene({ pus = ['紫微笔记'], digao = true, basePu = true } = {}) {
+async function scene({ pus = ['紫微笔记'], digao = true, basePu = true, sessionQuery, failFirstInject = false } = {}) {
   const sandbox = makeSandbox('send')
   roots.push(sandbox)
   const fake = fakeHorosa(envelope('bazi-ok-default'))
   const agents = fakeAgents()
+  if (failFirstInject) {
+    // 让 create 那一刻的首灌抛一次（模拟「那一刻读谱 / 读底稿失败」），之后恢复正常。
+    const realCreate = agents.service.create
+    agents.service.create = async (options) => {
+      const handle = await realCreate(options)
+      const realInject = handle.agent.inject
+      let failed = false
+      handle.agent.inject = (message) => {
+        if (!failed) {
+          failed = true
+          throw new Error('FAULT INJECTION: create 时首灌失败')
+        }
+        return realInject(message)
+      }
+      return handle
+    }
+  }
   const sessions = fakeSessionStore()
   const workspaces = fakeWorkspaceRegistry()
   const host = makeHost({
@@ -64,6 +85,7 @@ async function scene({ pus = ['紫微笔记'], digao = true, basePu = true } = {
       // 发问前的门要的那两个服务（缺了 send 会可读地拒绝，见 agent.test.mjs）。
       agentPresets: fakeAgentPresets().service,
       agentDefaultModel: fakeAgentDefaultModel().service,
+      ...(sessionQuery === undefined ? {} : { sessionQuery: sessionQuery.service }),
     },
   })
   if (basePu) await seedBasePu(sandbox, host.ctx)
@@ -242,6 +264,74 @@ describe('consult.send · 等一轮结束看 turn/end（不是 whenIdle）', () 
   })
 })
 
+describe('consult.send · 原生 composer 那条路（评审发现的那一处）', () => {
+  it('原生 composer 说的第一句也算一轮：turns / 标题按**会话日志**核对（那条路不经过 consult.send）', async () => {
+    const query = fakeSessionQuery()
+    const { api, agents, session, sandbox } = await scene({ sessionQuery: query })
+    // 用户从原生 composer 说了第一句：会话日志里有这条 `user/message`（`source.kind = 'user'`），
+    // 而旁挂清单的 `turns` 仍是 0 —— 两个下游会因此出错（票 15 的 sediment 据此拒绝；
+    // 首轮判据会以为「还没灌过」）。
+    query.events[session.sessionId] = [
+      userEvent(1, { id: 'm-native-1', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '原生输入的首问' }] }),
+    ]
+
+    await api['consult.send']({ sessionId: session.sessionId, text: '接着问一句' })
+
+    const manifest = sandbox.json('consult', 'sessions', `${session.sessionId}.json`)
+    // 原生那一句 + 这一句 = 2 轮；标题取**首问**（原生那一句），不许被这一句顶掉。
+    expect(manifest.turns).toBe(2)
+    expect(manifest.title).toBe('原生输入的首问')
+    // 上下文在 create 时就灌过了（同进程判据），这一问不再灌一遍。
+    expect(callsOf(agents, session.sessionId).map((call) => call.kind)).toEqual(['inject', 'followup'])
+  })
+
+  it('create 时首灌失败 + 原生 composer 说过话 → 下一问仍然补灌（宁可晚一轮，不许一直没有）', async () => {
+    // 两个条件同时成立才是那条缝：create 的注入没成（`injected` 里没有），而首问又不经过 consult.send
+    // （会话日志里有问句、旁挂清单被核对成 turns=1）。**注入判据看「灌过没有」，不看 turns** ——
+    // 否则这一场问事会永远没有上下文，而每一处都显示正常。
+    const query = fakeSessionQuery()
+    const { api, agents, session, sandbox } = await scene({ sessionQuery: query, failFirstInject: true })
+    expect(callsOf(agents, session.sessionId).filter((call) => call.kind === 'inject')).toHaveLength(0)
+    query.events[session.sessionId] = [
+      userEvent(1, { id: 'm-native-1', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '原生输入的首问' }] }),
+    ]
+
+    await api['consult.send']({ sessionId: session.sessionId, text: '接着问一句' })
+
+    const calls = callsOf(agents, session.sessionId)
+    expect(calls.map((call) => call.kind)).toEqual(['inject', 'followup'])
+    const text = calls[0].message.content.map((block) => block.text).join('\n')
+    expect(text).toContain('【来源：底座谱】')
+    expect(text).toContain('【来源：底稿】')
+    // 账也补上了：原生那一句 + 这一句。
+    expect(sandbox.json('consult', 'sessions', `${session.sessionId}.json`).turns).toBe(2)
+  })
+
+  it('别的进程建的会话：日志里已有上下文 → 不重复灌一遍（turns 为 0 也不再灌）', async () => {
+    const query = fakeSessionQuery()
+    const { agents, session, sandbox } = await scene({ sessionQuery: query })
+    // 会话日志里已经有 create 时灌的那一条（source.kind = 我们的上下文 kind）。
+    query.events[session.sessionId] = [
+      userEvent(1, { id: 'm-ctx-1', role: 'user', source: { kind: CONSULT_MESSAGE_SOURCE_KIND }, content: [{ type: 'text', text: '【玄枢·问事上下文】…' }] }),
+    ]
+    agents.live.clear()
+
+    const host2 = makeHost({
+      services: {
+        agents: agents.service,
+        agentPresets: fakeAgentPresets().service,
+        agentDefaultModel: fakeAgentDefaultModel().service,
+        sessionQuery: query.service,
+      },
+    })
+    const api2 = createConsultMethods(host2.ctx, { dataDir: sandbox.dataDir })
+    await api2['consult.send']({ sessionId: session.sessionId, text: '第二句' })
+
+    // resume 之后重建的假 agent：只有问题，没有第二条上下文（历史里那一份已经在了）。
+    expect(callsOf(agents, session.sessionId).map((call) => call.kind)).toEqual(['followup'])
+  })
+})
+
 describe('consult.send · 会话来源与拒绝路径', () => {
   it('进程重启后（另一个 service 实例）也能接着问：走 ctx.agents.resume', async () => {
     const { api, agents, session, sandbox } = await scene()
@@ -275,13 +365,16 @@ describe('consult.send · 会话来源与拒绝路径', () => {
     expect(agents.resumed).toEqual([])
   })
 
-  it('空问题 / 非文本问题：拒绝，不注入也不落账', async () => {
+  it('空问题 / 非文本问题：拒绝，不新增投递也不落账', async () => {
     const { api, agents, session, sandbox } = await scene()
     const before = sandbox.read('consult', 'sessions', `${session.sessionId}.json`)
+    // 首轮上下文在 `consult.create` 那一刻已经灌了（见 create.test.mjs），所以这里的判据是
+    // 「拒绝路径**一条新投递都没有**」，而不是「调用列表是空的」；比整条投递（同 kind 多投一条也要红）。
+    const callsBefore = [...callsOf(agents, session.sessionId)]
     for (const text of ['', '   ', undefined, 42]) {
       await expect(api['consult.send']({ sessionId: session.sessionId, text })).rejects.toThrow(/问题|文本/u)
     }
-    expect(callsOf(agents, session.sessionId)).toEqual([])
+    expect(callsOf(agents, session.sessionId)).toEqual(callsBefore)
     expect(sandbox.read('consult', 'sessions', `${session.sessionId}.json`)).toBe(before)
   })
 })

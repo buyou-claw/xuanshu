@@ -139,6 +139,17 @@ export function normalizeMounts(input) {
 }
 
 /**
+ * 挂载清单的**指纹**：判「当前挂载」与「已经交给模型的那一份」是不是同一份（票 12 的增量注入判据）。
+ *
+ * 用 `[kind,id,label]` 三元组而不是原对象的 JSON：顺序是用户可见的（界面按勾选顺序排），
+ * 而对象里多出别的键（将来加字段）不该被判成「挂载变了」→ 白灌一段。
+ */
+export function mountsKey(mounts) {
+  const list = Array.isArray(mounts) ? mounts : []
+  return JSON.stringify(list.map((mount) => [mount?.kind ?? '', mount?.id ?? '', mount?.label ?? '']))
+}
+
+/**
  * 首问 → 标题：折叠空白后取前 40 字（契约 §1）。空问题由调用方先拒掉，这里只兜底成缺省标题。
  */
 export function titleFromQuestion(text) {
@@ -211,6 +222,9 @@ export function createConsultStore(dataDir) {
       title: typeof parsed.title === 'string' && parsed.title !== '' ? parsed.title : DEFAULT_CONSULT_TITLE,
       pus: Array.isArray(parsed.pus) ? parsed.pus.filter((slug) => typeof slug === 'string') : [],
       mounts: Array.isArray(parsed.mounts) ? parsed.mounts : [],
+      // 「已经交给模型的那一份挂载」：只在真的注入过挂载之后才写。
+      // 缺省**不补空数组** —— 老文件（与新建的会话）不该因为我们加了字段就变样。
+      ...(Array.isArray(parsed.mountsInjected) ? { mountsInjected: parsed.mountsInjected } : {}),
       turns: Number.isInteger(parsed.turns) && parsed.turns >= 0 ? parsed.turns : 0,
       ...(typeof parsed.lastTurnAt === 'string' && parsed.lastTurnAt !== '' ? { lastTurnAt: parsed.lastTurnAt } : {}),
     }
@@ -274,7 +288,8 @@ export function createConsultStore(dataDir) {
 
     /**
      * 只允许改这几样：`pus` 是开会话时的选择（本票没有改选择的 RPC），
-     * `mounts` 归票 12（`consult.setMounts` —— 走同一份旁挂清单，不另开权威）。
+     * `mounts` 归票 12（`consult.setMounts` —— 走同一份旁挂清单，不另开权威），
+     * `mountsInjected` 归注入侧（票 12 的增量判据：记住**已经交给模型的那一份**挂载）。
      */
     update(sessionId, patch = {}) {
       const current = read(sessionId)
@@ -284,6 +299,7 @@ export function createConsultStore(dataDir) {
       if (Object.hasOwn(patch, 'turns')) next.turns = patch.turns
       if (Object.hasOwn(patch, 'lastTurnAt')) next.lastTurnAt = patch.lastTurnAt
       if (Object.hasOwn(patch, 'mounts')) next.mounts = normalizeMounts(patch.mounts)
+      if (Object.hasOwn(patch, 'mountsInjected')) next.mountsInjected = normalizeMounts(patch.mountsInjected)
       return write(next)
     },
   }

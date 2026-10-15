@@ -28,6 +28,9 @@ export function sourceMarkMount(label) {
 /** 挂载披露块的标记（S8 §5 步骤 7：注入内容里必须能看到「砍了多少、为什么砍」）。 */
 export const SOURCE_MARK_MOUNT_DISCLOSURE = '【来源：临时挂载·披露】'
 
+/** 挂载**变更**段的标记（票 12：首轮之后挂上/换掉的挂载，在下一问之前补一段）。 */
+export const SOURCE_MARK_MOUNT_UPDATE = '【来源：临时挂载·变更】'
+
 /** 勾选谱的段标记：`【来源：谱 <name>】`。 */
 export function sourceMarkPu(name) {
   return `【来源：谱 ${name}】`
@@ -132,6 +135,37 @@ export function buildConsultContext({ dataDir, basePu, digao, selected = [], mou
   for (const block of buildMountBlocks(mounts)) blocks.push(block)
 
   return `${blocks.join('\n\n')}\n`
+}
+
+/**
+ * 挂载**变更**段的装配（票 12；评审发现的那一处「静默失效」）。
+ *
+ * 为什么要有这一段：挂载内容只在**首轮上下文**里进会话，而挂载清单是随时可改的
+ * （S8 抽屉 `consult.setMounts`）。首轮之后再挂一个工作区，模型**看不见它** ——
+ * 抽屉上字数状态一切正常，问出来的答案却与那个工作区无关：界面上工作、模型侧不工作。
+ * 于是「当前挂载」与「已经注入过的挂载」不一致时，在**下一问之前**补这一段。
+ *
+ * 移除也要说：以前注入的挂载正文已经进了历史，不声明一句「不再适用」，
+ * 模型会继续拿它当现况（越来越旧的上下文比没有上下文更难查）。
+ *
+ * @param {{mounts?: object}} input `mounts` 是 `buildMountPreview()` 的产物（**读 + 裁之后**）；
+ *        空 / 没有层 → 输出「已全部移除」那一句。
+ * @returns {string}
+ */
+export function buildMountUpdateContext({ mounts } = {}) {
+  const blocks = buildMountBlocks(mounts)
+  if (blocks.length === 0) {
+    return [
+      SOURCE_MARK_MOUNT_UPDATE,
+      '这一场问事的临时挂载**已全部移除**：此前注入的挂载内容不再适用于后面的问题，不要再用它。',
+    ].join('\n') + '\n'
+  }
+  return [
+    SOURCE_MARK_MOUNT_UPDATE,
+    '这一场问事的临时挂载变了：以**下面这一份**为当前挂载（此前注入的挂载内容已被它取代）。',
+    '',
+    blocks.join('\n\n'),
+  ].join('\n') + '\n'
 }
 
 /**

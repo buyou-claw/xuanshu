@@ -18,6 +18,7 @@
 import { consultAgentCapability, resumeConsultAgent } from '../consult/agent.mjs'
 import { isConsultSessionId, createConsultStore } from '../consult/store.mjs'
 import { waitForTurnEnd } from '../consult/turn.mjs'
+import { reconcileTurns } from '../consult/turns.mjs'
 import { createPuMethods } from '../pu/service.mjs'
 import { resolveDataDir } from '../bazi/service.mjs'
 import { ensureConsultAgent } from './agent.mjs'
@@ -91,7 +92,9 @@ export function createSedimentMethods(ctx, config = {}) {
       if (signal?.aborted === true) throw new Error(ABORTED_MESSAGE)
       const sessionId = requireConsultSessionId(source.sessionId)
 
-      const manifest = consultStore.read(sessionId)
+      // 轮次账先与会话日志核对一次（`turns` 只记玄枢受理过的轮次；用户可能从原生 composer 说过话）——
+      // 不核的话，一场真的问过的问事会被下面那道门拒掉（见 consult/turns.mjs）。
+      const { manifest } = await reconcileTurns(ctx, consultStore, sessionId)
       if (manifest === null) {
         throw new Error(`问事记录不存在：${sessionId}（列表以旁挂清单为准 —— 它不是一场问事，或者记录已经不在 <dataDir>/consult/sessions/ 里了）。`)
       }

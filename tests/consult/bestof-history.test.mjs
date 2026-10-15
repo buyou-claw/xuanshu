@@ -65,28 +65,30 @@ async function runToEnd(bestof, sessionId) {
 }
 
 /**
- * 「会话日志」= 假 agent 收到的**每一条投递**（宿主能碰到日志的全部通道）。
- * 形状与真日志一致：每条都是投递给会话的 `user/message`。
+ * 「会话日志」= 假 agent 收到的**每一条投递**（宿主能碰到日志的全部通道，含 `inject()`）。
+ * 「落选候选的正文有没有漏进日志」这类断言用**这一份**：收窄通道会让判据变松。
  */
-function sessionLog(agents) {
+function allDeliveries(agents) {
   const rows = []
   for (const agent of agents.live.values()) {
     for (const call of agent.calls) rows.push({ sessionId: agent.id, via: call.kind, message: call.message })
   }
   return rows
 }
-const logText = (agents) => JSON.stringify(sessionLog(agents))
+
+const logText = (agents) => JSON.stringify(allDeliveries(agents))
 const recordOf = (sandbox, sessionId) => sandbox.json('consult', `${sessionId}.bestof.json`)
 
 describe('task-14 · 采用后：采用稿进历史，落选候选永不进日志', () => {
   it('采用 c1：日志多出**恰好一条**消息 —— 采用稿本身，带我们的 source kind', async () => {
     const { bestof, session, agents, sandbox } = await scene()
     const started = await runToEnd(bestof, session.sessionId)
-    const before = sessionLog(agents)
+    // 比的是**全部通道**（含 `inject()`）：多出一条别的投递也要红（收窄到 followup 会让判据变松）。
+    const before = allDeliveries(agents)
 
     const { bestOf, delivery } = await bestof['bestof.adopt']({ runId: started.runId, decision: 'adopt', adoptedId: 'c1' })
 
-    const after = sessionLog(agents)
+    const after = allDeliveries(agents)
     // ③ adopt 前后日志的差异**只有那一处**。
     expect(after).toHaveLength(before.length + 1)
     expect(after.slice(0, before.length)).toEqual(before)
@@ -137,11 +139,13 @@ describe('task-14 · 采用后：采用稿进历史，落选候选永不进日�
 
   it('跑完不写、否决不写：只有「采用 / 合并」才动日志', async () => {
     const { bestof, session, agents } = await scene()
+    // 判据是**差异**（全部通道，含 create 时那条上下文注入）：跑完 / 否决之后一条新投递都不许有。
+    const before = allDeliveries(agents)
     const started = await runToEnd(bestof, session.sessionId)
-    expect(sessionLog(agents), '跑完这一轮不该往会话里写任何东西').toEqual([])
+    expect(allDeliveries(agents), '跑完这一轮不该往会话里写任何东西').toEqual(before)
 
     const { delivery } = await bestof['bestof.adopt']({ runId: started.runId, decision: 'reject' })
-    expect(sessionLog(agents), '否决不该往会话里写任何东西').toEqual([])
+    expect(allDeliveries(agents), '否决不该往会话里写任何东西').toEqual(before)
     expect(delivery).toBeUndefined()
     expect(logText(agents)).not.toContain(WINNER)
     expect(logText(agents)).not.toContain(LOSER)
@@ -164,10 +168,11 @@ describe('task-14 · 采用后：采用稿进历史，落选候选永不进日�
   it('改选（再点另一份）：日志多第二条，两条都是人点的，落选的仍在记录里', async () => {
     const { bestof, session, agents } = await scene()
     const started = await runToEnd(bestof, session.sessionId)
+    const before = allDeliveries(agents)
     await bestof['bestof.adopt']({ runId: started.runId, decision: 'adopt', adoptedId: 'c1' })
     await bestof['bestof.adopt']({ runId: started.runId, decision: 'adopt', adoptedId: 'c2' })
 
-    const rows = sessionLog(agents)
+    const rows = allDeliveries(agents).slice(before.length)
     expect(rows).toHaveLength(2)
     expect(rows.map((row) => row.via)).toEqual(['followup', 'followup'])
     expect(rows[0].message.content[0].text).toContain(WINNER)
@@ -197,13 +202,14 @@ describe('task-14 · 采用后：采用稿进历史，落选候选永不进日�
     }
     const { bestof, session, sandbox } = await scene({ services })
     const started = await runToEnd(bestof, session.sessionId)
+    const before = allDeliveries(agents)
     delete services.agents
 
     const { bestOf, delivery } = await bestof['bestof.adopt']({ runId: started.runId, decision: 'adopt', adoptedId: 'c1' })
     expect(bestOf.adoptedId).toBe('c1') // 人点过就是点过了
     expect(delivery.ok).toBe(false)
     expect(delivery.error).toMatch(/ctx\.agents/u)
-    expect(sessionLog(agents)).toEqual([]) // 一条都没写进去
+    expect(allDeliveries(agents), '全部通道，一条都没写进去').toEqual(before)
     const record = recordOf(sandbox, session.sessionId)
     expect(record.deliveryError).toMatch(/ctx\.agents/u)
     expect(record.deliveries).toBeUndefined()
@@ -240,12 +246,13 @@ describe('task-14 · 采用后：采用稿进历史，落选候选永不进日�
     const { session } = await consult['consult.create']({ pus: [] })
     const bestof = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir })
     const started = await runToEnd(bestof, session.sessionId)
+    const before = allDeliveries(agents)
 
     const failed = await bestof['bestof.adopt']({ runId: started.runId, decision: 'adopt', adoptedId: 'c1' })
     expect(failed.delivery.ok).toBe(false)
     expect(failed.bestOf.adoptedId).toBe('c1')
     expect(recordOf(sandbox, session.sessionId).deliveryError).toBeDefined()
-    expect(sessionLog(agents)).toEqual([])
+    expect(allDeliveries(agents), '投递失败那次一条都没写进去').toEqual(before)
 
     broken = false
     const retried = await bestof['bestof.adopt']({ runId: started.runId, decision: 'adopt', adoptedId: 'c1' })
@@ -253,7 +260,7 @@ describe('task-14 · 采用后：采用稿进历史，落选候选永不进日�
     const record = recordOf(sandbox, session.sessionId)
     expect(record.deliveryError).toBeUndefined()
     expect(record.deliveries).toHaveLength(1)
-    const rows = sessionLog(agents)
+    const rows = allDeliveries(agents).slice(before.length)
     expect(rows).toHaveLength(1)
     expect(rows[0].message.content[0].text).toContain(WINNER)
     expect(logText(agents)).not.toContain(LOSER)
@@ -266,7 +273,9 @@ describe('task-14 · 采用稿的形状稳定（不受消息工厂两条路影�
     const started = await runToEnd(bestof, session.sessionId)
     await bestof['bestof.adopt']({ runId: started.runId, decision: 'adopt', adoptedId: 'c1' })
 
-    const [row] = sessionLog(agents)
+    // 取全部投递的**最后一条**：adopt 是这条会话最后发生的事（多一条别的投递也会被这一步照出来）。
+    const row = allDeliveries(agents).at(-1)
+    expect(row.via).toBe('followup')
     expect(Object.keys(row.message).sort()).toEqual(['content', 'id', 'role', 'source'])
     expect(row.message.content[0].text.startsWith('【已采用的多 AI 合参稿】')).toBe(true)
   })

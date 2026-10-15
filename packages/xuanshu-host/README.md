@@ -133,11 +133,15 @@ DSH 原有的工作区 / `conversation` 面板一字不动。
 packages/xuanshu-host/lib/consult/
   store.mjs     旁挂清单：<dataDir>/consult/sessions/<sessionId>.json（schema xuanshu/consult@1）+ id 前缀与 slug 归一
   agent.mjs     把会话接上 agent：缺省 preset 组合（mount）+ 模型选择；能力门（缺服务就拒绝发问）
-  context.mjs   首轮注入的正文装配（纯函数：底座谱 → 底稿 → 勾选谱；每段带【来源：…】）
+  context.mjs   注入正文的装配（纯函数：底座谱 → 底稿 → 勾选谱 → 挂载；每段带【来源：…】）
+                + buildMountUpdateContext（挂载**变更**段，票 12）
+  inject.mjs    上下文读取 + 装配的**单一来源**：consult.create/send 与 bestof.run 都从这里取
   message.mjs   注入消息载体：source.kind = 'xuanshu-consult'（自定义 MessageSourceMap 合并点）
   turn.mjs      waitForTurnEnd：等一轮结束看 turn/end，不是 whenIdle()
+  turns.mjs     轮次账核对：按**会话日志**把 turns / 标题补齐（原生 composer 说的那一句也算）
   history.mjs   会话事件流 → ConsultMessage（只读投影；isSessionNotFound 认上游错误码）
-  service.mjs   六个方法：create / send / list / read / rename / defaults
+  bestof*.mjs   多 AI 合参（票 11）：run / state / adopt / cancel + 落 <sessionId>.bestof.json
+  service.mjs   六个方法：create / send / list / read / rename / defaults（+ setMounts，票 12）
 ```
 
 **分类载体**（ADR-0009，契约 §1；rc.2 的会话 `meta` 是闭集 7 字段且逐字段挑，额外键**静默丢弃**）：
@@ -154,8 +158,8 @@ packages/xuanshu-host/lib/consult/
 | method | 做什么 |
 |---|---|
 | `consult.defaults` | `{required:[底座谱,底稿], optional:[可勾选谱]}`；底座走票 08 `bazi.basePu`，底稿探测 `<dataDir>/digao.md`（**不存在就 `present:false`，不造空底稿**），可选谱来自票 09 `pu.list()`（读不出来的谱不进列表） |
-| `consult.create` | 铸 id → `mkdir -p <dataDir>/consult` → **`ctx.agents.create(...)`**（组合口径见下）→ 写旁挂清单；清单写失败就把刚建的会话 `dispose` 掉（不留「跑得起来但列表里看不见」的会话） |
-| `consult.send` | 先过**能力门**（preset / 模型服务缺一个就拒绝，不给假 `accepted`）→ 首轮 `agent.inject(注入消息)` 再 `agent.followup(问题)`，**受理即回 `{accepted:true}`**（不等答完）；同会话发问串行（并发两问不许丢 `turns` 更新、不许灌两遍上下文）；进程重启后会 `agents.resume(...)` 接回来（preset 取会话 header 里存的那个） |
+| `consult.create` | 铸 id → `mkdir -p <dataDir>/consult` → **`ctx.agents.create(...)`**（组合口径见下）→ 写旁挂清单 → **首轮上下文注入**（`agent.inject()`，不唤醒）；清单写失败就把刚建的会话 `dispose` 掉（不留「跑得起来但列表里看不见」的会话） |
+| `consult.send` | 先过**能力门**（preset / 模型服务缺一个就拒绝，不给假 `accepted`）→ 首轮上下文**已在 create 时灌过**，这里只在「create 没灌成 / 会话是别的进程建的」时补（补之前先核会话日志，见下）→ 挂载变更的增量（票 12）→ `agent.followup(问题)`，**受理即回 `{accepted:true}`**（不等答完）；同会话发问串行（并发两问不许丢 `turns` 更新、不许灌两遍上下文）；进程重启后会 `agents.resume(...)` 接回来（preset 取会话 header 里存的那个） |
 | `consult.list` | 读旁挂目录，`createdAt` 倒序（坏文件跳过，不拖垮整张列表） |
 | `consult.read` | 旁挂清单给标题/勾选谱，正文走 **`ctx.sessionQuery.readSession(id)`**（本机是 `session.v4.jsonl.zstd`，**不自己解压**）；刚建好还没落盘的会话 → `messages: []` |
 | `consult.rename` | 改名落到旁挂清单（列表与阅读器都读它） |
@@ -178,7 +182,25 @@ packages/xuanshu-host/lib/consult/
 **注入载体（契约 §3 让实现者择一，这里记明）**：**单独一条注入消息**，不是「同一个 content part 数组」。
 理由：多 content part 只有**一个** `source.kind`，把用户的问题也标成注入（轨迹里显示成「注入」行）就错了；
 所以注入用 `agent.inject()`（不唤醒）排在 `agent.followup()`（唤醒）之前 —— 于是它必然落在这一轮的问题之前，
-且各自带各自的 kind。**首轮判据**是旁挂清单里的 `turns === 0`（跨进程成立）。
+且各自带各自的 kind。
+
+**注入时机与三处判据**（评审修复轮改定，别再退回「只在第一问注入」）：
+
+| 时机 | 干什么 | 为什么 |
+|---|---|---|
+| `consult.create` | 灌**首轮上下文**（底座谱 + 底稿 + 勾选谱 + 挂载） | 门厅一开会话就 `openSession(id)`，用户完全可能直接在**原生 composer** 里说第一句 —— 那条路不经过 `consult.send`。判断「灌过没有」：同进程看内存、跨进程看**会话日志**里有没有 `source.kind='xuanshu-consult'` 的消息（`turns === 0` 时才去读一次） |
+| `consult.setMounts`（确认那一刻） | 挂载**变更**段（新增 / 换掉 / 全部移除都算） | 用户可能在抽屉里挂完再回会话里问；挂载清单写进旁挂清单 ≠ 模型看得到 |
+| `consult.send` | 上面两处的**兜底**（会话不在本进程活着 / create 时注入失败）；并把轮次账与会话日志核对一次 | 兜底必须落在问题之前；`turns` 只记过玄枢受理过的轮次，用户从原生 composer 说的第一句也要算（票 15 的 `sediment.draft` 读它） |
+
+「已经交给模型的那一份挂载」记在旁挂清单的 `mountsInjected`（增量判据：当前 `mounts` 与它不同才补一段；
+**只有内容真的纳入**才算交付 —— 读不出来 / 全被裁掉时留着，下一问再试）。
+**合参的候选流**（票 11）不走会话历史，所以 `bestof.run` 用**同一份装配**（`inject.mjs`）把上下文并进候选的
+用户消息 —— 判官与合并槽**不带**（判官只看问题与候选）。
+
+**`turns` 是「核对过的」轮数**：它由 `lib/consult/turns.mjs` 在**玄枢接手这个会话的那一刻**与会话日志核对
+（`consult.send` / `sediment.draft`）—— 日志里 `source.kind='user'` 的 `user/message` 都算一轮，
+包括用户从原生 composer 直接说的那些。边界：一次**纯原生**的会话在玄枢下一次接手之前，旁挂清单里的
+`turns` 仍是 0（刻意不用常驻 `session/event` 监听器：那会让每次问事漏一个监听器）。
 
 **内容口径**：底座谱与勾选谱只给 **manifest 概览 + summary + 文件路径**（正文由 AI 用工具按需读，
 票面第 3 条「AI 自己完成加载谱资料」）；底稿给**全文**（它本身就是精简汇总这一层）；

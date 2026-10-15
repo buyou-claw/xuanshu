@@ -17,6 +17,7 @@
 import { resolveDataDir } from '../bazi/service.mjs'
 import { defaultModelSelection, resumeConsultAgent } from './agent.mjs'
 import { BESTOF_SCHEMA, createBestofStore, newRunId } from './bestof-store.mjs'
+import { createContextAssembly } from './inject.mjs'
 import {
   collectStream,
   costUsdOf,
@@ -173,6 +174,8 @@ export function createBestOfMethods(ctx, config = {}) {
   const now = typeof config.now === 'function' ? config.now : Date.now
   const consultStore = createConsultStore(dataDir)
   const store = createBestofStore(dataDir)
+  /** 候选看到的上下文 = 这场问事的上下文（与 `consult.send` 的**同一份装配**，见 inject.mjs）。 */
+  const assembly = createContextAssembly(ctx, config)
   /** 活记录（轮询读它）；进程重启后由 `store.findByRunId()` 冷查。 */
   const live = new Map()
   /** 每个 run 一个中断开关：`bestof.cancel` 用它真的把 N 路流掐掉（S9「停止全部」）。 */
@@ -260,7 +263,7 @@ export function createBestOfMethods(ctx, config = {}) {
    * 后台跑一次合参：N 路并行 → judge → 落记录。任何一路失败都只标那一张卡（S9 §6 部分失败态），
    * 整次失败（全部候选都没文本）也照样落记录，界面看得见「为什么没成」。
    */
-  async function execute(record, { question, routes, signal }) {
+  async function execute(record, { question, context, routes, signal }) {
     const completionOrder = []
     await Promise.all(
       record.candidates.map(async (candidate, index) => {
@@ -269,6 +272,7 @@ export function createBestOfMethods(ctx, config = {}) {
           route,
           angle: resolveAngles([candidate.angle])[0],
           question,
+          context,
           signal,
           now,
           // 流式回填：界面轮询 `bestof.state` 就能看到半成品（写盘节流在下面）。
@@ -382,9 +386,15 @@ export function createBestOfMethods(ctx, config = {}) {
       const capability = bestofCapability(ctx)
       if (!capability.ok) throw new Error(`这次合参发不出去。${capability.detail}`)
       // 合参挂在问事会话上：旁挂清单是「这是哪一次问事」的权威（票 10 契约 §2）。
-      if (consultStore.read(sessionId) === null) {
+      const manifest = consultStore.read(sessionId)
+      if (manifest === null) {
         throw new Error(`问事记录不存在：${sessionId}（合参挂在问事会话上，先 consult.create）。`)
       }
+      // 候选流不带会话历史（它直接走 `ctx.llm.stream()`），所以把这场问事的上下文**读出来带上**：
+      // 底座谱 + 底稿 + 勾选谱 + 挂载，与首轮注入**同一份装配**。
+      // 评审实测的缺陷正是这一处：候选只拿到一句裸问题 —— 问「结合我的信息建议怎么做？」
+      // 时，答出来的东西与这场问事毫无关系，而界面上一切正常。
+      const context = await assembly.buildInjection(manifest)
 
       const angles = resolveAngles(source.angles)
       const routes = await resolveRoutes(ctx, { profileIds: source.profileIds, count: angles.length })
@@ -415,7 +425,7 @@ export function createBestOfMethods(ctx, config = {}) {
       const controller = new AbortController()
       aborts.set(record.runId, controller)
       // 后台跑：不 await（见文件头第 1 条）。失败已折进记录，这里只兜住「连记录都没写成」。
-      void execute(record, { question, routes, signal: controller.signal })
+      void execute(record, { question, context, routes, signal: controller.signal })
         .catch((error) => {
           record.finishedAt = new Date().toISOString()
           record.judge = { mode: 'failed', adoptedId: null, ranking: [], error: `合参执行失败：${String(error?.message ?? error)}` }
