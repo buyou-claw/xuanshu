@@ -23,8 +23,16 @@ import { findFreePort, httpRequest, probeMcpInitialize, startFakeMcp, waitMcpRea
 
 const ENVELOPE_NAMES = ['bazi-ok-default', 'bazi-ok-clock', 'bazi-ok-meansolar', 'bazi-gate', 'bazi-error', 'bazi-ok-default-no-settings-timealg']
 
-/** 捕获目录在不在（`.scratch/` 不入库）：不在就跳过「对回捕获」那一组，不假装验过。 */
-const HAS_CAPTURES = existsSync(CAPTURES_DIR)
+/**
+ * 捕获（`.scratch/` 不入库）按**每个用例真正要读的文件**判在不在。
+ *
+ * 为什么不用「目录在不在」当开关：目录里多了别的文件（本轮：票 05 的两份 pin 离线副本被放回同一目录）
+ * 就会把「跳过」变成假红 —— 守卫比依赖粗，是同一个 bug 的另一面。
+ */
+const capturePath = (name) => join(CAPTURES_DIR, name)
+const ENVELOPE_CAPTURES = ['gt06-envelope-default.json', 'gt06-envelope-clock.json', 'gt06-envelope-meansolar.json']
+const HAS_ENVELOPE_CAPTURES = ENVELOPE_CAPTURES.every((name) => existsSync(capturePath(name)))
+const HAS_GATE_CAPTURE = existsSync(capturePath('gt06-gate-raw.json'))
 const HAS_PROFILE_COPY = existsSync(PROFILE_HOST_LIB)
 
 const receivers = []
@@ -75,7 +83,7 @@ describe('P0 · 替身自检（fixture 自己是对的）', () => {
       expect(gate.data?.bazi?.fourColumns).toBeUndefined()
     })
 
-    it.skipIf(!HAS_CAPTURES)('逐字段路径对回真实捕获：fixture 不是手写的', () => {
+    it.skipIf(!HAS_ENVELOPE_CAPTURES)('逐字段路径对回真实捕获：fixture 不是手写的', () => {
       const cases = [
         ['bazi-ok-default', 'gt06-envelope-default.json', 0],
         ['bazi-ok-clock', 'gt06-envelope-clock.json', 1],
@@ -100,7 +108,7 @@ describe('P0 · 替身自检（fixture 自己是对的）', () => {
       }
     })
 
-    it.skipIf(!HAS_CAPTURES)('gate fixture 与 gt06-gate-raw.json 的 SSE 载荷一致（含 4 条追问的原文）', () => {
+    it.skipIf(!HAS_GATE_CAPTURE)('gate fixture 与 gt06-gate-raw.json 的 SSE 载荷一致（含 4 条追问的原文）', () => {
       const gate = readJson(join(ENVELOPES_DIR, 'bazi-gate.json'))
       const raw = readJson(join(CAPTURES_DIR, 'gt06-gate-raw.json'))
       const line = String(raw.text).split(/\r?\n/).find((entry) => entry.startsWith('data: '))
@@ -290,7 +298,9 @@ describe('P0 · 替身自检（fixture 自己是对的）', () => {
       }
     })
 
-    it.skipIf(!HAS_CAPTURES)('PROVENANCE.md 写明了那处「契约与真机不符」（fourColumns 里是 time）', () => {
+    it('PROVENANCE.md 写明了那处「契约与真机不符」（fourColumns 里是 time）', () => {
+      // 这条读的是**仓库里**的 PROVENANCE.md —— 以前它挂在 `skipIf(!HAS_CAPTURES)` 上，
+      // 于是在没有 .scratch 的机器上「仓库文档有没有写清」这件事从来没被验过（假跳过）。
       const provenance = readFileSync(join(ENVELOPES_DIR, 'PROVENANCE.md'), 'utf8')
       expect(provenance).toMatch(/fourColumns/)
       expect(provenance).toMatch(/\*\*time\*\*/)

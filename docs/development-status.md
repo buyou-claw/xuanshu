@@ -213,6 +213,18 @@ S4 漂移基线只检查**基线里有的行**是否存在，新增 bundle 带�
 **这一轮的教训**：**测试总数也会说谎**。文件级收集失败在摘要里是「少了几条 passed」，而
 `skipIf(证据存在)` 会把「证据没了」渲染成「跳过」——两种都不会红在自己的名字上。见下节陷阱 3。
 
+**这一轮的改进（把上面三件事变成机器判据）**
+
+| 改了什么 | 为什么 |
+|---|---|
+| `scripts/check-test-inventory.mjs` + `tests/test-inventory.json` + `pnpm test:inventory` | 「用例还在不在、数对不对」的机器判据：文件收集到 0 条 / 用例数比基线少 / 已知红之外的失败，各自红。基线 1033 条 · 98 文件，已知红只有 S1 两条（逐条写理由） |
+| `tests/setup/pin.test.mjs`：副本读取改哨兵 + **顶层门** | 顶层 `readFileSync` 一抛就是**整个文件收集失败**（静默消失）；现在缺证据 = 那一条红 + 那一组跳过（`describe.skipIf`），**总数不变**。红绿实测：隐藏副本 → `1 failed | 53 passed | 8 skipped (62)`（同一文件 10 条照旧被收集），失败标题就是「两份离线证据副本都在」并给出取回方法 |
+| `tests/horosa/p0-fixtures.test.mjs`：守卫改**按文件**，并摘掉一条永不执行的跳过 | `existsSync(CAPTURES_DIR)` 是目录级开关却管着 4 个具体文件 —— 补回两份 pin 副本就把「跳过」变成假红（本轮实测）。`PROVENANCE.md` 那条读的是**仓库里**的文件，却挂在 `.scratch` 上 ⇒ 在没有 .scratch 的机器上从未执行 |
+| `.github/workflows/verify.yml`（仓库第一道 CI）+ `pnpm verify:all` | 此前没有 workflow / hook / lint 配置：tsc、产物同步、用例清单门全靠人记得跑 |
+| `scripts/cleanup-worktrees.mjs` + `pnpm cleanup:worktrees` | 收 worktree 的**证明链**：分支 tip 必须是 HEAD 祖先（否则只报告不删）→ 脏工作区先 stash → `git worktree remove` → Windows 用 `cmd /c rmdir /s /q`（不跟随 junction） |
+
+**环境事实（省下下一次的摸索）**：`github.com:443` 会间歇性 reset（本轮 `git push` 重试到第 4 次才成功，`ls-remote` 也时通时断），而 **GitHub MCP 走另一条路、一直可用** —— push/fetch 用重试循环更省事。仓库根依赖硬链自 `E:\.pnpm-store\v11`。`captures/` 里那两份 pin 副本是**公开 release 资产**（可按 pin 的 `evidence` URL 取回并逐值核对），`gt06-*` 那份真机捕获取不回来、只能重跑探针。
+
 ## 验证边界
 
 完整装配五条 seam 的当前结果：S2（进程内启动）、S3（客户端产物）、S4（上游行基线）、S5（真实 CLI 报告）通过；
@@ -285,3 +297,6 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 - 跨半/跨票的接口面**先冻结成契约文档**（如 `.scratch/notes/t08-contract.md`）再并行实现，
   避免两条分支在集成时对不上。
 - 每完成一个阶段：推分支 + 开票面 PR + 在对应 issue 留证据，做法照票 01–07 的历史形态。
+- **收尾两条命令**：`pnpm verify:all`（类型 + 产物同步 + 用例清单门）、`pnpm cleanup:worktrees`（先证明分支已并入，再存档，再删）。
+- **数字只从工具输出里抄**：用例计数抄 `pnpm test:inventory` 那一行，五 seam 抄 `pnpm verify:assembly` 的输出。README、台账、PR body 三处手抄过一次（992 vs 1020）——手抄的必然漂。
+- **合并方向的最后一棒**：分支并进集成分支之后，如果那条分支又提交、又并回一次集成分支，就必须**再并一次回去** —— 票 13 客户端两笔就是这么丢的（`cleanup:worktrees` 的「必须是 HEAD 祖先」正是拦这个的）。

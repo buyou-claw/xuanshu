@@ -39,17 +39,26 @@ function parseSha256Sums(text) {
 
 const pinText = readFileSync(PIN_FILE, 'utf8')
 const pin = JSON.parse(pinText)
-const sums = parseSha256Sums(readFileSync(SHA256SUMS_TXT, 'utf8'))
-const manifest = JSON.parse(readFileSync(RUNTIME_MANIFEST_JSON, 'utf8'))
 
-// 只读一次，供多条用例共用；顺带在「离线副本缺失」时报一个能读懂的错误（而不是 ENOENT 堆栈）。
+/**
+ * 离线副本**必须在收集期就能缺**：顶层 `readFileSync` 一旦抛，这个文件**整个收集失败** ——
+ * 它的用例会从总数里消失（本轮实测：总数 1030 → 1021，而摘要只显示「passed 变少」，不在失败名单里）。
+ * 所以读成「缺席就给哨兵 + 门放在下面那条用例上」：红得响，也红在自己的名字上。
+ */
+const readCapture = (path, parse) => (existsSync(path) ? parse(readFileSync(path, 'utf8')) : undefined)
+const sums = readCapture(SHA256SUMS_TXT, parseSha256Sums) ?? {}
+const manifest = readCapture(RUNTIME_MANIFEST_JSON, JSON.parse) ?? {}
 const fixturesPresent = existsSync(SHA256SUMS_TXT) && existsSync(RUNTIME_MANIFEST_JSON)
 
-describe('票 05 · pin 自洽（horosa-pin.json ↔ 离线证据副本）', () => {
-  it('两份离线证据副本都在（缺了就必须红，不许静默跳过）', () => {
-    expect(fixturesPresent, `离线副本缺失：${CAPTURES_DIR}`).toBe(true)
-  })
+// 门：副本缺失时**只有这一条红**，下面那一组整组跳过（不假装验过，也不静默消失）。
+it('两份离线证据副本都在（缺了就必须红，不许静默跳过）', () => {
+  expect(
+    fixturesPresent,
+    `离线证据副本缺失：${CAPTURES_DIR}\n（.scratch/ 不入库；按 scripts/setup/horosa-pin.json 的 release URL 取回，见 docs/development-status.md §10）`,
+  ).toBe(true)
+})
 
+describe.skipIf(!fixturesPresent)('票 05 · pin 自洽（horosa-pin.json ↔ 离线证据副本）—— 副本不在时整组跳过，红留给上面那条', () => {
   it('pin 的 schema / 版本 / 顶层形状正确', () => {
     expect(pin.schema).toBe('xuanshu/horosa-pin@1')
     // B4：版本**从离线副本派生**（runtime manifest 里也写着一个 version），不写死 0.40.1 ——

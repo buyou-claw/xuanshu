@@ -121,6 +121,28 @@ describe('fixture 自检 · 假 uvx（回放真机形状）', () => {
     expect(result.status).not.toBe(0)
   })
 
+  /**
+   * 网络级重试：`TypeError: fetch failed` = 「连接还没起来 / 被拒」，不是断言失败。
+   *
+   * 为什么需要（本轮实测）：假服务器是子进程，全仓跑时启动会慢 —— 原来只给**握手** 5s 窗口，后面的
+   * `fetch` 完全没有重试，于是同一份代码「单独跑绿、全仓跑偶发红」（`fetch failed`）。
+   * 假红比不红更坏：它让新加的用例清单门（`scripts/check-test-inventory.mjs`）每跑几次就报一条假违规。
+   * 只重试网络层，**断言失败照旧立即红**。
+   */
+  async function fetchUp(url, options, attempts = 150) {
+    let last
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        return await fetch(url, options)
+      } catch (error) {
+        last = error
+        if (error?.name !== 'TypeError') throw error
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+    }
+    throw last
+  }
+
   it('serve：MCP 握手是**真机形状**（SSE + mcp-session-id + 信封在 content[0].text 里）', async () => {
     const state = join(sandbox.state, 'serve')
     const port = await findFreePort()
@@ -133,9 +155,9 @@ describe('fixture 自检 · 假 uvx（回放真机形状）', () => {
     const url = `http://127.0.0.1:${port}/mcp`
     const headers = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }
     try {
-      // 等它起监听（最多 5s）
+      // 等它起监听（最多 15s：全仓跑时子进程启动慢，5s 会偶发假红）
       let sessionId
-      for (let attempt = 0; attempt < 50; attempt += 1) {
+      for (let attempt = 0; attempt < 150; attempt += 1) {
         try {
           const response = await fetch(url, {
             method: 'POST',
@@ -152,13 +174,13 @@ describe('fixture 自检 · 假 uvx（回放真机形状）', () => {
           expect(payload.result.serverInfo.version).toBe(PIN_VERSION)
           break
         } catch (error) {
-          if (attempt === 49) throw error
+          if (attempt === 149) throw error
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
       }
 
       // notifications → 202 空体（真机行为：客户端必须容忍空体）
-      const notified = await fetch(url, {
+      const notified = await fetchUp(url, {
         method: 'POST',
         headers: { ...headers, 'mcp-session-id': sessionId },
         body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
@@ -167,13 +189,13 @@ describe('fixture 自检 · 假 uvx（回放真机形状）', () => {
       expect((await notified.text()).trim()).toBe('')
 
       // tools/list → 含 horosa_cn_bazi_birth
-      const listText = await (await fetch(url, { method: 'POST', headers: { ...headers, 'mcp-session-id': sessionId }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }) })).text()
+      const listText = await (await fetchUp(url, { method: 'POST', headers: { ...headers, 'mcp-session-id': sessionId }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }) })).text()
       const tools = JSON.parse(listText.split('data: ')[1]).result.tools
       expect(tools.map((tool) => tool.name)).toContain('horosa_cn_bazi_birth')
 
       // tools/call：信封在 content[0].text；四柱可读；缺确认字段会被闸门挡
       const callArgs = { date: '1990-01-01', time: '12:00', zone: '+08:00', lat: '31n14', lon: '121e29', gender: '1', agent_confirmed_settings: true, clarification_notes: 'fixture' }
-      const okText = await (await fetch(url, { method: 'POST', headers: { ...headers, 'mcp-session-id': sessionId }, body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'horosa_cn_bazi_birth', arguments: callArgs } }) })).text()
+      const okText = await (await fetchUp(url, { method: 'POST', headers: { ...headers, 'mcp-session-id': sessionId }, body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'horosa_cn_bazi_birth', arguments: callArgs } }) })).text()
       const envelope = JSON.parse(JSON.parse(okText.split('data: ')[1]).result.content[0].text)
       expect(envelope.ok).toBe(true)
       expect(envelope.version).toBe(PIN_VERSION)
@@ -181,7 +203,7 @@ describe('fixture 自检 · 假 uvx（回放真机形状）', () => {
         expect(envelope.data.bazi.fourColumns[key].ganzi).toMatch(/^[甲乙丙丁戊己庚辛壬癸][子丑寅卯辰巳午未申酉戌亥]$/)
       }
 
-      const gateText = await (await fetch(url, { method: 'POST', headers: { ...headers, 'mcp-session-id': sessionId }, body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'horosa_cn_bazi_birth', arguments: { ...callArgs, agent_confirmed_settings: false } } }) })).text()
+      const gateText = await (await fetchUp(url, { method: 'POST', headers: { ...headers, 'mcp-session-id': sessionId }, body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'horosa_cn_bazi_birth', arguments: { ...callArgs, agent_confirmed_settings: false } } }) })).text()
       const gate = JSON.parse(JSON.parse(gateText.split('data: ')[1]).result.content[0].text)
       expect(gate.ok).toBe(false)
       expect(gate.code).toBe('agent_guidance.required')

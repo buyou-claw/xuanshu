@@ -1,0 +1,52 @@
+# 仓库的第一道 CI 门（此前：没有 workflow、没有 hook、没有 lint 配置）。
+#
+# 只放**本机能验、且不依赖机器私有证据**的三件事：
+#   1. tsc --noEmit          类型面
+#   2. build-client --check  提交的 lib/client.js 与 src/** 同步（改了源码忘重建会一路绿到 review）
+#   3. check-test-inventory  用例清单门：用例不许悄悄消失；已知红在 tests/test-inventory.json 里逐条列明理由
+#
+# 证据前置：`tests/setup/pin.test.mjs` 要读 `.scratch/assembly-foundation/captures/` 里的两份**公开 release 资产**
+# （`SHA256SUMS.txt` / `runtime-manifest.json`）。`.scratch/` 不入库，所以这里按 `scripts/setup/horosa-pin.json`
+# 的 `evidence` 字段现取（钉版 URL = 单一来源，不在 workflow 里再抄一遍版本号）。
+# `gt06-*` 那份真机捕获取不到 → 相关用例按**按文件**的守卫跳过（不是按目录，见 p0-fixtures 的注释）。
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      - name: restore pin evidence captures
+        shell: pwsh
+        run: |
+          $pin = Get-Content scripts/setup/horosa-pin.json -Raw | ConvertFrom-Json
+          $dir = '.scratch/assembly-foundation/captures'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Invoke-WebRequest -Uri $pin.evidence.sha256sums -OutFile "$dir/horosa-SHA256SUMS.txt"
+          Invoke-WebRequest -Uri $pin.evidence.runtimeManifest -OutFile "$dir/horosa-runtime-manifest.json"
+
+      - name: typecheck
+        run: node ./node_modules/typescript/bin/tsc --noEmit -p packages/xuanshu-client/tsconfig.json
+
+      - name: artifact in sync
+        run: node scripts/build-client.mjs --check
+
+      - name: test inventory gate
+        run: node scripts/check-test-inventory.mjs
