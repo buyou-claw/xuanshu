@@ -1,8 +1,12 @@
-# 09: 璋辩鐞嗭紙鍒涘缓/鏌ョ湅/缂栬緫/绾у埆锛岃氨瑙勮寖 v1锛?
-**What to build:** 璋辨槸鐢ㄦ埛缁存姢寰楀姩鐨勪笢瑗裤€傚垱寤鸿氨鍙渶鎵撳瓧鎴栦涪闄勪欢锛圡D/PDF/浠绘剰鏂囦欢锛夛紝AI 鍊?`xuanshu:create-pu` 杞垚璋辫鑼?v1 鍥哄畾缁撴瀯锛坒rontmatter `spec: pu/1`銆乣name`銆乣level`銆乣tags`銆乣source`銆乣updated_at`锛夛紱绾у埆 `base|optional`锛堢骇鍒墵蹇呭～锛夈€傝氨鍒楄〃鎸夌骇鍒垎缁勩€佸彲鎼滅储绛涢€夈€佺偣寮€鍙锛堝悕绉?鎻忚堪+缁嗚妭锛夈€佸彲鐩存帴缂栬緫淇濆瓨銆侫I 浼樺厛璇?summary銆佹寜闇€娣卞叆銆?
+# 09: 谱管理（创建/查看/编辑/级别，谱规范 v1）
+
+**What to build:** 谱是用户维护得动的东西。创建谱只需打字或丢附件（MD/PDF/任意文件），AI 借 `xuanshu:create-pu` 转成谱规范 v1 固定结构（frontmatter `spec: pu/1`、`name`、`level`、`tags`、`source`、`updated_at`）；级别 `base|optional`（级别≠必填）。谱列表按级别分组、可搜索筛选、点开可见（名称+描述+细节）、可直接编辑保存。AI 优先读 summary、按需深入。
+
 **Blocked by:** 02, 03, 07
 
 **Status:** done（2026-10-15；验收证据见对应 issue 的关闭评论，未验证项见 `docs/design/ui-v1/待实测登记处.md` §6）
 
-- [ ] 鍒涘缓璋憋細鎵撳瓧/涓㈤檮浠?鈫?AI 杞垚 manifest + 鍒嗚妭姝ｆ枃 + summary锛岀敓鎴愬悗灞曠ず渚涚‘璁わ紝纭鍚庤惤鐩?- [ ] 绾у埆 `base|optional`锛歜ase 杩涘簳绋挎彁鐐兼簮锛宱ptional 闂簨鏃舵寜闇€杩藉姞锛涚骇鍒墵蹇呭～
-- [ ] 璋卞垪琛ㄦ寜绾у埆鍒嗙粍銆佸彲鎼滅储绛涢€夈€佺偣寮€鍙銆佸彲鐩存帴缂栬緫淇濆瓨锛堜汉鍙敼 summary锛?- [ ] 鏂囦欢濂戠害娴嬭瘯缁匡細璋?= frontmatter+MD 鐩綍缁撴瀯锛岀鍚堣氨瑙勮寖 v1
+- [ ] 创建谱：打字/丢附件 → AI 转成 manifest + 分节正文 + summary，生成后展示供确认，确认后落盘
+- [ ] 级别 `base|optional`：base 进底稿提炼源，optional 问事时按需追加；级别≠必填
+- [ ] 谱列表按级别分组、可搜索筛选、点开可见、可直接编辑保存（人可改 summary）
+- [ ] 文件契约测试绿：谱 = frontmatter+MD 目录结构，符合谱规范 v1
