@@ -107,7 +107,14 @@ export function RikkePanel({ api, navigate, preloaded, preloadedTimeEdit }: Rikk
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, seeded]);
 
-  /** 人点 `[继续生成]`：**唯一**调用 `rikke.generate` 的地方。 */
+  /**
+   * 人点 `[继续生成]`：**唯一**调用 `rikke.generate` 的地方。
+   *
+   * 面板走裸 `api.generate()` 而不经 `RikkeUiController`：控制器存在的理由是**跨面板**的两件事
+   * （日课卡要重取 status、失败理由要有一个来源），而本屏是那个动作的现场 ——
+   * 结果直接落在本屏的 `view` 上，不需要再绕一圈共享状态。
+   * 「人点才跑」的保证不变：本函数的唯一调用点是确认块的 `[继续生成]` 按钮，effect 里只有 `rikke.status`。
+   */
   const generate = (): void => {
     setConfirming(false);
     setBusy(true);

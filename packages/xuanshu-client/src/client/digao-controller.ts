@@ -25,6 +25,8 @@ export interface DigaoUiController {
   subscribe(listener: () => void): () => void;
   /** 最近一次人点的刷新结果（没跑过 = undefined）。 */
   getOutcome(): DigaoOutcome | undefined;
+  /** 抹掉上一次的刷新结果（卡级 `[重试]` 走它）并广播一次取数，让卡片重读宿主事实。 */
+  clearOutcome(): void;
   /** **人点的刷新**（单飞：连点只跑一次）；失败**不抛**，理由落进 `outcome.reason`。 */
   refresh(): Promise<DigaoOutcome>;
 }
@@ -57,6 +59,11 @@ export function createDigaoUiController(api: DigaoApi): DigaoUiController {
       };
     },
     getOutcome: () => outcome,
+    clearOutcome() {
+      outcome = undefined;
+      revision += 1;
+      notify();
+    },
     refresh() {
       if (running !== undefined) return running; // 单飞：连点不叠加
       running = api

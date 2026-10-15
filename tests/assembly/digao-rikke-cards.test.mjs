@@ -142,6 +142,23 @@ describe('票 13 · 底稿刷新控制器', () => {
     expect(outcome.ok).toBe(false)
     expect(outcome.reason).toBe('刷新失败：EACCES: digao.md')
   })
+
+  it('卡级 [重试] 清掉上一次结果并广播重取（否则点了界面不动）', async () => {
+    const api = {
+      async status() { return { exists: false, meta: null } },
+      async read() { return { markdown: '', meta: null } },
+      async refresh() { throw new Error('EACCES: digao.md') },
+    }
+    const controller = createDigaoUiController(api)
+    await controller.refresh()
+    expect(controller.getOutcome()).toEqual({ ok: false, reason: '刷新失败：EACCES: digao.md' })
+    let notified = 0
+    controller.subscribe(() => { notified += 1 })
+    controller.clearOutcome()
+    expect(controller.getOutcome()).toBeUndefined()
+    expect(controller.getRevision()).toBe(2)
+    expect(notified).toBe(1)
+  })
 })
 
 /* ───────────────────────── 3. 概览面板接线（静态界面事实） ───────────────────────── */
