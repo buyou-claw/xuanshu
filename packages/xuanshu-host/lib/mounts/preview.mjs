@@ -61,7 +61,25 @@ export async function buildMountPreview(ctx, config = {}, mounts = []) {
   const clipped = clipMountLayers(layers, budgetRead.budget)
   return {
     ...clipped,
+    layers: disambiguateHeads(clipped.layers),
     budgetSource: budgetRead.source,
     ...(budgetRead.detail === undefined ? {} : { budgetDetail: budgetRead.detail }),
   }
+}
+
+/**
+ * 两层解析出**完全相同的 head** 时，给它俩补上层的 id。
+ *
+ * 为什么必须补（复核 48e0e0a 规格轴的第 ③ 条）：交付账与日志之间以 `【来源：挂载 <head>】` 为键
+ * （`boundary.mjs` 的对账）—— head 撞车时（两个工作区 id 指向同一个路径、标签也一样）第二层会被
+ * 判成「已经交付过」，于是**永远不投**。层的 id 是稳定的（`kind:mountId`），补在 head 后面只多几个字符，
+ * 而且披露块与注入正文用的是**同一个** `layer.head`（两边同时改，不会一处有一处没有）。
+ *
+ * @param {Array<object>} layers `clipMountLayers()` 的层数组
+ * @returns {Array<object>} 撞车的那几层换了 head，其余原样
+ */
+function disambiguateHeads(layers) {
+  const counts = new Map()
+  for (const layer of layers) counts.set(layer.head, (counts.get(layer.head) ?? 0) + 1)
+  return layers.map((layer) => (counts.get(layer.head) > 1 ? { ...layer, head: `${layer.head} · id=${layer.id}` } : layer))
 }

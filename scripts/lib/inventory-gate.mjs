@@ -30,18 +30,30 @@ export function toRepoPath(absolute, repoRoot) {
 }
 
 /**
- * vitest JSON 报告 → `{files, failures, suiteFailures, skipped, total, reportFailed}`。
+ * vitest JSON 报告 → `{files, failures, suiteFailures, skipped, total, reportFailed, exitCode, unhandledErrors}`。
  *
  * `files` 记的是**收集到的用例数**（含 skip）——「文件收集失败」在摘要里只是「passed 变少」，
  * 所以这里的 0 条与变少才是要抓的形状。
  *
- * **`suiteFailures` 是评审 R1 补上的一类**：`beforeAll` / `beforeEach` 抛错、或 suite 级未处理错误时，
- * 真实 vitest 的报告形状是 **文件 `status: 'failed'` + 里面的用例全是 `skipped`**
- * （`numFailedTests: 0`、`numFailedTestSuites: 1`、`success: false`）——
- * 只看 `assertion.status === 'failed'` 会**完全漏掉**这一类：报告新鲜、条数不减，门照样判通过。
- * 判据因此分两层：用例级失败（`failures`）+ 文件级失败（`suiteFailures`，附报告里给的那句 message）。
+ * **`suiteFailures` 是 hook / suite 错误的独立台账**（评审两轮实测出来的两类形状）：
+ *   - **整文件没跑起来**：`beforeAll` 抛错时文件 `status:'failed'` + 用例全 `skipped`
+ *     （`numFailedTests: 0`、`success: false`）——只看 `assertion.status === 'failed'` 完全漏掉；
+ *   - **与已知红并存**（复核 48e0e0a 的 N1）：同一个文件里一条已知红断言 + 另一个 describe 的
+ *     `beforeAll` 抛错 —— 文件里有失败断言，**但那些 skipped 的用例不是已知红**
+ *     （已知红名单豁免的是「跑过且失败」的断言，豁免不了「没跑起来」的用例）。
+ *   判据因此是：**文件 failed 且（没有失败断言，或有被跳过的用例）**——两种都进 `suiteFailures`，
+ *   断言失败另由 `failures` 逐条对已知红名单。
+ *
+ * **未处理错误只能从 reporter 文本看出来**（复核 48e0e0a 的 N1 第二半）：JSON 报告在那种情况下
+ * `success` 仍是 `true`、0 条失败、也没有文件级失败，**唯一**的信号是 default reporter 打印的
+ * `⎯⎯ Unhandled Errors ⎯⎯` 段与 `Errors  N error` 汇总行（退出码 1 也一样，但「退出码 1」在已知红
+ * 在跑时本来就会出现，单独用它判不出来）。所以 `unhandledErrors` 由调用方从 reporter 文本扫出来传进来，
+ * 与断言失败**各自独立**记账 —— 已知红不能替它背书。
+ *
+ * @param {object} report vitest JSON 报告
+ * @param {{repoRoot?: string, exitCode?: number|null, unhandledErrors?: boolean}} [options]
  */
-export function collectReport(report, { repoRoot }) {
+export function collectReport(report, { repoRoot, exitCode, unhandledErrors } = {}) {
   const files = {}
   const failures = []
   const suiteFailures = []
@@ -51,17 +63,19 @@ export function collectReport(report, { repoRoot }) {
     const assertions = result.assertionResults ?? []
     files[key] = assertions.length
     let failedAssertions = 0
+    let skippedAssertions = 0
     for (const assertion of assertions) {
       if (assertion.status === 'failed') {
         failedAssertions += 1
         failures.push({ file: key, title: assertion.title })
       }
-      if (assertion.status !== 'passed' && assertion.status !== 'failed') skipped += 1
+      if (assertion.status !== 'passed' && assertion.status !== 'failed') skippedAssertions += 1
     }
-    // 文件级失败且**没有任何用例级失败**：用例根本没能跑（hook/suite 抛错、收集后的执行期崩溃）。
-    // 若文件里有用例级失败，那一份已经由 `failures` 记账，不重复报。
-    if (result.status === 'failed' && failedAssertions === 0) {
-      suiteFailures.push({ file: key, message: typeof result.message === 'string' ? result.message : '' })
+    skipped += skippedAssertions
+    // 文件级失败：用例根本没能跑（hook/suite 抛错），或同文件里失败与「没跑起来」并存。
+    // 有失败断言**不能**解释 skipped 的用例 —— 那是两件事，已知红名单只管前者。
+    if (result.status === 'failed' && (failedAssertions === 0 || skippedAssertions > 0)) {
+      suiteFailures.push({ file: key, message: typeof result.message === 'string' ? result.message : '', skippedAssertions })
     }
   }
   return {
@@ -71,19 +85,31 @@ export function collectReport(report, { repoRoot }) {
     skipped,
     total: Object.values(files).reduce((sum, count) => sum + count, 0),
     reportFailed: report?.success === false,
+    exitCode: exitCode ?? null,
+    unhandledErrors: unhandledErrors === true,
   }
 }
 
 /**
  * 这一轮结果 vs 基线 → 违规清单。
  *
- * 四条判据都指向「数量/身份」而不是「某条断言的值」：
+ * 判据都指向「数量/身份」而不是「某条断言的值」：
  *   1. 文件收集到 0 条（收集期报错，用例从总数里静默消失）；
  *   2. 比基线少 / 文件消失（不许悄悄删或悄悄跳过）；
  *   3. 已知红名单之外的**用例级**失败（名单在基线文件里逐条写明理由）；
- *   4. **文件级失败**（hook / suite / 执行期未处理错误）：用例被标成 skipped、一个失败用例都没有，
- *      只看用例级失败会判它通过（评审 R1 的真实反例）。这一条没有豁免名单 ——
- *      真要有已知的文件级失败，先把它变成一条看得见的失败用例再谈豁免。
+ *   4. **文件级失败**（hook / suite 错误）：要么整个文件没跑起来，要么同文件里失败断言与
+ *      没跑起来的用例并存 —— 已知红名单豁免的是「跑过且失败」的断言，豁免不了没跑起来的用例。
+ *      这一条没有豁免名单：真要有已知的文件级失败，先把它变成一条看得见的失败用例再谈豁免。
+ *      **接受的代价**（JSON 报告里没有更细的信号，已实测）：`it.skipIf` 那种**刻意跳过**也会
+ *      被算进「没跑起来的用例」—— 所以「一个文件既有已知红断言、又有刻意跳过」会误红。
+ *      真遇上，就把它拆开（跳过与失败别同文件，或先修掉已知红），别放宽判据：漏报 hook 错误的
+ *      代价（测试整批没跑而门说通过）比误红一次大得多。
+ *   5. **未处理错误**（vitest reporter 的 `Unhandled Errors` 段）：它不进断言失败、`success` 也仍是
+ *      `true`，所以必须**独立**占一条判据 —— 仓库常态有已知红在跑，任何「没有任何失败时才看它」的写法
+ *      等于没看（复核 48e0e0a 的 N1 第二半实测）；
+ *   6. **vitest 自己说失败了却核不出条目**：报告 `success=false`，或**退出码非 0**而
+ *      `failures` 与 `suiteFailures` 都为空（收集期失败 / 环境问题的兜底）。退出码只在这条兜底里用，
+ *      别扩成总判据（已知红在跑时 vitest 自己就 exit 1）。
  *
  * @returns {{violations: string[], known: Array<{file: string, title: string}>}}
  *          `known` 是**放过**的已知红（逐条打印，别静默）；用对象而不是拼好的字符串，
@@ -111,12 +137,27 @@ export function violationsFor({ current, baseline }) {
 
   for (const failure of current.suiteFailures ?? []) {
     const detail = failure.message === '' ? '' : `：${failure.message.slice(0, 200)}`
-    violations.push(`文件级失败（hook / suite / 未处理错误，用例全被标成跳过）：「${failure.file}」${detail}`)
+    const skippedNote = failure.skippedAssertions > 0 ? `（另有 ${failure.skippedAssertions} 条用例没跑起来）` : ''
+    violations.push(
+      `文件级失败（hook / suite 错误）${skippedNote}：「${failure.file}」${detail}`
+      + ' —— 已知红豁免的是跑过且失败的断言，豁免不了没跑起来的用例；若那几条是刻意的 it.skipIf，'
+      + '请把它们与失败分开（或先修掉已知红）再谈豁免。',
+    )
   }
 
-  // 报告说这一轮失败，却既没有用例级失败也没有文件级失败可核对（未处理错误 / 环境问题的形状）。
-  if (current.reportFailed === true && current.failures.length === 0 && (current.suiteFailures ?? []).length === 0) {
-    violations.push('报告 success=false，但没有任何可核对的失败条目（未处理错误 / 环境问题？先看 vitest 的 stderr）')
+  // 未处理错误：**独立于断言失败**的一条判据（复核 48e0e0a 的 N1）。
+  // 它必须自己占一条 —— 仓库常态就有已知红在跑，任何「只有在没有任何失败时才看它」的写法都等于没看。
+  if (current.unhandledErrors === true) {
+    violations.push('未处理错误（vitest reporter 打了 Unhandled Errors）：这类错误不计入断言失败，已知红也不能替它背书 —— 先看 reporter 里那一段堆栈')
+  }
+
+  // 两条兜底都指向「vitest 说这一轮失败，却没有任何可核对的失败条目」：
+  //   - 报告 success=false（收集期 / 环境问题的形状）；
+  //   - 退出 1 但报告干净 —— 未处理错误的报告 success 仍是 true（复核实测）。
+  // 注意：这条只兜「一条失败都核不出来」的情况；未处理错误与已知红并存时由上面那条独立判据抓。
+  const nothingAccounted = current.failures.length === 0 && (current.suiteFailures ?? []).length === 0
+  if (nothingAccounted && (current.reportFailed === true || (typeof current.exitCode === 'number' && current.exitCode > 0))) {
+    violations.push('vitest 这一轮失败了（success=false 或退出码非 0），但没有任何可核对的失败条目 —— 未处理错误 / 环境问题？先看 vitest 的 stderr')
   }
 
   return { violations, known }
@@ -125,30 +166,38 @@ export function violationsFor({ current, baseline }) {
 /**
  * 跑一次 vitest 并**只接受这一轮写出来的**报告。
  *
+ * 用两个 reporter：`json` 写报告文件（机器判据），`default` 写 stdout（人看的进度 + **未处理错误**）。
+ * `default` 那一路是被**捕获后回放**的：JSON 报告里根本不含未处理错误（`success` 仍是 `true`），
+ * 唯一能看出它的是 reporter 文本里的 `Unhandled Errors` 段 / `Errors  N error` 汇总行 ——
+ * 而这段文本只有把 stdout 抓下来才拿得到（原先 stdout 是 `ignore`，等于没有）。
+ *
  * @param {object} input
  * @param {string} input.vitest vitest 入口（`node_modules/vitest/vitest.mjs`）
  * @param {string} input.reportPath 报告落点（这一轮的唯一判据）
  * @param {string} input.repoRoot 工作目录（也是相对路径的基准）
  * @param {Function} [input.spawn] 进程启动器（缺省 `spawnSync`；断言台注入替身来复现「跑挂了」）
  * @param {Function} [input.now] 时钟（缺省 `Date.now`；断言台注入固定刻度）
- * @returns {{report: object, exitCode: number|null}} `exitCode` 非 0 可能是「有已知红」，不是失败信号
+ * @param {Function} [input.echo] reporter 文本的回放入口（缺省写 `process.stdout`；断言台注入收集器）
+ * @returns {{report: object, exitCode: number|null, unhandledErrors: boolean, reporterText: string}}
  * @throws {Error} 起不动 / 没写出报告 / 报告是旧的 / 报告不是合法 JSON —— 四种都**不许**继续比对
  */
-export function runSuiteReport({ vitest, reportPath, repoRoot, spawn = spawnSync, now = Date.now }) {
+export function runSuiteReport({ vitest, reportPath, repoRoot, spawn = spawnSync, now = Date.now, echo = (text) => process.stdout.write(text) }) {
   if (!existsSync(vitest)) {
     throw new Error(`找不到 vitest：${vitest}\n先跑 pnpm install --frozen-lockfile`)
   }
   // 判据 1：旧报告先删掉。删不掉就让下面的「报告是旧的」兜住，绝不静默读旧文件。
   rmSync(reportPath, { force: true })
   const startedAt = now()
-  const run = spawn(process.execPath, [vitest, 'run', '--reporter=json', `--outputFile=${reportPath}`], {
+  const run = spawn(process.execPath, [vitest, 'run', '--reporter=default', '--reporter=json', `--outputFile=${reportPath}`], {
     cwd: repoRoot,
     encoding: 'utf8',
-    stdio: ['ignore', 'ignore', 'inherit'],
+    stdio: ['ignore', 'pipe', 'inherit'],
   })
   if (run?.error !== undefined && run.error !== null) {
     throw new Error(`测试进程起不来：${run.error.message}\n这一轮没有用例清单可比对，不许拿旧报告顶上。`)
   }
+  const reporterText = typeof run?.stdout === 'string' ? run.stdout : ''
+  if (reporterText !== '') echo(reporterText)
   // 判据 2：报告必须存在。测试进程半路死掉（崩溃 / 被杀）时它根本不会写。
   if (!existsSync(reportPath)) {
     throw new Error(`vitest 没写出报告（exit ${run?.status ?? 'null'}）——测试进程没跑完，这一轮**没有**可比对的用例清单；报告路径 ${reportPath}`)
@@ -160,8 +209,38 @@ export function runSuiteReport({ vitest, reportPath, repoRoot, spawn = spawnSync
     throw new Error(`报告是**旧文件**（写于 ${new Date(writtenAt).toISOString()}，这一轮 ${new Date(startedAt).toISOString()} 才启动）：${reportPath}\n不许拿上一轮的报告当这一轮的结果。`)
   }
   try {
-    return { report: JSON.parse(readFileSync(reportPath, 'utf8')), exitCode: run?.status ?? null }
+    return {
+      report: JSON.parse(readFileSync(reportPath, 'utf8')),
+      exitCode: run?.status ?? null,
+      unhandledErrors: detectUnhandledErrors(reporterText),
+      reporterText,
+    }
   } catch (error) {
     throw new Error(`报告不是合法 JSON（测试进程写了一半就没了？exit ${run?.status ?? 'null'}）：${String(error?.message ?? error)}`)
   }
+}
+
+/**
+ * reporter 文本里有没有**这一轮自己**的未处理错误（复核 48e0e0a 的 N1 第二半）。
+ *
+ * 认的是 vitest 4 的 default reporter 自己打的两种形状：分节标题 `⎯⎯ Unhandled Errors ⎯⎯`
+ * 与汇总行 `Errors  N error`。这是**上游打印格式**，所以只在钉版（ADR-0004）上成立 ——
+ * 换 vitest 版本时这条判据要跟着复核（`tests/lib/inventory-gate.test.mjs` 有真 vitest 夹具钉着它）。
+ *
+ * **只看最后一段汇总块**（从最后一个 `Test Files …` 行到结尾）：断言台里会再 spawn 一次 vitest
+ * （清单门自己的单测就是这样），那一路的 reporter 文本会被外层 reporter 当控制台输出打出来 ——
+ * 其中就包含它自己的 `Unhandled Errors` 段与 `Errors 1 error` 行。整篇搜会被这种**嵌套文本**骗到
+ * （本轮实测踩过：门对着全仓套件报了 1 条假违规）。汇总块是**本进程**打的，只有它算数。
+ *
+ * @param {string} reporterText default reporter 的 stdout
+ */
+export function detectUnhandledErrors(reporterText) {
+  if (typeof reporterText !== 'string' || reporterText === '') return false
+  const lines = reporterText.split(/\r?\n/u)
+  let start = -1
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (/^\s*Test Files\s+\d/u.test(lines[index])) { start = index; break }
+  }
+  const ownSummary = (start === -1 ? lines : lines.slice(start)).join('\n')
+  return /⎯+\s*Unhandled Errors\s*⎯+/u.test(ownSummary) || /^\s*Errors\s+\d+ errors?\s*$/mu.test(ownSummary)
 }

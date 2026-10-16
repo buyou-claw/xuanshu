@@ -173,8 +173,14 @@ function removeDisposableSkeleton(path) {
  * 只在里面**全是**自有插件包目录时才动手（多一个陌生条目就报错不删）——`--force` 的适用前提
  * 是 `isDisposableSkeleton` 已经证明这是可丢弃的 profile 骨架，这里只是把「我们自己的那部分」
  * 收干净。
+ *
+ * **根自己可能就是联接**（复核 48e0e0a 的 N2 实测）：`readdirSync` 会**跟随**联接，
+ * 于是「里面全是自有包名」这条守卫会在联接目标上成立，接着递归删掉的其实是**真实文件**
+ * （探针实测：联接目标的哨兵 before=true → after=false，安装器还 exit 0）。
+ * 所以**先 lstat 根**：根是联接就只拆联接本身，一个字节都不跟着走。
  */
 function removeOwnPackagesDir(path) {
+  if (lstatSync(path).isSymbolicLink()) { removeLink(path); return }
   for (const entry of readdirSync(path)) {
     if (!OWN_PACKAGES.includes(entry)) throw new Error(`${path} contains unexpected entry ${entry}; refusing to delete`)
   }
@@ -186,8 +192,11 @@ function removeOwnPackagesDir(path) {
  *
  * 为什么不用 `rmSync(recursive)`：Windows 上 pnpm 的 junction 会被递归删除跟着走，删掉的可能是
  * 仓库里的真件（台账「操作陷阱」3 记过同类事故）。这里只删我们刚物化出来的包文件。
+ *
+ * 根路径也要查一次（纵深防御）：本函数是公开的删除原语，任何调用方传进来一个联接都不该被跟随。
  */
 function removeTreeNoFollow(path) {
+  if (lstatSync(path).isSymbolicLink()) { unlinkSync(path); return }
   for (const name of readdirSync(path)) {
     const child = join(path, name)
     const stat = lstatSync(child)

@@ -20,9 +20,12 @@ import { join } from 'node:path'
 export const SOURCE_MARK_BASE_PU = '【来源：底座谱】'
 export const SOURCE_MARK_DIGAO = '【来源：底稿】'
 
+/** 挂载段标记的**前缀**（`sourceMarkMount()` 拼的就是它）。日志对账要按同一个前缀认标记，别再手抄一遍模板。 */
+export const MOUNT_MARKER_PREFIX = '【来源：挂载 '
+
 /** 临时挂载的段标记（票 12）：`【来源：挂载 工作区「打印车间」】`。 */
 export function sourceMarkMount(label) {
-  return `【来源：挂载 ${label}】`
+  return `${MOUNT_MARKER_PREFIX}${label}】`
 }
 
 /** 挂载披露块的标记（S8 §5 步骤 7：注入内容里必须能看到「砍了多少、为什么砍」）。 */
@@ -204,15 +207,25 @@ function buildMountBlocks(mounts) {
     ...(Array.isArray(mounts.notes) ? mounts.notes.map((note) => `· ${note}`) : []),
   ]
   for (const layer of layers) {
-    const kept = layer.kept ? `已纳入 ${layer.keptChars} / ${layer.chars} 字` : '未纳入本次上下文'
-    lines.push(`· ${layer.head ?? layer.label}：${kept}${layer.clipped ? '（已按段边界裁剪）' : ''}${layer.reason === undefined ? '' : ` —— ${layer.reason}`}`)
+    const hint = hintOf(layer)
+    // 有 hint 的空层（工作流挂载：按设计没有内容可注入）在披露里如实写「没有可注入的内容」——
+    // 它不是「被丢弃」，也不该在披露里说成「未纳入本次上下文」。
+    const status = layer.kept
+      ? `已纳入 ${layer.keptChars} / ${layer.chars} 字`
+      : hint === null ? '未纳入本次上下文' : '没有可注入的内容（见下方说明）'
+    lines.push(`· ${layer.head ?? layer.label}：${status}${layer.clipped ? '（已按段边界裁剪）' : ''}${layer.reason === undefined ? '' : ` —— ${layer.reason}`}`)
   }
   out.push(lines.join('\n'))
 
   for (const layer of layers) {
-    if (!layer.kept) continue
+    const hint = hintOf(layer)
+    // **有 hint 的空层也要单独成块**（复核 48e0e0a 的 N3 连带发现）：这一句「还没接上」本来就该让模型看见，
+    // 而且这段文本进了日志之后，交付账才能按【来源：挂载 …】标记与日志逐层对账 ——
+    // 否则工作流层永远「没交付过」，每一问都会重复注入同一段披露。
+    // 被预算丢掉/读不出来的层仍然只出现在披露块里（不静默截断、不静默消失）。
+    if (!layer.kept && hint === null) continue
     const parts = [sourceMarkMount(layer.head ?? layer.label)]
-    if (typeof layer.hint === 'string' && layer.hint !== '') parts.push(layer.hint)
+    if (hint !== null) parts.push(hint)
     for (const segment of layer.segments ?? []) {
       parts.push(`── ${segment.label} ──`, String(segment.text).trimEnd())
     }
@@ -222,4 +235,9 @@ function buildMountBlocks(mounts) {
     out.push(parts.join('\n'))
   }
   return out
+}
+
+/** 层的 hint（非空字符串才算；`undefined` / 空串都当没有）。 */
+function hintOf(layer) {
+  return typeof layer?.hint === 'string' && layer.hint !== '' ? layer.hint : null
 }

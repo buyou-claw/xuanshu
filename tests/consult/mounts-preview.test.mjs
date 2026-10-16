@@ -129,6 +129,33 @@ describe('票 12 · 预算：config → 模型窗口 → null（不编数）', (
     expect(preview.budgetDetail).toContain('128000')
   })
 
+  it('N4/③：两层 head 撞车（两个工作区 id 指向同一路径、标签也一样）→ 补上层的 id，日志里才认得出谁是谁', async () => {
+    // 交付账与日志以 `【来源：挂载 <head>】` 为键；head 撞车时第二层会被判成「已交付过」而永不投递。
+    const { api, sandbox } = scene({ mounts: [] })
+    const samePath = sandbox.path('work')
+    const first = { kind: 'workspace', id: 'ws-print', label: '打印车间' }
+    await api['consult.setMounts']({ sessionId: SESSION_ID, mounts: [first] })
+    const solo = await api['consult.setMounts']({ sessionId: SESSION_ID, mounts: [first], preview: true })
+    expect(solo.preview.layers[0].head, '只有一层时不该画蛇添足加 id').not.toContain(' · id=')
+
+    // 再挂一个指向**同一路径**、标签也相同的工作区（id 不同）：两层 head 会撞车
+    const twin = { kind: 'workspace', id: 'ws-twin', label: '打印车间' }
+    const registry = fakeWorkspaceRegistryForMounts({
+      workspaces: [
+        { id: 'ws-print', path: samePath, title: '打印车间' },
+        { id: 'ws-twin', path: samePath, title: '打印车间' },
+      ],
+    })
+    const host = makeHost({ services: { workspaceRegistry: registry.service, fs: fakeFsReader().service } })
+    const api2 = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir })
+    await api2['consult.setMounts']({ sessionId: SESSION_ID, mounts: [first, twin] })
+    const { preview } = await api2['consult.setMounts']({ sessionId: SESSION_ID, mounts: [first, twin], preview: true })
+    const heads = preview.layers.map((layer) => layer.head)
+    expect(new Set(heads).size, '撞车时两层必须有各自的 head').toBe(2)
+    expect(heads[0]).toContain(' · id=workspace:ws-print')
+    expect(heads[1]).toContain(' · id=workspace:ws-twin')
+  })
+
   it('resolveMountBudget 是单一来源：0 / 负数 / 非数一律忽略（继续往下探）', async () => {
     const host = makeHost({ services: {} })
     for (const bad of [0, -5, Number.NaN, '60000', undefined]) {

@@ -23,7 +23,8 @@ import { createBaziMethods, resolveDataDir } from '../bazi/service.mjs'
 import { resolveHistoryBudget } from '../mounts/budget.mjs'
 import { buildMountPreview } from '../mounts/preview.mjs'
 import { createPuMethods } from '../pu/service.mjs'
-import { buildConsultContext, buildMountDeltaContext } from './context.mjs'
+import { createBestofStore, currentAdoptedMessageIds } from './bestof-store.mjs'
+import { buildConsultContext, buildMountDeltaContext, sourceMarkMount } from './context.mjs'
 import { buildCandidateHistory, isSessionNotFound, projectConsultMessages } from './history.mjs'
 
 /** 底稿文件名（契约 §2/§3：`<dataDir>/digao.md`，由票 13 生产，本模块只探测与注入）。 */
@@ -79,6 +80,8 @@ export function createContextAssembly(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
   const basePu = async () => createBaziMethods(ctx, { dataDir })['bazi.basePu']()
   const readPu = async (slug) => createPuMethods(ctx, { dataDir })['pu.read']({ slug })
+  /** 合参旁挂记录（候选历史要靠它判「哪一份采用稿还算数」；复核 N4）。 */
+  const bestofStore = createBestofStore(dataDir)
 
   /** 读材料（底座谱 / 底稿 / 勾选谱）——两个入口共用，免得各读一份。 */
   async function readMaterial(manifest) {
@@ -95,10 +98,35 @@ export function createContextAssembly(ctx, config = {}) {
     return { basePu: read?.pu ?? null, digao: readDigao(dataDir), selected }
   }
 
-  /** 挂载预览 → 「内容真的进了这段文本」的那些层对应的挂载（`kept` 才算交付；R4）。 */
+  /**
+   * 挂载预览 → 「内容真的进了这段文本」的那些层的交付账条目。
+   *
+   * 条目里带 `head`：它是注入文本里那段 `【来源：挂载 <head>】` 标记的主体，
+   * 也是**下次边界与日志对账**的唯一凭据（复核 48e0e0a 的 N3：账不能自己说了算，得能在日志里验）。
+   *
+   * 「交付」的两种：`kept`（内容纳入了）与**有 hint 的空层**（工作流：按设计没有内容，
+   * 但那一句「还没接上」确实并进了模型输入）。读不出来的层（`error`）**不算** —— 下一问再试（R4）。
+   */
   function deliveredFromPreview(preview, candidates) {
-    const kept = new Set((preview?.layers ?? []).filter((layer) => layer.kept === true).map((layer) => layer.id))
-    return candidates.filter((mount) => kept.has(`${mount.kind}:${mount.id}`))
+    const deliveredLayers = (preview?.layers ?? []).filter((layer) => layer.kept === true
+      || (typeof layer.hint === 'string' && layer.hint !== '' && layer.error === undefined))
+    const out = []
+    for (const mount of candidates) {
+      const layer = deliveredLayers.find((entry) => entry.id === `${mount.kind}:${mount.id}`)
+      if (layer === undefined) continue
+      out.push({
+        kind: mount.kind,
+        id: mount.id,
+        label: mount.label,
+        ...(typeof layer.head === 'string' && layer.head !== '' ? { head: layer.head } : {}),
+      })
+    }
+    return out
+  }
+
+  /** 一条交付账条目在注入文本里的标记（没有 head 的老条目给不出标记 → 只能当「没交付」重投一次）。 */
+  function markerOf(entry) {
+    return typeof entry?.head === 'string' && entry.head !== '' ? sourceMarkMount(entry.head) : null
   }
 
   /**
@@ -129,28 +157,45 @@ export function createContextAssembly(ctx, config = {}) {
   /**
    * **增量**注入：只补「模型还没见过内容」的层，以及「已经撤下」的层。
    *
-   * 判据是旁挂清单的 `mountsInjected`（**逐层**记的「内容已经交给模型」）：
-   *   - `pending` = 当前挂载里不在 `mountsInjected` 的（新增，或上次内容没读出来 ⇒ 这一问重试，R4）；
-   *   - `removed` = `mountsInjected` 里有、当前清单里没有的（撤下 ⇒ 说一句「不再适用」）。
+   * 判据是**日志**（`loggedMarkers`：边界从会话日志里扫出来的 `【来源：挂载 …】` 标记集合），
+   * 旁挂清单的 `mountsInjected` 只提供「每一层对应的标记是什么」：
+   *   - `pending` = 当前挂载里**标记不在日志**的（新增；上次没读出来 ⇒ 重试，R4；
+   *     或者——复核 N3——上次的注入在模型准备阶段就失败了、消息根本没落日志）；
+   *   - `removed` = 账里有、当前清单里没有、**且标记确实在日志里**的（真有正文在历史里才需要说一句
+   *     「不再适用」；从没落过日志的不用声明）。
    *
-   * 两者都空 → 返回空文本（这一问不必注入任何东西）。
+   * 为什么不只看账：账是我们自己写的，而「交付」发生在 loop 的 append 里。中间任何一处失败
+   * （`prepareRequest` 抛错就是常态路径之一）都会让账走在事实前面 —— 于是那一层**永远**不再重投。
+   * 把日志当权威之后，这一类不一致下一问就自愈。
    *
+   * `loggedMarkers` 缺省为空集合：调用方拿不到日志（替身 / 冷会话）时，账里的层会被当成
+   * 「还没落日志」重投一次 —— 宁可多投一次，也不许漏。
+   *
+   * @param {object} manifest 旁挂清单
+   * @param {{loggedMarkers?: Set<string>}} [options] 会话日志里出现过的挂载标记
    * @returns {Promise<{text: string, mountsInjected: Array<object>|null}>}
    */
-  async function buildMountDelta(manifest) {
+  async function buildMountDelta(manifest, { loggedMarkers = new Set() } = {}) {
     const current = Array.isArray(manifest.mounts) ? manifest.mounts : []
-    const delivered = Array.isArray(manifest.mountsInjected) ? manifest.mountsInjected : []
+    const ledger = Array.isArray(manifest.mountsInjected) ? manifest.mountsInjected : []
     const keyOf = (mount) => `${mount?.kind ?? ''}:${mount?.id ?? ''}`
     const currentKeys = new Set(current.map(keyOf))
-    const deliveredKeys = new Set(delivered.map(keyOf))
-    const pending = current.filter((mount) => !deliveredKeys.has(keyOf(mount)))
-    const removed = delivered.filter((mount) => !currentKeys.has(keyOf(mount)))
+    const entryOf = (mount) => ledger.find((entry) => keyOf(entry) === keyOf(mount))
+    const inLog = (entry) => {
+      const marker = markerOf(entry)
+      return marker !== null && loggedMarkers.has(marker)
+    }
+    const pending = current.filter((mount) => {
+      const entry = entryOf(mount)
+      return entry === undefined || !inLog(entry)
+    })
+    const removed = ledger.filter((entry) => !currentKeys.has(keyOf(entry)) && inLog(entry))
+    const stillDelivered = ledger.filter((entry) => currentKeys.has(keyOf(entry)) && inLog(entry))
     if (pending.length === 0 && removed.length === 0) return { text: '', mountsInjected: null }
 
     const preview = pending.length > 0 ? await buildMountPreview(ctx, config, pending) : undefined
     const text = buildMountDeltaContext({ preview, removed })
-    // 交付账：撤下的划掉，读到了内容的补上（没读到的**留在外面** —— 下一问再试）。
-    const stillDelivered = delivered.filter((mount) => currentKeys.has(keyOf(mount)))
+    // 交付账：撤下的划掉、真在日志里的留着，这一轮读到内容的补上（没读到的**留在外面** —— 下一问再试）。
     return { text, mountsInjected: [...stillDelivered, ...deliveredFromPreview(preview, pending)] }
   }
 
@@ -180,7 +225,10 @@ export function createContextAssembly(ctx, config = {}) {
       snapshot = { events: [] }
     }
     const resolved = await resolveHistoryBudget(ctx, config)
-    const built = buildCandidateHistory({ messages: projectConsultMessages(snapshot), budget: resolved.budget })
+    // 采用稿的**当前性**由旁挂决策判（复核 N4）：日志是追加式的，改选 / 否决都不会删掉旧消息。
+    // 判不出来（老记录）时 `currentAdoptedMessageIds` 给 `null` = 不过滤。
+    const keepAdoptedIds = currentAdoptedMessageIds(bestofStore.read(sessionId))
+    const built = buildCandidateHistory({ messages: projectConsultMessages(snapshot, { keepAdoptedIds }), budget: resolved.budget })
     return built.text === '' ? null : built.text
   }
 

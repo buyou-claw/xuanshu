@@ -29,7 +29,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -314,5 +314,31 @@ describe('install-profile · copy 模式：包进目标、锁文件可校验', (
     expect(run.status).toBe(0)
     expect(run.stdout).toContain('源 profile 没有 pnpm-lock.yaml')
     expect(existsSync(join(home, 'profiles', 'xuanshu', 'pnpm-lock.yaml'))).toBe(false)
+  })
+
+  it('⑨ N2：`--force` 清骨架时，`packages` 本身是联接 → 只拆联接，联接目标里的真实文件一个不动', () => {
+    // 复核 48e0e0a 的 N2 实测（`.scratch/review-48-standards/probe-install-junction.mjs`）：
+    // `readdirSync` 跟随联接 ⇒「里面全是自有包名」这条守卫在**联接目标**上成立 ⇒ 递归删掉真实文件，
+    // 安装器还 exit 0（哨兵 before=true → after=false）。根路径必须**先 lstat**。
+    const { repo, home } = makeFixtureRepo(sandbox)
+    const target = join(home, 'profiles', 'xuanshu')
+    const outside = sandbox.dir('outside-original-packages')
+    const sentinel = join(outside, 'xuanshu-host', 'valuable-source.txt')
+    write(outside, 'xuanshu-host/valuable-source.txt', 'must survive any operation on a junction\n')
+    write(outside, 'xuanshu-client/index.js', 'export default "outside"\n')
+
+    // 可丢弃骨架：dsh-profile-* 名字 + 没有 node_modules + `packages` 是指向外面真实目录的联接
+    write(target, 'package.json', JSON_TEXT({ name: 'dsh-profile-xuanshu', private: true }))
+    symlinkSync(outside, join(target, 'packages'), process.platform === 'win32' ? 'junction' : 'dir')
+
+    const run = runInstaller(repo, ['--home', home, '--force', '--skip-install'])
+    expect(run.stderr).toBe('')
+    expect(run.status).toBe(0)
+    expect(existsSync(sentinel), '联接目标里的真实文件被跟随删除了（N2 复发）').toBe(true)
+    expect(readFileSync(sentinel, 'utf8')).toContain('must survive')
+    expect(existsSync(join(outside, 'xuanshu-client/index.js'))).toBe(true)
+    // 骨架本身照常被换成源 profile 联接（联接只是被拆掉，安装继续）
+    expect(lstatSync(target).isSymbolicLink()).toBe(true)
+    expect(realpathSync(target).toLowerCase()).toBe(realpathSync(join(repo, 'profile')).toLowerCase())
   })
 })

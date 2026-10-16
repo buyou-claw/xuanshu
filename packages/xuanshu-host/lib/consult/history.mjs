@@ -28,15 +28,30 @@ function kindOf(source) {
   return typeof source?.kind === 'string' && source.kind !== '' ? source.kind : undefined
 }
 
+/** 合参候选的历史里**不**出现的 kind：注入进去的谱资料（它已经作为「材料」单独给了候选）。 */
+const HISTORY_EXCLUDED_KINDS = new Set(['xuanshu-consult'])
+
+/** 已采用的合参稿（ADR-0010 第 5 条：历史只带采用稿）——单独标一行，模型才知道那是一份被拍板的稿子。 */
+const ADOPTED_KIND = 'xuanshu-bestof-adopted'
+
 /**
  * 事件流 → `ConsultMessage[]`（只读，不改任何东西）。
+ *
  * @param {{events?: object[]}} snapshot `ctx.sessionQuery.readSession()` 的返回
+ * @param {{keepAdoptedIds?: Set<string>|null}} [options]
+ *        `keepAdoptedIds` 给**候选历史**用（复核 48e0e0a 的 N4）：日志是追加式的，改选 / 否决都不会
+ *        删掉旧的采用稿消息，所以「还算不算当前采用稿」必须由旁挂决策判（`currentAdoptedMessageIds`）。
+ *        `null` / 不给 = **不过滤**（阅读器那一侧照旧看得到全部投递史；判不出来时也不误删）。
  */
-export function projectConsultMessages(snapshot) {
+export function projectConsultMessages(snapshot, { keepAdoptedIds = null } = {}) {
   const events = Array.isArray(snapshot?.events) ? snapshot.events : []
   const messages = []
   for (const event of events) {
     if (event?.type === 'user/message') {
+      // 采用稿的「当前性」不在这一层判：被改选 / 被否决掉的那几份从这里就不进历史。
+      if (keepAdoptedIds instanceof Set
+        && event.data?.source?.kind === ADOPTED_KIND
+        && !keepAdoptedIds.has(event.data?.id)) continue
       const text = textOf(event.data?.content)
       if (text === null) continue
       messages.push({ role: 'user', text, ...pick(atOf(event.time), 'at'), ...pick(kindOf(event.data?.source), 'source') })
@@ -65,12 +80,6 @@ export function isSessionNotFound(error) {
   if (error?.code === 'SESSION_QUERY_SESSION_NOT_FOUND') return true
   return error?.name === 'SessionQueryError' && /not found/iu.test(String(error?.message ?? ''))
 }
-
-/** 合参候选的历史里**不**出现的 kind：注入进去的谱资料（它已经作为「材料」单独给了候选）。 */
-const HISTORY_EXCLUDED_KINDS = new Set(['xuanshu-consult'])
-
-/** 已采用的合参稿（ADR-0010 第 5 条：历史只带采用稿）——单独标一行，模型才知道那是一份被拍板的稿子。 */
-const ADOPTED_KIND = 'xuanshu-bestof-adopted'
 
 /** 一条历史消息的说话人标签（采用稿单独标，别让模型以为那是用户自己写的）。 */
 function labelOf(message) {

@@ -22,11 +22,15 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { collectReport, runSuiteReport, violationsFor } from '../../scripts/lib/inventory-gate.mjs'
+import { collectReport, detectUnhandledErrors, runSuiteReport, violationsFor } from '../../scripts/lib/inventory-gate.mjs'
 
 const REPO_ROOT = resolve(tmpdir(), 'not-a-real-repo')
 /** R1 的真实形状夹具：`beforeAll` 抛错的那个文件（见 fixtures/inventory-hook/）。 */
 const HOOK_FIXTURE = 'tests/lib/fixtures/inventory-hook/hook-failure.mjs'
+/** N1 的第二种真实形状夹具：同一文件里已知红断言 + 另一个 describe 的 hook 抛错。 */
+const MIXED_FIXTURE = 'tests/lib/fixtures/inventory-hook/mixed.fixture.mjs'
+/** N1 的第三种真实形状夹具：断言全绿，只有未处理错误。 */
+const UNHANDLED_FIXTURE = 'tests/lib/fixtures/inventory-hook/unhandled.fixture.mjs'
 const HOOK_FIXTURE_CONFIG = join(process.cwd(), 'tests', 'lib', 'fixtures', 'inventory-hook', 'vitest.config.mjs')
 const litter = []
 afterEach(() => {
@@ -172,13 +176,44 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
   it('合成报告：文件 failed + 用例全 skipped（用例级失败为 0）→ 「文件级失败」违规', () => {
     const current = collectReport(hookReport, { repoRoot: '/repo' })
     expect(current.failures, '用例级失败为 0 —— 这正是漏报的来源').toEqual([])
-    expect(current.suiteFailures).toEqual([{ file: 'tests/hook-failure.test.mjs', message: '' }])
+    expect(current.suiteFailures).toEqual([{ file: 'tests/hook-failure.test.mjs', message: '', skippedAssertions: 1 }])
     const { violations } = violationsFor({ current, baseline: { files: { 'tests/hook-failure.test.mjs': 1 }, knownRed: [] } })
     expect(violations).toHaveLength(1)
     expect(violations[0]).toMatch(/文件级失败/u)
   })
 
-  it('文件里有用例级失败时不再重复报「文件级失败」（那一份已按用例记账）', () => {
+  it('N1 混合形状：同文件一条已知红断言 + 另一个 describe 的 hook 抛错 → 也必须红', () => {
+    // 复核 48e0e0a 的 N1 实测形状（.scratch/review-48-standards/mixed-report.json）：
+    // 文件 failed、1 条失败断言（已知红）+ 1 条 skipped（hook 吃掉的）。旧判据要求
+    // 「没有任何失败断言」才记账 ⇒ 这一类整个漏掉。已知红豁免的是断言，豁免不了没跑起来的用例。
+    const mixedReport = {
+      success: false,
+      numFailedTestSuites: 3,
+      testResults: [
+        {
+          name: '/repo/tests/mixed.test.mjs',
+          status: 'failed',
+          message: '',
+          assertionResults: [
+            { title: 'known red', status: 'failed', ancestorTitles: ['known red suite'] },
+            { title: 'must actually run', status: 'skipped', ancestorTitles: ['new broken setup'] },
+          ],
+        },
+      ],
+    }
+    const current = collectReport(mixedReport, { repoRoot: '/repo' })
+    expect(current.suiteFailures).toEqual([{ file: 'tests/mixed.test.mjs', message: '', skippedAssertions: 1 }])
+    const { violations, known } = violationsFor({
+      current,
+      baseline: { files: { 'tests/mixed.test.mjs': 2 }, knownRed: [{ file: 'tests/mixed.test.mjs', title: 'known red', reason: '已知' }] },
+    })
+    expect(known, '那条已知红断言照常豁免').toEqual([{ file: 'tests/mixed.test.mjs', title: 'known red' }])
+    expect(violations, '但 hook 吃掉的用例必须以文件级失败记账').toEqual([
+      expect.stringMatching(/文件级失败.*没跑起来.*tests\/mixed\.test\.mjs/u),
+    ])
+  })
+
+  it('已知红独存的文件（有失败断言、没有没跑起来的用例）→ 不报文件级失败，已知红照常豁免', () => {
     const current = collectReport(
       { success: false, testResults: [{ name: '/repo/tests/a.test.mjs', status: 'failed', assertionResults: [{ title: 'x', status: 'failed' }] }] },
       { repoRoot: '/repo' },
@@ -188,16 +223,108 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
     expect(violations).toEqual([])
   })
 
-  it('报告 success=false 却一条失败都核不出来（未处理错误）→ 违规', () => {
+  it('N1 未处理错误：断言全绿、报告 success=true，但退出码 1 → 违规（退出码是兜底）', () => {
+    // 复核 48e0e0a 的 N1 实测：定时器抛未处理错误时 JSON 报告完全干净（success=true、0 失败），
+    // 只有 vitest 的退出码是 1。旧的兜底只看 success=false ⇒ 漏。
     const current = collectReport(
-      { success: false, testResults: [{ name: '/repo/tests/a.test.mjs', status: 'passed', assertionResults: [{ title: 'x', status: 'passed' }] }] },
-      { repoRoot: '/repo' },
+      { success: true, testResults: [{ name: '/repo/tests/a.test.mjs', status: 'passed', assertionResults: [{ title: 'x', status: 'passed' }] }] },
+      { repoRoot: '/repo', exitCode: 1 },
     )
+    expect(current.exitCode).toBe(1)
     const { violations } = violationsFor({ current, baseline: { files: { 'tests/a.test.mjs': 1 }, knownRed: [] } })
-    expect(violations).toEqual(['报告 success=false，但没有任何可核对的失败条目（未处理错误 / 环境问题？先看 vitest 的 stderr）'])
+    expect(violations).toEqual([expect.stringMatching(/退出码非 0.*没有任何可核对的失败条目/u)])
   })
 
-  it('**真实 vitest** 跑一次 beforeAll 抛错的夹具：形状与合成报告一致，门判红', () => {
+  it('N1 未处理错误**与已知红并存**：必须独立报出来（已知红不能替它背书）', () => {
+    // 规格轴复核实测：仓库常态就有 2 条 knownRed，任何「只有在没有任何失败时才看未处理错误」的
+    // 写法都等于没看 —— 所以 unhandledErrors 自己占一条判据，与断言失败各自记账。
+    const current = collectReport(
+      { success: false, testResults: [{ name: '/repo/tests/a.test.mjs', status: 'failed', assertionResults: [{ title: 'known red', status: 'failed' }] }] },
+      { repoRoot: '/repo', exitCode: 1, unhandledErrors: true },
+    )
+    expect(current.unhandledErrors).toBe(true)
+    const { violations, known } = violationsFor({
+      current,
+      baseline: { files: { 'tests/a.test.mjs': 1 }, knownRed: [{ file: 'tests/a.test.mjs', title: 'known red', reason: '已知' }] },
+    })
+    expect(known).toHaveLength(1)
+    expect(violations).toEqual([expect.stringMatching(/未处理错误.*已知红也不能替它背书/u)])
+  })
+
+  it('未处理错误的识别：认本轮汇总块里的分节标题 / Errors 行，不认嵌套文本与用例名', () => {
+    // 真形状：分节标题在失败段里，`Errors N error` 在最后那一段汇总里
+    expect(detectUnhandledErrors(' Test Files  1 passed (1)\n\n⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯\n')).toBe(true)
+    expect(detectUnhandledErrors(' Test Files  1 passed (1)\n      Tests  1 passed (1)\n     Errors  1 error\n')).toBe(true)
+    expect(detectUnhandledErrors(' Test Files  1 failed (1)\n      Tests  2 failed (2)\n')).toBe(false)
+    expect(detectUnhandledErrors('')).toBe(false)
+    expect(detectUnhandledErrors(undefined)).toBe(false)
+
+    // **嵌套文本不算数**（本轮实测踩到的假阳性）：断言台里再 spawn 一次 vitest 时，
+    // 那一路的 reporter 输出会被外层当控制台输出打出来 —— 里面同样有 Unhandled Errors 段与 Errors 行。
+    const nested = [
+      ' ❯ tests/lib/fixtures/inventory-hook/unhandled.fixture.mjs (1 test) 8ms',
+      '     Errors  1 error',
+      '⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯',
+      'Error: FIXTURE: NEW_UNHANDLED_ERROR',
+      ' ✓ tests/lib/inventory-gate.test.mjs (20 tests) 6860ms',
+      '',
+      ' Test Files  1 passed (1)',
+      '      Tests  20 passed (20)',
+      '   Duration  7.53s',
+    ].join('\n')
+    expect(detectUnhandledErrors(nested), '嵌套的 reporter 文本不该被判成本轮的错误').toBe(false)
+
+    // 用例名里出现这几个字（比如这条测试的名字）也不算
+    const titled = ' ✓ tests/lib/inventory-gate.test.mjs (1 test)\n   ✓ 认 reporter 里的 Unhandled Errors / Errors 行\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n'
+    expect(detectUnhandledErrors(titled)).toBe(false)
+
+    // 本轮真有未处理错误时，即使前面嵌了别的输出也要认出来
+    expect(detectUnhandledErrors(`${nested}\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n     Errors  1 error\n`)).toBe(true)
+  })
+
+  it('**真 vitest** 跑一遍未处理错误夹具：reporter 文本认得出它（形状假设由真 vitest 说了算）', () => {
+    const reportPath = reportPathOf('unhandled-real')
+    const run = runSuiteReport({
+      vitest: join(process.cwd(), 'node_modules', 'vitest', 'vitest.mjs'),
+      reportPath,
+      repoRoot: process.cwd(),
+      spawn: (command, args, options) => spawnSync(command, [...args, '--config', HOOK_FIXTURE_CONFIG], options),
+      echo: () => {},
+    })
+    // JSON 报告里**看不出来**（这正是问题所在）：那个夹具文件是 passed、它的用例也是 passed。
+    const unhandledResult = run.report.testResults.find((entry) => entry.name.endsWith('unhandled.fixture.mjs'))
+    expect(unhandledResult?.status).toBe('passed')
+    expect(unhandledResult?.assertionResults?.map((assertion) => assertion.status)).toEqual(['passed'])
+    // 但 reporter 文本与退出码都看得出来
+    expect(run.exitCode).toBe(1)
+    expect(run.unhandledErrors, 'reporter 文本里应当有 Unhandled Errors 段').toBe(true)
+    const current = collectReport(run.report, { repoRoot: process.cwd(), exitCode: run.exitCode, unhandledErrors: run.unhandledErrors })
+    // 与已知红（hook / mixed 两个夹具里那条已知红）并存时也要报出来
+    const { violations } = violationsFor({
+      current,
+      baseline: {
+        files: { [HOOK_FIXTURE]: 1, [MIXED_FIXTURE]: 2, UNHANDLED_FIXTURE: 1 },
+        knownRed: [{ file: MIXED_FIXTURE, title: 'known red', reason: '夹具已知红' }],
+      },
+    })
+    expect(violations.some((violation) => /未处理错误/u.test(violation))).toBe(true)
+  })
+
+  it('退出码 1 但有已知红在跑（正常形状）→ 不触发兜底；没有退出码信息的合成报告也不触发', () => {
+    const accounted = collectReport(
+      { success: false, testResults: [{ name: '/repo/tests/a.test.mjs', status: 'failed', assertionResults: [{ title: 'x', status: 'failed' }] }] },
+      { repoRoot: '/repo', exitCode: 1 },
+    )
+    expect(violationsFor({ current: accounted, baseline: { files: { 'tests/a.test.mjs': 1 }, knownRed: [{ file: 'tests/a.test.mjs', title: 'x', reason: '已知' }] } }).violations).toEqual([])
+
+    const noExitInfo = collectReport(
+      { success: true, testResults: [{ name: '/repo/tests/a.test.mjs', status: 'passed', assertionResults: [{ title: 'x', status: 'passed' }] }] },
+      { repoRoot: '/repo' },
+    )
+    expect(violationsFor({ current: noExitInfo, baseline: { files: { 'tests/a.test.mjs': 1 }, knownRed: [] } }).violations).toEqual([])
+  })
+
+  it('**真实 vitest** 跑两个夹具（纯 hook + 已知红并存的混合）：形状与合成报告一致，门判红', () => {
     const reportPath = reportPathOf('hook-real')
     const run = runSuiteReport({
       vitest: join(process.cwd(), 'node_modules', 'vitest', 'vitest.mjs'),
@@ -205,14 +332,21 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
       repoRoot: process.cwd(),
       spawn: (command, args, options) => spawnSync(command, [...args, '--config', HOOK_FIXTURE_CONFIG], options),
     })
-    const current = collectReport(run.report, { repoRoot: process.cwd() })
-    expect(run.report.numFailedTests, '真实 vitest 在这种形状下没有用例级失败').toBe(0)
-    expect(current.failures).toEqual([])
-    expect(current.suiteFailures.map((entry) => entry.file)).toEqual([HOOK_FIXTURE])
-    expect(typeof current.suiteFailures[0].message).toBe('string')
-    const { violations } = violationsFor({ current, baseline: { files: { [HOOK_FIXTURE]: 1 }, knownRed: [] } })
-    expect(violations).toHaveLength(1)
-    expect(violations[0]).toMatch(/文件级失败/u)
+    const current = collectReport(run.report, { repoRoot: process.cwd(), exitCode: run.exitCode })
+    // 真实形状：混合夹具里那条已知红按用例记账；两个文件都进了文件级失败（各有没跑起来的用例）。
+    expect(current.failures).toEqual([{ file: MIXED_FIXTURE, title: 'known red' }])
+    expect(current.suiteFailures.map((entry) => entry.file).sort()).toEqual([HOOK_FIXTURE, MIXED_FIXTURE].sort())
+    expect(run.exitCode).toBe(1)
+    const { violations, known } = violationsFor({
+      current,
+      baseline: {
+        files: { [HOOK_FIXTURE]: 1, [MIXED_FIXTURE]: 2 },
+        knownRed: [{ file: MIXED_FIXTURE, title: 'known red', reason: '夹具已知红' }],
+      },
+    })
+    expect(known).toHaveLength(1)
+    expect(violations, '两个文件的 hook 错误都必须被文件级失败拦下').toHaveLength(2)
+    expect(violations.every((violation) => /文件级失败/u.test(violation))).toBe(true)
   })
 })
 

@@ -139,6 +139,37 @@ export function normalizeMounts(input) {
 }
 
 /**
+ * 归一**交付账**（旁挂清单的 `mountsInjected`）。
+ *
+ * 与 `normalizeMounts` 的差别只有两点，都是为了复核 48e0e0a 的 N3（账要与日志对账）：
+ *   1. 多带一个 `head` —— 注入文本里那段 `【来源：挂载 <head>】` 标记的主体，是「这层到底
+ *      进没进日志」的唯一凭据；
+ *   2. **宽容**：交付账是我们自己写的缓存，坏条目丢掉就行（不像 `mounts` 那样抛错）——
+ *      一份坏的缓存不该让整场问事哑掉。
+ *
+ * @param {unknown} input 旁挂清单里的 `mountsInjected`
+ * @returns {Array<{kind: string, id: string, label: string, head?: string}>}
+ */
+export function normalizeDeliveredMounts(input) {
+  if (!Array.isArray(input)) return []
+  const out = []
+  const seen = new Set()
+  for (const entry of input) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const kind = typeof entry.kind === 'string' ? entry.kind.trim() : ''
+    const id = typeof entry.id === 'string' ? entry.id.trim() : ''
+    if (kind === '' || id === '') continue
+    const key = `${kind}\u0000${id}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const label = typeof entry.label === 'string' && entry.label.trim() !== '' ? entry.label.trim() : id
+    const head = typeof entry.head === 'string' && entry.head !== '' ? entry.head : undefined
+    out.push({ kind, id, label, ...(head === undefined ? {} : { head }) })
+  }
+  return out
+}
+
+/**
  * 首问 → 标题：折叠空白后取前 40 字（契约 §1）。空问题由调用方先拒掉，这里只兜底成缺省标题。
  */
 export function titleFromQuestion(text) {
@@ -211,9 +242,9 @@ export function createConsultStore(dataDir) {
       title: typeof parsed.title === 'string' && parsed.title !== '' ? parsed.title : DEFAULT_CONSULT_TITLE,
       pus: Array.isArray(parsed.pus) ? parsed.pus.filter((slug) => typeof slug === 'string') : [],
       mounts: Array.isArray(parsed.mounts) ? parsed.mounts : [],
-      // 「内容已经交给模型的挂载」（**逐层**）：只在真的注入过之后才写。
+      // 「内容已经交给模型的挂载」（**逐层** + 每层带 `head` 供与日志对账）：只在真的注入过之后才写。
       // 缺省**不补空数组** —— 老文件（与新建的会话）不该因为我们加了字段就变样。
-      ...(Array.isArray(parsed.mountsInjected) ? { mountsInjected: normalizeMounts(parsed.mountsInjected) } : {}),
+      ...(Array.isArray(parsed.mountsInjected) ? { mountsInjected: normalizeDeliveredMounts(parsed.mountsInjected) } : {}),
       turns: Number.isInteger(parsed.turns) && parsed.turns >= 0 ? parsed.turns : 0,
       ...(typeof parsed.lastTurnAt === 'string' && parsed.lastTurnAt !== '' ? { lastTurnAt: parsed.lastTurnAt } : {}),
     }
@@ -289,7 +320,7 @@ export function createConsultStore(dataDir) {
       if (Object.hasOwn(patch, 'turns')) next.turns = patch.turns
       if (Object.hasOwn(patch, 'lastTurnAt')) next.lastTurnAt = patch.lastTurnAt
       if (Object.hasOwn(patch, 'mounts')) next.mounts = normalizeMounts(patch.mounts)
-      if (Object.hasOwn(patch, 'mountsInjected')) next.mountsInjected = normalizeMounts(patch.mountsInjected)
+      if (Object.hasOwn(patch, 'mountsInjected')) next.mountsInjected = normalizeDeliveredMounts(patch.mountsInjected)
       return write(next)
     },
   }

@@ -242,6 +242,9 @@ export function createBestOfMethods(ctx, config = {}) {
     agent.followup(message)
     const entry = { candidateId: view.adoptedId, messageId: message.id, source: BESTOF_ADOPTED_SOURCE_KIND, at: new Date().toISOString() }
     record.deliveries = [...(Array.isArray(record.deliveries) ? record.deliveries : []), entry]
+    // 账本也追加一条（复核 N4）：改选时旧的那条留在 deliveries 里（那是投递史），
+    // 但「当前采用稿」以账本的最后一条为准。
+    record.draftLedger = [...(Array.isArray(record.draftLedger) ? record.draftLedger : []), { kind: 'adopted', messageId: message.id, candidateId: view.adoptedId, runId: record.runId, at: entry.at }]
     delete record.deliveryError
     return entry
   }
@@ -405,6 +408,10 @@ export function createBestOfMethods(ctx, config = {}) {
       const routes = await resolveRoutes(ctx, { profileIds: source.profileIds, count: angles.length })
       if (routes.length < 2) throw new Error(`合参至少要两路（现在 ${routes.length} 路）：去设置加一个视角或换一个 provider。`)
 
+      // **采用稿账本**（复核 N4）：一层会话只留最后一份记录（覆盖写），而「谁还是当前采用稿」
+      // 要跨轮才说得清 —— 新记录**继承**上一份的账本，此后每次采用 / 否决各追加一条。
+      // 消费方是 `history.mjs` 的候选历史投影（只带当前那一份采用稿）。
+      const previousRecord = store.read(sessionId)
       const record = {
         schema: BESTOF_SCHEMA,
         runId: newRunId(),
@@ -423,6 +430,7 @@ export function createBestOfMethods(ctx, config = {}) {
         judge: { mode: 'pending', adoptedId: null, ranking: [] },
         adoptedId: null,
         rejected: false,
+        draftLedger: Array.isArray(previousRecord?.draftLedger) ? previousRecord.draftLedger : [],
       }
       live.set(record.runId, record)
       persist(record)
@@ -495,6 +503,13 @@ export function createBestOfMethods(ctx, config = {}) {
       }
       const record = findRecord(runId)
       if (record === undefined) throw new Error(`合参记录不存在：${runId}。`)
+      // 一层会话只留**最后一份**记录（覆盖写），而 `live` 里可能还留着更早那几轮 —— 对旧 runId 迟到的
+      // 拍板会把旧记录 persist 回去、**盖掉新那一轮**（连它的采用稿账本一起）。所以只允许对
+      // 「当前那一份记录」拍板；其它情况给可读错误，让人刷新界面（复核 48e0e0a 规格轴指出的这条）。
+      const latest = store.read(record.sessionId)
+      if (latest !== null && latest.runId !== record.runId) {
+        throw new Error(`这一轮合参已经被更新的一轮取代（当前是 ${latest.runId}）：刷新界面再拍板 —— 对旧记录写入会盖掉新一轮。`)
+      }
       if (record.finishedAt === undefined) throw new Error('候选还在生成中：等这一轮跑完再拍板（或先点「停止全部」）。')
 
       const usable = usableCandidates(record)
@@ -538,6 +553,10 @@ export function createBestOfMethods(ctx, config = {}) {
         record.adoptedId = null
         record.rejected = true
         delete record.mergedBy
+        // 账本追加一条否决（复核 N4）：**按轮**记 —— 这一轮此前可能已经采用过一份并投进了日志，
+        // 否决之后它不再是当前采用稿，候选历史里也不该再出现（S9:174「否决轮次不带任何候选正文」）；
+        // 而**别的轮**已采用的稿不受影响（那一份仍在会话日志里、仍是这场问事的采用决定）。
+        record.draftLedger = [...(Array.isArray(record.draftLedger) ? record.draftLedger : []), { kind: 'rejected', runId: record.runId, at: new Date().toISOString() }]
       }
       persist(record)
 

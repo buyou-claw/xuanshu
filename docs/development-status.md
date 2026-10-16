@@ -386,6 +386,46 @@ Status 行取坏文件里那一行，逐字未动；写盘前核两条 —— �
 两条都要先落一个设计决定（客户端还缺「工作流选择」入口，需要 `workflow.list` 接到挂载抽屉）。
 **本轮不编一个数据源**：编出来的内容会让「挂载了却没有任何工作流内容」这个真问题变成看不见的假问题。
 
+### 13. 复核轮：`48e0e0a` 的 4 条发现（2026-10-16，全修）
+
+复核报告入库在 `docs/reviews/spec001-48e0e0a-review.md`（结论：本轮不通过；Standards 2 条 + Spec 2 条）。
+四条都是真的，逐条处置如下（每条的**复核探针复跑**结果也一并记上）。
+
+| # | 复核实测的发现 | 处置 |
+|---|---|---|
+| N1 | **清单门仍漏两类**：① 同文件里「一条已知红断言 + 另一个 describe 的 hook 抛错」—— 旧判据要求「没有任何失败断言」才记文件级失败，于是这一类整个漏掉；② **未处理错误**：断言全绿、`success` 仍是 `true`、0 条失败 —— JSON 报告里根本没有它 | ① `suiteFailures` 的判据改成「文件 `failed` 且（没有失败断言 **或** 有用例没跑起来）」；② 门改成**两路 reporter**（`json` 写报告 + `default` 写 stdout 并被抓下来回放）：未处理错误只出现在 reporter 文本的 `⎯⎯ Unhandled Errors ⎯⎯` 段与 `Errors N error` 汇总行里，`detectUnhandledErrors()` 认出它 → `current.unhandledErrors` **独立占一条判据**（已知红不能替它背书）；退出码仍保留为「一条失败都核不出来」时的兜底。回归：合成 4 条 + **真 vitest 跑三个夹具**（`tests/lib/fixtures/inventory-hook/`：纯 hook / 已知红并存 / 未处理错误） |
+| N2 | **`--force` 清骨架时沿 `packages` 根联接删除真实文件**：`readdirSync` 跟随联接 ⇒「里面全是自有包名」这条守卫在**联接目标**上成立 ⇒ 递归删掉真实内容，安装器还 exit 0 | `removeOwnPackagesDir` 与 `removeTreeNoFollow` 都**先 lstat 根**：根是联接就只拆联接本身（一个字节都不跟着走）。回归：`tests/setup/install-profile-copy.test.mjs` 第 ⑨ 条（联接目标里的哨兵必须活着） |
+| N3 | **挂载交付账在实际落日志前就前移**：`prepareRequest` 失败（`INVALID_CONFIG` / `UNKNOWN_MODEL` 是常态路径）时消息没 append，账却已写 ⇒ 那一层**永远**不再补 | 判断改以**日志**为准：边界扫日志收集 `【来源：挂载 …】` 标记，账（`mountsInjected`，条目带 `head`）只提供「这一层对应的标记是什么」；标记不在日志 ⇒ 下一问重投。顺带修掉连带病症：工作流挂载（`kept:false` 但有 hint）现在**单独成块**并带标记，不再「永远不算交付、每问重投同一段披露」；两层 `head` 撞车（两个工作区 id 指向同一路径、同名）时预览层给 head 补上层的 id，否则第二层会被当成「已交付」永不投递 |
+| N4 | **改选 / 否决后的旧采用稿仍进候选历史**：日志是追加式的，两份采用稿都在里面；旧投影只看 `source.kind` | 新增**跨轮** `draftLedger`（采纳与否决各追加一条、都带 `runId`；新 run 的记录**继承**上一份的账本），`currentAdoptedMessageIds()` 取「最后一条其所属轮次**没有被否决**的 adopted」；`projectConsultMessages(snapshot, { keepAdoptedIds })` 按 messageId 过滤；判不出来时 `null` = **不过滤**。**否决按轮生效**（本轮否决只抹本轮的采用稿 —— 复核实测指出原实现会连带抹掉上一轮已采用、仍在日志里的那份）；另加两道闸：对**被取代的旧轮**迟到拍板直接拒绝（否则旧记录会把新一轮连账本一起盖掉） |
+
+**复核自己的探针复跑（全部转绿）**：
+
+```
+# N1（.scratch/review-48-standards/probe-inventory.mjs + .scratch/review-48-fix/probe-unhandled-exitcode.mjs）
+mixed:      suiteFailures 1（"…另有 1 条用例没跑起来"）  violations 1  known 仍豁免那条已知红
+unhandled:  JSON 报告里看不出来（success=true、0 失败）→ 门靠 reporter 文本里的 Unhandled Errors 段
+            独立报出来（已知红并存时也报）；退出码路径作为兜底另有取证
+# N2（同目录 probe-install-junction.mjs）
+before=true → after=true（修复前 after=false）；exit 0、目标照常换成源 profile 联接
+# N3/N4（.scratch/review-48-spec/probe.mjs，真 Context + AgentLoop + 打桩 LLM）
+prepare-failure:   markedDelivered 有值、mountInLog=false（账仍在 append 之前写，如实保留）
+model-recovered:   mountInLog=true、injectedMessages=2（**下一问重投** —— 修复前恒为 false）
+reselected-history: obsoleteChoiceInHistory=false、currentChoiceInHistory=true
+rejected-history:   两稿都 false
+```
+
+**仍然留着的边界（如实登记）**：账依旧在 append 之前写 —— 「这一问失败、账已写」的中间态在同一问内可见
+（探针第一行就是它），由**下一问自愈**，不是永久丢失；账单判据要**扫一遍会话日志**（每一问的第一步，
+只取我们那两类消息的正文），这是「与日志对账」的价格；未处理错误的识别认的是 **reporter 的打印文本**
+（`Unhandled Errors` / `Errors N error`）—— 那是上游格式，所以只在钉版（ADR-0004）上成立，
+`tests/lib/inventory-gate.test.mjs` 有一条真 vitest 夹具钉着它，换版本时要跟着复核；清单门判据 4 会把
+**刻意跳过**（`it.skipIf`）也算进「没跑起来的用例」，所以「同一文件既有已知红断言、又有刻意跳过」会误红 ——
+遇上了把两者拆开，别放宽判据（漏报 hook 错误比误红一次贵得多，理由写在 `scripts/lib/inventory-gate.mjs`
+的判据注释里）。
+
+**工作流挂载**：N3 的连带修复治好了它的两个可见病症（hint 单独成块 + 不再每问重投），
+但「没有可注入的数据源」这条仍在（见上一节）。
+
 ## 验证边界
 
 完整装配五条 seam 的当前结果：S2（进程内启动）、S3（客户端产物）、S4（上游行基线）、S5（真实 CLI 报告）通过；
@@ -395,17 +435,17 @@ Status 行取坏文件里那一行，逐字未动；写盘前核两条 —— �
 而同版本官方 web bundle 自带的 `@deepseek-ai/dsh-agent-preset` 是另一种 carrier，报
 `unrecognized Loader tree carrier`。真实 web 与宿主启动正常。测试保留失败，无上游源码改动、无放宽断言。
 
-当前全仓基线（`node scripts/check-test-inventory.mjs`，2026-10-16 复核修复轮之后）：
+当前全仓基线（`node scripts/check-test-inventory.mjs`，2026-10-16 二次复核修复轮之后）：
 
 ```
-[inventory] 用例 1097 条（基线 1097）/ 文件 103 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 1119 条（基线 1119）/ 文件 104 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 ```
 
 2 条失败 = **S1 装配树** 与由它连带的 **CLI 退出码为 0**（就是基线 `knownRed` 里那两条，理由见上）。
 跳过的 10 条 = `tests/horosa/p0-fixtures` 2 条（`.scratch` 里的 `gt06-*` 原始捕获仍缺）+ `tests/horosa/p10-e2e` 8 条
 （真机前置件不在）。**同一条命令在「没有 profile」的干净环境里也必须给出同样的条数并判过**
-（复核修复轮实测：1097 / 103 文件 / 0 失败 / 51 跳过 / exit 0）—— 这就是 §11 ② 的机器判据；
+（二次复核修复轮实测：1119 / 104 文件 / 0 失败 / 51 跳过 / exit 0）—— 这就是 §11 ② 的机器判据；
 
 「干净环境」用 `XUANSHU_DSH_HOME` 指向一个空目录来模拟（CI 上那个目录本来就不存在）。
 **基线之外的红色一律是本轮引入的回归。**

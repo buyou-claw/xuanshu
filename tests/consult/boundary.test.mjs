@@ -124,6 +124,19 @@ async function step(listener, agent, { step: stepNumber = 1, claimed = [QUESTION
 const injectedOf = (decision) => decision.messages.find((message) => message?.source?.kind === CONSULT_MESSAGE_SOURCE_KIND)
 const textOf = (message) => (message?.content ?? []).map((block) => block.text).join('\n')
 
+/**
+ * 交付账条目的形状：MountRef + `head`。
+ *
+ * `head` 是注入文本里 `【来源：挂载 <head>】` 标记的主体 —— 复核 48e0e0a 的 N3 之后，
+ * 它就是「这一层到底进没进日志」的对账凭据（只比 kind/id/label 会漏掉它）。
+ */
+const ledgerEntry = (mount) => ({
+  kind: mount.kind,
+  id: mount.id,
+  label: mount.label,
+  head: expect.stringContaining(`「${mount.label}」`),
+})
+
 describe('发问边界 · 首次交付（R2：材料一次落进日志，永久在场）', () => {
   it('第一步：材料并进模型输入，排在用户那句话之前；底座谱 / 底稿 / 勾选谱都在', async () => {
     const { listener, session } = await scene()
@@ -220,7 +233,7 @@ describe('发问边界 · 挂载按变化补投（R3/R4）', () => {
     expect(text).toContain('【来源：临时挂载·披露】')
     expect(text).toContain('【来源：挂载 工作区「打印车间」')
     expect(text).toContain('排产表在这里。')
-    expect(manifestOf().mountsInjected).toEqual([SPEC])
+    expect(manifestOf().mountsInjected).toEqual([ledgerEntry(SPEC)])
   })
 
   it('R3：重启后（没有活 agent）先确认挂载、再从原生 composer 问 —— 那一问补投这段挂载', async () => {
@@ -237,7 +250,7 @@ describe('发问边界 · 挂载按变化补投（R3/R4）', () => {
     expect(text, '材料不该重发（已在日志里）').not.toContain('【来源：底座谱】')
     expect(text).toContain('本次补投临时挂载')
     expect(text).toContain('排产表在这里。')
-    expect(manifestOf().mountsInjected).toEqual([SPEC])
+    expect(manifestOf().mountsInjected).toEqual([ledgerEntry(SPEC)])
   })
 
   it('挂载没变：第二问不再重复投（内容已经在日志里了）', async () => {
@@ -249,7 +262,7 @@ describe('发问边界 · 挂载按变化补投（R3/R4）', () => {
     const second = await step(listener, agent, { claimed: [{ ...QUESTION, id: 'q-2' }] })
     expect(injectedOf(second)).toBeUndefined()
     expect(agent.events).toHaveLength(eventsAfterFirst)
-    expect(manifestOf().mountsInjected).toEqual([SPEC])
+    expect(manifestOf().mountsInjected).toEqual([ledgerEntry(SPEC)])
   })
 
   it('撤下挂载：说一句「不再适用」（S8 §5：不声明就会拿旧正文当现况）', async () => {
@@ -278,14 +291,61 @@ describe('发问边界 · 挂载按变化补投（R3/R4）', () => {
     expect(first).toContain('排产表在这里。')
     expect(first).toContain('B 车间') // 披露里看得见（那是事实）
     expect(first).not.toContain('MOUNT_B_SENTINEL')
-    expect(manifestOf().mountsInjected, '读不到内容的那一层不许记账').toEqual([SPEC])
+    expect(manifestOf().mountsInjected, '读不到内容的那一层不许记账').toEqual([ledgerEntry(SPEC)])
 
     // B 的文件就位：**下一问**补投 B 的内容（无需重新确认挂载）。
     sandbox.write('work-b/README.md', 'MOUNT_B_SENTINEL')
     const second = textOf(injectedOf(await step(listener, agent, { claimed: [{ ...QUESTION, id: 'q-2' }] })))
     expect(second).toContain('MOUNT_B_SENTINEL')
     expect(second).not.toContain('排产表在这里。') // A 已交付，不再重发
-    expect(manifestOf().mountsInjected).toEqual([SPEC, SPEC_B])
+    expect(manifestOf().mountsInjected).toEqual([ledgerEntry(SPEC), ledgerEntry(SPEC_B)])
+  })
+
+  it('N3 连带：两层 head 撞车（两个工作区 id 指向同一路径、同名）时，两层都要投递且只投一次', async () => {
+    // 日志对账以 `【来源：挂载 <head>】` 为键：head 撞车时第二层会被当成「已经交付过」而永不投递。
+    // 预览层给撞车的 head 补了 id，所以这里两层各有各的标记。
+    const sandbox = makeSandbox('boundary-heads')
+    roots.push(sandbox)
+    sandbox.write('work/README.md', 'HEAD_COLLISION_SENTINEL\n')
+    const registry = fakeWorkspaceRegistryForMounts({
+      workspaces: [
+        { id: 'ws-one', path: sandbox.path('work'), title: '打印车间' },
+        { id: 'ws-two', path: sandbox.path('work'), title: '打印车间' },
+      ],
+    })
+    const agents = fakeAgents()
+    const host = makeHost({
+      services: {
+        xuanshuHorosa: fakeHorosa(envelope('bazi-ok-default')).service,
+        agents: agents.service,
+        workspaceRegistry: registry.service,
+        fs: fakeFsReader().service,
+        agentPresets: fakeAgentPresets().service,
+        agentDefaultModel: fakeAgentDefaultModel().service,
+      },
+    })
+    seedPu(sandbox, ZIWEI)
+    seedPu(sandbox, RUANJIAN)
+    const api = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir, mountBudget: 10_000 })
+    const { session } = await api['consult.create']({ pus: [] })
+    const twinMounts = [
+      { kind: 'workspace', id: 'ws-one', label: '打印车间' },
+      { kind: 'workspace', id: 'ws-two', label: '打印车间' },
+    ]
+    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: twinMounts })
+    installConsultBoundary(host.ctx, { dataDir: sandbox.dataDir, mountBudget: 10_000 })
+    const listener = host.listeners.find((entry) => entry.event === PRE_STEP_EVENT)?.listener
+    const agent = loggedAgent(session.sessionId)
+    const manifestOf = () => sandbox.json('consult', 'sessions', `${session.sessionId}.json`)
+
+    const text = textOf(injectedOf(await step(listener, agent)))
+    expect(text.match(/【来源：挂载 /gu), '两层各有一个标记（head 不撞车）').toHaveLength(2)
+    expect(manifestOf().mountsInjected).toHaveLength(2)
+    expect(new Set(manifestOf().mountsInjected.map((entry) => entry.head)).size).toBe(2)
+
+    const second = await step(listener, agent, { claimed: [{ ...QUESTION, id: 'q-2' }] })
+    expect(injectedOf(second), '两层都已交付 ⇒ 第二问不再重投').toBeUndefined()
+    sandbox.cleanup()
   })
 
   it('老会话（日志里已有材料）+ 挂了东西：**只补挂载段**，材料不重复（复核第二轮的 HARD 2）', async () => {
@@ -296,7 +356,47 @@ describe('发问边界 · 挂载按变化补投（R3/R4）', () => {
     expect(text).toContain('排产表在这里。')
     expect(text).not.toContain('【来源：底座谱】')
     expect(text).not.toContain('底稿正文第二行')
-    expect(manifestOf().mountsInjected).toEqual([SPEC])
+    expect(manifestOf().mountsInjected).toEqual([ledgerEntry(SPEC)])
+  })
+
+  it('N3：账说已交付、但那条消息**没落进日志**（模型准备阶段失败）→ 下一问重投，不许永久跳过', async () => {
+    // 复核 48e0e0a 的 N3 实测：边界先写交付账、再返回消息；loop 之后才 `prepareRequest()`，
+    // 失败（INVALID_CONFIG / UNKNOWN_MODEL）就**不会** append —— 账已经前移，那一层永远不再补。
+    // 修法：判断以**日志**为准（账只提供每层对应的标记），不一致下一问自愈。
+    const { api, listener, session, manifestOf } = await scene()
+    const agent = loggedAgent(session.sessionId, [materialEvent()]) // 材料已在日志里（老会话）
+    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [SPEC] })
+
+    // 第一问：补投挂载段并记账（`step()` 照 loop 的行为把消息落进假日志）。
+    await step(listener, agent, { claimed: [{ ...QUESTION, id: 'q-1' }] })
+    const appendedIndex = agent.events.findIndex((event) => textOf(event.data).includes('【来源：挂载 '))
+    expect(appendedIndex, '这一问确实投了挂载段').toBeGreaterThanOrEqual(0)
+    expect(manifestOf().mountsInjected).toEqual([ledgerEntry(SPEC)])
+
+    // 模拟「append 没发生」：把那条刚落进去的事件摘掉（账留在原地）—— 这正是 N3 的现场。
+    agent.events.splice(appendedIndex, 1)
+    expect(agent.events.some((event) => textOf(event.data).includes('【来源：挂载 '))).toBe(false)
+
+    // 下一问：标记不在日志里 ⇒ 必须重投（修之前这里会永久跳过）。
+    const retry = textOf(injectedOf(await step(listener, agent, { claimed: [{ ...QUESTION, id: 'q-2' }] })))
+    expect(retry).toContain('排产表在这里。')
+    expect(manifestOf().mountsInjected).toEqual([ledgerEntry(SPEC)])
+  })
+
+  it('N3 连带：工作流挂载（没有内容、只有一句 hint）也只投一次 —— 标记同样进日志', async () => {
+    // 工作流层 `kept:false` 但带 hint：修之前它永远不算「已交付」⇒ 每一问都重投同一段披露。
+    const workflow = { kind: 'workflow', id: 'wf-1', label: '周报' }
+    const { listener, session, manifestOf } = await scene({ mounts: [workflow] })
+    const agent = loggedAgent(session.sessionId)
+
+    const first = textOf(injectedOf(await step(listener, agent)))
+    expect(first).toContain('【来源：挂载 工作流「周报」】')
+    expect(first).toContain('工作流内容的数据源属票 16')
+    expect(first).toContain('没有可注入的内容')
+    expect(manifestOf().mountsInjected).toEqual([ledgerEntry(workflow)])
+
+    const second = await step(listener, agent, { claimed: [{ ...QUESTION, id: 'q-2' }] })
+    expect(injectedOf(second), '工作流层不该每问重投').toBeUndefined()
   })
 })
 

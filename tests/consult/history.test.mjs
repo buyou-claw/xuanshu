@@ -17,7 +17,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
-import { buildCandidateHistory } from '../../packages/xuanshu-host/lib/consult/history.mjs'
+import { buildCandidateHistory, projectConsultMessages } from '../../packages/xuanshu-host/lib/consult/history.mjs'
 import {
   assistantEvent,
   envelope,
@@ -229,5 +229,53 @@ describe('合参候选的会话历史 · 窗口与口径（评审 R5）', () => 
   it('没有历史（空会话 / 只有注入行）：返回空串，调用方据此连标题都不加', () => {
     expect(buildCandidateHistory({ messages: [], budget: null }).text).toBe('')
     expect(buildCandidateHistory({ messages: [{ role: 'user', text: 'MATERIAL', source: 'xuanshu-consult' }], budget: 100 }).text).toBe('')
+  })
+})
+
+/**
+ * 采用稿的**当前性**过滤（复核 48e0e0a 的 N4）。
+ *
+ * 日志是追加式的：改选 / 否决都不会删掉旧的采用稿消息。投影层负责把「不再算数的那几份」挡在外面 ——
+ * 判据由 `bestof-store.mjs` 的 `currentAdoptedMessageIds` 给（`null` = 判不出来，不过滤）。
+ */
+describe('候选历史的采用稿过滤 · 只带当前那一份（N4）', () => {
+  const ADOPTED = (id, text) => ({ type: 'user/message', seq: Number(id.slice(1)), time: T2, data: { id, role: 'user', source: { kind: 'xuanshu-bestof-adopted' }, content: [{ type: 'text', text }] } })
+  const events = [
+    userEvent(1, { id: 'm-q', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: QUESTION }] }, T1),
+    ADOPTED('m-c1', 'ADOPTED_C1：先看大方向。'),
+    ADOPTED('m-c2', 'ADOPTED_C2：先核对前提。'),
+  ]
+
+  it('改选之后：只保留当前那一份（旧的那份从候选历史里消失）', () => {
+    const messages = projectConsultMessages({ events }, { keepAdoptedIds: new Set(['m-c2']) })
+    const text = messages.map((message) => message.text).join('\n')
+    expect(text).toContain('ADOPTED_C2')
+    expect(text).not.toContain('ADOPTED_C1')
+    // 不是「把所有注入都删了」：用户问题照常在里面
+    expect(text).toContain(QUESTION)
+  })
+
+  it('否决之后：一份采用稿都不进候选历史（keepAdoptedIds 为空集）', () => {
+    const messages = projectConsultMessages({ events }, { keepAdoptedIds: new Set() })
+    const text = messages.map((message) => message.text).join('\n')
+    expect(text).not.toContain('ADOPTED_C1')
+    expect(text).not.toContain('ADOPTED_C2')
+    expect(text).toContain(QUESTION)
+  })
+
+  it('判不出来（`null` / 不给）：不过滤 —— 阅读器那一侧照旧看得到全部投递史', () => {
+    for (const options of [undefined, {}, { keepAdoptedIds: null }]) {
+      const messages = projectConsultMessages({ events }, options)
+      const text = messages.map((message) => message.text).join('\n')
+      expect(text).toContain('ADOPTED_C1')
+      expect(text).toContain('ADOPTED_C2')
+    }
+  })
+
+  it('候选历史文本里也只出现当前那一份（投影 + 窗口两段串起来看）', () => {
+    const messages = projectConsultMessages({ events }, { keepAdoptedIds: new Set(['m-c1']) })
+    const built = buildCandidateHistory({ messages, budget: null })
+    expect(built.text).toContain('已采用的合参稿：ADOPTED_C1')
+    expect(built.text).not.toContain('ADOPTED_C2')
   })
 })

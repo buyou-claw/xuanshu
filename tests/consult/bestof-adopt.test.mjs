@@ -91,6 +91,19 @@ describe('bestof.state · 轮询与冷读（契约 §1「供界面轮询/回看�
 })
 
 describe('bestof.adopt · 三个动作都要人点（C9）', () => {
+  it('对**被取代的旧轮**迟到拍板：拒绝，且不许把旧记录写回去盖掉新一轮（复核 N4）', async () => {
+    // 一层会话只留最后一份记录（覆盖写），但 `live` 里仍留着旧轮 —— 对旧 runId 的 adopt 会把旧记录
+    // persist 回去，连新一轮的账本一起盖掉。这里钉住「拒绝 + 新记录原封不动」。
+    const { bestof, sandbox, session } = await scene({ plans: [...CANDIDATES, JUDGE_PLAN, ...CANDIDATES, JUDGE_PLAN] })
+    const first = await runToEnd(bestof, session.sessionId)
+    const second = await runToEnd(bestof, session.sessionId)
+    const secondRecord = sandbox.json('consult', `${session.sessionId}.bestof.json`)
+    expect(secondRecord.runId).toBe(second.started.runId)
+
+    await expect(bestof['bestof.adopt']({ runId: first.started.runId, decision: 'adopt', adoptedId: 'c1' })).rejects.toThrow(/已经被更新的一轮取代/u)
+    // 新一轮的记录一个字节都没动（runId 仍是它、没有被旧记录盖掉）
+    expect(sandbox.json('consult', `${session.sessionId}.bestof.json`).runId).toBe(second.started.runId)
+  })
   it('采用某一份：adoptedId 落盘，rejected 复位', async () => {
     const { bestof, session, sandbox } = await scene()
     const { started } = await runToEnd(bestof, session.sessionId)

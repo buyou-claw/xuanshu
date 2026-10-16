@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createBestOfMethods } from '../../packages/xuanshu-host/lib/consult/bestof.mjs'
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
-import { fakeAgentDefaultModel, fakeAgents, makeHost, makeSandbox } from './lib/sandbox.mjs'
+import { fakeAgentDefaultModel, fakeAgents, fakeSessionQuery, makeHost, makeSandbox, userEvent } from './lib/sandbox.mjs'
 import { fakeLlm, STUB_USAGE } from './lib/bestof-llm.mjs'
 
 const roots = []
@@ -177,6 +177,85 @@ describe('task-14 · 采用后：采用稿进历史，落选候选永不进日�
     expect(rows.map((row) => row.via)).toEqual(['followup', 'followup'])
     expect(rows[0].message.content[0].text).toContain(WINNER)
     expect(rows[1].message.content[0].text).toContain(LOSER)
+  })
+
+  it('N4：候选历史只带**当前**采用稿 —— 改选后旧的那份不进历史；否决只抹掉**本轮**的采用稿', async () => {
+    // 复核 48e0e0a 的 N4 实测：日志是追加式的（改选 / 否决都不会删掉旧消息），
+    // 而 S9:174 要的是「只带 adoptedId 指向的那一份」。判据是旁挂决策（按轮记的账本），
+    // 不是消息的来源标签；**否决按轮生效** —— 否决这一轮不该把上一轮已采用的那份一起抹掉。
+    const sandbox = makeSandbox('bestof-history-n4')
+    roots.push(sandbox)
+    const query = fakeSessionQuery()
+    const agents = fakeAgents()
+    /** 6 轮候选的剧本：R1 用固定 sentinel（改选场景要认得出哪一份进/不进历史），R2–R6 各自可辨。 */
+    const tags = ['R1', 'R2', 'R3', 'R4', 'R5', 'R6']
+    const firstOf = (tag) => `${tag} 第一份。`
+    const llm = fakeLlm(tags.flatMap((tag, index) => [
+      { text: index === 0 ? WINNER : firstOf(tag) },
+      { text: index === 0 ? LOSER : `${tag} 第二份。` },
+      JUDGE_PLAN,
+    ]))
+    const host = makeHost({
+      services: {
+        agents: agents.service,
+        agentPresets: { resolve: async () => ({ id: 'standard' }), mount: async () => ({}) },
+        agentDefaultModel: fakeAgentDefaultModel().service,
+        llm: llm.service,
+        sessionQuery: query.service,
+      },
+    })
+    const consult = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir })
+    const { session } = await consult['consult.create']({ pus: [] })
+    const bestof = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir })
+
+    // 「会话日志」：按真实 loop 的方式追加（这里只手工做 append 这一步；消息本身是业务 API 产出的）。
+    const log = []
+    query.events[session.sessionId] = log
+    log.push(userEvent(log.length + 1, { id: 'm-question', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: QUESTION }] }))
+    const appendDelivered = () => log.push(userEvent(log.length + 1, allDeliveries(agents).at(-1).message))
+    /** 下一个 run 的候选提示（两路）。 */
+    const nextRunPrompts = async () => {
+      const before = llm.calls.length
+      await runToEnd(bestof, session.sessionId)
+      return llm.calls.slice(before).filter((call) => call.system?.includes('本候选视角')).map((call) => call.messages[0].content.map((block) => block.text).join('\n'))
+    }
+
+    // ① 第一轮：跑完 → 采用 c1 → **改选** c2（两条都真的投递进会话，日志里于是有两份）。
+    const run1 = await runToEnd(bestof, session.sessionId)
+    await bestof['bestof.adopt']({ runId: run1.runId, decision: 'adopt', adoptedId: 'c1' })
+    appendDelivered()
+    await bestof['bestof.adopt']({ runId: run1.runId, decision: 'adopt', adoptedId: 'c2' })
+    appendDelivered()
+    expect(log.filter((event) => event.data?.source?.kind === 'xuanshu-bestof-adopted')).toHaveLength(2)
+
+    // ② 第二轮候选：历史里**只该有 c2 那一份**（c1 已被改选掉）。
+    for (const prompt of await nextRunPrompts()) {
+      expect(prompt).toContain('【这场问事的历史】')
+      expect(prompt).toContain('已采用的合参稿：')
+      expect(prompt).toContain(LOSER)
+      expect(prompt, '被改选掉的旧采用稿不该进候选历史').not.toContain(WINNER)
+    }
+
+    // ③ 否决第三轮（本轮没投递过任何采用稿）→ 上一轮采用的 c2 **仍然算数**（否决按轮生效）。
+    const thirdRun = await runToEnd(bestof, session.sessionId)
+    await bestof['bestof.adopt']({ runId: thirdRun.runId, decision: 'reject' })
+    for (const prompt of await nextRunPrompts()) {
+      expect(prompt, '否决这一轮不该抹掉上一轮已采用的稿').toContain(LOSER)
+      expect(prompt).not.toContain(WINNER)
+    }
+
+    // ④ 第五轮：采用它的一份 → 再**否决同一轮** → 下一轮候选历史里这一份也不该再出现。
+    const fifthRun = await runToEnd(bestof, session.sessionId)
+    await bestof['bestof.adopt']({ runId: fifthRun.runId, decision: 'adopt', adoptedId: 'c1' })
+    appendDelivered()
+    const adoptedInFifth = log.at(-1).data.content.map((block) => block.text).join('\n')
+    expect(adoptedInFifth).toContain(firstOf('R5'))
+    // 采纳之后、再启动下一轮之前否决（同一轮）：账本记两条（adopted + rejected，runId 相同）
+    await bestof['bestof.adopt']({ runId: fifthRun.runId, decision: 'reject' })
+    for (const prompt of await nextRunPrompts()) {
+      expect(prompt, '本轮被否决 ⇒ 本轮采用过的那份不再进历史').not.toContain(firstOf('R5'))
+      expect(prompt, '上一轮（未被否决）的采用稿照旧在').toContain(LOSER)
+    }
   })
 
   it('会话不在本进程活着 → 走 agents.resume 再投递（进程重启后也能补上）', async () => {

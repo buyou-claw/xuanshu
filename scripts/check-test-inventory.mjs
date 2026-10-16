@@ -7,13 +7,26 @@
  * 而摘要只会显示「passed 变少」，失败名单里根本没有它。另一面：`skipIf(证据存在)` 会把
  * 「证据没了」渲染成「跳过」。两种失败都不会红在自己的名字上。
  *
- * 三条判据（都指向「数量/身份」而不是「某条断言的值」）：
+ * 判据（都指向「数量/身份」而不是「某条断言的值」）：
  *   1. 任何测试文件**收集到 0 条**用例 → 红（收集期报错的形状）
  *   2. 任何文件的用例数**比基线少** / 文件消失 → 红（不许悄悄删或悄悄跳过）
  *   3. 出现**不在已知红名单里**的失败用例 → 红（已知红名单在基线文件里逐条写明理由）
+ *   4. **文件级失败**（hook / suite 错误）→ 红：整个文件没跑起来，或文件里失败断言与
+ *      「没跑起来的用例」并存（已知红豁免的是跑过且失败的断言，豁免不了没跑起来的用例）
+ *   5. **未处理错误**（reporter 打了 `Unhandled Errors`）→ 红：它不进断言失败、`success` 也仍是 `true`，
+ *      所以独立占一条；已知红不能替它背书
+ *   6. **vitest 这一轮失败了却没有任何可核对的失败条目** → 红（报告 `success:false`，或退出码非 0
+ *      而 `failures` / `suiteFailures` 都为空 —— 收集期失败 / 环境问题的兜底）
  *
  * 判据与「读报告」的实现收在 `scripts/lib/inventory-gate.mjs`（那份有单测：门的三种撒谎形状
  * 都是实测踩过的 —— 尤其「旧报告还在 → 门读到上一轮的通过结果」这一条）。
+ *
+ * **两路 reporter 各管一半**：`json` 写报告文件（机器判据）；`default` 写 stdout 并被抓下来回放 ——
+ * 未处理错误只出现在那一路的文本里（JSON 报告里看不出来），所以 stdout 不再是 `ignore`。
+ *
+ * **退出码怎么用**（别按旧注释理解）：退出码**不是**「跑没跑完」的判据（那看报告新鲜度），
+ * 也**不是**「有没有红」的判据（已知红在跑时 vitest 自己就 exit 1）；它只用在判据 6 的兜底里
+ * （「一条失败都核不出来」时才看它）—— 除此之外一律以报告内容为准。
  *
  * 用法：
  *   node scripts/check-test-inventory.mjs              # 跑全仓 vitest 并比对（exit 1 = 有违规）
@@ -45,7 +58,7 @@ let exitCode
 try {
   mkdirSync(dirname(reportPath), { recursive: true })
   const run = runSuiteReport({ vitest: VITEST, reportPath, repoRoot: REPO_ROOT })
-  current = collectReport(run.report, { repoRoot: REPO_ROOT })
+  current = collectReport(run.report, { repoRoot: REPO_ROOT, exitCode: run.exitCode, unhandledErrors: run.unhandledErrors })
   exitCode = run.exitCode
 } catch (error) {
   console.error(`[inventory] ${String(error?.message ?? error)}`)

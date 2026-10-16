@@ -15,8 +15,9 @@
  * **原样追加进会话日志**（`:1061` 首次尝试时 `append("user/message", message, {surfaceOp:'append'})`）
  * —— 这就是「模型可见 ⟺ 已落日志」不变量的具体形态。所以：
  *   - 交付**永久在场**（重启 / dispose / 原生 composer 都一样，因为读的是日志），
- *   - 也因此**不必每轮重发**：材料补一次（判据 = 日志里有没有），挂载按**变化**补（判据 = 旁挂清单的
- *     `mountsInjected`，逐层记「内容已经交给模型」）。
+ *   - 也因此**不必每轮重发**：材料补一次（判据 = 日志里有没有），挂载按**与日志的差**补
+ *     （判据 = 日志里有没有那一层的 `【来源：挂载 …】` 标记；旁挂清单的 `mountsInjected` 只提供
+ *     「每层对应的标记是什么」—— 账走在事实前面时，日志说了算，见「交付账与日志对账」）。
  *
  * 三条门都是有理由的（写在这儿，免得下一轮有人「简化」掉）：
  *   - `step !== 1` → 一轮只在第一步补：后面几步是同一轮的工具循环；
@@ -27,6 +28,7 @@
  */
 import { resolveDataDir } from '../bazi/service.mjs'
 import { createContextAssembly, messageSearchDirs } from './inject.mjs'
+import { MOUNT_MARKER_PREFIX } from './context.mjs'
 import { CONSULT_MESSAGE_SOURCE_KIND, createConsultContextMessage } from './message.mjs'
 import { createConsultStore, isConsultSessionId } from './store.mjs'
 
@@ -35,6 +37,13 @@ export const PRE_STEP_EVENT = 'agent/pre-step'
 
 /** 材料里一定会出现的段标记（判「日志里已经有材料了没有」用的哨兵，不是给模型看的）。 */
 const MATERIAL_MARKERS = ['【来源：底座谱】', '【来源：底稿】']
+
+/**
+ * 注入文本里的挂载层标记（**交付账与日志对账**的凭据；复核 48e0e0a 的 N3）。
+ *
+ * 前缀从 `context.mjs` 取 —— 标记是账与日志之间唯一的契约，两处各抄一遍模板必然漂移。
+ */
+const MOUNT_MARKER = new RegExp(`${MOUNT_MARKER_PREFIX}([^】]*)】`, 'gu')
 
 /**
  * 把「问事上下文」接到 `agent/pre-step` 边界上。
@@ -61,32 +70,34 @@ export function installConsultBoundary(ctx, config = {}) {
   })()
 
   /**
-   * 这条会话的日志里有没有我们注入过的**材料**（底座谱 / 底稿那一段）。
+   * 扫一遍这条会话的日志（一次遍历，两件事）。
    *
-   * 为什么要这条判据：材料交付一次就永久在日志里（见文件头），所以「已经在」= 不用再发；
-   * 而**挂载**不在这个判据里 —— 它是按变化逐层补的（`buildMountDelta`）。
+   * 为什么挂载要看日志而不是只看账（复核 48e0e0a 的 N3）：账是我们自己写的，而「交付」发生在
+   * loop 的 append 里 —— 中间任何一处失败（`prepareRequest` 抛错就是常态路径之一）都会让账
+   * 走在事实前面，那一层于是**永远**不再重投。把日志当权威，这类不一致下一问就自愈。
    *
-   * 认的是**正文里的段标记**而不是 `source.kind`：挂载增量段用的是同一个 kind，
+   * 认的是**正文里的标记**而不是 `source.kind`：挂载增量段与材料用的是同一个 kind，
    * 只看 kind 会把「只补过挂载」的会话误判成「材料已在」。
+   *
+   * @returns {{hasMaterial: boolean, mountMarkers: Set<string>}}
    */
-  function hasLoggedMaterial(agent, sessionId) {
-    // 只缓存**肯定**的那一半：材料缺席时每一问都要重扫（第一问那一刻它还没落盘）。
-    // 反过来缓存 false 就会每轮重发一份材料 —— 复核第二轮实测到的正是这个形状。
-    if (materialLogged.get(sessionId) === true) return true
-    let found = false
+  function scanLog(agent) {
+    const result = { hasMaterial: false, mountMarkers: new Set() }
+    let events = []
     try {
-      const events = typeof agent?.session?.snapshotEvents === 'function' ? agent.session.snapshotEvents() : []
-      found = (Array.isArray(events) ? events : []).some((event) => {
-        if (event?.type !== 'user/message' || event.data?.source?.kind !== CONSULT_MESSAGE_SOURCE_KIND) return false
-        const text = (event.data.content ?? []).map((block) => block?.text ?? '').join('\n')
-        return MATERIAL_MARKERS.some((marker) => text.includes(marker))
-      })
+      events = typeof agent?.session?.snapshotEvents === 'function' ? agent.session.snapshotEvents() : []
     } catch {
-      // 拿不到事件列表（替身 / 冷会话）：按「没有」处理 —— 宁可多带一段材料，也不许漏。
-      found = false
+      // 拿不到事件列表（替身 / 冷会话）：当成「什么都没有」—— 材料会重发一次，
+      // 挂载会重投一次，都是宁可多说一次的代价。
+      events = []
     }
-    if (found) materialLogged.set(sessionId, true)
-    return found
+    for (const event of Array.isArray(events) ? events : []) {
+      if (event?.type !== 'user/message' || event.data?.source?.kind !== CONSULT_MESSAGE_SOURCE_KIND) continue
+      const text = (event.data.content ?? []).map((block) => block?.text ?? '').join('\n')
+      if (!result.hasMaterial && MATERIAL_MARKERS.some((marker) => text.includes(marker))) result.hasMaterial = true
+      for (const match of text.matchAll(MOUNT_MARKER)) result.mountMarkers.add(match[0])
+    }
+    return result
   }
 
   /** 把一段文本交给这一步的模型输入（排在用户那句话之前）。 */
@@ -109,15 +120,22 @@ export function installConsultBoundary(ctx, config = {}) {
       const manifest = store.read(sessionId)
       if (manifest === null) return decision
 
-      if (!hasLoggedMaterial(agent, sessionId)) {
+      const log = scanLog(agent)
+      // 扫到材料就记进缓存，之后不再依赖「这一轮能不能扫到事件列表」：
+      // 材料一旦落过日志就永远是「已在」，而 `snapshotEvents()` 偶发拿不到时不该退回重发一份大文本。
+      // 反过来**不缓存 false** —— 第一问那一刻它确实还没落盘，缓存 false 就会每轮重发（复核实测过的形状）。
+      if (log.hasMaterial) materialLogged.set(sessionId, true)
+
+      if (materialLogged.get(sessionId) !== true) {
         const { text, mountsInjected } = await assembly.buildInjection(manifest)
         if (typeof text !== 'string' || text.trim() === '') return decision
         if (mountsInjected !== null) store.update(sessionId, { mountsInjected })
         return await withContext(decision, claimed, text)
       }
 
-      // 材料已在日志里：这一问只看**挂载变没变**（新增 / 上次没读出来 → 补投；撤下 → 说一句）。
-      const { text, mountsInjected } = await assembly.buildMountDelta(manifest)
+      // 材料已在日志里：这一问只看**挂载比日志里多/少了什么**（新增 / 上次没落日志 → 补投；
+      // 撤下 → 说一句）。账只提供「每一层对应的标记」，判断以日志为准（N3）。
+      const { text, mountsInjected } = await assembly.buildMountDelta(manifest, { loggedMarkers: log.mountMarkers })
       if (typeof text !== 'string' || text.trim() === '') return decision
       if (mountsInjected !== null) store.update(sessionId, { mountsInjected })
       return await withContext(decision, claimed, text)
