@@ -17,6 +17,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createBestOfMethods } from '../../packages/xuanshu-host/lib/consult/bestof.mjs'
+import { createBestofStore } from '../../packages/xuanshu-host/lib/consult/bestof-store.mjs'
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
 import { fakeAgentDefaultModel, fakeAgents, fakeSessionQuery, makeHost, makeSandbox, userEvent } from './lib/sandbox.mjs'
 import { fakeLlm, STUB_USAGE } from './lib/bestof-llm.mjs'
@@ -177,6 +178,148 @@ describe('task-14 · 采用后：采用稿进历史，落选候选永不进日�
     expect(rows.map((row) => row.via)).toEqual(['followup', 'followup'])
     expect(rows[0].message.content[0].text).toContain(WINNER)
     expect(rows[1].message.content[0].text).toContain(LOSER)
+  })
+
+  it('R4：新 run 继承迁移结果 —— 上一版记录（无账本）在覆盖前补上「旧轮」条目，第二个新 run 起旧采用稿仍算数', async () => {
+    // 复核 32216d9 的 R4 反例：上一版 `xuanshu/bestof@1` 只有 deliveries / adoptedId / rejected。
+    // `bestof.run` 覆盖写时若把账本当空数组，旧轮的采用关系就说不清了 —— 升级后的**第二个**新 run
+    // 起，候选历史里会重新混进「改选前的旧稿」。这里断言两件事：
+    //   ① 第一个新 run 的记录里已经带上迁移出的「旧轮」条目（不是空数组）；
+    //   ② 那两个新 run 的候选 prompt 里，旧稿不在、当前采用稿在（secondHasObsolete=false）。
+    const sandbox = makeSandbox('bestof-history-legacy')
+    roots.push(sandbox)
+    const query = fakeSessionQuery()
+    const AGED = '第一版旧稿正文（已被改选掉）。'
+    const CURRENT = '当前采用稿正文。'
+    const agents = fakeAgents()
+    const llm = fakeLlm([{ text: AGED }, { text: CURRENT }, JUDGE_PLAN])
+    const host = makeHost({
+      services: {
+        agents: agents.service,
+        agentPresets: { resolve: async () => ({ id: 'standard' }), mount: async () => ({}) },
+        agentDefaultModel: fakeAgentDefaultModel().service,
+        llm: llm.service,
+        sessionQuery: query.service,
+      },
+    })
+    const consult = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir })
+    const { session } = await consult['consult.create']({ pus: [] })
+    const bestof = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir })
+
+    // 上一版记录：两稿都真的投过（一条被改选掉），`adoptedId` 指向后投的那一份。
+    createBestofStore(sandbox.dataDir).write({
+      schema: 'xuanshu/bestof@1',
+      runId: 'bestof-previous-release-run',
+      sessionId: session.sessionId,
+      question: QUESTION,
+      createdAt: '2026-10-15T00:00:00.000Z',
+      candidates: [],
+      judge: { mode: 'skipped', skipped: true, adoptedId: null, ranking: [] },
+      adoptedId: 'c2',
+      rejected: false,
+      deliveries: [
+        { candidateId: 'c1', messageId: 'm-aged', source: 'xuanshu-bestof-adopted', at: '2026-10-15T00:01:00.000Z' },
+        { candidateId: 'c2', messageId: 'm-current', source: 'xuanshu-bestof-adopted', at: '2026-10-15T00:02:00.000Z' },
+      ],
+    })
+    // 会话日志（追加式）：两条采用稿都留在里面 —— 改选不会删掉旧那条。
+    const log = []
+    query.events[session.sessionId] = log
+    log.push(userEvent(log.length + 1, { id: 'm-question', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: QUESTION }] }))
+    log.push(userEvent(log.length + 1, { id: 'm-aged', role: 'user', source: { kind: 'xuanshu-bestof-adopted' }, content: [{ type: 'text', text: AGED }] }))
+    log.push(userEvent(log.length + 1, { id: 'm-current', role: 'user', source: { kind: 'xuanshu-bestof-adopted' }, content: [{ type: 'text', text: CURRENT }] }))
+
+    /** 开一个真 run，返回那两路候选 prompt（判据：历史段里出现了什么正文）。 */
+    const nextRunPrompts = async () => {
+      const before = llm.calls.length
+      await runToEnd(bestof, session.sessionId)
+      return llm.calls
+        .slice(before)
+        .filter((call) => call.system?.includes('本候选视角'))
+        .map((call) => call.messages[0].content.map((block) => block.text).join('\n'))
+    }
+
+    // 第一个新 run：**覆盖写之前**完成了迁移（记录里已经有哨兵条目）。
+    const firstPrompts = await nextRunPrompts()
+    const recordAfterFirst = recordOf(sandbox, session.sessionId)
+    expect(recordAfterFirst.draftLedger).toEqual([
+      { kind: 'adopted', messageId: 'm-current', candidateId: 'c2', runId: 'legacy', at: '2026-10-15T00:02:00.000Z' },
+    ])
+    for (const prompt of firstPrompts) {
+      expect(prompt).toContain(CURRENT)
+      expect(prompt, '改选前的旧稿不该进候选历史').not.toContain(AGED)
+    }
+
+    // 第二个新 run：旧轮的采用关系还在（迁移不断档），旧稿仍不混进来。
+    const secondPrompts = await nextRunPrompts()
+    expect(recordOf(sandbox, session.sessionId).draftLedger).toHaveLength(1)
+    for (const prompt of secondPrompts) {
+      expect(prompt).toContain(CURRENT)
+      expect(prompt, '第二个新 run 起旧采用稿不该重新混入候选').not.toContain(AGED)
+    }
+  })
+
+  it('SP-2：上一版「先采用、后否决」的旧记录，第二个新 run 起旧稿也不许重新混入', async () => {
+    // 复核 32216d9 追加复核的反例：旧版 48e0e0a 的否决路径是 `adoptedId=null; rejected=true`，
+    // 且**不清** `deliveries` —— 所以「本轮先采用 m-aged（已投进日志）再否决」是上一版可产生的合法记录。
+    // 迁移若在这种形状上返回空账本，覆盖写之后消费方就退回「不过滤」，旧稿在第二个新 run 重新进候选历史。
+    const sandbox = makeSandbox('bestof-history-legacy-rejected')
+    roots.push(sandbox)
+    const query = fakeSessionQuery()
+    const OBSOLETE = '上一版先采用、随后被否决的那份稿子。'
+    const agents = fakeAgents()
+    const llm = fakeLlm([{ text: '这一轮的新候选一。' }, { text: '这一轮的新候选二。' }, JUDGE_PLAN, JUDGE_PLAN])
+    const host = makeHost({
+      services: {
+        agents: agents.service,
+        agentPresets: { resolve: async () => ({ id: 'standard' }), mount: async () => ({}) },
+        agentDefaultModel: fakeAgentDefaultModel().service,
+        llm: llm.service,
+        sessionQuery: query.service,
+      },
+    })
+    const consult = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir })
+    const { session } = await consult['consult.create']({ pus: [] })
+    const bestof = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir })
+
+    createBestofStore(sandbox.dataDir).write({
+      schema: 'xuanshu/bestof@1',
+      runId: 'bestof-previous-release-rejected',
+      sessionId: session.sessionId,
+      question: QUESTION,
+      createdAt: '2026-10-15T00:00:00.000Z',
+      candidates: [],
+      judge: { mode: 'skipped', skipped: true, adoptedId: null, ranking: [] },
+      adoptedId: null,
+      rejected: true,
+      deliveries: [{ candidateId: 'c1', messageId: 'm-obsolete', source: 'xuanshu-bestof-adopted', at: '2026-10-15T00:01:00.000Z' }],
+    })
+    const log = []
+    query.events[session.sessionId] = log
+    log.push(userEvent(log.length + 1, { id: 'm-question', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: QUESTION }] }))
+    log.push(userEvent(log.length + 1, { id: 'm-obsolete', role: 'user', source: { kind: 'xuanshu-bestof-adopted' }, content: [{ type: 'text', text: OBSOLETE }] }))
+
+    const nextRunPrompts = async () => {
+      const before = llm.calls.length
+      await runToEnd(bestof, session.sessionId)
+      return llm.calls
+        .slice(before)
+        .filter((call) => call.system?.includes('本候选视角'))
+        .map((call) => call.messages[0].content.map((block) => block.text).join('\n'))
+    }
+
+    // 第一个新 run：覆盖写之前迁出「旧轮被否决」这条哨兵（账本非空 ⇒ 不会退回「不过滤」）。
+    const firstPrompts = await nextRunPrompts()
+    expect(recordOf(sandbox, session.sessionId).draftLedger).toEqual([
+      { kind: 'rejected', runId: 'legacy', at: expect.any(String) },
+    ])
+    for (const prompt of firstPrompts) expect(prompt, '被否决轮次的稿子不该进候选历史').not.toContain(OBSOLETE)
+
+    // 第二个新 run：旧稿仍不许重新混进来（这正是 R4 原反例的形态，只是换成 rejected 形状）。
+    const secondPrompts = await nextRunPrompts()
+    for (const prompt of secondPrompts) {
+      expect(prompt, '第二个新 run 起被否决的旧稿不该重新混入候选').not.toContain(OBSOLETE)
+    }
   })
 
   it('N4：候选历史只带**当前**采用稿 —— 改选后旧的那份不进历史；否决只抹掉**本轮**的采用稿', async () => {

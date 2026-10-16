@@ -35,14 +35,21 @@ export function toRepoPath(absolute, repoRoot) {
  * `files` 记的是**收集到的用例数**（含 skip）——「文件收集失败」在摘要里只是「passed 变少」，
  * 所以这里的 0 条与变少才是要抓的形状。
  *
- * **`suiteFailures` 是 hook / suite 错误的独立台账**（评审两轮实测出来的两类形状）：
+ * **`suiteFailures` 是 hook / suite 错误的独立台账**（评审三轮实测出来的三类形状）：
  *   - **整文件没跑起来**：`beforeAll` 抛错时文件 `status:'failed'` + 用例全 `skipped`
  *     （`numFailedTests: 0`、`success: false`）——只看 `assertion.status === 'failed'` 完全漏掉；
  *   - **与已知红并存**（复核 48e0e0a 的 N1）：同一个文件里一条已知红断言 + 另一个 describe 的
  *     `beforeAll` 抛错 —— 文件里有失败断言，**但那些 skipped 的用例不是已知红**
  *     （已知红名单豁免的是「跑过且失败」的断言，豁免不了「没跑起来」的用例）。
- *   判据因此是：**文件 failed 且（没有失败断言，或有被跳过的用例）**——两种都进 `suiteFailures`，
- *   断言失败另由 `failures` 逐条对已知红名单。
+ *   - **与已知红并存、且没有 skipped**（复核 32216d9 的 R1）：`afterAll` 在断言**全部执行完**之后
+ *     抛错 —— 文件里有失败断言（已知红）、跳过 0 条，于是上面两条形状都不成立，hook 错误整个漏掉
+ *     （`.scratch/review-322-standards/after-all-report.json` 实测：`exit=1 / success=false`、
+ *     `numFailedTests:1 / numPendingTests:0`，门却 `suiteFailures=[] / violations=[]`）。
+ *     这一类唯一的报告信号是**文件级 `result.message`**：afterAll 抛错时它正好是那次 hook 的错误文本
+ *     （实测 `'NEW_AFTER_ALL_ERROR'`），而**纯断言失败时它是空串**（同目录 `mixed-report.json`、
+ *     本仓 `assembly-contract.test.mjs` 的真实报告都是 `''`）。
+ *   判据因此是：**文件 failed 且（没有失败断言，或有被跳过的用例，或文件级 message 非空）**——
+ *   三种都进 `suiteFailures`，断言失败另由 `failures` 逐条对已知红名单。
  *
  * **未处理错误只能从 reporter 文本看出来**（复核 48e0e0a 的 N1 第二半）：JSON 报告在那种情况下
  * `success` 仍是 `true`、0 条失败、也没有文件级失败，**唯一**的信号是 default reporter 打印的
@@ -72,10 +79,12 @@ export function collectReport(report, { repoRoot, exitCode, unhandledErrors } = 
       if (assertion.status !== 'passed' && assertion.status !== 'failed') skippedAssertions += 1
     }
     skipped += skippedAssertions
-    // 文件级失败：用例根本没能跑（hook/suite 抛错），或同文件里失败与「没跑起来」并存。
+    // 文件级失败：用例根本没能跑（hook/suite 抛错），或同文件里失败与「没跑起来」并存，
+    // 或 hook 在断言全部跑完之后才抛（`afterAll`：没有 skipped、只有文件级 message —— 复核 32216d9 的 R1）。
     // 有失败断言**不能**解释 skipped 的用例 —— 那是两件事，已知红名单只管前者。
-    if (result.status === 'failed' && (failedAssertions === 0 || skippedAssertions > 0)) {
-      suiteFailures.push({ file: key, message: typeof result.message === 'string' ? result.message : '', skippedAssertions })
+    const suiteMessage = typeof result.message === 'string' ? result.message : ''
+    if (result.status === 'failed' && (failedAssertions === 0 || skippedAssertions > 0 || suiteMessage !== '')) {
+      suiteFailures.push({ file: key, message: suiteMessage, skippedAssertions })
     }
   }
   return {
@@ -98,12 +107,18 @@ export function collectReport(report, { repoRoot, exitCode, unhandledErrors } = 
  *   2. 比基线少 / 文件消失（不许悄悄删或悄悄跳过）；
  *   3. 已知红名单之外的**用例级**失败（名单在基线文件里逐条写明理由）；
  *   4. **文件级失败**（hook / suite 错误）：要么整个文件没跑起来，要么同文件里失败断言与
- *      没跑起来的用例并存 —— 已知红名单豁免的是「跑过且失败」的断言，豁免不了没跑起来的用例。
+ *      没跑起来的用例并存，要么 hook 在断言跑完之后才抛（`afterAll`：文件级 message 非空、
+ *      跳过 0 条 —— 复核 32216d9 的 R1）—— 已知红名单豁免的是「跑过且失败」的断言，
+ *      豁免不了没跑起来的用例，也豁免不了 hook 抛错这件事本身。
  *      这一条没有豁免名单：真要有已知的文件级失败，先把它变成一条看得见的失败用例再谈豁免。
- *      **接受的代价**（JSON 报告里没有更细的信号，已实测）：`it.skipIf` 那种**刻意跳过**也会
- *      被算进「没跑起来的用例」—— 所以「一个文件既有已知红断言、又有刻意跳过」会误红。
- *      真遇上，就把它拆开（跳过与失败别同文件，或先修掉已知红），别放宽判据：漏报 hook 错误的
- *      代价（测试整批没跑而门说通过）比误红一次大得多。
+ *      **接受的代价**（JSON 报告里没有更细的信号，已实测）：
+ *      ① `it.skipIf` 那种**刻意跳过**也会被算进「没跑起来的用例」—— 所以「一个文件既有已知红断言、
+ *         又有刻意跳过」会误红。真遇上，就把它拆开（跳过与失败别同文件，或先修掉已知红），别放宽判据；
+ *      ② 第三类证据认的是**上游 reporter 给的 `result.message`**（与 `detectUnhandledErrors` 同一条纪律：
+ *         只在钉版 ADR-0004 上成立，换 vitest 版本要跟着复核 —— 真 vitest 夹具钉着它）。
+ *         若某个**已登记已知红**的文件将来带上非空文件级 message（上游改了报告形状），它会从「放过」
+ *         变成文件级失败违规。这是**刻意的失败方向**：宁可让人去看一眼，也不许把 hook 错误当已知红放过去。
+ *      两条合计的取向一致：漏报 hook 错误的代价（测试整批没跑而门说通过）比误红一次大得多。
  *   5. **未处理错误**（vitest reporter 的 `Unhandled Errors` 段）：它不进断言失败、`success` 也仍是
  *      `true`，所以必须**独立**占一条判据 —— 仓库常态有已知红在跑，任何「没有任何失败时才看它」的写法
  *      等于没看（复核 48e0e0a 的 N1 第二半实测）；
@@ -140,8 +155,8 @@ export function violationsFor({ current, baseline }) {
     const skippedNote = failure.skippedAssertions > 0 ? `（另有 ${failure.skippedAssertions} 条用例没跑起来）` : ''
     violations.push(
       `文件级失败（hook / suite 错误）${skippedNote}：「${failure.file}」${detail}`
-      + ' —— 已知红豁免的是跑过且失败的断言，豁免不了没跑起来的用例；若那几条是刻意的 it.skipIf，'
-      + '请把它们与失败分开（或先修掉已知红）再谈豁免。',
+      + ' —— 已知红豁免的是跑过且失败的断言，豁免不了 hook / suite 抛错（以及因此没跑起来的用例）；'
+      + '若那几条是刻意的 it.skipIf，请把它们与失败分开（或先修掉已知红）再谈豁免。',
     )
   }
 

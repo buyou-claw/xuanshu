@@ -70,11 +70,21 @@ export function readDigao(dataDir) {
 }
 
 /**
+ * 一条挂载 / 交付账条目在旁挂清单里的键。
+ *
+ * 导出给边界用（`boundary.mjs` 盖章时要知道「这次这条消息承载了哪几层」）——两处各抄一遍
+ * `kind:id` 的拼法必然漂移。
+ */
+export function mountLedgerKey(entry) {
+  return `${entry?.kind ?? ''}:${entry?.id ?? ''}`
+}
+
+/**
  * 建一个「这场问事的上下文」装配器（同一份实现给 consult / bestof / 发问边界用）。
  *
  * @param {object} ctx cordis 宿主上下文
  * @param {{dataDir?: string, mountBudget?: number}} [config]
- * @returns {{dataDir: string, buildInjection: (manifest: object) => Promise<string>}}
+ * @returns {{dataDir: string, buildInjection: Function, buildMountDelta: Function, buildHistory: Function}}
  */
 export function createContextAssembly(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
@@ -99,34 +109,69 @@ export function createContextAssembly(ctx, config = {}) {
   }
 
   /**
-   * 挂载预览 → 「内容真的进了这段文本」的那些层的交付账条目。
+   * 挂载预览 → 「内容真的进了这段文本」的那些层的交付账条目（+ 需要**本次回执**的层）。
    *
    * 条目里带 `head`：它是注入文本里那段 `【来源：挂载 <head>】` 标记的主体，
-   * 也是**下次边界与日志对账**的唯一凭据（复核 48e0e0a 的 N3：账不能自己说了算，得能在日志里验）。
+   * 也是**老条目**（没有 `receipt`）与日志对账的唯一凭据（复核 48e0e0a 的 N3：账不能自己说了算）。
    *
    * 「交付」的两种：`kept`（内容纳入了）与**有 hint 的空层**（工作流：按设计没有内容，
    * 但那一句「还没接上」确实并进了模型输入）。读不出来的层（`error`）**不算** —— 下一问再试（R4）。
+   *
+   * **为什么还要 `receiptKeys`（复核 32216d9 的 R5）**：`【来源：挂载 <head>】` 只由 head 决定，
+   * 所以同一层**重新挂载**时，日志里第一次挂载留下的旧标记会冒充本次投递的回执 ——
+   * 新版工作区内容于是永不补投。判据：这次要投的那条标记**已经在日志里**（同一 head 早先交付过、
+   * 或另一个同 head 的层交付过）⇒ 旧标记不能自证，这一层要一条**本次交付回执**（承载它的消息 id，
+   * 由边界盖章）。标记还没在日志里的（首次交付、上次没落日志的重试）不需要回执：标记本身就是凭据。
+   *
+   * @param {object|undefined} preview `buildMountPreview()` 的产物
+   * @param {readonly object[]} candidates 这次要投的层（`pending`）
+   * @param {{loggedMarkers?: Set<string>}} [options] 会话日志里出现过的挂载标记
+   * @returns {{entries: Array<object>, receiptKeys: string[]}}
    */
-  function deliveredFromPreview(preview, candidates) {
+  function deliveredFromPreview(preview, candidates, { loggedMarkers = new Set() } = {}) {
     const deliveredLayers = (preview?.layers ?? []).filter((layer) => layer.kept === true
       || (typeof layer.hint === 'string' && layer.hint !== '' && layer.error === undefined))
-    const out = []
+    const entries = []
+    const receiptKeys = []
     for (const mount of candidates) {
       const layer = deliveredLayers.find((entry) => entry.id === `${mount.kind}:${mount.id}`)
       if (layer === undefined) continue
-      out.push({
+      const head = typeof layer.head === 'string' && layer.head !== '' ? layer.head : undefined
+      const entry = {
         kind: mount.kind,
         id: mount.id,
         label: mount.label,
-        ...(typeof layer.head === 'string' && layer.head !== '' ? { head: layer.head } : {}),
-      })
+        ...(head === undefined ? {} : { head }),
+      }
+      // 给不出标记（老形态 / 空 head）或标记已经在日志里：旧凭据不算数，这次交付要新回执。
+      if (head === undefined || loggedMarkers.has(sourceMarkMount(head))) receiptKeys.push(mountLedgerKey(entry))
+      entries.push(entry)
     }
-    return out
+    return { entries, receiptKeys }
   }
 
   /** 一条交付账条目在注入文本里的标记（没有 head 的老条目给不出标记 → 只能当「没交付」重投一次）。 */
   function markerOf(entry) {
     return typeof entry?.head === 'string' && entry.head !== '' ? sourceMarkMount(entry.head) : null
+  }
+
+  /**
+   * 「这一层的**本次交付**真的落进日志了吗」。
+   *
+   * - 条目带 `receipt`（本次交付那条消息的 id）⇒ **只看日志里有没有这条消息**：同一层的旧标记
+   *   不再能冒充本次回执（R5 的重挂反例）；
+   * - 老条目（没有 `receipt`）⇒ 按现状：`【来源：挂载 <head>】` 标记在日志里就算交付过
+   *   （向后兼容，不许因此让每问重投）。
+   */
+  function deliveryConfirmed(entry, { loggedMarkers, loggedReceipts }) {
+    if (typeof entry?.receipt === 'string' && entry.receipt !== '') return loggedReceipts.has(entry.receipt)
+    const marker = markerOf(entry)
+    return marker !== null && loggedMarkers.has(marker)
+  }
+
+  /** 「这一层的撤下声明真的落进日志了吗」——靠撤下那条消息的 id（`withdrawal`）与日志对账。 */
+  function withdrawalConfirmed(entry, { loggedReceipts }) {
+    return typeof entry?.withdrawal === 'string' && entry.withdrawal !== '' && loggedReceipts.has(entry.withdrawal)
   }
 
   /**
@@ -141,62 +186,104 @@ export function createContextAssembly(ctx, config = {}) {
    * 边界如实登记：底稿在会话中途刷新（票 13 的定时任务）不会自动重发 —— 材料里给的是**文件路径**，
    * 模型要看最新版自己去读那个文件；要一份新快照就开新会话。
    *
-   * @returns {Promise<{text: string, mountsInjected: Array<object>|null}>}
-   *          `mountsInjected` 非 null 时 = 这段文本之后「内容已经交给模型」的完整挂载清单（待落盘）。
+   * @param {object} manifest 旁挂清单
+   * @param {{loggedMarkers?: Set<string>}} [options] 会话日志里出现过的挂载标记
+   * @returns {Promise<{text: string, mountsInjected: Array<object>|null, receiptKeys: string[]}>}
+   *          `mountsInjected` 非 null 时 = 这段文本之后「内容已经交给模型」的完整挂载清单（待落盘）；
+   *          `receiptKeys` = 其中需要**本次交付回执**的层（旧标记不能自证的那些，见 `deliveredFromPreview`）。
    */
-  async function buildInjection(manifest) {
+  async function buildInjection(manifest, { loggedMarkers = new Set() } = {}) {
     const material = await readMaterial(manifest)
     const mounts = (manifest.mounts ?? []).length > 0
       ? await buildMountPreview(ctx, config, manifest.mounts)
       : undefined
     const text = buildConsultContext({ dataDir, ...material, mounts })
-    const delivered = mounts === undefined ? null : deliveredFromPreview(mounts, manifest.mounts ?? [])
-    return { text, mountsInjected: delivered }
+    if (mounts === undefined) return { text, mountsInjected: null, receiptKeys: [] }
+    const delivered = deliveredFromPreview(mounts, manifest.mounts ?? [], { loggedMarkers })
+    return { text, mountsInjected: delivered.entries, receiptKeys: delivered.receiptKeys }
   }
 
   /**
-   * **增量**注入：只补「模型还没见过内容」的层，以及「已经撤下」的层。
+   * **增量**注入：只补「本次交付凭据不在日志里」的层，以及「已经撤下」的层。
    *
-   * 判据是**日志**（`loggedMarkers`：边界从会话日志里扫出来的 `【来源：挂载 …】` 标记集合），
-   * 旁挂清单的 `mountsInjected` 只提供「每一层对应的标记是什么」：
-   *   - `pending` = 当前挂载里**标记不在日志**的（新增；上次没读出来 ⇒ 重试，R4；
-   *     或者——复核 N3——上次的注入在模型准备阶段就失败了、消息根本没落日志）；
-   *   - `removed` = 账里有、当前清单里没有、**且标记确实在日志里**的（真有正文在历史里才需要说一句
-   *     「不再适用」；从没落过日志的不用声明）。
+   * 判据是**日志**（`loggedMarkers` / `loggedReceipts`：边界从会话日志里扫出来的
+   * `【来源：挂载 …】` 标记集合与 `xuanshu-consult` 消息 id 集合），旁挂清单的 `mountsInjected`
+   * 提供「每一层对应的凭据是什么」：
+   *   - `pending` = 当前挂载里**本次交付凭据不在日志**的（新增；上次没读出来 ⇒ 重试，R4；
+   *     上次的注入在模型准备阶段就失败了、消息根本没落日志，N3；或者——R5——
+   *     这一层撤下已确认之后又挂回来，旧一轮的正文标记不能当本次回执，得补投**新版内容**）；
+   *   - `removed` = 账里有、当前清单里没有、**且正文确实交付过、撤下声明还没在日志里确认**的
+   *     （真有正文在历史里才需要说一句「不再适用」；从没落过日志的不用声明）。
+   *     撤下确认前**条目留着**（撤下失败要能在下一问重发）；确认之后才清掉。
    *
    * 为什么不只看账：账是我们自己写的，而「交付」发生在 loop 的 append 里。中间任何一处失败
    * （`prepareRequest` 抛错就是常态路径之一）都会让账走在事实前面 —— 于是那一层**永远**不再重投。
    * 把日志当权威之后，这一类不一致下一问就自愈。
    *
-   * `loggedMarkers` 缺省为空集合：调用方拿不到日志（替身 / 冷会话）时，账里的层会被当成
-   * 「还没落日志」重投一次 —— 宁可多投一次，也不许漏。
+   * `loggedMarkers` / `loggedReceipts` 缺省为空集合：调用方拿不到日志（替身 / 冷会话）时，
+   * 账里的层会被当成「还没落日志」重投一次 —— 宁可多投一次，也不许漏。
    *
    * @param {object} manifest 旁挂清单
-   * @param {{loggedMarkers?: Set<string>}} [options] 会话日志里出现过的挂载标记
-   * @returns {Promise<{text: string, mountsInjected: Array<object>|null}>}
+   * @param {{loggedMarkers?: Set<string>, loggedReceipts?: Set<string>}} [options]
+   *        会话日志里出现过的挂载标记 / 注入消息 id
+   * @returns {Promise<{text: string, mountsInjected: Array<object>|null,
+   *          receiptKeys: string[], withdrawalKeys: string[]}>}
+   *          `mountsInjected` 非 null 时 = 这段文本之后该落盘的完整交付账；
+   *          `receiptKeys` / `withdrawalKeys` = 本段文本承载的「交付」/「撤下声明」——边界据此盖章
+   *          （凭据 = 承载它的那条消息 id）。没有任何变化时 `mountsInjected === null`（不必写盘）。
    */
-  async function buildMountDelta(manifest, { loggedMarkers = new Set() } = {}) {
+  async function buildMountDelta(manifest, { loggedMarkers = new Set(), loggedReceipts = new Set() } = {}) {
     const current = Array.isArray(manifest.mounts) ? manifest.mounts : []
     const ledger = Array.isArray(manifest.mountsInjected) ? manifest.mountsInjected : []
-    const keyOf = (mount) => `${mount?.kind ?? ''}:${mount?.id ?? ''}`
-    const currentKeys = new Set(current.map(keyOf))
-    const entryOf = (mount) => ledger.find((entry) => keyOf(entry) === keyOf(mount))
-    const inLog = (entry) => {
-      const marker = markerOf(entry)
-      return marker !== null && loggedMarkers.has(marker)
-    }
+    const currentKeys = new Set(current.map(mountLedgerKey))
+    const entryOf = (mount) => ledger.find((entry) => mountLedgerKey(entry) === mountLedgerKey(mount))
+    const confirmed = (entry) => deliveryConfirmed(entry, { loggedMarkers, loggedReceipts })
+    const retracted = (entry) => withdrawalConfirmed(entry, { loggedReceipts })
+    const withdrawalPending = (entry) => typeof entry?.withdrawal === 'string' && entry.withdrawal !== ''
+
+    // 当前挂载：本次交付凭据不在日志里（新增 / 没落日志），或者**撤下声明已经发过**
+    // （不管落没落日志：撤回过的正文不再算现况，重挂就得重新投一次）⇒ 要补投。
     const pending = current.filter((mount) => {
       const entry = entryOf(mount)
-      return entry === undefined || !inLog(entry)
+      return entry === undefined || !confirmed(entry) || withdrawalPending(entry)
     })
-    const removed = ledger.filter((entry) => !currentKeys.has(keyOf(entry)) && inLog(entry))
-    const stillDelivered = ledger.filter((entry) => currentKeys.has(keyOf(entry)) && inLog(entry))
-    if (pending.length === 0 && removed.length === 0) return { text: '', mountsInjected: null }
+
+    // 当前清单之外的条目：撤下已确认 ⇒ 清掉；正文从没交付过 ⇒ 没东西可撤，也清掉；
+    // 交付过但撤下声明还没确认 ⇒ **留着**，这一问再说一次（撤下失败下一问重发的依据）。
+    const removed = []
+    let changed = false
+    for (const entry of ledger) {
+      if (currentKeys.has(mountLedgerKey(entry))) continue
+      if (retracted(entry) || !confirmed(entry)) {
+        changed = true
+        continue
+      }
+      removed.push(entry)
+    }
 
     const preview = pending.length > 0 ? await buildMountPreview(ctx, config, pending) : undefined
+    const delivered = preview === undefined ? { entries: [], receiptKeys: [] } : deliveredFromPreview(preview, pending, { loggedMarkers })
     const text = buildMountDeltaContext({ preview, removed })
-    // 交付账：撤下的划掉、真在日志里的留着，这一轮读到内容的补上（没读到的**留在外面** —— 下一问再试）。
-    return { text, mountsInjected: [...stillDelivered, ...deliveredFromPreview(preview, pending)] }
+
+    // 已交付且**没有撤下纪录**的层：账原样留着（老条目没有新字段也照旧 —— 标记在日志里就算交付过）。
+    const stillDelivered = []
+    for (const mount of current) {
+      const entry = entryOf(mount)
+      if (entry === undefined || !confirmed(entry) || withdrawalPending(entry)) continue
+      stillDelivered.push(entry)
+    }
+
+    // 没有可投的层、也没有撤下声明，但**确认状态变了**（撤下已在日志里确认 ⇒ 条目清掉）：
+    // 也要把更新后的账交回调用方落盘（文本可以是空串，边界不再注入一个字）。
+    if (!changed && delivered.entries.length === 0 && removed.length === 0) {
+      return { text: '', mountsInjected: null, receiptKeys: [], withdrawalKeys: [] }
+    }
+    return {
+      text,
+      mountsInjected: [...stillDelivered, ...delivered.entries, ...removed],
+      receiptKeys: delivered.receiptKeys,
+      withdrawalKeys: removed.map(mountLedgerKey),
+    }
   }
 
   /**

@@ -143,6 +143,41 @@ describe('bestof.adopt · 三个动作都要人点（C9）', () => {
   })
 })
 
+describe('被取代的旧轮 · 迟到操作不许静默成功（复核 32216d9 追加复核的 SP-1）', () => {
+  it('旧轮的 adopt / cancel 都拒绝，且盘面仍是新一轮（旧记录不许写回去）', async () => {
+    const { bestof, session, sandbox } = await scene({ plans: [...CANDIDATES, JUDGE_PLAN, ...CANDIDATES, JUDGE_PLAN] })
+    const diskOf = () => sandbox.json('consult', `${session.sessionId}.bestof.json`)
+
+    // 先在第一轮上正常拍板（守卫不许把正常路径一起挡掉）。
+    const first = await runToEnd(bestof, session.sessionId)
+    const adoptedOnFirst = await bestof['bestof.adopt']({ runId: first.started.runId, decision: 'adopt', adoptedId: 'c1' })
+    expect(adoptedOnFirst.bestOf.adoptedId).toBe('c1')
+    expect(diskOf().draftLedger).toHaveLength(1)
+
+    // 起第二轮 ⇒ 第一轮成为「被取代的旧轮」。
+    const second = await runToEnd(bestof, session.sessionId)
+    const entriesBeforeStaleCalls = diskOf().draftLedger
+
+    // 旧轮的两条写路径都必须给可读错误：报「成功」而盘上没变（或写回旧记录）都是撒谎。
+    await expect(bestof['bestof.adopt']({ runId: first.started.runId, decision: 'adopt', adoptedId: 'c2' }))
+      .rejects.toThrow(/已经被更新的一轮取代/u)
+    await expect(bestof['bestof.cancel']({ runId: first.started.runId }))
+      .rejects.toThrow(/已经被更新的一轮取代/u)
+
+    // 盘面还是新一轮：runId 没被写回旧轮、账本没被旧轮的拍板污染。
+    const onDisk = diskOf()
+    expect(onDisk.runId).toBe(second.started.runId)
+    expect(onDisk.adoptedId).toBeNull()
+    expect(onDisk.draftLedger).toEqual(entriesBeforeStaleCalls)
+
+    // 新一轮自己的拍板照常落盘。
+    const { bestOf } = await bestof['bestof.adopt']({ runId: second.started.runId, decision: 'adopt', adoptedId: 'c1' })
+    expect(bestOf.adoptedId).toBe('c1')
+    expect(diskOf().runId).toBe(second.started.runId)
+    expect(diskOf().adoptedId).toBe('c1')
+  })
+})
+
 describe('bestof.adopt · 合并（S9 §5 步骤 8 的总编语义）', () => {
   it('不给 mergedText → 宿主发一次合并调用（不带工具、含两份候选），记 mergedBy=host', async () => {
     const { bestof, session, llm } = await scene({

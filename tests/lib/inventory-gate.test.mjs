@@ -31,6 +31,8 @@ const HOOK_FIXTURE = 'tests/lib/fixtures/inventory-hook/hook-failure.mjs'
 const MIXED_FIXTURE = 'tests/lib/fixtures/inventory-hook/mixed.fixture.mjs'
 /** N1 的第三种真实形状夹具：断言全绿，只有未处理错误。 */
 const UNHANDLED_FIXTURE = 'tests/lib/fixtures/inventory-hook/unhandled.fixture.mjs'
+/** R1 的真实形状夹具：一条已知红断言 + `afterAll` 抛错（没有 skipped、只有文件级 message）。 */
+const AFTER_ALL_FIXTURE = 'tests/lib/fixtures/inventory-hook/after-all.fixture.mjs'
 const HOOK_FIXTURE_CONFIG = join(process.cwd(), 'tests', 'lib', 'fixtures', 'inventory-hook', 'vitest.config.mjs')
 const litter = []
 afterEach(() => {
@@ -213,6 +215,78 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
     ])
   })
 
+  it('R1 afterAll 形状：一条已知红断言 + 文件级 message 非空 + 0 skipped → 已知红照常豁免，hook 错误独立记账', () => {
+    // 复核 32216d9 的真实报告（.scratch/review-322-standards/after-all-report.json）：
+    // `afterAll` 在断言跑完之后抛错 ⇒ 文件 failed、1 条失败断言（已知红）、`numPendingTests: 0`、
+    // 文件级 `message === 'NEW_AFTER_ALL_ERROR'`。旧判据（没有失败断言 **或** 有 skipped）两条都不成立
+    // ⇒ suiteFailures 为空、退出码兜底又被那条已知红挡住 ⇒ 假绿。
+    const afterAllReport = {
+      success: false,
+      numFailedTestSuites: 1,
+      numTotalTests: 1,
+      numFailedTests: 1,
+      numPendingTests: 0,
+      testResults: [
+        {
+          name: '/repo/tests/after-all.test.mjs',
+          status: 'failed',
+          message: 'NEW_AFTER_ALL_ERROR',
+          assertionResults: [{ title: 'known red', status: 'failed', ancestorTitles: ['known red suite'] }],
+        },
+      ],
+    }
+    const current = collectReport(afterAllReport, { repoRoot: '/repo' })
+    expect(current.failures).toEqual([{ file: 'tests/after-all.test.mjs', title: 'known red' }])
+    expect(current.skipped, 'afterAll 不产生 skipped 用例 —— 这正是旧判据漏它的原因').toBe(0)
+    expect(current.suiteFailures).toEqual([
+      { file: 'tests/after-all.test.mjs', message: 'NEW_AFTER_ALL_ERROR', skippedAssertions: 0 },
+    ])
+    const { violations, known } = violationsFor({
+      current,
+      baseline: { files: { 'tests/after-all.test.mjs': 1 }, knownRed: [{ file: 'tests/after-all.test.mjs', title: 'known red', reason: '已知' }] },
+    })
+    expect(known, '那条已知红断言照常豁免').toEqual([{ file: 'tests/after-all.test.mjs', title: 'known red' }])
+    expect(violations, 'hook 抛错必须以文件级失败记账').toHaveLength(1)
+    expect(violations[0]).toMatch(/文件级失败/u)
+    expect(violations[0]).toContain('tests/after-all.test.mjs')
+    expect(violations[0]).toContain('NEW_AFTER_ALL_ERROR')
+  })
+
+  it('纯断言失败的文件（文件级 message 是空串）→ 不因新判据误报文件级失败', () => {
+    // 真报告的对照组（复核 32216d9 的同目录 mixed-report.json、本仓 assembly-contract 报告）：
+    // 只有断言失败时 `result.message === ''`。新判据只认非空 message ⇒ 这一形状不受影响。
+    const current = collectReport(
+      {
+        success: false,
+        testResults: [
+          {
+            name: '/repo/tests/assertion-only.test.mjs',
+            status: 'failed',
+            message: '',
+            assertionResults: [{ title: 'x', status: 'failed' }],
+          },
+          // message 字段整个缺失的报告（合成报告 / 老版本 reporter）也一样不算 hook 证据。
+          { name: '/repo/tests/no-message.test.mjs', status: 'failed', assertionResults: [{ title: 'x', status: 'failed' }] },
+        ],
+      },
+      { repoRoot: '/repo' },
+    )
+    expect(current.suiteFailures).toEqual([])
+    expect(current.failures).toHaveLength(2)
+    const { violations, known } = violationsFor({
+      current,
+      baseline: {
+        files: { 'tests/assertion-only.test.mjs': 1, 'tests/no-message.test.mjs': 1 },
+        knownRed: [
+          { file: 'tests/assertion-only.test.mjs', title: 'x', reason: '已知' },
+          { file: 'tests/no-message.test.mjs', title: 'x', reason: '已知' },
+        ],
+      },
+    })
+    expect(known).toHaveLength(2)
+    expect(violations).toEqual([])
+  })
+
   it('已知红独存的文件（有失败断言、没有没跑起来的用例）→ 不报文件级失败，已知红照常豁免', () => {
     const current = collectReport(
       { success: false, testResults: [{ name: '/repo/tests/a.test.mjs', status: 'failed', assertionResults: [{ title: 'x', status: 'failed' }] }] },
@@ -324,7 +398,7 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
     expect(violationsFor({ current: noExitInfo, baseline: { files: { 'tests/a.test.mjs': 1 }, knownRed: [] } }).violations).toEqual([])
   })
 
-  it('**真实 vitest** 跑两个夹具（纯 hook + 已知红并存的混合）：形状与合成报告一致，门判红', () => {
+  it('**真实 vitest** 跑三个夹具（纯 hook + 已知红并存的混合 + afterAll 抛错）：形状与合成报告一致，门判红', () => {
     const reportPath = reportPathOf('hook-real')
     const run = runSuiteReport({
       vitest: join(process.cwd(), 'node_modules', 'vitest', 'vitest.mjs'),
@@ -333,19 +407,36 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
       spawn: (command, args, options) => spawnSync(command, [...args, '--config', HOOK_FIXTURE_CONFIG], options),
     })
     const current = collectReport(run.report, { repoRoot: process.cwd(), exitCode: run.exitCode })
-    // 真实形状：混合夹具里那条已知红按用例记账；两个文件都进了文件级失败（各有没跑起来的用例）。
-    expect(current.failures).toEqual([{ file: MIXED_FIXTURE, title: 'known red' }])
-    expect(current.suiteFailures.map((entry) => entry.file).sort()).toEqual([HOOK_FIXTURE, MIXED_FIXTURE].sort())
+    // 真实形状：mixed 与 afterAll 两个夹具里各有一条已知红按用例记账（两者同名 `known red`）；
+    // 三个文件都进了文件级失败 —— hook-failure / mixed 是「有没跑起来的用例」，
+    // afterAll 是「跳过 0 条、只有文件级 message」（R1 的新形状）。
+    const byFile = (a, b) => a.file.localeCompare(b.file)
+    expect(current.failures.map(({ file, title }) => ({ file, title })).sort(byFile)).toEqual(
+      [
+        { file: AFTER_ALL_FIXTURE, title: 'known red' },
+        { file: MIXED_FIXTURE, title: 'known red' },
+      ].sort(byFile),
+    )
+    expect(current.suiteFailures.map((entry) => entry.file).sort()).toEqual(
+      [HOOK_FIXTURE, MIXED_FIXTURE, AFTER_ALL_FIXTURE].sort(),
+    )
+    // R1 的关键实测：afterAll 的形状是「0 skipped + 文件级 message 非空」，与断言失败（message 空串）可区分。
+    const afterAll = current.suiteFailures.find((entry) => entry.file === AFTER_ALL_FIXTURE)
+    expect(afterAll?.skippedAssertions, 'afterAll 吃不到用例，所以没有 skipped').toBe(0)
+    expect(afterAll?.message, 'afterAll 抛错时文件级 message 就是那次 hook 的错误文本').toBe('NEW_AFTER_ALL_ERROR')
     expect(run.exitCode).toBe(1)
     const { violations, known } = violationsFor({
       current,
       baseline: {
-        files: { [HOOK_FIXTURE]: 1, [MIXED_FIXTURE]: 2 },
-        knownRed: [{ file: MIXED_FIXTURE, title: 'known red', reason: '夹具已知红' }],
+        files: { [HOOK_FIXTURE]: 1, [MIXED_FIXTURE]: 2, [AFTER_ALL_FIXTURE]: 1 },
+        knownRed: [
+          { file: MIXED_FIXTURE, title: 'known red', reason: '夹具已知红' },
+          { file: AFTER_ALL_FIXTURE, title: 'known red', reason: '夹具已知红' },
+        ],
       },
     })
-    expect(known).toHaveLength(1)
-    expect(violations, '两个文件的 hook 错误都必须被文件级失败拦下').toHaveLength(2)
+    expect(known, '两个夹具里的已知红都照常豁免').toHaveLength(2)
+    expect(violations, '三个文件的 hook 错误都必须被文件级失败拦下').toHaveLength(3)
     expect(violations.every((violation) => /文件级失败/u.test(violation))).toBe(true)
   })
 })

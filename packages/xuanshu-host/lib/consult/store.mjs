@@ -141,14 +141,19 @@ export function normalizeMounts(input) {
 /**
  * 归一**交付账**（旁挂清单的 `mountsInjected`）。
  *
- * 与 `normalizeMounts` 的差别只有两点，都是为了复核 48e0e0a 的 N3（账要与日志对账）：
- *   1. 多带一个 `head` —— 注入文本里那段 `【来源：挂载 <head>】` 标记的主体，是「这层到底
- *      进没进日志」的唯一凭据；
+ * 与 `normalizeMounts` 的差别只有两点，都是为了复核 48e0e0a 的 N3 / 32216d9 的 R5（账要与日志对账）：
+ *   1. 多带对账凭据 —— 三层，按可信度从高到低：
+ *      - `receipt`：**本次交付**那条会话消息的 id（边界盖的章）。它在日志里出现过 ⇒ 这一轮的
+ *        正文真的落进了日志。同一层重新挂载后必须有新的 `receipt`，**旧一轮的正文标记不算数**（R5）；
+ *      - `withdrawal`：**本次撤下声明**那条消息的 id。它在日志里出现过 ⇒ 撤下已说出口，
+ *        条目才可以清掉；没出现 ⇒ 下一问重发（撤下失败不许丢重试依据，R5）；
+ *      - `head`：注入文本里 `【来源：挂载 <head>】` 标记的主体 —— **老条目**（没有上面两个字段）
+ *        唯一的凭据：标记在日志里就算交付过（向后兼容，不许因此每问重投）。
  *   2. **宽容**：交付账是我们自己写的缓存，坏条目丢掉就行（不像 `mounts` 那样抛错）——
  *      一份坏的缓存不该让整场问事哑掉。
  *
  * @param {unknown} input 旁挂清单里的 `mountsInjected`
- * @returns {Array<{kind: string, id: string, label: string, head?: string}>}
+ * @returns {Array<{kind: string, id: string, label: string, head?: string, receipt?: string, withdrawal?: string}>}
  */
 export function normalizeDeliveredMounts(input) {
   if (!Array.isArray(input)) return []
@@ -164,7 +169,16 @@ export function normalizeDeliveredMounts(input) {
     seen.add(key)
     const label = typeof entry.label === 'string' && entry.label.trim() !== '' ? entry.label.trim() : id
     const head = typeof entry.head === 'string' && entry.head !== '' ? entry.head : undefined
-    out.push({ kind, id, label, ...(head === undefined ? {} : { head }) })
+    const receipt = typeof entry.receipt === 'string' && entry.receipt !== '' ? entry.receipt : undefined
+    const withdrawal = typeof entry.withdrawal === 'string' && entry.withdrawal !== '' ? entry.withdrawal : undefined
+    out.push({
+      kind,
+      id,
+      label,
+      ...(head === undefined ? {} : { head }),
+      ...(receipt === undefined ? {} : { receipt }),
+      ...(withdrawal === undefined ? {} : { withdrawal }),
+    })
   }
   return out
 }

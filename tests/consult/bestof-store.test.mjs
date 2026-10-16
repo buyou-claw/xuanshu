@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { currentAdoptedMessageIds } from '../../packages/xuanshu-host/lib/consult/bestof-store.mjs'
+import { currentAdoptedMessageIds, migrateLegacyDecisions } from '../../packages/xuanshu-host/lib/consult/bestof-store.mjs'
 
 describe('采用稿账本 · 谁还是当前采用稿（N4）', () => {
   it('没有记录 / 还没人拍板 → null（判不出来就别过滤）', () => {
@@ -85,5 +85,145 @@ describe('采用稿账本 · 谁还是当前采用稿（N4）', () => {
     expect(currentAdoptedMessageIds({ ...legacy, rejected: true, adoptedId: null })).toEqual(new Set())
     // 投递史里找不到对应那一份（比如只是跑完还没拍板）：判不出来 → null（不过滤）
     expect(currentAdoptedMessageIds({ adoptedId: 'c9', rejected: false, deliveries: legacy.deliveries })).toBeNull()
+  })
+})
+
+describe('采用稿账本 · 跨轮 / 否决后重采（复核 32216d9 的 R2 / R3）', () => {
+  it('R2：两轮各自采用一份 → 两份都算当前采用稿（整场会话不是只留一稿）', () => {
+    // 复核 32216d9 的 R2 反例：run#1 采用 DRAFT_9、run#2 采用 DRAFT_11，两轮都没否决；
+    // 原实现从末尾倒着找**第一条** adopted 就返回，于是第一轮那份被历史过滤掉
+    // （真实 Loop 实测 promptHasFirstRun=false / promptHasSecondRun=true）。
+    const twoRuns = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-run1-c1', runId: 'bestof-r1' },
+        { kind: 'adopted', messageId: 'm-run2-c1', runId: 'bestof-r2' },
+      ],
+    }
+    expect(currentAdoptedMessageIds(twoRuns)).toEqual(new Set(['m-run1-c1', 'm-run2-c1']))
+  })
+
+  it('R3：同轮 c1 → reject → c2 → 返回 c2（按每轮**最后**一个决定，不是「曾经被否决」）', () => {
+    const readopt = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-c1', runId: 'bestof-r1' },
+        { kind: 'rejected', runId: 'bestof-r1' },
+        { kind: 'adopted', messageId: 'm-c2', runId: 'bestof-r1' },
+      ],
+    }
+    expect(currentAdoptedMessageIds(readopt)).toEqual(new Set(['m-c2']))
+  })
+
+  it('R3：同轮 adopted → rejected → 再 adopt c3 → 返回 c3（本轮最后决定是采用）', () => {
+    const readoptedAgain = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-c1', runId: 'bestof-r1' },
+        { kind: 'rejected', runId: 'bestof-r1' },
+        { kind: 'adopted', messageId: 'm-c3', runId: 'bestof-r1' },
+      ],
+    }
+    expect(currentAdoptedMessageIds(readoptedAgain)).toEqual(new Set(['m-c3']))
+  })
+
+  it('R3 与 R2 一起：某轮最后决定是否决，只抹掉**那一轮**，别的轮的采用稿照旧算数', () => {
+    const mixed = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-run1', runId: 'bestof-r1' },
+        { kind: 'adopted', messageId: 'm-run2', runId: 'bestof-r2' },
+        { kind: 'rejected', runId: 'bestof-r2' },
+      ],
+    }
+    expect(currentAdoptedMessageIds(mixed)).toEqual(new Set(['m-run1']))
+  })
+})
+
+describe('采用稿账本 · 旧记录迁移（复核 32216d9 的 R4）', () => {
+  /** 上一版 `xuanshu/bestof@1` 的合法形态：只有 deliveries / adoptedId / rejected，没有 draftLedger。 */
+  const legacyRecord = {
+    schema: 'xuanshu/bestof@1',
+    runId: 'bestof-old-run',
+    adoptedId: 'c2',
+    rejected: false,
+    deliveries: [
+      { candidateId: 'c1', messageId: 'm-c1-old' },
+      { candidateId: 'c2', messageId: 'm-c2' },
+      { candidateId: 'c1', messageId: 'm-c1-new' },
+    ],
+  }
+
+  it('没有账本 + 可判定的旧决策 → 合成一条归属「旧轮」的 adopted 条目', () => {
+    const ledger = migrateLegacyDecisions(legacyRecord)
+    expect(ledger).toHaveLength(1)
+    expect(ledger[0].kind).toBe('adopted')
+    expect(ledger[0].messageId).toBe('m-c2')
+    expect(ledger[0].candidateId).toBe('c2')
+    expect(ledger[0].runId).toBe('legacy')
+    // 迁移后旧采用稿仍被认作当前采用稿（升级后的首个新 run 必须过滤掉改选前的旧稿）。
+    expect(currentAdoptedMessageIds({ ...legacyRecord, draftLedger: ledger })).toEqual(new Set(['m-c2']))
+  })
+
+  it('迁移幂等：账本已在就原样返回，重复迁移不多条目', () => {
+    const first = migrateLegacyDecisions(legacyRecord)
+    const again = migrateLegacyDecisions({ ...legacyRecord, draftLedger: first })
+    expect(again).toHaveLength(1)
+    expect(again).toEqual(first)
+    expect(again[0]).toBe(first[0]) // 原样返回，不是重建一份
+    expect(migrateLegacyDecisions({ ...legacyRecord, draftLedger: again })).toHaveLength(1)
+  })
+
+  it('迁移后新 run 采用另一份 → 两份都在（旧轮的与新一轮的各算各的）', () => {
+    const inherited = migrateLegacyDecisions(legacyRecord)
+    const afterNewRunAdopt = [...inherited, { kind: 'adopted', messageId: 'm-run-new', runId: 'bestof-new-run' }]
+    expect(currentAdoptedMessageIds({ ...legacyRecord, draftLedger: afterNewRunAdopt })).toEqual(new Set(['m-c2', 'm-run-new']))
+  })
+
+  it('判不出采用但**可判定为「这一轮不作数」**的旧决策：落否决哨兵，不许翻成「不过滤」', () => {
+    // 复核 32216d9 追加复核的 SP-2：迁移前这两种形状都是**过滤**（空集 / 空集），迁移后若返回空账本，
+    // 消费方会退回「不过滤」——语义翻转，旧采用稿在第二个新 run 重新混进候选历史。
+    const rejectedOf = (record) => {
+      const ledger = migrateLegacyDecisions(record)
+      expect(ledger).toHaveLength(1)
+      expect(ledger[0]).toMatchObject({ kind: 'rejected', runId: 'legacy' })
+      return currentAdoptedMessageIds({ ...record, draftLedger: ledger })
+    }
+    expect(rejectedOf({ ...legacyRecord, adoptedId: null, rejected: true })).toEqual(new Set())
+    expect(rejectedOf({ ...legacyRecord, adoptedId: 'c9' })).toEqual(new Set())
+    // 迁移前后一致（迁移前走老 fallback：否决 ⇒ 空集、找不到投递 ⇒ 不过滤/空集，都算不出采用稿）。
+    expect(currentAdoptedMessageIds({ ...legacyRecord, adoptedId: null, rejected: true })).toEqual(new Set())
+  })
+
+  it('还没拍板的旧记录：不合成条目（空账本 + 老字段 ⇒ 退回当次决策）', () => {
+    expect(migrateLegacyDecisions({ ...legacyRecord, adoptedId: null })).toEqual([])
+    expect(migrateLegacyDecisions(undefined)).toEqual([])
+    expect(migrateLegacyDecisions(null)).toEqual([])
+    // 空账本 + 老字段仍退回当次决策（老 fallback 语义不丢）。
+    expect(currentAdoptedMessageIds({ ...legacyRecord, draftLedger: [] })).toEqual(new Set(['m-c2']))
+    expect(currentAdoptedMessageIds({ ...legacyRecord, adoptedId: null, rejected: true, draftLedger: [] })).toEqual(new Set())
+  })
+
+  it('SP-4：账本**存在但为空**时也要迁移（空数组不等于「已经迁移过」）', () => {
+    // 这个形状在现版本内可产生：`bestof.adopt` 先落盘（adoptedId 已写、账本还没追加）、
+    // 随后 `deliverAdopted` 抛错。若把空数组当「账本已在」，那次采用就在覆盖写后彻底丢失。
+    const ledger = migrateLegacyDecisions({ ...legacyRecord, draftLedger: [] })
+    expect(ledger).toHaveLength(1)
+    expect(ledger[0]).toMatchObject({ kind: 'adopted', messageId: 'm-c2', runId: 'legacy' })
+    expect(currentAdoptedMessageIds({ ...legacyRecord, draftLedger: ledger })).toEqual(new Set(['m-c2']))
+  })
+
+  it('SP-3：没有 runId 的条目**各自成轮**，不许后一条把前一条顶掉（静默丢采用稿）', () => {
+    const keyless = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-keyless-1' },
+        { kind: 'adopted', messageId: 'm-keyless-2' },
+      ],
+    }
+    expect(currentAdoptedMessageIds(keyless)).toEqual(new Set(['m-keyless-1', 'm-keyless-2']))
+    // 无 runId 的 adopted 与无 runId 的 rejected 也是两轮：否决只抹自己那一条。
+    const keylessMixed = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-keyless-1' },
+        { kind: 'rejected' },
+      ],
+    }
+    expect(currentAdoptedMessageIds(keylessMixed)).toEqual(new Set(['m-keyless-1']))
   })
 })

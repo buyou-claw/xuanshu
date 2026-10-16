@@ -428,6 +428,130 @@ rejected-history:   两稿都 false
 
 ## 验证边界
 
+### 14. 复核轮：`32216d9` 的 5 条发现（2026-10-16，全修）
+
+复核报告入库在 `docs/reviews/spec001-32216d9-review.md`（结论：本轮不通过；Standards 1 条 P1 + Spec 4 条 P2）。
+它写的每一处都是真的，逐条处置如下；**§13 里与本节冲突的说法以本节为准**。
+
+| # | 复核实测的发现 | 处置 |
+|---|---|---|
+| R1 | **清单门仍会假绿**：`afterAll` 在断言全部跑完之后抛错 ⇒ 文件里有失败断言（已知红）、跳过 0 条 ⇒ 旧判据「没有失败断言 **或** 有 skipped」两条都不成立，`suiteFailures` 为空而退出码兜底又被已有失败断言挡住 | `collectReport` 的判据加第三类证据：**文件 `failed` 且文件级 `result.message` 非空** ⇒ 进 `suiteFailures`。依据是实测的报告形状：`afterAll` 抛错时 `message='NEW_AFTER_ALL_ERROR'`（`.scratch/review-322-standards/after-all-report.json`），而**纯断言失败时它是空串**（同目录 `mixed-report.json`、本仓 `assembly-contract.test.mjs` 的真实报告）。回归：新增真 vitest 夹具 `tests/lib/fixtures/inventory-hook/after-all.fixture.mjs`（一条已知红 + `afterAll` 抛错）+ 2 条合成报告用例（含「空串 / 字段缺失不误报」），真 vitest 那条用例从两夹具扩到三夹具（**收紧**，不是放宽） |
+| R2 | **整场会话最多留一稿**：`currentAdoptedMessageIds()` 从账本末尾找到**第一条** adopted 就返回单个 id ⇒ 两个独立合参轮次各自采用一份时，候选历史只带得回最后那一份 | 判据改成**按 `runId` 分组、每组只看最后一个决定**，各轮有效采用的**并集**就是当前采用稿集合（S9:77「采用稿是这一轮在会话流里的正式输出」） |
+| R3 | **同轮否决后重新采用仍被排除**：`rejectedRuns` 把「曾经出现过 rejected 的 run」永久排除，没看该轮之后的新采用决定 | 同一处改写顺带修掉：「曾经被否决」≠「这轮不作数」，只按**每组最后一条**决定判（S9:169 / ADR-0010:18「只放 adoptedId 指向的那一份」）。同轮 `c1 → reject → c2` 现在返回 c2 |
+| R4 | **旧记录未迁移**：上一版 `xuanshu/bestof@1` 只有 `deliveries / adoptedId / rejected`，启动新 run 时被 `draftLedger: []` 覆盖 ⇒ 旧轮采用关系丢失，第二个新 run 起过滤返回 `null`、旧采用稿重新混入候选 | 新增 `migrateLegacyDecisions(record)` + 哨兵 `BESTOF_LEGACY_RUN_ID='legacy'`，在 `bestof.run` **覆盖写之前**把可判定的旧决策合成一条归属「旧轮」的条目（adopted 条目带旧投递的 `messageId`；判不出采用时落 `rejected` 哨兵 —— 见下面「追加复核」的 SP-2）。幂等性靠结构保证：账本**非空**时原样返回（引用），重复迁移不会多条目。**能保住的只有「可判定为 adopted」这一支**：`adoptedId` 有投递凭据那种记录，迁移后旧采用稿仍算当前；被否决 / 投递凭据找不到的旧记录只剩「这一轮不作数」，覆盖写之后无法复原（老 fallback 只在**账本长度为零**时生效） |
+| R5 | **挂载撤下与重新挂上的失败恢复仍漏投**：① 撤下项在撤下声明落日志**之前**就被从账里删掉 ⇒ `prepareCall` 失败后没有重试依据；② 重挂后「已交付」仍按 `【来源：挂载 <head>】` 标记判，而标记只由 `head` 决定 ⇒ 第一次挂载留下的旧标记冒充本次回执，新版工作区内容永不补投 | 交付账条目加**本次交付回执**：`receipt` / `withdrawal` = **承载这一轮交付 / 撤下声明的那条会话消息 id**（边界用 `createConsultContextMessage()` 的 `message.id` 盖章，`scanLog()` 顺带收集日志里注入消息的 id）。判据：有条目带 `receipt` ⇒ 只看该 id 在不在日志（**旧标记不算数**）；**老条目**（无 `receipt`）退回标记对账（升级不许每问重投）。撤下声明在日志确认**之前条目留着**并每问重发，确认后才清；撤下声明发过之后又挂回来 = 新一次交付（补投当前内容）。**没有可见文案改动**：`context.mjs` / `message.mjs` 零改动，仍只用 `【来源：挂载 …】` / `【来源：临时挂载·撤下】`（`receipt` 不写进消息 `source` 元数据，只用消息 id 对账） |
+
+**R2–R4 的一处语义后果（消费方要跟着看）**：当前采用稿从「全场一份」变成「**各轮各一份**」——
+`currentAdoptedMessageIds()` 返回的是集合。`history.mjs` 的候选历史投影按 messageId 过滤，语义正好；
+而 **S7 回看按「一条采用稿」呈现**的展示口径（`bestof-store.mjs` 文件头与 ADR-0010 第 4 条那句
+「一层会话只留最后一次合参」）指的是**旁挂记录**的覆盖写，不是候选历史的携带范围 —— 旁挂记录仍一份，
+改的是「哪些已采用消息算当前」。客户端展示未改（本轮的验证边界见下）。
+
+**同一轮里附带修掉的一处基线竞态（R2–R4 排查时实测到，如实登记）**：
+上一轮 `bestof.run` 的 `execute` 还在后台跑时，它收尾 / 流式回填会把**陈旧记录**写回盘，
+盖掉新一轮的 `runId` 与采用稿账本，随后 `bestof.adopt` 的取代判据误报「已经被更新的一轮取代」
+（`tests/consult/bestof-adopt.test.mjs:141` 那条用例因此**在基线就偶发红**）。
+修法：`createBestOfMethods` 内加 `currentRun = Map<sessionId, runId>`，`persist()` 在「我不是当前轮」时不写；
+`bestof.run` 在**首次落盘成功之后**才认下自己是当前轮。
+判据是**逻辑先后**，不是「此刻盘上是谁」（判盘面会和后台写抢同一瞬间）。
+**它超出 R2–R4 的字面范围，单独记在这里，便于下一轮复核单独处置**；它自己在独立复核里又被追出两条
+（见下面「追加复核」的 ST-1/SP-1），修法与测据一并记在那里。
+
+## 追加复核：独立复核者对本轮修复的第二轮审查（2026-10-16 深夜，全修）
+
+上面五条修完之后，另起一个独立复核上下文（只读、复跑三个探针 + 全量清单门 + 自写对抗探针）审了工作区 diff。
+它确认**五个原始反例全部真的关掉了**（复跑数字与本节各表逐字一致），但追出五条**未闭合路径**与五处
+「实现 ↔ 文档」不一致。逐条处置如下（这才是本节的最终形态；上面 R4 行与 ADR-0012 的措辞都已按这里的结论改过）。
+
+| # | 独立复核的发现 | 处置 |
+|---|---|---|
+| SP-1 | **`persist()` 静默丢弃整次写，调用方却拿到「成功」**（Standards P1，本轮新引入）：被取代那一轮的写被整次丢掉（连 `bestof.adopt` 的落盘也丢）——API 报「已采用」、采用稿也真进了会话日志，但盘上逐字节未变；下一轮读盘时账本里没有这条 adopted，候选历史会把刚投的那份当非当前过滤掉。触发面 =「盘面 ≠ 内存当前轮」（新一轮首次落盘失败 / 两个宿主实例共用 dataDir） | 三条一起改：① `persist()` **返回这次到底写了没有**；② `bestof.run` 改成**落盘成功之后**才 `currentRun.set`（那一次抛错时旧轮仍是当前轮，盘面与「当前轮」不会分叉）；③ `bestof.adopt` / `bestof.cancel` 增加**内存判据的取代闸**（`hasNewerRun()`，与原有「读盘面判取代」配对），并在 `adopt` 里**投递之前**判 `persist()` 的返回值 —— 不落盘就抛可读错误，绝不静默报成功。回归：`bestof-adopt.test.mjs` 新增一条（旧轮的 adopt / cancel 都拒绝、盘面仍是新一轮、当前轮的拍板照常成功） |
+| SP-2 | **R4 只闭合了「可判定为 adopted」的旧记录**（Spec P2）：上一版「先采用 c1、再否决」是合法记录（`adoptedId=null; rejected=true` 且不清 `deliveries`），迁移返回**空账本** ⇒ 覆盖写后消费方退回「不过滤」⇒ **第二个新 run 起旧稿重新混入**（与 R4 同形，形状换成 rejected） | `migrateLegacyDecisions` 在「本轮被否决」与「`adoptedId` 找不到投递」两种形状上落 `{kind:'rejected', runId:'legacy'}` 哨兵（**不是**空账本）：语义与迁移前一致（该轮不作数），不会翻转成「不过滤」。回归：`bestof-store.test.mjs` 哨兵形状 + `bestof-history.test.mjs` 一条端到端（老记录 `rejected:true` + 日志里有旧稿 ⇒ 两个新 run 的候选 prompt 都不含旧稿） |
+| SP-3 | **无 `runId` 的条目被折成同一轮**（Spec P2）：注释写「不让它们互相顶掉」，代码是 `Map.set` ⇒ 后一条顶掉前一条，**静默丢一份采用稿**（正是 R2 要修的方向） | 无 `runId` 的条目**各自成轮**（`\0keyless-<n>`），注释与代码对齐。回归：两条无 `runId` 的 adopted ⇒ 两份都算数；无 `runId` 的 adopted + rejected ⇒ 只抹自己那一条 |
+| SP-4 | **`draftLedger: []` 被当成「已经迁移过」**（Spec P3）：该形状在现版本内可产生（`adopt` 先落盘、`deliverAdopted` 随后抛错），空数组会让那次采用在覆盖写后彻底丢失 | 「已经迁移过」的判据改成**账本非空**（`length > 0`）；空数组继续走老字段合成。回归：`{draftLedger: [], adoptedId:'c2', deliveries:[…]}` 迁出 adopted 条目 |
+| SP-5 | `deliveryConfirmed` 有条目带 `receipt` 时**只看消息 id**、不退回标记（Spec P3，只有代码阅读证据）：若「id 缺失而标记正文仍在」，多投之外还可能把「已撤下」条目当「没交付过」直接清掉 | **无法在钉版 rc.2 造出该状态**（复核者查了 `dsh-session` 实装：`snapshotEvents()` 返回全量 `this.log`，全仓只有 `push`、没有截断；`scanLog` 对同一事件同时取 id 与正文，要缺就一起缺）。本轮**不改判据**，把这条作为「钉版约束」登记：换 DSH 版本时要连同 `detectUnhandledErrors` / 清单门第三类证据一起复核 |
+| ST-1 | 清单门第三类证据（文件级 `message` 非空）的**误红代价只写在台账里、没写在判据旁边**（Standards P3） | 把代价写进 `scripts/lib/inventory-gate.mjs` 判据 4 的注释：① `it.skipIf` 会误红；② 认的是上游 reporter 形状、只在钉版成立，换版本要复核；并写明「已知红文件将来带上非空 message 会从放过变违规」是**刻意的失败方向** |
+
+**独立复核者的复跑数字（本节据此确认，不采信实现者的转述）**：全量清单门 exit 0
+（`1134 条（基线 1134）/ 104 文件 / 失败 2 条（已知红 2 条）/ 文件级失败 0 个 / 跳过 10 条` —— 该数字是**追加复核那一刻**的快照；
+复核之后 Lead 又按它的 SP 条目补了 5 条用例，最终计数见下面「本节改动的用例账」）；
+三个探针的 after-all / 四个 stage / 两组 mounts 字段与本节各表逐字一致；`git show HEAD:tests/test-inventory.json`
+对账 = boundary 21→25、bestof-store **6→14**、bestof-history 10→11、inventory-gate 20→22（+15，`knownRed` 未改）；
+`.scratch/test-inventory-report.json` 里唯一 `status:'failed'` 的文件 `assembly-contract.test.mjs` 的**文件级 message 是空串**
+⇒ 第三类证据今天不误红。它另外用四个对抗夹具证明「断言失败 + 未处理错误」**不会**让文件级 message 变非空
+（即新判据不会被那一类误触发）。
+
+**独立复核者无法验证的边界（照录，别当成已验）**：真实模型的端到端与 S7 回看渲染（R2–R4 把「当前采用稿」
+从 1 份改成 N 份，**客户端展示是必须补的验收项**，不是注脚）；「干净无 profile」的全仓矩阵；`verify:assembly`
+（S1/S2–S5 未独立复核）；`currentRun` 在多宿主实例下的行为（进程内 Map，两个实例互不知情）；旧客户端对
+旁挂清单新字段（`receipt` / `withdrawal`）严格 schema 校验的可能性。
+
+**复核自己的三个探针在修复后原样复跑（全部转绿）**：
+
+```
+# ① .scratch/review-322-standards/probe.mjs（清单门）
+after-all:  suiteFailures 1（message="NEW_AFTER_ALL_ERROR"、skippedAssertions 0）
+            → violations 1（文件级失败）· 那条已知红照旧豁免   （修复前 violations=[]）
+mixed / unhandled 两行与改前一致（未回归）
+# ② .scratch/review-322-spec/probe.mjs（采用稿历史）
+readopt-after-reject:  adoptedId=c2 / delivery.ok=true / candidateHasReadopted=true
+two-adopted-runs:      promptHasFirstRun=true / promptHasSecondRun=true（修复前 false/true）
+legacy-upgrade:        firstHasObsolete=false / firstHasCurrent=true
+                       secondHasObsolete=false / secondHasCurrent=true（修复前 true/true）
+two-clean-adopted-runs: 两轮都在
+# ③ .scratch/review-322-mounts-probe.mjs（真 rc.2 Loop + 真 consult.setMounts）
+withdrawal-failure:  originalAddRecovered=true / withdrawalInLog=true（修复前 false）
+                     账在撤下失败时保留：{..., withdrawal:"<msgId>"}
+remount-failure:     originalAddRecovered=true / withdrawalInLog=true /
+                     updatedRemountInLog=true（修复前 false）
+```
+
+**一条操作陷阱（本轮实测踩到，代价是三名实现者的探针结论一度无效）**：
+`install-profile.mjs` 把自有插件包**逐文件拷进** `$DSH_HOME/profiles/<name>/node_modules/`，
+而 `.dsh-home/profiles/xuanshu/node_modules/xuanshu-host` 是一个指向**仓库 `profile/`** 的目录联接，
+`profile/` 里那份是**拷贝**。于是**改完 `packages/xuanshu-host/lib/**` 必须先跑
+`node scripts/install-profile.mjs --home .dsh-home`**，否则所有「真 Loop 探针」跑的还是旧副本
+（症状极其安静：探针照常输出、数字却是修复前的）。本轮实测：同步前 `profile` 与 `packages` 的
+`inject.mjs` / `bestof-store.mjs` 哈希不同（`install-profile` 报「同步了 5 个文件」），
+同步后三个探针的结论才可信。**这与 §「三条会让『没验』伪装成『验过』的操作陷阱」第 1 条（merge 之后必须重跑安装器）
+是同一类，但触发条件更宽：不只是 merge，任何改自有包源码之后都要重跑。**
+
+**本节改动的用例账**（`tests/test-inventory.json` 已按下面刷新；**这里的数字以追加复核后的工作区为准**）：
+
+```
+[inventory] 用例 1139 条（基线 1139）/ 文件 104 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
+```
+
+1119 → 1139（**+20 条**，全为回归覆盖，无删除，`knownRed` 未改）：`tests/consult/boundary.test.mjs` 21 → 25（+4）、
+`tests/consult/bestof-store.test.mjs` 6 → 17（+11）、`tests/consult/bestof-history.test.mjs` 10 → 12（+2）、
+`tests/consult/bestof-adopt.test.mjs` 20 → 21（+1）、`tests/lib/inventory-gate.test.mjs` 20 → 22（+2）、
+`tests/consult/history.test.mjs` 21 → 21（0）；
+新增夹具 `tests/lib/fixtures/inventory-hook/after-all.fixture.mjs` 不计入（刻意不叫 `.test.mjs`，只由夹具 config 收）。
+2 条已知红仍是 S1 装配树与连带的 CLI 全绿断言（理由见下）。
+
+**本节修复后的边界与代价（如实登记）**：
+
+- R1 的第三类证据依赖**上游 reporter 形状**（`afterAll` 时文件级 `message` 非空）：与
+  `detectUnhandledErrors()` 一样只在钉版（ADR-0004）上成立，`tests/lib/inventory-gate.test.mjs` 的真 vitest 用例钉着它 ——
+  **换 vitest 版本时这两条判据要一起复核**。另一面：若某个**已登记已知红**的文件将来带上非空文件级 `message`
+  （上游改了报告形状），它会从「放过」变成「文件级失败」违规 —— 这是**刻意的**方向（宁可让人去看一眼，
+  也不许把 hook 错误当已知红放过去），真遇上就按注释里的两条路处置（拆文件 / 先修掉已知红），别放宽判据。
+- R5 的凭据是**会话消息 id**：追加复核查过钉版实装（`dsh-session` 的 `snapshotEvents()` 返回全量 `this.log`，
+  全仓只有 `push`、没有截断）——**正常路径上日志不压缩**，所以「凭据凭空消失」不是本钉版的现实代价。
+  真要出现「id 缺失而正文标记仍在」（当前造不出），方向是**多投**（`deliveryConfirmed` 只看 id 在不在），
+  对「已撤下」条目也会因为 `retracted()` 为假而**保留条目并重发撤下声明**；`withdrawal` 若从未成功落盘，
+  条目同样留着重试（复核 32216d9 追加复核的 SP-5 已按此口径核对，未改判据）。
+  挂载期间工作区内容变化仍**不**重投（只在「重挂」时补投当前内容），这是票 12 / ADR-0012 的既有口径。
+- R2–R4 的迁移只恢复「上一版记录自己那一轮」的采用关系（旧记录没有 `runId`，跨轮信息本来就不可复原）；
+  可判定的旧决策有两种落法：`adoptedId` 能找到投递凭据 ⇒ 合成 adopted 条目；被否决或找不到凭据 ⇒
+  合成 `rejected` 哨兵（该轮不作数）。哨兵 `'legacy'` 是常量，不在 `newRunId()` 的 `bestof-<uuid>` 形态里，
+  不会与真轮次撞名。
+- 本轮**未**做客户端 / UI 端到端验收（探针是打桩 LLM 的 Loop 级与断言台）。**R2–R4 把「当前采用稿」从 1 份
+  改成 N 份，所以 S7 回看逐条渲染多份采用稿是必须补的验收项，不是注脚**（客户端展示未改、未验）。
+  `currentRun` 守卫是**进程内** Map：两个宿主实例共用同一个 `dataDir` 时互不知情（与基线同类，未构造该现场）。
+  本轮也未重跑「干净无 profile」的全仓矩阵（上一轮的数字见 §13）。
+
 完整装配五条 seam 的当前结果：S2（进程内启动）、S3（客户端产物）、S4（上游行基线）、S5（真实 CLI 报告）通过；
 **S1 schema 导出失败**。
 
@@ -435,17 +559,17 @@ rejected-history:   两稿都 false
 而同版本官方 web bundle 自带的 `@deepseek-ai/dsh-agent-preset` 是另一种 carrier，报
 `unrecognized Loader tree carrier`。真实 web 与宿主启动正常。测试保留失败，无上游源码改动、无放宽断言。
 
-当前全仓基线（`node scripts/check-test-inventory.mjs`，2026-10-16 二次复核修复轮之后）：
+当前全仓基线（`node scripts/check-test-inventory.mjs`，2026-10-16 二次复核修复轮 + 追加复核修复之后）：
 
 ```
-[inventory] 用例 1119 条（基线 1119）/ 文件 104 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 1139 条（基线 1139）/ 文件 104 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 ```
 
 2 条失败 = **S1 装配树** 与由它连带的 **CLI 退出码为 0**（就是基线 `knownRed` 里那两条，理由见上）。
 跳过的 10 条 = `tests/horosa/p0-fixtures` 2 条（`.scratch` 里的 `gt06-*` 原始捕获仍缺）+ `tests/horosa/p10-e2e` 8 条
 （真机前置件不在）。**同一条命令在「没有 profile」的干净环境里也必须给出同样的条数并判过**
-（二次复核修复轮实测：1119 / 104 文件 / 0 失败 / 51 跳过 / exit 0）—— 这就是 §11 ② 的机器判据；
+（上一轮实测：0 失败 / 51 跳过 / exit 0 —— 本条本节未重跑，见 §14 的边界）—— 这就是 §11 ② 的机器判据；
 
 「干净环境」用 `XUANSHU_DSH_HOME` 指向一个空目录来模拟（CI 上那个目录本来就不存在）。
 **基线之外的红色一律是本轮引入的回归。**
@@ -456,7 +580,8 @@ rejected-history:   两稿都 false
 `tests/setup/install-profile-copy.test.mjs` 8 条、`tests/rikke/daily-chain.test.mjs` 9 条、`tests/digao/daily-chain.test.mjs` 6 条，
 以及 history +5 / inventory-gate +4 / bestof-run +1 / mounts-preview +1；同时据实删掉 12 条「验旧注入机制」的用例
 （`send` 6 条 / `mounts-inject` 6 条），其覆盖搬到边界用例 —— 所以 `--update` 时那两处「用例变少」
-是**有意的**，理由写在提交信息与本节。）
+是**有意的**，理由写在提交信息与本节。二次复核修复轮 + 追加复核修复 **+20 条用例**（1119 → 1139，见 §14 的用例账：
+boundary +4 / bestof-store +11 / bestof-history +2 / bestof-adopt +1 / inventory-gate +2，另有 1 个真 vitest 夹具文件不计入）。）
 
 同一时刻的装配五 seam：**S2 / S3 / S4（185 行基线全命中）/ S5 PASS，S1 FAIL**；`tsc --noEmit` exit 0；
 `build-client --check` in sync（386627 B）。
@@ -484,6 +609,11 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 1. **merge 集成 tip 之后必须重跑 `node scripts/install-profile.mjs --home .dsh-home`。**
    否则 S3 会红：profile 里装的 `lib/client.js` 与仓库不一致（merge 带进来的客户端源文件不会自动同步）。
    **本条每张票都会踩一次**，实现者两轮各踩了一次。
+   **触发条件比「merge」更宽（复核 32216d9 修复轮实测踩到）**：自有插件包是**逐文件拷进** profile 的
+   （`profile/node_modules/<name>` 不是联接，`.dsh-home/profiles/xuanshu/node_modules/<name>` 才是联接），
+   所以**任何改完 `packages/xuanshu-host/lib/**` 或 `packages/xuanshu-client/**` 之后**都要重跑安装器 ——
+   否则所有「真 Loop 探针」跑的还是旧副本，而症状极其安静：探针照常输出、数字却是修复前的
+   （本轮三名实现者的探针结论因此一度无效，同步时报「同步了 5 个文件」）。
 2. **改中文源码文件不要走 PowerShell 的 `Get-Content -Raw | Set-Content -Encoding utf8` 往返** ——
    中文注释会变乱码，进而让 vitest 报 **`no tests`**。危险的不是乱码本身，而是它的**失败形态**：
    一个「测试根本没跑」被读成「测试通过」或「实现被改坏」。**用 `read`/`edit`/`write` 工具改文件。**

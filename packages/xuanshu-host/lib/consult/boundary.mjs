@@ -16,8 +16,14 @@
  * —— 这就是「模型可见 ⟺ 已落日志」不变量的具体形态。所以：
  *   - 交付**永久在场**（重启 / dispose / 原生 composer 都一样，因为读的是日志），
  *   - 也因此**不必每轮重发**：材料补一次（判据 = 日志里有没有），挂载按**与日志的差**补
- *     （判据 = 日志里有没有那一层的 `【来源：挂载 …】` 标记；旁挂清单的 `mountsInjected` 只提供
- *     「每层对应的标记是什么」—— 账走在事实前面时，日志说了算，见「交付账与日志对账」）。
+ *     （判据 = **本次交付凭据**在不在日志里；旁挂清单的 `mountsInjected` 只提供「每层对应的凭据是什么」
+ *     —— 账走在事实前面时，日志说了算，见「交付账与日志对账」）。
+ *
+ * **交付账与日志对账（复核 32216d9 的 R5 之后）**：凭据有两种，按可信度分：
+ *   - `receipt` / `withdrawal` = 承载这一轮交付 / 撤下声明的**会话消息 id**（`scanLog` 收集日志里
+ *     注入消息的 id）。消息 id 不随 head 重复，所以同一层**重新挂载**时，旧一轮的正文标记不能
+ *     冒充本次回执；撤下声明落日志之前条目留着 ⇒ 撤下失败下一问重发。
+ *   - 老条目没有这两个字段 ⇒ 退回 `【来源：挂载 <head>】` 标记对账（向后兼容，不许因此每问重投）。
  *
  * 三条门都是有理由的（写在这儿，免得下一轮有人「简化」掉）：
  *   - `step !== 1` → 一轮只在第一步补：后面几步是同一轮的工具循环；
@@ -27,7 +33,7 @@
  * 纪律：这里**永不抛**（catch 住只记日志）—— 一个辅助上下文不该把别人的一轮问答弄挂。
  */
 import { resolveDataDir } from '../bazi/service.mjs'
-import { createContextAssembly, messageSearchDirs } from './inject.mjs'
+import { createContextAssembly, messageSearchDirs, mountLedgerKey } from './inject.mjs'
 import { MOUNT_MARKER_PREFIX } from './context.mjs'
 import { CONSULT_MESSAGE_SOURCE_KIND, createConsultContextMessage } from './message.mjs'
 import { createConsultStore, isConsultSessionId } from './store.mjs'
@@ -70,7 +76,7 @@ export function installConsultBoundary(ctx, config = {}) {
   })()
 
   /**
-   * 扫一遍这条会话的日志（一次遍历，两件事）。
+   * 扫一遍这条会话的日志（一次遍历，三件事）。
    *
    * 为什么挂载要看日志而不是只看账（复核 48e0e0a 的 N3）：账是我们自己写的，而「交付」发生在
    * loop 的 append 里 —— 中间任何一处失败（`prepareRequest` 抛错就是常态路径之一）都会让账
@@ -79,10 +85,14 @@ export function installConsultBoundary(ctx, config = {}) {
    * 认的是**正文里的标记**而不是 `source.kind`：挂载增量段与材料用的是同一个 kind，
    * 只看 kind 会把「只补过挂载」的会话误判成「材料已在」。
    *
-   * @returns {{hasMaterial: boolean, mountMarkers: Set<string>}}
+   * `messageIds` 是**注入消息自己的 id** 集合（复核 32216d9 的 R5）：交付账里 `receipt` /
+   * `withdrawal` 记的就是承载那一轮交付 / 撤下声明的消息 id —— 同一层重新挂载时，旧一轮的正文
+   * 标记会冒充本次回执，而消息 id 不会。
+   *
+   * @returns {{hasMaterial: boolean, mountMarkers: Set<string>, messageIds: Set<string>}}
    */
   function scanLog(agent) {
-    const result = { hasMaterial: false, mountMarkers: new Set() }
+    const result = { hasMaterial: false, mountMarkers: new Set(), messageIds: new Set() }
     let events = []
     try {
       events = typeof agent?.session?.snapshotEvents === 'function' ? agent.session.snapshotEvents() : []
@@ -93,6 +103,8 @@ export function installConsultBoundary(ctx, config = {}) {
     }
     for (const event of Array.isArray(events) ? events : []) {
       if (event?.type !== 'user/message' || event.data?.source?.kind !== CONSULT_MESSAGE_SOURCE_KIND) continue
+      const id = event.data?.id
+      if (typeof id === 'string' && id !== '') result.messageIds.add(id)
       const text = (event.data.content ?? []).map((block) => block?.text ?? '').join('\n')
       if (!result.hasMaterial && MATERIAL_MARKERS.some((marker) => text.includes(marker))) result.hasMaterial = true
       for (const match of text.matchAll(MOUNT_MARKER)) result.mountMarkers.add(match[0])
@@ -100,9 +112,26 @@ export function installConsultBoundary(ctx, config = {}) {
     return result
   }
 
-  /** 把一段文本交给这一步的模型输入（排在用户那句话之前）。 */
-  async function withContext(decision, claimed, text) {
-    const message = await createConsultContextMessage(text, { searchDirs: messageSearchDirs(ctx) })
+  /**
+   * 把「这一段文本承载了哪些交付 / 撤下声明」盖成**本次回执**。
+   *
+   * 凭据就是承载它的那条消息 id（`messageId`）：loop 会把这条消息 append 进日志，于是
+   * 「凭据在日志里」⟺「这段文本真的交付了」—— 与正文标记无关，同一层重挂也不会误认旧标记（R5）。
+   */
+  function stampReceipts(entries, { receiptKeys = [], withdrawalKeys = [] }, messageId) {
+    const deliveries = new Set(receiptKeys)
+    const withdrawals = new Set(withdrawalKeys)
+    return entries.map((entry) => {
+      const key = mountLedgerKey(entry)
+      const next = { ...entry }
+      if (deliveries.has(key)) next.receipt = messageId
+      if (withdrawals.has(key)) next.withdrawal = messageId
+      return next
+    })
+  }
+
+  /** 把一条**已经建好**的注入消息交给这一步的模型输入（排在用户那句话之前）。 */
+  function withContext(decision, claimed, message) {
     return { ...decision, messages: [message, ...claimed] }
   }
 
@@ -127,18 +156,32 @@ export function installConsultBoundary(ctx, config = {}) {
       if (log.hasMaterial) materialLogged.set(sessionId, true)
 
       if (materialLogged.get(sessionId) !== true) {
-        const { text, mountsInjected } = await assembly.buildInjection(manifest)
-        if (typeof text !== 'string' || text.trim() === '') return decision
-        if (mountsInjected !== null) store.update(sessionId, { mountsInjected })
-        return await withContext(decision, claimed, text)
+        const injected = await assembly.buildInjection(manifest, { loggedMarkers: log.mountMarkers })
+        if (typeof injected.text !== 'string' || injected.text.trim() === '') return decision
+        // 先建消息（拿到本次交付的凭据 = 消息 id），再盖章落账：账与「承载它的那条消息」一一对应（R5）。
+        const message = await createConsultContextMessage(injected.text, { searchDirs: messageSearchDirs(ctx) })
+        if (injected.mountsInjected !== null) {
+          store.update(sessionId, { mountsInjected: stampReceipts(injected.mountsInjected, injected, message.id) })
+        }
+        return withContext(decision, claimed, message)
       }
 
       // 材料已在日志里：这一问只看**挂载比日志里多/少了什么**（新增 / 上次没落日志 → 补投；
-      // 撤下 → 说一句）。账只提供「每一层对应的标记」，判断以日志为准（N3）。
-      const { text, mountsInjected } = await assembly.buildMountDelta(manifest, { loggedMarkers: log.mountMarkers })
-      if (typeof text !== 'string' || text.trim() === '') return decision
-      if (mountsInjected !== null) store.update(sessionId, { mountsInjected })
-      return await withContext(decision, claimed, text)
+      // 撤下 → 说一句）。账只提供「每一层对应的凭据」，判断以日志为准（N3 / R5）。
+      const delta = await assembly.buildMountDelta(manifest, {
+        loggedMarkers: log.mountMarkers,
+        loggedReceipts: log.messageIds,
+      })
+      // 账有变化（撤下已在日志里确认 ⇒ 清条目；或那一问什么都没投出去）就要落盘 ——
+      // 文本为空只是「这一问不再注入一个字」，不等于账没事发生。
+      if (delta.mountsInjected === null) return decision
+      if (typeof delta.text !== 'string' || delta.text.trim() === '') {
+        store.update(sessionId, { mountsInjected: delta.mountsInjected })
+        return decision
+      }
+      const message = await createConsultContextMessage(delta.text, { searchDirs: messageSearchDirs(ctx) })
+      store.update(sessionId, { mountsInjected: stampReceipts(delta.mountsInjected, delta, message.id) })
+      return withContext(decision, claimed, message)
     } catch (error) {
       logger.warn('问事上下文没并进这一步的输入（已兜住，不影响这一轮）：%s', String(error?.message ?? error))
       return decision

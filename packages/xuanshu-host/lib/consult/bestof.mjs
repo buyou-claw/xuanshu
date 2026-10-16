@@ -16,7 +16,7 @@
  */
 import { resolveDataDir } from '../bazi/service.mjs'
 import { defaultModelSelection, resumeConsultAgent } from './agent.mjs'
-import { BESTOF_SCHEMA, createBestofStore, newRunId } from './bestof-store.mjs'
+import { BESTOF_SCHEMA, createBestofStore, migrateLegacyDecisions, newRunId } from './bestof-store.mjs'
 import { createContextAssembly } from './inject.mjs'
 import {
   collectStream,
@@ -127,6 +127,19 @@ function deliveryOf(record) {
   return undefined
 }
 
+/**
+ * 一次采用投递 → 账本里的那条条目（**唯一**的构造点）。
+ *
+ * 导出给测试用：SP-1 的回归要构造「盘上/内存里已经有一条同形交付」的记录，若测试自己拼一份
+ * `{kind,messageId,candidateId,runId}`，形状一漂两边就对不上（账本键进 `currentAdoptedMessageIds` 的判据）。
+ *
+ * @param {{runId: string}} record 那一轮的记录（`runId` = 这一轮）
+ * @param {{messageId: string, at: string}} entry `deliverAdopted()` 写进 `deliveries` 的那条
+ */
+export function adoptedLedgerEntry(record, entry) {
+  return { kind: 'adopted', messageId: entry.messageId, candidateId: entry.candidateId, runId: record.runId, at: entry.at }
+}
+
 /** 记录 → RPC 响应（契约 §1 的 `{runId, candidates, judge}` + 界面要用的采用态/费用）。 */
 function view(record) {
   return {
@@ -180,6 +193,8 @@ export function createBestOfMethods(ctx, config = {}) {
   const live = new Map()
   /** 每个 run 一个中断开关：`bestof.cancel` 用它真的把 N 路流掐掉（S9「停止全部」）。 */
   const aborts = new Map()
+  /** 每层会话当前那一轮（`runId`）：`bestof.run` 覆盖写时更新，给 `persist` 判「我还算不算当前那一轮」。 */
+  const currentRun = new Map()
 
   function findRecord(runId) {
     const inMemory = live.get(runId)
@@ -189,10 +204,35 @@ export function createBestOfMethods(ctx, config = {}) {
     return cold ?? undefined
   }
 
-  /** 落一次盘（失败不吞：记录的权威就是这份文件）。 */
+  /**
+   * 这层会话在**本进程里**是不是已经有更新的一轮了（逻辑先后，不看盘面那一刻是谁）。
+   *
+   * 与 `bestof.adopt` 原来那条「读盘面判取代」是一对：盘面判据在「新一轮首次落盘失败」或
+   * 「两个宿主实例共用 dataDir」时会漏，而这里的标记跟着 `bestof.run` 的**成功落盘**走。
+   * 两道一起用，迟到的拍板 / 停止才不会写回旧记录、盖掉新一轮的账本。
+   */
+  function hasNewerRun(record) {
+    const current = currentRun.get(record.sessionId)
+    return current !== undefined && current !== record.runId
+  }
+
+  /**
+   * 落一次盘。**返回这次到底写了没有**（调用方据此决定要不要把「成功」报出去）。
+   *
+   * **只允许当前那一轮写**：一层会话一份记录（覆盖写），而上一轮的 `execute` 还在后台跑 ——
+   * 它收尾 / 流式回填时若把**陈旧记录**写回去，会把新一轮的 runId 与采用稿账本一起盖掉
+   * （`bestof.adopt` 的取代判据随后就会误报「已经被更新的一轮取代」，新一轮的候选也可能读成旧的）。
+   * 判据用**逻辑先后**（新 `bestof.run` 落盘**成功之后**才把当前轮标成自己），不看去盘上此刻是谁 ——
+   * 判盘面会和后台写抢同一个瞬间。单轮时标记就是自己（或还没标记），照常写。
+   *
+   * **为什么返回值要往上冒**（复核 32216d9 追加复核的 SP-1）：丢弃写对「决定是否真的落盘」这件事
+   * 不能是静默的 —— 拍板那条路上，静默丢弃会让 RPC 报「已采用」而盘上什么都没变。
+   */
   function persist(record) {
+    const current = currentRun.get(record.sessionId)
+    if (current !== undefined && current !== record.runId) return false
     store.write(record)
-    return record
+    return true
   }
 
   /** 解析官方 `@deepseek-ai/dsh-llm/message` 的锚点顺序（与 `consult.send` 同一条：profile 目录优先）。 */
@@ -243,8 +283,9 @@ export function createBestOfMethods(ctx, config = {}) {
     const entry = { candidateId: view.adoptedId, messageId: message.id, source: BESTOF_ADOPTED_SOURCE_KIND, at: new Date().toISOString() }
     record.deliveries = [...(Array.isArray(record.deliveries) ? record.deliveries : []), entry]
     // 账本也追加一条（复核 N4）：改选时旧的那条留在 deliveries 里（那是投递史），
-    // 但「当前采用稿」以账本的最后一条为准。
-    record.draftLedger = [...(Array.isArray(record.draftLedger) ? record.draftLedger : []), { kind: 'adopted', messageId: message.id, candidateId: view.adoptedId, runId: record.runId, at: entry.at }]
+    // 但「当前采用稿」以账本的最后一条为准。条目形状由 `adoptedLedgerEntry()` 唯一给出 ——
+    // 测试要构造同形的记录，两处各拼一份必然漂移。
+    record.draftLedger = [...(Array.isArray(record.draftLedger) ? record.draftLedger : []), adoptedLedgerEntry(record, entry)]
     delete record.deliveryError
     return entry
   }
@@ -408,9 +449,11 @@ export function createBestOfMethods(ctx, config = {}) {
       const routes = await resolveRoutes(ctx, { profileIds: source.profileIds, count: angles.length })
       if (routes.length < 2) throw new Error(`合参至少要两路（现在 ${routes.length} 路）：去设置加一个视角或换一个 provider。`)
 
-      // **采用稿账本**（复核 N4）：一层会话只留最后一份记录（覆盖写），而「谁还是当前采用稿」
-      // 要跨轮才说得清 —— 新记录**继承**上一份的账本，此后每次采用 / 否决各追加一条。
-      // 消费方是 `history.mjs` 的候选历史投影（只带当前那一份采用稿）。
+      // **采用稿账本**（复核 N4 / 32216d9 的 R2–R4）：一层会话只留最后一份记录（覆盖写），而
+      // 「谁还是当前采用稿」要跨轮才说得清 —— 新记录**继承**上一份的账本，此后每次采用 / 否决各追加一条。
+      // 消费方是 `history.mjs` 的候选历史投影（只带各轮当前那几份采用稿）。
+      // 上一版记录（只有 `deliveries / adoptedId / rejected`）在**被覆盖之前**先迁移一次：否则
+      // 第二个新轮次起旧轮的采用关系就没了，旧采用稿会重新混进候选历史（R4）。
       const previousRecord = store.read(sessionId)
       const record = {
         schema: BESTOF_SCHEMA,
@@ -430,10 +473,14 @@ export function createBestOfMethods(ctx, config = {}) {
         judge: { mode: 'pending', adoptedId: null, ranking: [] },
         adoptedId: null,
         rejected: false,
-        draftLedger: Array.isArray(previousRecord?.draftLedger) ? previousRecord.draftLedger : [],
+        draftLedger: migrateLegacyDecisions(previousRecord),
       }
       live.set(record.runId, record)
       persist(record)
+      // **落盘成功之后**才认下「这层会话当前是这一轮」：`persist` 抛错（磁盘满 / 权限 / AV 锁）时
+      // `bestof.run` 已经向调用方抛错，旧轮仍是当前轮、它的收尾写照常落盘 —— 盘面与「当前轮」不会分叉
+      // （加固的缘由见 `persist` 的注释：分叉会让迟到的拍板被静默丢弃）。
+      currentRun.set(sessionId, record.runId)
       // 每个 run 一个中断开关：「停止全部」靠它把 N 路流真的掐掉（契约 §1 的 additive `bestof.cancel`）。
       const controller = new AbortController()
       aborts.set(record.runId, controller)
@@ -466,6 +513,12 @@ export function createBestOfMethods(ctx, config = {}) {
       const runId = requireText(source.runId, 'runId')
       const record = findRecord(runId)
       if (record === undefined) throw new Error(`合参记录不存在：${runId}。`)
+      // 这一轮已被取代时**什么都不做**（与 `bestof.adopt` 的取代判据同一口径，只是判据取**内存里的
+      // 逻辑先后**）：写在盘面上的更旧一轮若去 abort 自己的 controller，状态不落盘、界面也只看得到
+      // `state` —— 回应一个「已停止」等于替新一轮发言。
+      if (hasNewerRun(record)) {
+        throw new Error(`这一轮合参已经被更新的一轮取代（当前是 ${currentRun.get(record.sessionId)}）：刷新界面再操作 —— 对旧记录写入会盖掉新一轮。`)
+      }
       const controller = aborts.get(runId)
       if (controller !== undefined) controller.abort()
       if (record.finishedAt === undefined) {
@@ -476,7 +529,9 @@ export function createBestOfMethods(ctx, config = {}) {
         }
         record.judge = { mode: 'skipped', skipped: true, adoptedId: null, ranking: [], error: '已停止：这一轮没有跑完，判官不会给出排序。' }
         record.finishedAt = new Date().toISOString()
-        persist(record)
+        if (!persist(record)) {
+          throw new Error('这一轮合参已经被更新的一轮取代：停止状态没有落盘，刷新界面看当前那一轮。')
+        }
       }
       return { bestOf: view(record) }
     },
@@ -506,6 +561,12 @@ export function createBestOfMethods(ctx, config = {}) {
       // 一层会话只留**最后一份**记录（覆盖写），而 `live` 里可能还留着更早那几轮 —— 对旧 runId 迟到的
       // 拍板会把旧记录 persist 回去、**盖掉新那一轮**（连它的采用稿账本一起）。所以只允许对
       // 「当前那一份记录」拍板；其它情况给可读错误，让人刷新界面（复核 48e0e0a 规格轴指出的这条）。
+      // **两道判据一起用**：内存里的逻辑先后（`hasNewerRun`，覆盖「新一轮首次落盘失败 / 两个宿主实例
+      // 共用 dataDir」时盘面还写着旧轮那一小段窗口）与盘面上的取代关系。两者都通过、但落盘仍被跳过时，
+      // 下面的 `persist` 返回值会把它顶成可读错误 —— 绝不静默报「已采用」。
+      if (hasNewerRun(record)) {
+        throw new Error(`这一轮合参已经被更新的一轮取代（当前是 ${currentRun.get(record.sessionId)}）：刷新界面再拍板 —— 对旧记录写入会盖掉新一轮。`)
+      }
       const latest = store.read(record.sessionId)
       if (latest !== null && latest.runId !== record.runId) {
         throw new Error(`这一轮合参已经被更新的一轮取代（当前是 ${latest.runId}）：刷新界面再拍板 —— 对旧记录写入会盖掉新一轮。`)
@@ -558,7 +619,12 @@ export function createBestOfMethods(ctx, config = {}) {
         // 而**别的轮**已采用的稿不受影响（那一份仍在会话日志里、仍是这场问事的采用决定）。
         record.draftLedger = [...(Array.isArray(record.draftLedger) ? record.draftLedger : []), { kind: 'rejected', runId: record.runId, at: new Date().toISOString() }]
       }
-      persist(record)
+      // 决定本身必须先落盘（**失败不许静默**）：被取代时 `persist` 不写，这一拍就不能报成功 ——
+      // 采用稿已经投进会话日志、账本却没落，「当前采用稿」下一轮读盘就会把刚投的那份当非当前过滤掉
+      // （复核 32216d9 追加复核的 SP-1）。这里在**投递之前**判：报错时还什么都没写进会话。
+      if (!persist(record)) {
+        throw new Error('这一轮合参已经被更新的一轮取代：这一拍没有落盘（采用稿也还没写进会话），刷新界面重拍。')
+      }
 
       // 采用 / 合并 = 人点了「这一份就是定稿」→ 把**它**写进会话历史（只写这一份；落选候选永不进日志）。
       // 否决什么都不写。投递失败不上抛（决定已经落盘），但如实回 `delivery.ok=false`。
@@ -570,6 +636,8 @@ export function createBestOfMethods(ctx, config = {}) {
         record.deliveryError = String(error?.message ?? error)
         record.deliveryAttemptedAt = new Date().toISOString()
       }
+      // 这一次是补记投递结果的写：被取代时不落盘也不抛 —— 决定与投递都已如实回报，
+      // 此时抛错只会让「采用稿其实已经进会话」的调用方以为整件事失败了。
       persist(record)
       const delivered = deliveryOf(record)
       return { bestOf: view(record), ...(delivered === undefined ? {} : { delivery: delivered }) }
