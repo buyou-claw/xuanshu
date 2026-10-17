@@ -75,6 +75,7 @@ import { createCangMethods } from './cang/service.mjs';
 import { createConsultMethods } from './consult/service.mjs';
 import { createDigaoMethods } from './digao/service.mjs';
 import { installHorosa } from './horosa/service.mjs';
+import { createTrafficMethods } from './notify/service.mjs';
 import { createPuMethods, installPuSkill } from './pu/service.mjs';
 import { DEFAULT_TIME_ZONE, installDailyTasks } from './rikke/daily-tasks.mjs';
 import { baseZone, createRikkeMethods } from './rikke/service.mjs';
@@ -466,7 +467,10 @@ export function apply(ctx, config) {
       // 票 05（#26）：事记（只可删、不可改；删除 = 墓碑，恢复走显式 RPC）。
       // 单独展开（方法名独立），扫描挂点是 `refreshDigao()` 内部，没有第二条扫描路径。
       ...createShijiMethods(ctx, { dataDir }),
-      ...createRikkeMethods(ctx, { dataDir }),
+      ...createRikkeMethods(ctx, { dataDir, env: process.env }),
+      // #24：触达账 / 共享设置（`traffic.status` / `traffic.markRead` / `traffic.settings.*` /
+      // `shell.settings.*`）。账本与设置都在 `<dataDir>/` 下，与日课产物同源。
+      ...createTrafficMethods(ctx, { dataDir }),
       // 票 16：工作流创建向导（新会话 + seed 自动调 `/writing-skills`；导出 skill 落
       // `<dshHome>/skills/<kebab>/SKILL.md`）。`dshHome` 与数据目录同源，skill 才落对地方。
       ...createWorkflowMethods(ctx, { dataDir, dshHome }),
@@ -503,7 +507,7 @@ export function apply(ctx, config) {
       if (typeof ctx.inject === 'function') {
         ctx.inject(['schedule'], (scoped) => {
           const timeZone = safeBaseZone(dataDir);
-          installDailyTasks({ ctx: scoped, dataDir, timeZone })
+          installDailyTasks({ ctx: scoped, dataDir, timeZone, env: process.env })
             .then((daily) => {
               log.info('票13 定时任务：日课=%s（%s）、底稿刷新=%s（%s）',
                 daily.rikke.ok ? daily.rikke.task.id : '未建', daily.rikke.reused ? '复用' : '新建',

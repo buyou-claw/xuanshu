@@ -12,6 +12,8 @@
  * 的 LLM 计数断言就是按这个分的）。
  */
 
+import { streamText } from '../llm/text.mjs'
+
 /** 事记摘要的系统提示（与底稿的 `DIGEST_SYSTEM` 明确区分）。 */
 export const SHIJI_SUMMARY_SYSTEM = '你是玄枢的事记摘要器。把用户给的项目名、会话标题与项目说明文档压成一两句中文事记，'
   + '只写材料里出现过的事实，不要推测、不要分点、不要标题，长度不超过 120 字。'
@@ -38,55 +40,20 @@ export function skeletonSummary(basis) {
   return `${SKELETON_PREFIX}：依据 ${basisText(basis)}。`
 }
 
-/** 从一个 DSH LLM 运行时里挑首个可用 provider/model；挑不出 → null（绝不抛）。 */
-async function pickRoute(llm) {
-  if (typeof llm?.listProviders !== 'function' || typeof llm?.listModels !== 'function') return null
-  let providers
-  try {
-    providers = llm.listProviders()
-  } catch {
-    return null
-  }
-  for (const provider of Array.isArray(providers) ? providers : []) {
-    const id = typeof provider?.id === 'string' ? provider.id : typeof provider === 'string' ? provider : ''
-    if (id === '') continue
-    try {
-      const models = await llm.listModels(id)
-      const model = Array.isArray(models) ? models.find((entry) => typeof entry?.id === 'string' && entry.id !== '') : undefined
-      if (model !== undefined) return { provider: id, model: model.id }
-    } catch {
-      /* 这条路由问不出模型：试下一条 */
-    }
-  }
-  return null
-}
-
 /**
  * 调一次 LLM（只收 text-delta；失败一律 `{ok:false}`）。
+ *
+ * 路由与流处理复用 `lib/llm/text.mjs` 的**唯一实现**（#24 抽出来的：底稿摘要 / 日课 AI 段 /
+ * 事记摘要只差 system 与素材）；本函数只负责「事记要的失败口径 + 一两句的长度截断」。
  * @returns {Promise<{ok: boolean, text: string, reason: string|null}>}
  */
 async function callLlm(ctx, { system, prompt }) {
   const llm = softLlm(ctx)
   if (!llm || typeof llm.stream !== 'function') return { ok: false, text: '', reason: 'ctx.llm 不可得（宿主没装 LLM 服务）' }
   if (prompt.trim() === '') return { ok: false, text: '', reason: '没有可摘要的素材' }
-  const route = await pickRoute(llm)
-  if (route === null) return { ok: false, text: '', reason: 'ctx.llm 里没有可用的 provider/model 路由' }
-  let collected = ''
-  try {
-    const stream = llm.stream({
-      provider: route.provider,
-      model: route.model,
-      system,
-      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-    })
-    for await (const chunk of stream) {
-      if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') collected += chunk.text
-      if (chunk?.type === 'error') return { ok: false, text: '', reason: `LLM 流报错：${String(chunk.error ?? chunk.message ?? '未知')}` }
-    }
-  } catch (error) {
-    return { ok: false, text: '', reason: `LLM 调用失败：${String(error?.message ?? error)}` }
-  }
-  const collapsed = collected.replace(/\s+/gu, ' ').trim()
+  const streamed = await streamText(llm, { system, prompt })
+  if (!streamed.ok) return { ok: false, text: '', reason: streamed.reason }
+  const collapsed = streamed.text.replace(/\s+/gu, ' ').trim()
   if (collapsed === '') return { ok: false, text: '', reason: 'LLM 返回了空文本' }
   return { ok: true, text: collapsed.length > SHIJI_SUMMARY_LIMIT ? `${collapsed.slice(0, SHIJI_SUMMARY_LIMIT)}…` : collapsed, reason: null }
 }
