@@ -43,6 +43,8 @@ import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
 import { createConsultApi } from './consult-api.js';
 import { installConsult } from './consult.js';
+import { createDataApi } from './data-api.js';
+import { installDataSettings } from './data.js';
 import { createDigaoApi } from './digao-api.js';
 import { createDigaoUiController } from './digao-controller.js';
 import { installDigao } from './digao.js';
@@ -209,6 +211,10 @@ export function apply(ctx: Context): void {
   const bestof = createBestofApi(rpc);
   const bestofController = createBestofController({ api: bestof });
 
+  // 票 30（#30）：设置 → 我的数据。数据面只做两件事（读体积 / 一键备份），apply 期不发请求；
+  // 选目录复用藏库的 `cang.pickDirectory`（同一台机器上唯一一条原生目录选择器路径）。
+  const data = createDataApi(rpc);
+
   const injected = (): OverviewInjected => ({
     navigate,
     mainPanels,
@@ -311,4 +317,9 @@ export function apply(ctx: Context): void {
       }
     },
   });
+
+  // ⑫ 票 30：设置 → 「我的数据」分区（`settings.section`，纯加性：不新增 main key / 侧栏行）。
+  //    体积在分区挂载后读一次；备份只在人点 `[一键备份]` 之后发生。
+  //    注册序排在 bestof 之后 —— `panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 靠数组顺序分先后。
+  installDataSettings(rpc, { api: data });
 }

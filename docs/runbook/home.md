@@ -100,9 +100,71 @@ pnpm verify:isolation
 | `cordis.patch.yml` | 可复制 | 机器级补丁（空数组 `[]` 是合法形态） |
 | `skills/` | 可复制 | 导出的工作流 skill |
 
-迁移后第一次启动会重建 `profiles/`；`~/.dsh` 一个字节都不会动（见 §4 的断言）。
+迁移后第一次启动会重建 `profiles/`；`~/.dsh` 一个字节都不会动（见 §5 的断言）。
 
-## 4. 为什么与 DSH 桌面版互不影响
+## 4. 我的数据：8 个品类、体积与一键备份（票 30）
+
+「设置 → 我的数据」列出玄枢全部的本地数据，并提供一个把数据复制到你自选目录的「一键备份」。
+这一节讲**备份里到底有什么、没有什么，以及怎么恢复**。
+
+### 4.1 八个品类（体积按这里统计）
+
+| 品类 | 位置（相对 home） | 内容 |
+|---|---|---|
+| 谱 | `xuanshu/pus/**` | 底座与各条谱（manifest / content / summary） |
+| 藏 | `xuanshu/cang/registry.jsonl` | 藏的登记表（只存指针，不含被藏的文件本身） |
+| 底稿 | `xuanshu/digao.md` + `xuanshu/digao.json` | 纯派生、可重建 |
+| 事记 | `xuanshu/shiji.jsonl` | 事记账本（只可删、不可改） |
+| 问事与会话 | `sessions/**` | DSH 会话记录（含 `.zstd` 压缩件）；玄枢自铸会话也在这里 |
+| 存储 | `storages/**` | 调度 / 工作区 / 会话缓存等运行时状态 |
+| skills | `skills/**` | 工作流导出的 `SKILL.md` |
+| 其它 | `xuanshu/` 下未被上面覆盖的条目 | 日课、沉淀草稿、合参记录、八字快照、horosa 状态、装配报告… |
+
+`home` 与「数据目录」是两件事：home 是 `<你的用户目录>/.xuanshu`（开发档 `<repo>/.dsh-home`），
+数据目录是它下面的 `xuanshu/`。页面把两者分开显示，别把 home 叫成数据目录。
+
+体积统计**不跟随符号链接 / 目录联接**（否则一条链到 home 之外的联接就能把外部目录算成自己的体积），
+缺失的分类按 0 计；统计有文件数 / 深度上限，到顶会在页面上写明「至少这么多」。
+
+### 4.2 备份：落哪、里面有什么
+
+- 目标由你在系统目录选择器里挑（复用藏库的选目录能力）；**不能选 home 里面**
+  （否则备份会把自己再备份一遍）。
+- 备份目录名固定为 `xuanshu-backup-<YYYYMMDD-HHmmss>/`；同一秒里点两次会加 `-2`、`-3`，
+  **绝不覆盖**已有备份。
+- 内容 = 上面 8 个品类的真实文件（**包含会话记录**）。
+- 每个文件复制后重新算一次 sha256，与复制前不一致就整体失败并清掉这次备份目录 ——
+  不会留下半份文件。
+- 清单 `manifest.json`（`xuanshu/backup@1`）逐项写着相对 home 的 POSIX 路径、`sha256` 与字节数，
+  可以拿它逐项对账。
+
+备份在宿主侧是异步的：界面按钮进入 busy 态并显示阶段文案（选目录 / 复制并校验），
+期间不阻塞界面；失败会给出可读原因（目标在 home 里 / 未确认 / 目录不可写 / 复制失败）。
+
+### 4.3 不备份什么、为什么
+
+| 不备份 | 原因 |
+|---|---|
+| `.credentials.yaml`（以及任何密钥引用） | 凭据是本机凭据库。密钥不该离开这台机器，玄枢也不另建密钥库 |
+| `xuanshu/logs/**` | 运行日志，排障用，不是用户数据 |
+| `**/*.tmp` | 原子写残留，随时会被覆盖 |
+| `profiles/**` | profile 代码与 node_modules（几百 MB），重装即可 |
+| `cordis.yml` / `cordis.patch.yml` / `.anonymous-user-id` | 运行时配置与机器标识，不属于「我的数据」 |
+
+**密钥怎么迁**：备份里没有 API key。换机器恢复后，在玄枢自己的「设置 → 模型」里重新填一次即可
+（DSH 的设置页就是密钥库，玄枢不复制它）。
+
+### 4.4 恢复：放回对应位置，不自动覆盖（逐项）
+
+1. 先关掉玄枢，确认没有实例还在运行，再动文件。
+2. 把备份里的 `xuanshu/`、`sessions/`、`storages/`、`skills/` 分别放回 home 的对应位置
+   （同名文件覆盖前，先自己留一份）。
+3. 在「设置 → 模型」重新填一次 API key。
+4. 启动后打开「设置 → 我的数据」，看一次体积，确认分类都回来了。
+
+玄枢**不提供自动恢复**：它不会自己覆盖现有数据，放回哪一份由你决定。
+
+## 5. 为什么与 DSH 桌面版互不影响
 
 | 维度 | DSH 桌面版 | 玄枢 | 断言/证据 |
 |---|---|---|---|
@@ -117,7 +179,7 @@ pnpm verify:isolation
 `pnpm verify:isolation` 就是这套说法的**可执行版**：它自己真跑两个隔离 home 的实例，断言清单不相交、
 真实 home 指纹零变化。
 
-## 5. 装好并启动（一条命令 + 启动形态）
+## 6. 装好并启动（一条命令 + 启动形态）
 
 ```powershell
 # 产品档：显式给玄枢自己的 home（干净临时目录同理，最省事的复现方式）
@@ -136,7 +198,7 @@ pnpm dev:xuanshu      # 开发档：<repo>/.dsh-home + 19388
 home 里没有它时 CLS 会直接报 `profile "xuanshu" does not exist`。先跑 setup（或
 `node scripts/install-profile.mjs --home <home>`）。
 
-## 6. 回滚 / 清理
+## 7. 回滚 / 清理
 
 装是加法，回滚是删：
 
@@ -154,7 +216,7 @@ Remove-Item -Recurse -Force <repo>\.dsh-home
 
 `install-profile.mjs` 没有 `--uninstall`：卸 profile 就是删目录。
 
-## 7. 排障对照表（文案照抄实现，直接按它搜）
+## 8. 排障对照表（文案照抄实现，直接按它搜）
 
 | 你会看到的文案 | 含义 | 处置 |
 |---|---|---|
@@ -164,11 +226,16 @@ Remove-Item -Recurse -Force <repo>\.dsh-home
 | `home-isolated` FAIL：`默认 home 撞上用户真实 DSH home：…` | 默认值被改成了 `~/.dsh`（回归） | 这是实现 bug，报给维护者；别改测试去凑绿 |
 | `profile "xuanshu" does not exist` | 这个 home 下没装 profile（DSH 不会自动建） | `node scripts/setup.mjs --dsh-home <home>`，或 `node scripts/install-profile.mjs --home <home>` |
 | 界面上「数据目录」与报告路径对不上 | 报告里 `profile.dshHome` 是 **home**，数据目录是它的子目录 `<home>/xuanshu` | 报告新键 `profile.dshHomeSource` 说明这个 home 是哪来的；两者别再混着叫 |
+| 「备份目录不能放在玄枢 home 里」 | 你在选目录时选了 home 内的文件夹 | 选 home 之外的目录（备份不是 home 的镜像，放一起会互相递归） |
+| 「备份没有完成：…」 | 复制 / 校验失败（权限、磁盘满、文件被占用）；这次备份目录已被清掉 | 按冒号后的原因处置后重试；不会留下半份备份 |
+| 「没有选择备份目录（已取消）」 | 系统目录选择器被关掉 / 宿主没有原生选择器 | 重试；宿主没有选择器时页面会给出「请粘贴本地路径」之外的原始原因 |
 
-## 8. 相关
+## 9. 相关
 
 - `docs/adr/0014-own-desktop-shell-and-home.md` —— 为什么要有独立 home（与桌面版零交集）。
 - `docs/adr/0006-dev-dual-instance-isolation.md` —— 开发期双实例隔离的原始裁决（R16：环境里的 `DSH_HOME` 软忽略）。
 - [setup.md](setup.md) —— 一条命令装好：取件 / 钉版 runtime / 装配 profile / 三项自检 / 退出码。
 - [dual-instance.md](dual-instance.md) —— desktop + xuanshu 开发期并跑（端口旋钮、horosa 8765 四态守卫）。
 - `tests/isolation/home.test.mjs` —— 本页每条断言的用例（默认值两档、覆盖链、拒绝路径、宿主拒绝、验收台 evidence）。
+- `packages/xuanshu-host/lib/data/**` 与 `packages/xuanshu-client/src/client/data{,-api,-style}.tsx` —— §4「我的数据」的实现
+  （8 组口径、备份清单、恢复说明）；对应的用例在 `tests/data/**` 与 `tests/assembly/data-panel.test.mjs`。

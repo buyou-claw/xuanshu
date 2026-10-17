@@ -41,6 +41,11 @@
  * 之后才走票 09 的 `pu.update`（同一套 staging + rename）——**AI 不静默、不自动写谱**。
  * 面版的客户端半边在 `packages/xuanshu-client/src/client/sediment*.tsx`。
  *
+ * 票 30 追加（`lib/data/**`）：「我的数据」—— `data.overview`（8 组体积 + 排除项原因）与
+ * `data.backup`（复制到用户自选目录 + 每文件 sha256 清单；不含 `.credentials.yaml` 与密钥引用）。
+ * 两个方法都是本地文件操作，`home` / `dataDir` 由本文件 `apply` 里已经算好的那一份传入。
+ * 客户端半边在 `packages/xuanshu-client/src/client/data{,-api,-style}.tsx`（设置 → 我的数据）。
+ *
  * 每个 DSH API 调用的出处（本机实装 0.2.0-rc.2，均为只读核对）：
  *   - `ctx.get(name, strict?)`：`@deepseek-ai/cordis/lib/types/reflect.d.ts:16`；
  *     非严格第二参数 `false` 的官方用法见
@@ -73,6 +78,9 @@ import { createRouteMethods } from './consult/routes.mjs';
 import { installConsultBoundary } from './consult/boundary.mjs';
 import { createCangMethods } from './cang/service.mjs';
 import { createConsultMethods } from './consult/service.mjs';
+// 票 30（#30）：「我的数据」——8 组体积与一键备份（`data.overview` / `data.backup`）。
+// home / dataDir 由下面 apply 里已经算好的那一份传入，本组**不重算**（#22 的解析结果是唯一来源）。
+import { createDataMethods } from './data/service.mjs';
 import { createDigaoMethods } from './digao/service.mjs';
 import { pointsAtRealDshHome, realDshHome, resolveHostHome, XUANSHU_HOME_ENV } from './home.mjs';
 import { installHorosa } from './horosa/service.mjs';
@@ -567,6 +575,10 @@ export function apply(ctx, config) {
       // 票 28：只读路由清单（`routes.list`）—— providers → models → keyConfigured、默认路由、
       // 可配置但未注册的家。**只读**：玄枢不写 provider 配置与密钥（那是 DSH「设置 → 模型」的职责）。
       ...createRouteMethods(ctx),
+      // 票 30（#30）：我的数据（`data.overview` / `data.backup`）。
+      // 两个方法都是本地文件操作：体积只读；备份写到**用户自选**的目录，不含 `.credentials.yaml`。
+      // `home` 与 `dataDir` 用上面装配报告同源的那一份 —— 绝不在这里再解析一次 home。
+      ...createDataMethods(ctx, { home: dshHome, dataDir }),
     });
     // 票 10/12 的**统一发问边界**（评审 R2/R3/R4）：底座谱 / 底稿 / 勾选谱 / 临时挂载在
     // `agent/pre-step` 处按当前状态现算并并进每一步的模型输入 —— 谁发起的那一轮都一样

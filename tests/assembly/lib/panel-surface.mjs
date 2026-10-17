@@ -59,6 +59,14 @@ export const EXTRA_REGISTRATIONS = [
       'conversation.composer.dock\u0000xuanshu-bestof-trigger',
     ],
   },
+  {
+    // 票 30（#30）：设置 → 「我的数据」分区（`settings.section`，**不新增 main key / 侧栏行**）。
+    // `after: 'workflow'`：`installDataSettings` 是 `index.tsx` 里最后一个 install（排在票 11 之后）；
+    // 本数组顺序 = 注册序，顺序不符会被 `expectedRegisterNames()` 抓到。
+    after: 'workflow',
+    names: ['settings.section'],
+    cells: ['settings.section\u0000xuanshu.data'],
+  },
 ]
 
 /** 每个 key 产生的一对注册名（main 面板 + 侧栏行）。 */
