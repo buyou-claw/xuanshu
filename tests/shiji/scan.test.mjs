@@ -150,8 +150,28 @@ describe('票05 · 工作区这一路：会话数 / 文档数 / 最后活跃', (
     }
   })
 
-  it('用户排除目录在扫描这一层就生效（docs 计数不含被排除的目录）', async () => {
+  it('投影缓存里缺 sessionListMetadata 键（层叠差异）→ 回落读日志，不把问过的会话数成 0', async () => {
     const { sandbox, dshHome, workspaces } = scene()
+    try {
+      const { query } = sessions()
+      // 只给 title、不给 lastPromptAt 那一行（本机 `session-1bb37188` 的缓存就是这种，探路笔记 §5.2）。
+      // s2 给了明确的 `lastPromptAt:null`（= 确实没说过话）——它不该触发读日志。
+      const cache = fakeProjectionCache({ s1: { title: '事记怎么接' }, s2: { title: '底稿', lastPromptAt: null } })
+      const registry = fakeWorkspaceRegistry(workspaces)
+      const ctx = makeCtx({ services: { workspaceRegistry: registry.service, sessionQuery: query.service, sessionProjectionCache: cache.service } })
+      const result = await collectShijiEvidence({ ctx, dataDir: sandbox.dataDir, dshHome, now: NOW })
+      const item = result.items.find((entry) => entry.source === 'workspace')
+      expect(item.basis.sessions).toBe(1)
+      expect(item.lastActiveAt).toBe('2026-10-16T12:00:00.000Z')
+      expect(query.calls.some((call) => call.method === 'readSession' && call.sessionId === 's1')).toBe(true)
+      // 缓存给了明确 `lastPromptAt:null` 的会话仍然不读日志（成本口径）：s2 不在 readSession 调用里。
+      expect(query.calls.some((call) => call.method === 'readSession' && call.sessionId === 's2')).toBe(false)
+    } finally {
+      sandbox.cleanup()
+    }
+  })
+
+  it('用户排除目录在扫描这一层就生效（docs 计数不含被排除的目录）', async () => {    const { sandbox, dshHome, workspaces } = scene()
     try {
       seedProject(sandbox, 'xuan', { docs: { 'docs/private/secret.md': '# 私密\n' } })
       const { query, cache } = sessions()

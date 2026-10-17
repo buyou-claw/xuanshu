@@ -70,7 +70,8 @@ function isUserEvent(event) {
  *   - 拿不到 header（`listSessions` 缺席 / 没这一条）或**投影缓存服务整个缺席**时，才回落到
  *     `ctx.sessionQuery.readSession(id)` 读日志（权威但更贵）；
  *   - 投影缓存明确给出 `lastPromptAt = null` 时**不再读日志**：那是「确实没说过话」，
- *     与 DSH 侧栏显示一致（缓存可能落后，但落后到把有轮次读成没有的概率远低于每轮读全量日志的成本）。
+ *     与 DSH 侧栏显示一致（缓存可能落后，但落后到把有轮次读成没有的概率远低于每轮读全量日志的成本）；
+ *     但缓存**缺 `sessionListMetadata` 键**（这一层没挂载该投影）不等于「没有轮次」→ 回落读日志。
  *
  * @returns {Promise<{bySession: Map<string, {title: string, lastActiveMs: number}>, available: boolean}>}
  */
@@ -104,9 +105,13 @@ async function collectSessionEvidence(ctx, sessionIds, notes) {
     if (header !== undefined && cacheAvailable) {
       try {
         const snapshot = cache.cachedSnapshot(header, ['title', 'sessionListMetadata'])
-        answeredByCache = snapshot !== undefined
+        // 只有**明确给出** `sessionListMetadata` 时才算「缓存答了」（值是 null 也算：确实没人说过话）。
+        // 缺这个键 = 这一层没挂载该投影（本机不同会话的缓存 key 集合确实不同，探路笔记 §5.2）——
+        // 那不是「没有轮次」，要回落读日志，否则会把问过的会话数成 0 场。
+        const metadata = snapshot?.values?.sessionListMetadata
+        answeredByCache = metadata !== undefined && metadata !== null
         if (typeof snapshot?.values?.title === 'string') title = snapshot.values.title
-        const lastPromptAt = snapshot?.values?.sessionListMetadata?.lastPromptAt
+        const lastPromptAt = metadata?.lastPromptAt
         if (Number.isFinite(lastPromptAt) && lastPromptAt > 0) lastActiveMs = lastPromptAt
       } catch (error) {
         notes.push(`会话投影缓存读不出来（${id}）：${String(error?.message ?? error)}`)
