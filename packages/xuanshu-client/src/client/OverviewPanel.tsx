@@ -25,7 +25,7 @@ import { XsDestinyCard, XsDigaoCard, XsQuickLinks, XsRikkeCard, XsWanshengCard }
 import type { DestinySnapshot, DigaoSummary, OverviewInjected, RikkeContent } from './cards.js';
 import type { DigaoApi, DigaoStatus } from './digao-api.js';
 import type { DigaoOutcome, DigaoUiController } from './digao-controller.js';
-import { ERROR_COPY, PANEL_HOME, PANEL_ID, PANEL_LOCAL_NOTE, PANEL_TITLE } from './panel.js';
+import { ERROR_COPY, PANEL_HOME, PANEL_ID, PANEL_TITLE, panelLocalNote } from './panel.js';
 import type { CardState } from './panel.js';
 import type { RikkeAiNote, RikkeApi, RikkeNotify, RikkeStatus } from './rikke-api.js';
 import type { RikkeOutcome, RikkeUiController } from './rikke-controller.js';
@@ -414,6 +414,12 @@ export type OverviewPanelProps = PropsRuntime<'main'> &
   OverviewInjected & {
     /** 卡头日期（测试注入固定值；缺省 = 本机日期）。 */
     today?: string;
+    /**
+     * 宿主回传的数据目录（`data.overview.dataDir`，产品 `~/.xuanshu/xuanshu` /
+     * 开发 `<repo>/.dsh-home/xuanshu`）：页眉那行「数据都在本地 …」据此渲染。
+     * 缺席时显示中性占位「玄枢数据目录」（不写死任何一档，见 `home-paths.ts`）。
+     */
+    dataDir?: string;
     /** 底座是否已立（票 08 起缺省由命盘状态推导；显式给了就以它为准）。 */
     baseplateReady?: boolean;
     /** 静态预置的命盘状态（测试 / SSR：给了就不调 `bazi.status`）。 */
@@ -454,6 +460,7 @@ export function OverviewPanel({
   preloadedWanshengStatus,
   preloadedWanshengOutcome,
   today,
+  dataDir,
   baseplateReady,
   onStartOnboarding,
   onOpenDetail,
@@ -562,7 +569,7 @@ export function OverviewPanel({
           <span className="xs-overview__home">{PANEL_HOME}</span> · {PANEL_TITLE}
         </h1>
         <p className="xs-overview__localnote" data-xuanshu-note="local-data">
-          {PANEL_LOCAL_NOTE}
+          {panelLocalNote(dataDir)}
         </p>
       </header>
       {/* D3 读序：命盘 → 日课 → 底稿 → 快捷入口（窄屏单列时顺序不变）。 */}

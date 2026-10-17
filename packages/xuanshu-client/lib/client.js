@@ -1141,6 +1141,29 @@ var import_react2 = require("react");
 var CANG_AI_FREE = "藏永不进 AI：只登记指针、签与跳转 —— 玄枢不读、不索引、不分析、不进上下文";
 var newCangDraft = () => ({ path: "", name: "", tags: [], actions: { open: true, reveal: true, copy: true } });
 
+// src/client/home-paths.ts
+var DATA_DIR_PLACEHOLDER = "玄枢数据目录";
+var HOME_PLACEHOLDER = "玄枢 home";
+function isUsablePathValue(value) {
+  return typeof value === "string" && value.trim() !== "";
+}
+function joinXsDisplayPath(base, segments) {
+  const trimmed = base.trim().replace(/[\\/]+$/, "");
+  const separator = trimmed.includes("\\") && !trimmed.includes("/") ? "\\" : "/";
+  return [trimmed, ...segments.filter((segment) => segment !== "")].join(separator);
+}
+function withTrailingSeparator(path) {
+  const trimmed = path.trim().replace(/[\\/]+$/, "");
+  const separator = trimmed.includes("\\") && !trimmed.includes("/") ? "\\" : "/";
+  return `${trimmed}${separator}`;
+}
+function dataDirPath(dataDir, ...segments) {
+  return joinXsDisplayPath(isUsablePathValue(dataDir) ? dataDir : DATA_DIR_PLACEHOLDER, segments);
+}
+function homePath(home, ...segments) {
+  return joinXsDisplayPath(isUsablePathValue(home) ? home : HOME_PLACEHOLDER, segments);
+}
+
 // src/client/CangPanel.tsx
 var import_jsx_runtime3 = require("react/jsx-runtime");
 function filterCangEntries(entries, query, tag, sort) {
@@ -1296,7 +1319,7 @@ function CangPanel({ api, controller, navigatePus, initialData }) {
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", disabled: busy, onClick: () => setRemove(void 0), children: "取消" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("footer", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("code", { children: data?.registryPath ?? "~/.dsh/xuanshu/cang/registry.jsonl" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("code", { children: data?.registryPath ?? dataDirPath(void 0, "cang", "registry.jsonl") }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "只存指针 + 签 + 跳转，不存内容。拷走注册表 ≠ 拷走这些文件；换机器后请重新定位。" })
     ] })
   ] });
@@ -1902,6 +1925,7 @@ function XsConsultHistoryList({
   query,
   range,
   now,
+  home,
   onQuery,
   onRange,
   onOpen,
@@ -1960,7 +1984,7 @@ function XsConsultHistoryList({
     loading ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-state": "loading", children: "正在读本地会话清单…" }) : null,
     error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__error", "data-xuanshu-error": "list", role: "alert", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { children: error }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", children: "数据在本地：~/.dsh/sessions/（只读展示）" }),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", children: `数据在本地：${withTrailingSeparator(homePath(home, "sessions"))}（只读展示）` }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-consult__actions", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "retry-list", onClick: onRetry, children: "重试" }) })
     ] }),
     !loading && error === void 0 && neverAsked ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__empty", "data-xuanshu-state": "empty", children: [
@@ -2098,7 +2122,9 @@ var CONSULT_LABEL = "问事";
 var CONSULT_ORDER = 30;
 var PANEL_TITLE = "自我总览";
 var PANEL_HOME = "家";
-var PANEL_LOCAL_NOTE = "数据都在本地 ~/.dsh/xuanshu/";
+function panelLocalNote(dataDir) {
+  return typeof dataDir === "string" && dataDir.trim() !== "" ? `数据都在本地 ${withTrailingSeparator(dataDirPath(dataDir))}` : `数据都在本地（${withTrailingSeparator(DATA_DIR_PLACEHOLDER)}）`;
+}
 var CARD_TITLE = {
   mingpan: "命盘 / 八字",
   rike: "日课",
@@ -5122,7 +5148,9 @@ function formatOffsetMinutes(minutes) {
 
 // src/client/MingpanPanel.tsx
 var import_jsx_runtime14 = require("react/jsx-runtime");
-var RERECORD_CONFIRM = "将重新录制出生信息并重新出盘。当前底座谱（~/.dsh/xuanshu/pus/_base/bazi.md）会被新结果原子替换；底稿会在下次刷新时随之更新，需要你手动点刷新。";
+function rerecordConfirm(dataDir) {
+  return `将重新录制出生信息并重新出盘。当前底座谱（${dataDirPath(dataDir, "pus", "_base", "bazi.md")}）会被新结果原子替换；底稿会在下次刷新时随之更新，需要你手动点刷新。`;
+}
 var PILLAR_COLUMNS = [
   { key: "year", label: "年柱" },
   { key: "month", label: "月柱" },
@@ -5135,7 +5163,8 @@ function MingpanPanel({
   controller,
   navigate,
   preloadedSnapshot,
-  preloadedError
+  preloadedError,
+  dataDir
 }) {
   const revision = (0, import_react11.useSyncExternalStore)(controller.subscribe, controller.getRevision, controller.getRevision);
   const seeded = preloadedError !== void 0 || preloadedSnapshot !== void 0;
@@ -5199,6 +5228,7 @@ function MingpanPanel({
       MingpanBody,
       {
         snapshot: view.snapshot,
+        dataDir,
         confirming,
         onAskRerecord: () => {
           setConfirming(true);
@@ -5215,6 +5245,7 @@ function MingpanPanel({
 }
 function MingpanBody({
   snapshot,
+  dataDir,
   confirming,
   onAskRerecord,
   onCancelRerecord,
@@ -5259,7 +5290,7 @@ function MingpanBody({
     /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "xs-mingpan__hint", children: "改命盘只能重新录制出生信息；本屏不出盘、不写任何文件。" }),
     /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "xs-mingpan__actions", children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord", onClick: onAskRerecord, children: "重新录制出生信息 ->" }) }),
     /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "xs-mingpan__confirm", "data-xuanshu-confirm": "rerecord", hidden: !confirming, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { "data-xuanshu-confirm-text": "rerecord", children: RERECORD_CONFIRM }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { "data-xuanshu-confirm-text": "rerecord", children: rerecordConfirm(dataDir) }),
       /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "xs-mingpan__actions", children: [
         /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord-cancel", onClick: onCancelRerecord, children: "取消" }),
         /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord-go", onClick: onConfirmRerecord, children: "去重新录制 ->" })
@@ -7118,6 +7149,7 @@ function OverviewPanel({
   preloadedWanshengStatus,
   preloadedWanshengOutcome,
   today,
+  dataDir,
   baseplateReady,
   onStartOnboarding,
   onOpenDetail,
@@ -7183,7 +7215,7 @@ function OverviewPanel({
         " · ",
         PANEL_TITLE
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "xs-overview__localnote", "data-xuanshu-note": "local-data", children: PANEL_LOCAL_NOTE })
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "xs-overview__localnote", "data-xuanshu-note": "local-data", children: panelLocalNote(dataDir) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "xs-overview__grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(XsDestinyCard, { state: destiny.state, snapshot: destiny.snapshot, ...injected }),
@@ -8546,9 +8578,12 @@ function previewText(text, maxChars = 480) {
   const raw = String(text ?? "").trim();
   return raw.length <= maxChars ? raw : `${raw.slice(0, maxChars)}…`;
 }
-function puPaths(slug) {
-  const base = `~/.dsh/xuanshu/pus/${slug}`;
-  return { content: `${base}/content.md`, summary: `${base}/summary.md`, manifest: `${base}/manifest.md` };
+function puPaths(slug, dataDir) {
+  return {
+    content: dataDirPath(dataDir, "pus", slug, "content.md"),
+    summary: dataDirPath(dataDir, "pus", slug, "summary.md"),
+    manifest: dataDirPath(dataDir, "pus", slug, "manifest.md")
+  };
 }
 function confirmGate(input) {
   if (input.busy) return { ok: false, reason: "正在写入，请稍候（写入期间按钮不可再点）。" };
@@ -8717,7 +8752,7 @@ function stateLabel(kind) {
   if (kind === "done") return "done";
   return "empty";
 }
-function XsSedimentDraftCard({ sessionId, api, controller, navigate, initialConfirmOpen, preloadedTargetView }) {
+function XsSedimentDraftCard({ sessionId, api, controller, navigate, dataDir, initialConfirmOpen, preloadedTargetView }) {
   const consult = isConsultSessionId(sessionId);
   const state = useSedimentState(controller, sessionId);
   const [open, setOpen] = (0, import_react21.useState)(initialConfirmOpen === true);
@@ -8795,7 +8830,7 @@ function XsSedimentDraftCard({ sessionId, api, controller, navigate, initialConf
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__meta", children: `${countWords(draft.body)} 字 · 尚未写进任何谱` }),
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__target", children: `目标谱：${target.name}（${target.slug}）` }),
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("pre", { className: "xs-sediment__preview", "data-xuanshu-preview": "sediment", children: previewText(draft.body) }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__path", children: `草稿落点（只读）：~/.dsh/xuanshu/sediment/${state.answer?.draftId ?? ""}.json` }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__path", children: `草稿落点（只读）：${dataDirPath(dataDir, "sediment", `${state.answer?.draftId ?? ""}.json`)}` }),
       state.reason === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__error", role: "alert", children: state.reason }),
       actionError === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__error", role: "alert", children: actionError }),
       /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "xs-sediment__actions", children: [
@@ -8812,6 +8847,7 @@ function XsSedimentDraftCard({ sessionId, api, controller, navigate, initialConf
           draft,
           target,
           base: targetView,
+          dataDir,
           stale,
           busy,
           error: actionError === "" ? void 0 : actionError,
@@ -8829,16 +8865,16 @@ function XsSedimentDraftCard({ sessionId, api, controller, navigate, initialConf
     ] }) : null,
     state.kind === "done" && state.pu !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "xs-sediment__done", children: [
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { "data-xuanshu-state": "committed", children: `已更新到谱「${state.pu.name}」。` }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__note", children: `写入路径：${puPaths(state.pu.slug).content}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__note", children: `写入路径：${puPaths(state.pu.slug, dataDir).content}` }),
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "xs-sediment__actions", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", "data-xuanshu-nav": "pus", onClick: () => {
         navigate("pus");
       }, children: "查看谱 ->" }) })
     ] }) : null
   ] });
 }
-function XsSedimentConfirmDialog({ draft, target, base, stale, busy, error, onConfirm, onCancel, onReopen }) {
+function XsSedimentConfirmDialog({ draft, target, base, dataDir, stale, busy, error, onConfirm, onCancel, onReopen }) {
   const gate = confirmGate({ hasDraft: draft !== void 0, targetSlug: target?.slug ?? "", stale, busy });
-  const paths = target === void 0 ? void 0 : puPaths(target.slug);
+  const paths = target === void 0 ? void 0 : puPaths(target.slug, dataDir);
   const diff = draft === void 0 || base === void 0 ? void 0 : diffParagraphs(base.body, draft.body);
   const words = draft === void 0 || base === void 0 ? void 0 : wordDeltaText(countWords(base.body), countWords(draft.body));
   return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "xs-sediment__overlay", role: "dialog", "aria-modal": "true", "aria-labelledby": "xs-sediment-dialog-title", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "xs-sediment__dialog", children: [

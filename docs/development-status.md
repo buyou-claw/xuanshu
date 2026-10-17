@@ -734,8 +734,13 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 - `routes.list`：默认路由未知时 `isDefault = null`（之前写成 `false`，把「不知道」冒充成「不是」）；providers 与 models 两处都改。
 - `rikke.status` 的 `unread` / `notify` **只数 `kind==='rikke'`** 的账行（晚省不再蹭日课未读）；打开日课面板只标日课账已读。
 - 客户端新增 `#xuanshu-overview` hash 通道（壳点通知后 `show()` + 让页面回 overview；前端无路由，这是它能做到的上限）。
-- 宿主 home/dataDir 解析**只剩一份实现**（`lib/home.mjs`；`bazi/service.mjs` 只是同一函数对象的再导出）；
+- 宿主 home/dataDir 解析**只剩一份实现**（`lib/home.mjs`）：`bazi/service.mjs` 只是同一函数对象的再导出；
+  `cang/service.mjs` 的 dataDir 走 `resolveDataDir()`，`horosa/{service,paths}.mjs` 的 home 走
+  `resolveHostHome()` 与 `pointsAtRealDshHome`（复核 C2 之前这两处各有一份无门的解析）。真实 `~/.dsh` 的拒绝
+  在同一道门上：horosa 把原因写进 `paths.note`（进 `installHorosa` 的装配 notes 与 `snapshot().paths`），
+  cang 由同一判据改判玄枢自己的 home（该组没有装配报告通道，是如实的**行为**结果，不带 note 字段）；
   事记/工作流的 skill 扫描根也走 `resolveSearchHome()`，`DSH_HOME=~/.dsh` 时**拒绝**取真实 home 并记 note。
+  生产落**点**门（`lib/index.js` 的 `planWriteTarget`）语义未改。
 
 #### 16.3 验证（数字全部抄工具输出）
 
@@ -799,6 +804,14 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 - **补课的时间语义**：`occurrence_at` 的正文形状按钉版实装（`reminders_json`）解析，真机正文未逐字抓；
   `ctx.schedule` 停机后只补「最近一次」occurrence 的事实仍成立 —— 玄枢用「产物 + 自己的账」补齐中间日期。
 - **事记日期**：投影缓存缺席时回落到日志；缓存落后会让 `lastActiveAt` 偏旧（已如实写进代码注释）。
+- **事记的「会话摘要」没有现成 API**（#38 复核 A1）：钉版只有 `session/title`、`titleInput`（首问聚合，
+  是 projection **state** 而非 wire row，`cachedSnapshot()` 取不到）与日志正文，**没有**任何会话摘要读面。
+  摘要素材因此由我们自己合成：`shiji/scan.mjs` 的 `questionsOf()` 从日志投影里取人问过的句子
+  （复用 `consult/history.mjs`），`summaryPrompt()` 把它作为「会话内容」与标题、文档一起交给 LLM。
+  三条边界如实登记：① 有界是刻意的——每场至多 3 句、每句至多 200 字、每条事记至多带 3 场（按最后活跃倒序），
+  素材不够多时**不补、不编**；② 会话正文读不出来（`ctx.sessionQuery` 缺席 / 日志读不动）或会话里没有人问的
+  文本时，素材降级为**标题 + 文档**，并在扫描 `notes` 里写明原因；③ 助手回话不进素材（只取人问的句子），
+  避免把会话里的代码 / 执行复盘带进摘要——「不读代码正文」的口径仍然成立。
 - **壳的 `DSH_HOME` 义务**：任何起 `dsh` 子进程的入口都必须同时传 `DSH_HOME` 与 `XUANSHU_DSH_HOME`
   （DSH 本体只认前者）；壳与启动器都已这么传，runbook 写明。
 - **`install-profile --home ~/.dsh` 仍是显式逃生舱**（等价 setup 的 `--install`）：显式要求才写真实 home；

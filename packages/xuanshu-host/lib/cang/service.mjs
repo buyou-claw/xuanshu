@@ -15,7 +15,7 @@
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { fallbackXuanshuHome } from '../home.mjs';
+import { resolveDataDir } from '../home.mjs';
 import { createCangRegistry } from './registry.mjs';
 
 function softGet(ctx, name) { try { return ctx.get(name, false); } catch { return undefined; } }
@@ -36,10 +36,21 @@ function nativeAnchors(profile) {
   ];
 }
 
-export function createCangMethods(ctx, config = {}) {
+/**
+ * 建 `cang.*` 方法组。
+ *
+ * `dataDir` 走 **`home.mjs::resolveDataDir` 这唯一一份入口**（复核 C2：从前本模块自己串
+ * `profileContext.home ?? $DSH_HOME ?? 兜底` 再 `join(..., 'xuanshu')`，没有「真实 ~/.dsh」这道门）。
+ * 口径不变：显式 `config.dataDir` 原样优先（测试 / 嵌入方的注入口），否则 `<home>/xuanshu`；
+ * 解析结果落在用户真实 `~/.dsh` 时由同一道门改判玄枢自己的 home。
+ *
+ * @param {object} ctx cordis 宿主上下文（裸 `{}` 也要活）
+ * @param {{dataDir?: string}} [config] 数据目录（缺省按 home.mjs 的解析）
+ * @param {{env?: Record<string, string|undefined>, homedirPath?: string}} [options] 纯函数接缝（同上）
+ */
+export function createCangMethods(ctx, config = {}, options = {}) {
   const profile = softGet(ctx, 'profileContext');
-  // 兜底是玄枢自己的 home（`XUANSHU_DSH_HOME` ＞ `~/.xuanshu`），不是 `~/.dsh`（ADR-0014）。
-  const dataDir = config.dataDir ?? join(profile?.home ?? process.env.DSH_HOME ?? fallbackXuanshuHome({ env: process.env }).home, 'xuanshu');
+  const dataDir = resolveDataDir(ctx, config, options);
   const registry = createCangRegistry({ dataDir });
   let nativePromise;
   async function native() {
