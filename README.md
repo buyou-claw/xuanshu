@@ -16,7 +16,7 @@
 | `xuanshu-portrait.md` | 产品画像 |
 | `docs/architecture-v1.md` | 技术架构 v1（分层、装配清单、机制映射、数据流、Spike 清单） |
 | `docs/pu-spec-v1.md` | 谱规范 v1 |
-| `docs/specs/` | 交付 specs（001 装配基座 = issue #1） |
+| `docs/specs/` | 交付 specs（001 装配基座 = issue #1；002 住进去 = issue #21） |
 | `docs/adr/` | 架构决策记录（0001 装配不 fork / 0002 首页替换 / 0003 藏不上 AI / 0004 钉版 / 0005 谱是信息 / 0006 双实例隔离 / 0007 setup 一条命令 / 0008 horosa 静态挂载与宿主托管） |
 | `docs/runbook/` | 操作手册（`setup.md` = 一键安装：钉版取件 / 三项自检 / 退出码 / 升级与回滚；`dual-instance.md` = desktop + xuanshu 开发期并跑：DSH_HOME / 端口 / horosa 8765 守卫 / 回滚；`horosa.md` = horosa 底座：静态挂载行 / 宿主托管六步 / `/xuanshu-horosa` / `bazi-contract.mjs` / 状态文件 / 排障） |
 | `docs/research/` | 上游侦察报告（DSH / horosa-skill / 星阙桌面端 / 真太阳时 / 事实核查） |
@@ -71,6 +71,7 @@ node scripts/horosa/bazi-contract.mjs --json    # 直打回环，验信封结构
 
 ## 状态
 
+- **Spec 002（住进去）已立项**：[issue #21](https://github.com/buyou-claw/xuanshu/issues/21)，规格 `docs/specs/002-reside-and-use.md`。主线 =「真的用起来」：独立桌面壳 + 两次触达（日课 / 晚省）+ 事记与底稿两段 + 真多家 API 合参 + 数据备份页；形态决策见 `docs/adr/0014`（玄枢自己的壳与 home，与 DSH 桌面版零交集）。
 - **Spec 001（装配基座）16 张票全部实现完毕**，收在集成分支 `codex/spec-001-integration`，由 [PR #20](https://github.com/buyou-claw/xuanshu/pull/20) 承载（覆盖并取代已关闭的 stacked PR #2 / #3 / #4 / #6 / #7 / #9）；父 issue [#1](https://github.com/buyou-claw/xuanshu/issues/1)。
 - 交付面：setup 一键安装（钉版 + SHA256 硬门）→ horosa 底座静态挂载与宿主托管 → 冷启动八字向导 → 自我总览四卡 → 谱管理 → 问事闭环 → 多 AI 合参 → 临时挂载 → 底稿 / 日课 → 藏库 → 沉淀闭环 → 工作流向导。零 DSH 源码改动（ADR-0001）。
 - 验证（集成分支 tip，2026-10-15）：`vitest run` → **1021 passed / 4 failed / 8 skipped（1033）**；装配五 seam **S2 / S3 / S4 / S5 PASS，S1 FAIL**（钉版 `dsh-app-boot@0.2.0-rc.2` 的 schema 导出器只收 native carrier，而同版官方 web bundle 自带的 `dsh-agent-preset` 是另一种 —— 上游缺陷；测试保留失败、不放宽断言、不改上游源码）；`tsc --noEmit` exit 0；`build-client --check` in sync（386627 B）。
