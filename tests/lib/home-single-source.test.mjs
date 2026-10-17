@@ -15,14 +15,19 @@
  *   ④ `workflow/service.mjs::resolveDshHome` 与 `shiji/scan.mjs::resolveShijiDshHome` 都是它的**薄包装**
  *      （同一份顺序，行为逐条对拍）；
  *   ⑤ `collectShijiEvidence` 把「真实 home 已改判」写进 notes —— 用户要能看到为什么路径不是他给的那个。
+ *   ⑥ **全部服务组**（复核 C2 补）：`cang` 的 dataDir、`horosa` 的 paths 与 service 两处 home
+ *      也走这同一份实现与同一道 `pointsAtRealDshHome` 门；horosa 把拒绝原因带进 `note` / 装配 notes。
  *
  * 环境纪律：一律显式传 `env` / `homedirPath`（纯函数），**不读 process.env**、不碰真 home。
  */
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 
 import { resolveDataDir as baziResolveDataDir } from '../../packages/xuanshu-host/lib/bazi/service.mjs'
+import { createCangMethods } from '../../packages/xuanshu-host/lib/cang/service.mjs'
 import {
   dataDirFor,
   fallbackXuanshuHome,
@@ -30,6 +35,8 @@ import {
   resolveHostHome,
   resolveSearchHome,
 } from '../../packages/xuanshu-host/lib/home.mjs'
+import { resolveHorosaPaths } from '../../packages/xuanshu-host/lib/horosa/paths.mjs'
+import { createHorosaRuntime, installHorosa } from '../../packages/xuanshu-host/lib/horosa/service.mjs'
 import { resolveShijiDshHome } from '../../packages/xuanshu-host/lib/shiji/scan.mjs'
 import { collectShijiEvidence } from '../../packages/xuanshu-host/lib/shiji/scan.mjs'
 import { resolveDshHome } from '../../packages/xuanshu-host/lib/workflow/service.mjs'
@@ -208,5 +215,114 @@ describe('S1 · 两个薄包装与唯一实现逐条对拍', () => {
     const fallback = fallbackXuanshuHome({ env: {}, homedirPath: USER_HOME }).home
     expect(fallback).toBe(PRODUCT_HOME)
     expect(resolveHostHome({ env: {}, homedirPath: USER_HOME }).home).toBe(fallback)
+  })
+})
+
+/* ──────────────────────────────────────────────────────────────────────────── *
+ * 复核 C2（PR #32 二轮）：`cang` 与 `horosa` 从前各有一份自己的 home / dataDir 解析，
+ * **都不经** `pointsAtRealDshHome`。下面三组用例把「全部服务组同一实现 + 同一道门」钉死：
+ *   - cang：`dataDir` 与 `resolveDataDir` 是**同一个结果**（直接对拍），真实 home 下不落登记表；
+ *   - horosa/paths：显式 / env 两条入口都在 path 层改判，并把原因写进 `note`；
+ *   - horosa/service：runtime 与 install 两处解析同源，原因进 `snapshot().paths` / 装配 `notes`。
+ * 全部用**假机器的家目录**（tmp 下的绝对路径）与显式接缝，绝不读写真 home。
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** 造一台假机器（真实 fs 沙箱；调用方负责删 `root`）。 */
+async function fakeMachine() {
+  const root = await mkdtemp(join(tmpdir(), 'xs-home-single-source-'))
+  const userHome = join(root, 'user')
+  await mkdir(userHome, { recursive: true })
+  return { root, userHome, realDsh: join(userHome, '.dsh'), productHome: join(userHome, '.xuanshu') }
+}
+
+describe('S1 · cang：dataDir 也走 home.mjs 的唯一入口（真实 ~/.dsh 被拒）', () => {
+  it('profileContext.home 落在真实 ~/.dsh：登记表落到玄枢自己的 home，绝不写真实 home', async () => {
+    const machine = await fakeMachine()
+    try {
+      const ctx = { get: (name) => (name === 'profileContext' ? { home: machine.realDsh } : undefined) }
+      const options = { env: {}, homedirPath: machine.userHome }
+
+      // 判据不是「cang 内部怎么写」，而是「它用的就是 resolveDataDir 算出来的那一份」。
+      const expected = resolveDataDir(ctx, {}, options)
+      expect(isUnder(expected, machine.realDsh)).toBe(false)
+      expect(expected).toBe(join(machine.productHome, 'xuanshu'))
+
+      const methods = createCangMethods(ctx, {}, options)
+      const target = join(machine.root, 'note.txt')
+      await writeFile(target, 'never-read')
+      await methods['cang.register']({ path: target, name: '藏一件', tags: [] })
+
+      expect(existsSync(join(expected, 'cang', 'registry.jsonl')), 'cang 的 dataDir 必须与 resolveDataDir 同一份').toBe(true)
+      expect(existsSync(join(machine.realDsh, 'xuanshu', 'cang', 'registry.jsonl')), '真实 ~/.dsh 下不许出现藏登记表').toBe(false)
+    } finally {
+      await rm(machine.root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('S1 · horosa paths：home 收口到 home.mjs（真实 ~/.dsh 被拒并带 note）', () => {
+  it('显式 dshHome 指向真实 ~/.dsh：改判玄枢兜底，派生路径跟着走，note 说明原因', () => {
+    const resolved = resolveHorosaPaths({ dshHome: REAL_DSH, config: {}, env: {}, homedirPath: USER_HOME })
+    expect(isUnder(resolved.dshHome, REAL_DSH)).toBe(false)
+    expect(resolved.dshHome).toBe(PRODUCT_HOME)
+    expect(resolved.dataDir).toBe(join(PRODUCT_HOME, 'xuanshu', 'horosa'))
+    expect(resolved.setupReportFile).toBe(join(PRODUCT_HOME, 'xuanshu', 'setup-report.json'))
+    expect(typeof resolved.note).toBe('string')
+    expect(resolved.note).toContain('.dsh')
+    expect(resolved.note).toContain('玄枢')
+  })
+
+  it('不给 dshHome 时经 home.mjs 解析：DSH_HOME=<真实 ~/.dsh>（含子目录）同样改判', () => {
+    for (const home of [REAL_DSH, join(REAL_DSH, 'profiles', 'xuanshu')]) {
+      const resolved = resolveHorosaPaths({ config: {}, env: { DSH_HOME: home }, homedirPath: USER_HOME })
+      expect(isUnder(resolved.dshHome, REAL_DSH), home).toBe(false)
+      expect(resolved.dshHome, home).toBe(PRODUCT_HOME)
+      expect(typeof resolved.note, home).toBe('string')
+    }
+  })
+
+  it('正常 dshHome / DSH_HOME 原样采用，且没有 note（不无病呻吟）', () => {
+    const explicit = resolveHorosaPaths({ dshHome: join('D:', 'dsh'), config: {}, env: {}, homedirPath: USER_HOME })
+    expect(explicit.dshHome).toBe(join('D:', 'dsh'))
+    expect(explicit.note).toBeUndefined()
+    const fromEnv = resolveHorosaPaths({ config: {}, env: { DSH_HOME: join('D:', 'dsh') }, homedirPath: USER_HOME })
+    expect(fromEnv.dshHome).toBe(join('D:', 'dsh'))
+    expect(fromEnv.note).toBeUndefined()
+  })
+})
+
+describe('S1 · horosa service：runtime 与 install 的解析同源，原因可观察', () => {
+  it('createHorosaRuntime：profileContext.home 在真实 ~/.dsh 时改判，snapshot().paths 带 note', () => {
+    const runtime = createHorosaRuntime({
+      ctx: profileCtx(REAL_DSH),
+      config: { autoStart: false },
+      env: {},
+      homedirPath: USER_HOME,
+    })
+    const snapshot = runtime.snapshot()
+    expect(isUnder(snapshot.paths.dshHome, REAL_DSH)).toBe(false)
+    expect(snapshot.paths.dshHome).toBe(PRODUCT_HOME)
+    expect(snapshot.paths.note).toContain('玄枢')
+  })
+
+  it('installHorosa：拒绝原因进装配 notes，状态文件不在真实 ~/.dsh 下', async () => {
+    const machine = await fakeMachine()
+    try {
+      const result = installHorosa(
+        profileCtx(machine.realDsh),
+        { autoStart: false },
+        { env: {}, homedirPath: machine.userHome },
+      )
+      expect(result.ok).toBe(true)
+      expect(isUnder(result.paths.dshHome, machine.realDsh)).toBe(false)
+      expect(result.paths.dshHome).toBe(machine.productHome)
+      const notes = result.notes.join('\n')
+      expect(notes).toContain('.dsh')
+      expect(notes).toContain('玄枢')
+      expect(existsSync(join(machine.realDsh, 'xuanshu', 'horosa', 'horosa-status.json')), '真实 ~/.dsh 下不许落状态文件').toBe(false)
+      expect(existsSync(join(machine.productHome, 'xuanshu', 'horosa', 'horosa-status.json'))).toBe(true)
+    } finally {
+      await rm(machine.root, { recursive: true, force: true })
+    }
   })
 })
