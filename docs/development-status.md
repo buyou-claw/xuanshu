@@ -826,4 +826,23 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 - **设置页的「点击链」没有 jsdom 证据**：本仓无 jsdom，设置页只用 `renderToStaticMarkup` + 纯函数/数据面断言；
   壳的真窗口行为（状态文件写入、`fs.watch` 回流、隐藏窗口点通知后回 overview）只有 runbook 手测清单。
 - **硬杀壳会留下过期 `shell-status.json`**：宿主按 `pid` 不匹配拒用（有测试），但 pid 复用在理论上可能误认。
+- **票 01「setup 默认档 + 干净临时 home 一条命令 → `dsh --profile xuanshu --help` 可启动」没有端到端证据（R9 / #41 如实登记，状态 = 未验证）**：
+  来源是第二轮规格轴审查 A2（`docs/reviews/spec002-ae78c53-spec.md:44-49`）。缺口有两半：
+  ① **setup 的默认档没有用例** —— `tests/setup/**` 的 `runSetup()` 一律显式给 `--dsh-home <sandbox>`
+  （`tests/setup/setup-cli.test.mjs:51-53` 的 `baseArgs()`），默认档（dev `<repo>/.dsh-home` / product `~/.xuanshu`）
+  只靠它委托的 `resolveHomeWithSource()` 被 isolation 用例间接覆盖，`resolveSetupPaths` 零测试调用点
+  （`scripts/setup/paths.mjs:136` / `scripts/setup.mjs:98`）；
+  ② **「setup 装完 → 直接 `dsh --help`」这条链没真跑过** —— setup 断言台用
+  `XUANSHU_INSTALL_PROFILE_BIN` / `XUANSHU_VERIFY_ASSEMBLY_BIN` 两个替身把 profile 装配与 DSH 启动整段跳过
+  （`tests/setup/setup-cli.test.mjs:10-11,61-62`），所以 10 条 e2e 面证明的是「编排对」，不是「装完能起」。
+  **为什么本轮不补**：真跑这条链需要 `install-profile` 的 `pnpm install` 装出 `@deepseek-ai/dsh`
+  （干净检出 / 本 worktree 的 `profile/node_modules` 不存在；主检出那份是**机器私有安装**，测试不得依赖），
+  而 R9 复核修复轮的硬约束是「不跑 pnpm install / install-profile、不联网」；默认档又会指向仓库 `.dsh-home`
+  或产品 `~/.xuanshu`，用例真走默认档就必须碰这些真实目录（违反「测试不依赖机器私有文件」）。**不造半条假链。**
+  **已有的替代证据（不等于本条）**：启动器路径的真启动是 `--mode headless` 真 boot + exit 0
+  （`tests/isolation/dual-instance.test.mjs:69-81`，每档一个隔离 home），**不是** `--help`、也不是 setup 装出来的 profile。
+  **要关掉它**：一台允许 `pnpm install` 且能联网的 CI 机（`windows-latest`）跑
+  `node scripts/setup.mjs --json`（默认档 + 干净临时用户）→ 再 spawn
+  `<home>/profiles/xuanshu/node_modules/@deepseek-ai/dsh/lib/bin.js --profile xuanshu --help` 断言 exit 0；
+  或加一个测试专用注入口（预置已完成装配的 profile 树）再补这条链。
 

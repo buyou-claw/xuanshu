@@ -9,7 +9,7 @@
 ## 0. 一句话
 
 玄枢的会话、storages、凭据、`xuanshu/` 数据目录、装配报告**全部**在它自己的 home 下：
-**产品机 `~/.xuanshu`**，**仓库检出 `/.dsh-home`**（仓库内、已 gitignore）。
+**产品机 `~/.xuanshu`**，**仓库检出 `<repo>/.dsh-home`**（仓库内、已 gitignore）。
 `~/.dsh` 是 DSH 桌面版的 home —— 玄枢**从不读写它**，解析结果一旦指向它，就是用法失败（exit 1）。
 
 ## 1. home 在哪：三档
@@ -17,7 +17,7 @@
 | 档 | 谁是 home | 谁在用 | 来源串（报告里会看到） |
 |---|---|---|---|
 | **产品** | `<你的用户目录>/.xuanshu`（Windows：`C:\Users\<你>\.xuanshu`） | 装好的玄枢：桌面壳（票 #23）、发布入口 | `default (product ~/.xuanshu)` |
-| **开发** | `<仓库>/.dsh-home` | 仓库里的开发 / 测试（`pnpm dev:xuanshu`、`pnpm verify:isolation`、`pnpm doctor:xuanshu`） | `default (dev <repo>/.dsh-home)` |
+| **开发** | `<repo>/.dsh-home` | 仓库里的开发 / 测试（`pnpm dev:xuanshu`、`pnpm verify:isolation`、`pnpm doctor:xuanshu`） | `default (dev <repo>/.dsh-home)` |
 | **覆盖** | 你指定的任意目录 | 换盘、临时验证、干净临时 home 复现 | `--home` / `XUANSHU_DSH_HOME` / `DSH_HOME` |
 
 「产品还是开发」怎么判（`resolveHomeMode()`）：显式给了档就是它；否则**找得到仓库根 = 开发档**
