@@ -9,8 +9,9 @@
  * 「文件:行 + 期望 + 实际 + 原文」，并且**多处漂移要全部列出**（不能报一条就停）。
  *
  * 另一半同样重要：**只认当前验证块**。合成文档里塞了历史章节 / 历史状态行
- * （§11 的 `[inventory] 用例 900 条`、README `## 历史` 的旧数字），它们**不许**被当成漂移。
- * 真仓库 §11/§12/§13 里就有同类旧数字（见 `docs/development-status.md`）。
+ * （§11 的 `[inventory] 用例 900 条`、§16.6 的 `[inventory] 用例 1811 条`、README `## 历史` 的旧数字），
+ * 它们**不许**被当成漂移。真仓库 §11/§12/§13/§16.6 里就有同类旧数字（见 `docs/development-status.md`）。
+ * 反过来，当前块**必须**是 §16.7：它缺失或数字被改坏都要红/没法验，不能静默绿。
  *
  * 环境：真文件系统（临时目录）、零网络、秒级；每个用例都是 spawn 真脚本，不 import 内部函数。
  */
@@ -58,8 +59,8 @@ function editLine(text, needle, edit, occurrence = 0) {
 }
 
 /**
- * 造一个合成仓库：真源 + 产物 + README 当前状态段 + development-status 的 §16.3 / §16.6 当前块。
- * 历史章节里故意放**旧数字**（§11、README `## 历史`）——门必须只核当前块。
+ * 造一个合成仓库：真源 + 产物 + README 当前状态段 + development-status 的 §16.3 / §16.7 当前块。
+ * 历史章节里故意放**旧数字**（§11、§16.6、README `## 历史`）——门必须只核当前块。
  */
 function makeRepo({ total = 7, fileCount = 3, bytes = 1234 } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'doc-numbers-'))
@@ -123,12 +124,17 @@ function makeRepo({ total = 7, fileCount = 3, bytes = 1234 } = {}) {
     '[inventory] 用例 900 条（基线 900）/ 文件 80 个',
     '```',
     '',
-    '#### 16.6 第二轮两轴审查与修复轮（合成夹具）',
+    '#### 16.6 t33 修复轮（历史：数字属于那一轮，门不许核）',
     '',
     '```',
-    `[inventory] 用例 ${total} 条（基线 ${total}）/ 文件 ${fileCount} 个 / 失败 2 条（已知红 2 条） / 跳过 10 条 / vitest exit 1`,
-    `# tsc --noEmit exit 0；build-client --check in sync（${bytes}B）`,
+    '[inventory] 用例 1811 条（基线 1811）/ 文件 164 个 / 失败 2 条（已知红 2 条） / 跳过 10 条 / vitest exit 1',
+    '[S3] PASS 客户端产物 522070B；物化/注册/槽位自检全过',
+    '# tsc --noEmit exit 0；build-client --check in sync（522070B）',
     '```',
+    '',
+    '#### 16.7 环境加固轮（当前验证块）',
+    '',
+    `**验证**：\`pnpm verify:all\` exit 0；\`[doc-numbers] OK：${total} 条用例 / ${fileCount} 个文件 / ${bytes} B\`。`,
     '',
   ].join('\n')
   write('docs/development-status.md', status)
@@ -178,14 +184,14 @@ describe('E3 · 漂移：文档数字与工具源不一致', () => {
     expect(result.output).toContain('8 条用例')
   })
 
-  it('多处漂移（README 文件数 / §16.3 产物字节 / §16.3 清单基线对 / §16.6 用例数）→ 全部列出', () => {
+  it('多处漂移（README 文件数 / §16.3 产物字节 / §16.3 清单基线对 / §16.7 文档数字门行）→ 全部列出', () => {
     const repo = makeRepo({ total: 7, fileCount: 3, bytes: 1234 })
     let readme = editLine(repo.readme, '文件 /', (line) => line.replace('3 文件', '4 文件'))
     // 第二处 `客户端产物`（第一处在 §11 历史块里，不算漂移）。
     let status = editLine(repo.status, '客户端产物', (line) => line.replace('1234B', '1235B'), 1)
     status = editLine(status, '清单基线已按最终用例数', (line) => line.replace('（7 / 3）', '（7 / 4）'))
-    // §16.6 的 inventory 行（第二处 `[inventory]`，第一处是 §16.3）
-    status = editLine(status, '（基线 7）', (line) => line.replace('用例 7 条', '用例 9 条'), 1)
+    // §16.7 当前块的 `[doc-numbers] OK` 行（三个数字都要核）。
+    status = editLine(status, '[doc-numbers] OK', (line) => line.replace('1234 B', '1235 B'))
     repo.write('README.md', readme)
     repo.write('docs/development-status.md', status)
 
@@ -194,7 +200,7 @@ describe('E3 · 漂移：文档数字与工具源不一致', () => {
     expect(result.output).toContain(`README.md:${lineOf(readme, '文件 /')}`)
     expect(result.output).toContain(`docs/development-status.md:${lineOf(status, '客户端产物', 1)}`)
     expect(result.output).toContain(`docs/development-status.md:${lineOf(status, '清单基线已按最终用例数')}`)
-    expect(result.output).toContain(`docs/development-status.md:${lineOf(status, '（基线 7）', 1)}`)
+    expect(result.output).toContain(`docs/development-status.md:${lineOf(status, '[doc-numbers] OK')}`)
     // 四条各自点名，不许报一条就停。
     expect(result.output.match(/不一致/gu) ?? []).toHaveLength(4)
   })
@@ -218,6 +224,54 @@ describe('E3 · 只核当前验证块：历史数字不算漂移', () => {
     expect(result.status).toBe(0)
     expect(result.output).not.toContain('900')
     expect(result.output).not.toContain('999')
+    expect(result.output).not.toContain('不一致')
+  })
+})
+
+/* ───────── 3b. 当前块 = §16.7（历史 §16.6 让位，三个数字都核） ───────── */
+
+describe('E3 · 当前块 = §16.7：历史 §16.6 不核、当前 §16.7 三个数字都核', () => {
+  // 与真实台账同一个规模：1835 条用例 / 167 文件 / 522070 B。
+  const REAL = { total: 1835, fileCount: 167, bytes: 522070 }
+
+  it('§16.7 当前块与工具源一致 → exit 0（1835 / 167 / 522070）', () => {
+    const repo = makeRepo(REAL)
+    const result = run(['--root', repo.root])
+    expect(result.stderr, result.output).toBe('')
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('1835 条用例')
+    expect(result.stdout).toContain('167 个文件')
+    expect(result.stdout).toContain('522070 B')
+  })
+
+  it('§16.7 的 1835 / 167 / 522070 任一改坏 → exit 1，点名文件:行、期望、实际', () => {
+    const cases = [
+      { label: '用例数', from: '1835 条用例', to: '1836 条用例', finding: '用例数', expected: 1835, actual: 1836 },
+      { label: '文件数', from: '167 个文件', to: '168 个文件', finding: '文件数', expected: 167, actual: 168 },
+      { label: '客户端字节', from: '522070 B', to: '522071 B', finding: '客户端产物字节', expected: 522070, actual: 522071 },
+    ]
+    for (const item of cases) {
+      const repo = makeRepo(REAL)
+      const broken = editLine(repo.status, '[doc-numbers] OK', (line) => line.replace(item.from, item.to))
+      expect(broken, `夹具里没改到 §16.7 的${item.label}`).not.toBe(repo.status)
+      repo.write('docs/development-status.md', broken)
+      const result = run(['--root', repo.root])
+      const at = lineOf(broken, '[doc-numbers] OK')
+      expect(result.status, `${item.label} 改坏应 exit 1：${result.output}`).toBe(1)
+      expect(result.output).toContain(`docs/development-status.md:${at}`)
+      expect(result.output).toContain(`${item.finding}不一致`)
+      expect(result.output).toContain(`期望 ${item.expected}`)
+      expect(result.output).toContain(`实际 ${item.actual}`)
+      expect(result.output).toMatch(/原文[:：]/u)
+    }
+  })
+
+  it('历史 §16.6 的旧数字（1811 / 164 / 522070B）不误报 → exit 0', () => {
+    const repo = makeRepo(REAL)
+    const result = run(['--root', repo.root])
+    expect(result.status, result.output).toBe(0)
+    expect(result.output).not.toContain('1811')
+    expect(result.output).not.toContain('164')
     expect(result.output).not.toContain('不一致')
   })
 })
@@ -250,13 +304,13 @@ describe('E3 · 真源缺失 / 当前块缺失 → 可读失败（exit 2）', ()
     expect(result.output).toContain('client.js')
   })
 
-  it('§16.6 当前验证块缺失 → exit 2，点名 16.6（不是静默放过）', () => {
+  it('§16.7 当前验证块缺失 → exit 2，点名 16.7（不是静默放过）', () => {
     const repo = makeRepo()
-    const stripped = repo.status.split('\n').filter((line) => !line.includes('16.6')).join('\n')
+    const stripped = repo.status.split('\n').filter((line) => !line.includes('16.7')).join('\n')
     repo.write('docs/development-status.md', stripped)
     const result = run(['--root', repo.root])
     expect(result.status).toBe(2)
-    expect(result.output).toContain('16.6')
+    expect(result.output).toContain('16.7')
   })
 
   it('README 没有「## 状态」段 → exit 2，点名 README 与「状态」', () => {

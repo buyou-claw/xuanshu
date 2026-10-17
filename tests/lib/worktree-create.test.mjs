@@ -11,7 +11,8 @@
  * 目标仓库根目录的变化。不在真实仓库建 worktree、不联网、不安装任何包。
  *
  * 环境：临时 git 仓库（`os.tmpdir()`，`--repo` 指向它）。临时目录名**故意带空格**，
- * 顺手钉住「路径带空格时 mklink / symlink 不被打断」。
+ * 顺手钉住「路径带空格时 Windows junction 不被打断」。**实测范围**：本机/CI 只实测 Windows
+ * junction；POSIX `symlinkSync` 分支本机未实测（`scripts/worktree-create.mjs` 的注释已如实标注）。
  */
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -66,9 +67,9 @@ function worktreeList(repo) {
   return runGit(repo, ['worktree', 'list', '--porcelain'])
 }
 
-/** 跑被测命令（cwd 故意留在临时仓库外：脚本不许依赖「我在哪个目录」）。 */
-function runCli(args) {
-  return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' })
+/** 跑被测命令（cwd 故意留在临时仓库外：脚本不许依赖「我在哪个目录」；env 用于注入外部命令失败）。 */
+function runCli(args, { env = {} } = {}) {
+  return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', env: { ...process.env, ...env } })
 }
 
 /** 链接建得成、且指向正确目标（读目标里的哨兵）才算就位。 */
@@ -102,6 +103,7 @@ describe('worktree-create：一条命令建工作树（临时仓库端到端）'
   it('建成功：worktree + 分支 + 根/包级链接就位，目标哨兵仍在，打印可复制的进入方式', () => {
     const repo = makeRepo()
     const before = readdirSync(repo).sort()
+    const headBefore = runGit(repo, ['rev-parse', 'HEAD']).trim()
     const worktree = join(repo, ...WORKTREES, 'wt-ok')
 
     const result = runCli(['wt-ok', '--repo', repo])
@@ -110,6 +112,8 @@ describe('worktree-create：一条命令建工作树（临时仓库端到端）'
     // 工作树真的按 base 检出（分支 = fix/<name>，默认从当前 HEAD）。
     expect(existsSync(join(worktree, 'README.md'))).toBe(true)
     expect(branchExists(repo, 'fix/wt-ok')).toBe(true)
+    // 默认 base = 当前 HEAD（在集成分支上执行即集成分支 tip）。
+    expect(runGit(repo, ['rev-parse', 'fix/wt-ok']).trim()).toBe(headBefore)
     expect(worktreeList(repo)).toContain(worktree.replaceAll('\\', '/'))
     // 依赖链接就位：根 + 已存在的包级；不存在的目标跳过。
     expectLink(worktree, 'node_modules', 'root-alive')
@@ -171,7 +175,7 @@ describe('worktree-create：拒绝时现场零改动', () => {
 
     const result = runCli(['wt-exists', '--repo', repo])
 
-    expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).not.toBe(0)
+    expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(1)
     expect(`${result.stdout}\n${result.stderr}`).toContain('已存在')
     expect(readFileSync(join(worktree, 'keep.txt'), 'utf8')).toBe('keep')
     expect(branchExists(repo, 'fix/wt-exists')).toBe(false)
@@ -187,7 +191,7 @@ describe('worktree-create：拒绝时现场零改动', () => {
 
     const result = runCli(['wt-branch', '--repo', repo])
 
-    expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).not.toBe(0)
+    expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(1)
     const output = `${result.stdout}\n${result.stderr}`
     expect(output).toContain('分支')
     expect(output).toContain('fix/wt-branch')
@@ -202,12 +206,23 @@ describe('worktree-create：拒绝时现场零改动', () => {
     const before = readdirSync(repo).sort()
     for (const name of ['../escape', 'sub/dir', '..', '.']) {
       const result = runCli([name, '--repo', repo])
-      expect(result.status, `名字「${name}」应被拒绝：${result.stdout}${result.stderr}`).not.toBe(0)
+      expect(result.status, `名字「${name}」应被拒绝：${result.stdout}${result.stderr}`).toBe(1)
       expect(`${result.stdout}\n${result.stderr}`).toContain('名字')
     }
     expect(readFileSync(join(repo, 'node_modules', 'sentinel.txt'), 'utf8')).toBe('root-alive')
     expect(existsSync(join(repo, 'escape'))).toBe(false)
     expect(readdirSync(repo).sort()).toEqual(before) // 连 .scratch 都没建
+  })
+
+  it('外部命令失败（git worktree add 失败）→ exit 2，与用法/环境拒绝（1）分得开', () => {
+    const repo = makeRepo()
+    // GIT_INDEX_FILE 指向不存在的目录：rev-parse / check-ref-format / show-ref 都不碰索引，
+    // 前置拒绝全过；到 `git worktree add` 写索引时才失败 —— 正好走「外部命令失败」那一支。
+    const result = runCli(['wt-fail', '--repo', repo], {
+      env: { GIT_INDEX_FILE: join(repo, 'no-such-dir', 'index') },
+    })
+    expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(2)
+    expect(`${result.stdout}\n${result.stderr}`).toContain('git worktree add 失败')
   })
 })
 

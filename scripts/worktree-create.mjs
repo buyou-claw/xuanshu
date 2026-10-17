@@ -17,7 +17,8 @@
  *   node scripts/worktree-create.mjs <name> [选项]
  *
  *   <name>            工作树名：决定路径 `<repo>/.scratch/worktrees/<name>` 与默认分支 `fix/<name>`
- *   --base <ref>      新分支的起点（缺省 = 当前 HEAD；建议传集成分支名）
+ *   --base <ref>      新分支的起点（缺省 = 当前 HEAD；在集成分支上执行即集成分支 tip，
+ *                     并行流程建议显式传 --base <集成分支>）
  *   --branch <name>   新分支名（缺省 = `fix/<name>`）
  *   --repo <dir>      目标仓库根（缺省 = 本脚本所在仓库；测试用临时仓库注入）
  *   --dry-run         只打印计划，不建目录、不改 git
@@ -94,7 +95,7 @@ function parseArgs(argv) {
 function printHelp() {
   console.log('用法：node scripts/worktree-create.mjs <name> [--base <ref>] [--branch <name>] [--repo <dir>] [--dry-run]')
   console.log('  <name>   工作树名 → <repo>/.scratch/worktrees/<name>，默认分支 fix/<name>')
-  console.log('  --base   新分支起点（缺省 = 当前 HEAD）')
+  console.log('  --base   新分支起点（缺省 = 当前 HEAD；在集成分支上执行即集成分支 tip；并行流程建议显式传 --base <集成分支>）')
   console.log('  --branch 新分支名（缺省 = fix/<name>）')
   console.log('  --repo   目标仓库根（缺省 = 本脚本所在仓库）')
   console.log('  --dry-run 只打印计划，不落盘')
@@ -159,6 +160,8 @@ function planLinks(repoRoot, worktreePath) {
 /**
  * 建一个依赖链接（只建链接本身，绝不写 target）。
  * Windows 用 `cmd /c mklink /J`（junction）；其它平台用 symlink。
+ * **实测范围（如实）**：本机/CI 只实测过 Windows junction；POSIX `symlinkSync` 分支**未实测**
+ * ——别把这段注释读成「两种平台都验过」（对应用例见 tests/lib/worktree-create.test.mjs 文件头）。
  * @returns {{ok: true} | {ok: false, error: string}}
  */
 function createLink(link, target) {
@@ -203,6 +206,7 @@ function main() {
 
   const repoRoot = resolveRepo(opts)
 
+  // ── base：缺省 = 当前 HEAD；在集成分支上执行即集成分支 tip（并行流程建议显式 --base） ──
   const baseRef = opts.base ?? 'HEAD'
   const base = git(['rev-parse', '--verify', '--quiet', `${baseRef}^{commit}`], repoRoot)
   if (base.status !== 0) {

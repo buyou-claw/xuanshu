@@ -1,6 +1,6 @@
 # 并行实现（worktree / 多 agent）
 
-> 什么时候读：要开独立 worktree、或把多张票并行走时读本页。规则正文只在本文件；`AGENTS.md` 只留指针。
+> 什么时候读：要开独立 worktree、或把多张票并行走时读本页。本文件的规则正文只在本文档；`AGENTS.md` 只放**指向本文件**的指针。
 
 ## 1. 起工作树（唯一入口）
 
@@ -17,7 +17,7 @@ node scripts/worktree-create.mjs <name> --base feat/spec-002-integration
 ## 2. junction 跟穿（禁令）
 
 - 实现者 worktree 的 `node_modules` 是指向主仓的 junction/symlink；**任何递归删除都会跟穿它，删掉的是主仓真件**（2026-10-17 实测：主仓 `node_modules` 被清空，见 `docs/development-status.md` §16.4 第 7 条）。
-- **收 worktree 只走**（主仓根执行）：`pnpm cleanup:worktrees`。它先证明分支 tip 已是 HEAD 的祖先（未并回只报告、不删）→ 脏工作区 `git stash --include-untracked` 存档 → 摘链接（只删链接本身、绝不进目标）→ deregister + 删目录。证明链条目见 `docs/development-status.md:224`。
+- **收 worktree 只走**（主仓根执行）：`pnpm cleanup:worktrees`。它先证明分支 tip 已是 HEAD 的祖先（未并回只报告、不删）→ 脏工作区 `git stash --include-untracked` 存档 → 摘链接（只删链接本身、绝不进目标）→ deregister + 删目录。证明链条目见 `docs/development-status.md` §10「清理轮：找回票 13 客户端半的最后一棒」。
 - 禁止手写 `Remove-Item -Recurse` / `cmd /c rmdir /s` 清工作树或依赖目录；连 `tests/**/.tmp` 这类临时目录也别用递归删除（同款事故面，§16.4 第 2 条）。
 - 收之前先看名单：`pnpm cleanup:worktrees -- --dry-run`。只在实现者全部收工、分支已提交后跑——脚本按「分支是否已并入」判，不看还有没有人在用。
 
@@ -35,4 +35,4 @@ node scripts/worktree-create.mjs <name> --base feat/spec-002-integration
 
 1. 在你的分支上：`git merge feat/spec-002-integration --no-edit`；`client.js` 冲突按上节重建。
 2. 重跑受影响用例（至少该票验证命令 + `tests/assembly`），把结果抄进报告。
-3. 之后集成分支若再前进、或你的分支又提交，**报告前再并一次**：清理门按「分支 tip 是 HEAD 祖先」判，少并一次就可能丢提交（见 `docs/development-status.md:689`）。
+3. 之后集成分支若再前进、或你的分支又提交，**报告前再并一次**：清理门按「分支 tip 是 HEAD 祖先」判，少并一次就可能丢提交（见 `docs/development-status.md` §「工作方式」的「合并方向的最后一棒」条）。

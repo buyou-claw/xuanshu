@@ -12,9 +12,11 @@
  *
  * 核对什么（**只核当前验证块**，历史章节里的旧数字不判漂移）：
  *   - `README.md` 的 `## 状态` 段：`pnpm test:inventory` 行（用例数 / 文件数）与 `build-client --check` 行（产物字节）；
- *   - `docs/development-status.md` 的 `#### 16.3` 与 `#### 16.6` 两个当前验证块：
- *     `[inventory]` 行（用例数 / 文件数）、`[S3] PASS 客户端产物 NB` 行、`build-client --check in sync（NB）` 行，
- *     以及 §16.3 里「清单基线已按最终用例数 `--update`（N / M）」那一行。
+ *   - `docs/development-status.md` 的 `#### 16.3` 与 `#### 16.7` 两个当前验证块：
+ *     §16.3 核 `[inventory]` 行（用例数 / 文件数）、`[S3] PASS 客户端产物 NB` 行，
+ *     以及「清单基线已按最终用例数 `--update`（N / M）」那一行；
+ *     §16.7 核 `[doc-numbers] OK：N 条用例 / M 个文件 / K B` 一行（三个数字都核）。
+ *     （§16.6 是历史轮：数字属于那一轮，**不核**——门只认当前块，见 tests/lib/check-doc-numbers.test.mjs。）
  *
  * 退出码（「没验」与「验了但红了」分开，与 `scripts/check-test-inventory.mjs` 同一口径）：
  *   0 = 当前验证块与工具源一致；
@@ -146,7 +148,7 @@ const INVENTORY_IN_BRACKETS = {
   ],
 }
 
-/** §16.3 的散文行：「清单基线已按最终用例数 `--update`（1814 / 165）」。 */
+/** §16.3 的散文行：「清单基线已按最终用例数 `--update`（1835 / 167）」。 */
 const BASELINE_PAIR = {
   kind: 'inventory',
   optional: true,
@@ -169,7 +171,7 @@ const ARTIFACT_S3_LINE = {
   ],
 }
 
-/** `build-client --check in sync（522070B）`（README 与 §16.6 各一处）。 */
+/** `build-client --check in sync（522070B）`（README 的 `## 状态` 段）。 */
 const ARTIFACT_IN_SYNC_LINE = {
   kind: 'artifact',
   when: (line) => line.includes('build-client --check') && line.includes('in sync'),
@@ -178,13 +180,36 @@ const ARTIFACT_IN_SYNC_LINE = {
   ],
 }
 
-/** README 的 `pnpm test:inventory` 行：`→ **1814 条用例 / 165 文件 / …**`。 */
+/** README 的 `pnpm test:inventory` 行：`→ **1835 条用例 / 167 文件 / …**`。 */
 const README_INVENTORY_LINE = {
   kind: 'inventory',
   when: (line) => line.includes('pnpm test:inventory'),
   extract: (line, truth) => [
     { name: '用例数', expected: truth.total, match: line.match(/(\d+)\s*条用例/u) },
     { name: '文件数', expected: truth.fileCount, match: line.match(/(\d+)\s*文件/u) },
+  ],
+}
+
+/**
+ * §16.7 的当前块：`[doc-numbers] OK：1835 条用例 / 167 个文件 / 522070 B`（verify:all 末步的 summary）。
+ * 一行里三个数字，拆成两条规则共享同一个 `when`：`kind` 决定「当前块必须出现哪类数字」的覆盖检查。
+ */
+const whenDocNumbersOk = (line) => line.includes('[doc-numbers] OK')
+
+const DOC_NUMBERS_OK_COUNTS = {
+  kind: 'inventory',
+  when: whenDocNumbersOk,
+  extract: (line, truth) => [
+    { name: '用例数', expected: truth.total, match: line.match(/\[doc-numbers\]\s*OK[：:]\s*(\d+)\s*条用例/u) },
+    { name: '文件数', expected: truth.fileCount, match: line.match(/\/\s*(\d+)\s*个文件/u) },
+  ],
+}
+
+const DOC_NUMBERS_OK_ARTIFACT = {
+  kind: 'artifact',
+  when: whenDocNumbersOk,
+  extract: (line, truth) => [
+    { name: '客户端产物字节', expected: truth.artifactBytes, match: line.match(/\/\s*(\d+)\s*B(?![A-Za-z])/u) },
   ],
 }
 
@@ -203,7 +228,7 @@ const DOC_SPECS = [
     option: 'status',
     sections: [
       { id: '「#### 16.3」当前验证块', pattern: /^#{1,6}\s*16\.3\b/u, rules: [INVENTORY_IN_BRACKETS, ARTIFACT_S3_LINE, BASELINE_PAIR], required: ['inventory', 'artifact'] },
-      { id: '「#### 16.6」当前验证块', pattern: /^#{1,6}\s*16\.6\b/u, rules: [INVENTORY_IN_BRACKETS, ARTIFACT_IN_SYNC_LINE], required: ['inventory', 'artifact'] },
+      { id: '「#### 16.7」当前验证块', pattern: /^#{1,6}\s*16\.7\b/u, rules: [DOC_NUMBERS_OK_COUNTS, DOC_NUMBERS_OK_ARTIFACT], required: ['inventory', 'artifact'] },
     ],
   },
 ]
