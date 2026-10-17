@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" fill="none">
+<!-- asset.S3-11 · 出盘成功 → 命盘卡点亮（与 S1-6 命盘卡同族，点亮版） · S3 -->
+<circle cx="52" cy="40" r="26" stroke="currentColor" stroke-width="1.8"/>
+<path d="M52 14v52M26 40h52" stroke="currentColor" stroke-width="1.2" opacity="0.3"/>
+<path d="M40 40l7 7 14-16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M52 6v-2M52 76v2M18 40h-2M88 40h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+<path d="M52 66v18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M44 84h16" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-dasharray="4 3" opacity="0.4"/>
+</svg>

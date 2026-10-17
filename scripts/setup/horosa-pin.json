@@ -1,0 +1,30 @@
+{
+  "schema": "xuanshu/horosa-pin@1",
+  "version": "0.40.1",
+  "releaseBase": "https://github.com/Horace-Maxwell/horosa-skill/releases/download/v0.40.1",
+  "wheel": {
+    "name": "horosa_skill-0.40.1-py3-none-any.whl",
+    "sha256": "feb377d6417ed82a49d0025f4190109435be06561f6fd33f05306b8f98819f83",
+    "size": 1403270
+  },
+  "runtime": {
+    "platforms": {
+      "win32-x64": {
+        "name": "horosa-runtime-win32-x64-v0.40.1.zip",
+        "sha256": "2b3cce77b2779efbf41feba3d0377c10dadcd5e3b07f01c43985740edd3986d7",
+        "size": 718649254,
+        "archiveType": "zip"
+      },
+      "darwin-arm64": {
+        "name": "horosa-runtime-darwin-arm64-v0.40.1.tar.gz",
+        "sha256": "5e804d64428b9ff6dc02608cb6398e6b09fac5af38280e037e85228503708609",
+        "size": 732395819,
+        "archiveType": "tar.gz"
+      }
+    }
+  },
+  "evidence": {
+    "sha256sums": "https://github.com/Horace-Maxwell/horosa-skill/releases/download/v0.40.1/SHA256SUMS.txt",
+    "runtimeManifest": "https://github.com/Horace-Maxwell/horosa-skill/releases/download/v0.40.1/runtime-manifest.json"
+  }
+}

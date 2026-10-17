@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+<!-- asset.S9-7 · 设置合参开关「开」态：滑珠居右带点芯（与全稿开关同族两态） · S9 -->
+<path d="M6 4.75h4a3.25 3.25 0 0 1 0 6.5H6a3.25 3.25 0 0 1 0-6.5z"/>
+<circle cx="10" cy="8" r="2.1"/>
+<circle cx="10" cy="8" r="0.8" fill="currentColor" stroke="none"/>
+</svg>

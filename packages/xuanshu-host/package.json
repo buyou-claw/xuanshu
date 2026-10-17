@@ -1,0 +1,33 @@
+{
+  "name": "xuanshu-host",
+  "version": "0.1.0",
+  "private": true,
+  "description": "玄枢 DSH 主机插件：装配时建好 $DSH_HOME/xuanshu/ 数据目录并写出装配报告（纯本地文件，不联网、不调 LLM、不开端口）。",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "lib/index.js",
+  "dependencies": {
+    "tz-lookup": "6.1.25"
+  },
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "dsh": "0.2.0-rc.2"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "lib",
+    "data",
+    "cordis.patch.yml",
+    "README.md"
+  ]
+}

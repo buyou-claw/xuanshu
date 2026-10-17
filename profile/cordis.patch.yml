@@ -1,0 +1,42 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+#
+# 玄枢：本层只做「本 profile 相对上游默认的差异」。两个自有插件的行由它们各自的
+# bundle 补丁（packages/xuanshu-*/cordis.patch.yml）插入，不在这里重复声明——
+# 重复声明同一个 id 会让 Loader 启动失败（desktop profile 踩过这个坑）。
+#
+# 下面 mcp-horosa 那一行是**版本库里的静态行**（票 06 · horosa 集成）：
+# 它写在 profile 补丁层里，所以「市场」那套连接记录（dsh-mcp-connector / dshmarket，
+# 落 $DSH_HOME/storages/mcp_connector.json）的删除 UI 碰不到它 —— 「默认自带、不可删除」
+# 是靠行的**来源**落地的（版本库是唯一来源），不是靠运行期再插一遍。
+# 本层不需要在 package.json 里加依赖：@deepseek-ai/dsh-mcp-client 由安装闭包提供
+# （它是 @deepseek-ai/dsh 的 dependencies 之一，而 @deepseek-ai/dsh 是本 profile 的直依赖）。
+# 挂法与 desktop profile 的 mcp-filesystem 行同款（唯一先例）。
+# 端口/路径（8765 与 /mcp）的定值三方一致：本文件 = scripts/isolation/defaults.mjs
+# = packages/xuanshu-host/lib/horosa/constants.mjs，一致性由测试钉住（契约 §2.4）。
+# 非回环不暴露：这一行的 URL 钉死在回环上；spawn serve 的 --host 也恒为 127.0.0.1，
+# 宿主侧对非回环配置一律拒绝启动（契约 §2.3 / §3.2 R6）。
+# Both bundles may be installed, but only one app may parse cmdlineArgs.
+# Default to the browser; the isolation headless probe explicitly selects headless.
+- id: headless-startup
+  disabled: !!js "process.env.XUANSHU_SURFACE !== 'headless'"
+- id: headless-runner
+  disabled: !!js "process.env.XUANSHU_SURFACE !== 'headless'"
+- id: web-startup
+  disabled: !!js "process.env.XUANSHU_SURFACE === 'headless'"
+
+- insert:
+    - id: mcp-horosa
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: streamable-http
+        serverName: horosa # 工具名前缀的唯一来源：mcp__horosa__*
+        url: http://127.0.0.1:8765/mcp
+        toolCallTimeoutMs: 300000 # 首调会拉起 runtime（冷启动分钟级）
+        failOnStartupError: false # horosa 没起不许拖垮 DSH 启动；靠 reconnect 自愈
+        reconnect:
+          enabled: true
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+          maxAttempts: 60

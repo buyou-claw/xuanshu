@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+<!-- asset.S8-2, asset.S13-3, asset.S13-6 · 工作区实体字形：项目夹内含代码括弧（分区标识 / 三跳转 / 来源标签之「工作区」） · S8 / S13 -->
+<path d="M2.5 5a1.25 1.25 0 0 1 1.25-1.25h2.5l1.5 1.5h4.5a1.25 1.25 0 0 1 1.25 1.25v5a1.25 1.25 0 0 1-1.25 1.25h-8.5A1.25 1.25 0 0 1 2.5 11.5z"/>
+<polyline points="6.25 8.75 5 10.25 6.25 11.75"/>
+<polyline points="9.75 8.75 11 10.25 9.75 11.75"/>
+</svg>

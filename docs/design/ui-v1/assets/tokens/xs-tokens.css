@@ -1,0 +1,279 @@
+/*
+ * 玄枢设计 token 取值表（票 03 · 人读镜像；机读权威 = xs-tokens.json，二者同源生成）
+ * =================================================================================
+ * 裁决（字典 §13.3 第二问）：采用【叠加覆盖层】ctx.theme.overrideTokens("xuanshu-ui-v1", tokens)，
+ *   不注册独立具名主题。理由：玄枢界面寄生在 DSH 主题之上、只做别名叠加，部署形态不需要「可选主题」；
+ *   且 overrideTokens 按 source 整层替换/胜出，正好承载「玄枢一层」的语义。
+ *   证据：dsh-client-ui-theme/lib/types/client/index.d.ts:153-178（overrideTokens 契约）、
+ *         :29-41（ThemeTokenOverrides 值 = { light, dark }，双模必填）。
+ * 双模挂接：light 值落 :root；dark 值落 body[data-ds-dark-theme]。
+ *   证据：dsh-client-ui-theme/lib/client.js:1148（design-platform.css 的 dark 块选择器）、
+ *         类型 index.d.ts:48（presenter 依 colorScheme 切换 body[data-ds-dark-theme]）。
+ * 取值纪律（assets README §4 / 字典 §13.1）：
+ *   - 别名引用：var(--dsw-*) light/dark 同写，不重定义 DSH alias 语义；
+ *   - 新增色值：先落 --xs-static-*（字面色，注释写推导来源），--xs-* 再 var(--xs-static-*)；
+ *     原则出处：dsh-client-ui-theme/README.zh.md:126（新增值须「以一个静态尺度层级与一个语义别名的形式」进入）。
+ *   - 尺寸/动效：字面值，light/dark 同值；space/size 对齐 Plugin Manager 页节奏（字典 §13.1-6）。
+ * 尺度表出处：--dsw-static-* 调色板 = dsh-client-ui-theme/lib/client.js:1148（design-platform.css）。
+ * 日期：2026-10-11 ｜ 状态：draft
+ */
+
+:root {
+  /* ---- --xs-static-* 尺度层（字面值；新增色值的唯一落地处） ---- */
+  /* -- static -- */
+  --xs-static-level-base-bg: #0f111514; /* 推导自 --dsw-static-neutral-bluish-1000(light)/-50(dark) 按 8%→12% 透明度阶梯；前景即 --dsw-alias-brand-primary */
+  --xs-static-level-optional-bg: #81858c1f; /* 推导自 --dsw-static-neutral-bluish-600(light)/-400(dark)（=label-tertiary 取色）按 12% 透明度阶梯 */
+  --xs-static-level-baseplate-fg: #dd8629; /* 取自 --dsw-static-amber-600(light)/-400(dark)；底座属玄学基底，用琥珀金族与 base/optional 中性灰区分（字典 §8.3-1） */
+  --xs-static-level-baseplate-bg: #fef5e7; /* 取自 --dsw-static-amber-100(light)/-900(dark)（同 --dsw-alias-state-warn-tertiary 双模取色模式） */
+  --xs-static-level-digao-fg: #4176e6; /* 取自 --dsw-static-deepseek-500(light)/-400(dark)（同 --dsw-alias-state-business-primary 双模取色模式）；底稿为 AI 纯派生，用 deepseek 靛蓝族 */
+  --xs-static-level-digao-bg: #e4edfd; /* 取自 --dsw-static-deepseek-100(light)/-800(dark)（同 --dsw-alias-state-business-tertiary 双模取色模式） */
+  --xs-static-level-nonpu-fg: #2563eb; /* 取自 --dsw-static-blue-600(light)/-400(dark)；「不是谱」用纯蓝族，与底稿的 deepseek 靛蓝相区分，且 §8.3-2 限定两族不同屏同现 */
+  --xs-static-level-nonpu-bg: #dbeafe; /* 取自 --dsw-static-blue-100(light)/-900(dark) */
+  --xs-static-constraint-readonly-fg: #61666b; /* 取自 --dsw-static-neutral-bluish-700(light)/-300(dark)（=label-secondary 取色）：只读=在场但降权 */
+  --xs-static-constraint-readonly-bg: #ebeef2; /* 取自 --dsw-static-neutral-bluish-100(light)/-750(dark) */
+  --xs-static-constraint-derived-fg: #4868b2; /* 取自 --dsw-static-deepseek-600(light)/-300(dark)：与底稿同属 deepseek 族（底稿即纯派生），明度错位一档与 level-digao 区分 */
+  --xs-static-constraint-derived-bg: #edf3fe; /* 取自 --dsw-static-deepseek-50(light)/-900(dark) */
+  --xs-static-constraint-locked-fg: #81858c; /* 取自 --dsw-static-neutral-bluish-600(light)/-400(dark)（=label-tertiary 取色）：锁定=不可操作的静默态 */
+  --xs-static-constraint-locked-bg: #f1f3f5; /* 取自 --dsw-static-neutral-bluish-75(light)/-800(dark)；与 --xs-static-surface-locked 同值（锁定行面与锁定标记底同色，刻意对齐） */
+  --xs-static-constraint-noai-fg: #545557; /* 取自 --dsw-static-neutral-600(light)/-300(dark)：用无蓝相 neutral 族，与只读/锁定的 bluish 族区分（C3 是独立语义） */
+  --xs-static-constraint-noai-bg: #f5f5f5; /* 取自 --dsw-static-neutral-100(light)/-800(dark) */
+  --xs-static-constraint-budget-bar: #5686fe; /* 取自 --dsw-static-deepseek-450，双模同值（占用条为业务强调填充，非文字；双模对比度均足） */
+  --xs-static-constraint-human-gate-fg: #ffffff; /* 取自 --dsw-static-neutral-00(light)/--dsw-static-neutral-bluish-1000(dark)（=label-primary-foreground 双模取色模式） */
+  --xs-static-constraint-human-gate-bg: #0f1115; /* 取自 --dsw-static-neutral-bluish-1000(light)/-50(dark)（=brand-primary/button-primary-fill 取色）：人工闸门=人亲手点的主动作容器（§9.1-3），用全族唯一实心高对比处理 */
+  --xs-static-surface-overlay-mask: #0000003d; /* 推导自 --dsw-static-neutral-1000 按 24%(light)/50%(dark) 透明度；与 DSH Modal 遮罩 --dsw-alias-bg-mask-1 完全同值（证据：design-platform.css alias 表），玄枢遮罩同样不模糊背景 */
+  --xs-static-surface-readonly: #f9fafb; /* 取自 --dsw-static-neutral-bluish-50(light)/-900(dark)（与 --dsw-specific-sidebar-fill 同阶梯）：只读面=半档下沉 */
+  --xs-static-surface-locked: #f1f3f5; /* 取自 --dsw-static-neutral-bluish-75(light)/-800(dark)；dark 与 card(875)/card-nested(850)/readonly(900) 逐级可区分 */
+  --xs-static-surface-skeleton: #0000000a; /* 推导自 neutral-1000/00 按 4%/8% 透明度阶梯；与 DSH 自带 --dsw-alias-bg-skeleton 同值（DSH 有 token 无原语，玄枢骨架自研、取值对齐宿主） */
+  --xs-static-surface-empty: #f5f6f7; /* 取自 --dsw-static-neutral-bluish-60(light)/-950(dark)；dark 即 app 底色——空态区沉入应用底，与正常内容（卡面 875/850）自然分层 */
+  --xs-static-text-code: #34415b; /* 取自 --dsw-static-deepseek-800(light)/-300(dark)：等宽内容（slug/路径）用深靛蓝，与正文 label-primary(bluish-1000/50) 可区分 */
+  --xs-static-text-on-accent: #ffffff; /* 取自 --dsw-static-neutral-00(light)/--dsw-static-neutral-bluish-1000(dark)（=label-primary-foreground 取色）：主按钮=brand-primary 实心底上的文字 */
+  --xs-static-edge-locked: #e1e5ee; /* 取自 --dsw-static-neutral-bluish-200(light)/-750(dark)：比 border-l2 更可辨的静默描边 */
+  --xs-static-edge-readonly: #e9ecf2; /* 取自 --dsw-static-neutral-bluish-150(light)/-800(dark)：比 locked 弱半档 */
+  --xs-static-state-stale-fg: #dd8629; /* 取自 --dsw-static-amber-600，双模同值（=--dsw-alias-state-warn-label 的双模取色模式）：陈旧=降饱和的 warn，与 warning(amber-500) 区分 */
+
+  /* ---- --xs-* 玄枢语义层（light） ---- */
+
+  /* == xs 族 == */
+  /* 应用最底层背景 ｜ 用在哪：S1/S4/S5/S11/S13 main 面板根容器 ｜ 形态：别名引用 ｜ DSH 取值 light=bluish-00 #fff / dark=bluish-950 #151517 */
+  --xs-surface-app: var(--dsw-alias-bg-base);
+  /* 面板容器底 ｜ 用在哪：S1/S5/S6/S11/S13 面板外壳 ｜ 形态：别名引用 ｜ 与 app 同底（字典允许可同可不同）；面板与应用的层次由卡面 layer-1 承担 */
+  --xs-surface-panel: var(--dsw-alias-bg-base);
+  /* 卡面 ｜ 用在哪：S1 四卡、S5 谱卡、S9 合参候选卡、S11 藏卡、S14 日课卡 ｜ 形态：别名引用 ｜ light=bluish-00 / dark=bluish-875 #232324 */
+  --xs-surface-card: var(--dsw-alias-bg-layer-1);
+  /* 卡内嵌套面 ｜ 用在哪：S1 卡内区块、S8 挂载账本行内区、S10 沉淀预览区 ｜ 形态：别名引用 ｜ light=bluish-00 / dark=bluish-850 #2c2c2e */
+  --xs-surface-card-nested: var(--dsw-alias-bg-layer-2);
+  /* 浮层底 ｜ 用在哪：S2/S8 抽屉、S10 确认弹窗、S4 引导浮层 ｜ 形态：别名引用 ｜ light=bluish-150 #e9ecf2 / dark=bluish-700 #61666b（DSH 双模取值差异大，随宿主即可） */
+  --xs-surface-overlay: var(--dsw-alias-bg-overlay);
+  /* 浮层后方遮罩 ｜ 用在哪：S2/S8 抽屉、S10 确认弹窗 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→与 --dsw-alias-bg-mask-1 同值（DSH Modal 遮罩，不模糊背景） */
+  --xs-surface-overlay-mask: var(--xs-static-surface-overlay-mask);
+  /* 侧栏列底 ｜ 用在哪：S15 侧栏行所在列 ｜ 形态：别名引用 ｜ 沿用 DSH 侧栏，不改（light=bluish-50 / dark=bluish-900） */
+  --xs-surface-sidebar: var(--dsw-specific-sidebar-fill);
+  /* 可交互行悬停面 ｜ 用在哪：S5/S11 列表行、S6 勾选行、S15 侧栏行 ｜ 形态：别名引用 ｜ light=#2631480f / dark=#ffffff14 */
+  --xs-surface-interactive-hover: var(--dsw-alias-interactive-bg-hover);
+  /* 选中/激活面 ｜ 用在哪：S6 已勾选谱行、S9 已采用候选、S15 当前面板行 ｜ 形态：别名引用 ｜ 按字典建议别名映射；选中态的「强调」由 --xs-edge-card-strong 与文字标签承担 */
+  --xs-surface-selected: var(--dsw-alias-interactive-bg-hover);
+  /* 只读面 ｜ 用在哪：S2 命盘卡详情（C1）、S13 底稿视图（C2） ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→bluish-50/900，半档下沉 */
+  --xs-surface-readonly: var(--xs-static-surface-readonly);
+  /* 锁定行面 ｜ 用在哪：S6 勾选列表「底座」「底稿」两行（C5） ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→bluish-75/800 */
+  --xs-surface-locked: var(--xs-static-surface-locked);
+  /* 骨架屏占位块底 ｜ 用在哪：S1 卡级骨架、S5/S11/S13 列表骨架 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→与 --dsw-alias-bg-skeleton 同值（4%/8% 透明度） */
+  --xs-surface-skeleton: var(--xs-static-surface-skeleton);
+  /* 空态区的底 ｜ 用在哪：S1/S4/S5/S11/S13 空态、S6 无谱可选、S7 无历史 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→bluish-60/950；dark 沉入应用底 */
+  --xs-surface-empty: var(--xs-static-surface-empty);
+  /* 品牌名「玄枢」 ｜ 用在哪：S1 面板标题、sidebar.brand.name 占位 ｜ 形态：别名引用 ｜ 色=brand-primary；字族 var(--dsw-font-family-brand)（Montserrat），字号档归 UI 阶段 */
+  --xs-text-brand: var(--dsw-alias-brand-primary);
+  /* 屏/卡主标题 ｜ 用在哪：S1 卡名、S5 谱名、S2 抽屉标题、S13 底稿标题 ｜ 形态：别名引用 ｜ light=bluish-1000 / dark=bluish-50 */
+  --xs-text-title: var(--dsw-alias-label-primary);
+  /* 区块小标题 ｜ 用在哪：S1 卡内分节、S10 沉淀分区标题 ｜ 形态：别名引用 ｜ 与标题同色系，层级靠字号/字重（UI 阶段）区分 */
+  --xs-text-heading: var(--dsw-alias-label-primary);
+  /* 正文 ｜ 用在哪：S2 命盘要点、S13 底稿正文、S10 diff 正文 ｜ 形态：别名引用 ｜ 同上 */
+  --xs-text-body: var(--dsw-alias-label-primary);
+  /* 次要文字 ｜ 用在哪：S5 谱卡描述、S8 账本行副文、S11 跳转说明 ｜ 形态：别名引用 ｜ light=bluish-700 / dark=bluish-300 */
+  --xs-text-secondary: var(--dsw-alias-label-secondary);
+  /* 三级文字 ｜ 用在哪：S1 卡脚 info、S7 历史行时间、S10 字数变化 ｜ 形态：别名引用 ｜ light=bluish-600 / dark=bluish-400 */
+  --xs-text-tertiary: var(--dsw-alias-label-tertiary);
+  /* 极小注记 ｜ 用在哪：S6 勾选计数、S8 预算计数、Tag 内文字 ｜ 形态：别名引用 ｜ light=bluish-400 / dark=bluish-600 */
+  --xs-text-caption: var(--dsw-alias-label-caption);
+  /* 可跳转文字 ｜ 用在哪：S2 重新录制出生信息、S13 三跳、S11 跳转入口 ｜ 形态：别名引用 ｜ 按字典建议别名=brand-primary（DSH 品牌强调色，light≈黑/dark≈白）；可点性由下划线/箭头图标承担，不靠蓝 */
+  --xs-text-link: var(--dsw-alias-brand-primary);
+  /* 等宽（slug/路径/文件名） ｜ 用在哪：S5 谱名 slug、S13 源文件路径、S15 只读路径展示（C11） ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→deepseek-800/300；字族用宿主 --ds-font-family-code */
+  --xs-text-code: var(--xs-static-text-code);
+  /* 主按钮上的文字 ｜ 用在哪：S3 下一步、S10 更新到谱、S4 去录出生信息 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→neutral-00/bluish-1000（=label-primary-foreground 取色模式） */
+  --xs-text-on-accent: var(--xs-static-text-on-accent);
+  /* 禁用态文字 ｜ 用在哪：S8 超预算行、S10 未勾选确认框、S6 无谱时发送钮 ｜ 形态：别名引用 ｜ 禁用=降权到 caption 档 */
+  --xs-text-disabled: var(--dsw-alias-label-caption);
+  /* 卡的描边 ｜ 用在哪：S1 四卡、S5 谱卡、S9 候选卡 ｜ 形态：别名引用 ｜ light=#0000000a / dark=#ffffff0f */
+  --xs-edge-card: var(--dsw-alias-border-l1);
+  /* 强调卡描边 ｜ 用在哪：S9 已采用候选、S6 当前勾选汇总区 ｜ 形态：别名引用 ｜ light=#0000001a / dark=#ffffff1f */
+  --xs-edge-card-strong: var(--dsw-alias-border-l2);
+  /* 区块分隔线（发丝） ｜ 用在哪：S1 卡内分节、S8 账本行间、S13 底稿分节 ｜ 形态：别名引用 ｜ 同卡描边档 */
+  --xs-edge-divider: var(--dsw-alias-border-l1);
+  /* 锁定行描边 ｜ 用在哪：S6 底座/底稿锁定行（C5） ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→bluish-200/750 */
+  --xs-edge-locked: var(--xs-static-edge-locked);
+  /* 只读区描边 ｜ 用在哪：S2 抽屉顶部标记带、S13 顶栏（C1/C2） ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→bluish-150/800 */
+  --xs-edge-readonly: var(--xs-static-edge-readonly);
+  /* 焦点环 ｜ 用在哪：全部可聚焦控件 ｜ 形态：别名引用 ｜ 照 DSH focus.css 原生回退链：--dsw-focus-ring-color 未设时落 state-business-primary；环宽=--dsw-focus-ring-width(2px) */
+  --xs-edge-focus: var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  /* 面板内容与面板边缘的距离 ｜ 用在哪：S1/S5/S6/S11/S13 面板外壳 ｜ 形态：字面值 ｜ 对齐 DSH Plugin Manager 页间距阶梯（实测 4/8/12/16/20/24px 为主频档） */
+  --xs-space-page: 24px;
+  /* 大区块之间的垂直距离 ｜ 用在哪：S1 四卡与页头、S5 列表与工具栏、S10 导出区与更新区 ｜ 形态：字面值 ｜ 对齐 DSH Plugin Manager 页间距阶梯（实测 4/8/12/16/20/24px 为主频档） */
+  --xs-space-section: 24px;
+  /* 卡片之间的栅格间隙 ｜ 用在哪：S1 四卡 2×2、S9 候选卡横排、S14 任务卡列表 ｜ 形态：字面值 ｜ 对齐 DSH Plugin Manager 页间距阶梯（实测 4/8/12/16/20/24px 为主频档） */
+  --xs-space-card-gap: 16px;
+  /* 卡内边距 ｜ 用在哪：全部卡片 ｜ 形态：字面值 ｜ 对齐 DSH Plugin Manager 页间距阶梯（实测 4/8/12/16/20/24px 为主频档） */
+  --xs-space-card-pad: 16px;
+  /* 列表行内水平间距 ｜ 用在哪：S5/S6/S11 列表行、S8 账本行、S15 侧栏行 ｜ 形态：字面值 ｜ 对齐 DSH Plugin Manager 页间距阶梯（实测 4/8/12/16/20/24px 为主频档） */
+  --xs-space-row: 12px;
+  /* 紧邻文字行垂直距离 ｜ 用在哪：卡标题↔副标题、Tag 行↔正文 ｜ 形态：字面值 ｜ 对齐 DSH Plugin Manager 页间距阶梯（实测 4/8/12/16/20/24px 为主频档） */
+  --xs-space-stack-sm: 4px;
+  /* 控件/段落垂直距离 ｜ 用在哪：表单行之间、按钮行与内容之间 ｜ 形态：字面值 ｜ 对齐 DSH Plugin Manager 页间距阶梯（实测 4/8/12/16/20/24px 为主频档） */
+  --xs-space-stack-md: 12px;
+  /* 一排控件之间的水平距离 ｜ 用在哪：S5 工具栏、S10 底部按钮行、S6 勾选区操作行 ｜ 形态：字面值 ｜ 对齐 DSH Plugin Manager 页间距阶梯（实测 4/8/12/16/20/24px 为主频档） */
+  --xs-space-toolbar: 8px;
+  /* 浮层与视口边缘的距离 ｜ 用在哪：S2/S8 抽屉、S10 确认弹窗、S4 引导浮层 ｜ 形态：字面值 ｜ 对齐 DSH Plugin Manager 页间距阶梯（实测 4/8/12/16/20/24px 为主频档） */
+  --xs-space-overlay-inset: 16px;
+  /* 浮层内的边距 ｜ 用在哪：同上 ｜ 形态：字面值 ｜ 对齐 DSH Plugin Manager 页间距阶梯（实测 4/8/12/16/20/24px 为主频档） */
+  --xs-space-overlay-pad: 20px;
+  /* 卡片圆角 ｜ 用在哪：S1 四卡、S5 谱卡、S9 候选卡、S11 藏卡、S14 任务卡 ｜ 形态：别名引用 ｜ =20px（DSH base.css 尺度表） */
+  --xs-radius-card: var(--dsw-radius-xl);
+  /* 卡内嵌套面圆角 ｜ 用在哪：S1 卡内区块、S10 预览区、S8 行内区 ｜ 形态：别名引用 ｜ =12px，比卡小一档 */
+  --xs-radius-nested: var(--dsw-radius-md);
+  /* 控件圆角 ｜ 用在哪：全部 Button/Input/SegmentedControl/SegmentedTabs ｜ 形态：别名引用 ｜ =12px；primitives 的 Button/Input 正消费此档（V29 已证） */
+  --xs-radius-control: var(--dsw-radius-md);
+  /* 胶囊圆角 ｜ 用在哪：Tag/Pill（谱级别、超预算、只读标记） ｜ 形态：字面值 ｜ 照 DSH Tag/Pill 既有几何：两者 border-radius 均为 999px */
+  --xs-radius-chip: 999px;
+  /* 浮层圆角 ｜ 用在哪：S2/S8 抽屉、S10 确认弹窗、Modal ｜ 形态：别名引用 ｜ =20px */
+  --xs-radius-overlay: var(--dsw-radius-xl);
+  /* 图标/图形底板圆角 ｜ 用在哪：S15 侧栏行图标底、S2 命盘主图形底、S1 卡头图标 ｜ 形态：别名引用 ｜ =12px */
+  --xs-radius-tile: var(--dsw-radius-md);
+  /* 空态前景 ｜ 用在哪：S1/S4/S5/S11/S13 空态、S6 无谱、S7 无历史 ｜ 形态：别名引用 ｜ light=neutral-300 / dark=neutral-600；对应宿主状态点 idle 态 */
+  --xs-state-empty-fg: var(--dsw-alias-state-idle-primary);
+  /* 加载态前景 ｜ 用在哪：S1 卡级骨架、S5/S11 列表骨架、S9 合参进行中 ｜ 形态：别名引用 ｜ 同 idle；扫光动效见 motion 族 */
+  --xs-state-loading-fg: var(--dsw-alias-state-idle-primary);
+  /* 就绪态前景 ｜ 用在哪：全部屏默认内容态 ｜ 形态：别名引用 ｜ =正文色 */
+  --xs-state-ready-fg: var(--dsw-alias-label-primary);
+  /* 运行态前景 ｜ 用在哪：S9 合参进行中、S12 工作流执行中、S14 任务触发中 ｜ 形态：别名引用 ｜ 品牌强调色=进行中的最高可见档 */
+  --xs-state-running-fg: var(--dsw-alias-brand-primary);
+  /* 完成态前景 ｜ 用在哪：S9 全部候选返回、S10 已写入、S14 投递成功 ｜ 形态：别名引用 ｜ =green-500 双模 */
+  --xs-state-done-fg: var(--dsw-alias-state-success-primary);
+  /* 告警态前景 ｜ 用在哪：S8 已裁剪提示、S10 字数超阈值、S14 任务即将到期 ｜ 形态：别名引用 ｜ =amber-500 双模 */
+  --xs-state-warning-fg: var(--dsw-alias-state-warn-primary);
+  /* 错误态前景 ｜ 用在哪：全部屏错误态、S2 八字缺失、S3 出生信息非法 ｜ 形态：别名引用 ｜ light=red-600 / dark=red-400 */
+  --xs-state-error-fg: var(--dsw-alias-state-error-primary);
+  /* 陈旧态前景 ｜ 用在哪：S1 日课卡跨日、S13 底稿与源头不一致、S5 谱外部被改 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→amber-600 双模同值（派生自 warn-label）；stale 无宿主对应态，需自研 */
+  --xs-state-stale-fg: var(--xs-static-state-stale-fg);
+  /* 进度/运行条轨道 ｜ 用在哪：S9 合参进度、S8 预算占用条、S14 任务周期示意 ｜ 形态：别名引用 ｜ 嵌套面底色作轨道 */
+  --xs-state-busy-track: var(--dsw-alias-bg-layer-2);
+  /* level:base 谱标识文字/图标 ｜ 用在哪：S5 谱列表行、S6 勾选列表行、S7 历史回看行 ｜ 形态：别名引用 ｜ 基础输入级=品牌主色档（最高权重的可选谱） */
+  --xs-level-base-fg: var(--dsw-alias-brand-primary);
+  /* level:base 标识底 ｜ 用在哪：同上 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→brand 色 8%/12% 透明度 */
+  --xs-level-base-bg: var(--xs-static-level-base-bg);
+  /* level:optional 谱标识文字/图标 ｜ 用在哪：同上 ｜ 形态：别名引用 ｜ 可选输入级=三级灰，权重低于 base */
+  --xs-level-optional-fg: var(--dsw-alias-label-tertiary);
+  /* level:optional 标识底 ｜ 用在哪：同上 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→tertiary 色 12% 透明度 */
+  --xs-level-optional-bg: var(--xs-static-level-optional-bg);
+  /* 底座（八字）标识 ｜ 用在哪：S1 命盘卡、S6 锁定行、S15 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→amber-600/400 琥珀金族，与 base/optional 中性灰可区分（§8.3-1） */
+  --xs-level-baseplate-fg: var(--xs-static-level-baseplate-fg);
+  /* 底座标识底 ｜ 用在哪：同上 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→amber-100/900 */
+  --xs-level-baseplate-bg: var(--xs-static-level-baseplate-bg);
+  /* 底稿标识（纯派生） ｜ 用在哪：S1 底稿卡、S6 锁定行、S13 底稿面板顶栏 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→deepseek-500/400 靛蓝族，与底座琥珀金、base/optional 中性灰三方可区分 */
+  --xs-level-digao-fg: var(--xs-static-level-digao-fg);
+  /* 底稿标识底 ｜ 用在哪：同上 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→deepseek-100/800 */
+  --xs-level-digao-bg: var(--xs-static-level-digao-bg);
+  /* 「不是谱」实体标识（藏/工作区/工作流） ｜ 用在哪：S8 挂载账本、S11 藏卡、S12 工作流、S15 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→blue-600/400 纯蓝族；只出现在挂载与藏库语境（§8.3-2），与底稿靛蓝不同屏相混 */
+  --xs-level-nonpu-fg: var(--xs-static-level-nonpu-fg);
+  /* 「不是谱」实体标识底 ｜ 用在哪：同上 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→blue-100/900 */
+  --xs-level-nonpu-bg: var(--xs-static-level-nonpu-bg);
+  /* 「只读」标记文字/图标 → C1 ｜ 用在哪：S2 抽屉顶部「只读 · 由出生信息与底座生成」 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→bluish-700/300 */
+  --xs-constraint-readonly-fg: var(--xs-static-constraint-readonly-fg);
+  /* 「只读」标记的底 → C1 ｜ 用在哪：同上 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→bluish-100/750 */
+  --xs-constraint-readonly-bg: var(--xs-static-constraint-readonly-bg);
+  /* 「纯派生」标记文字/图标 → C2 ｜ 用在哪：S13 顶栏「纯派生 · 不可手改」 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→deepseek-600/300（与底稿同族错位一档） */
+  --xs-constraint-derived-fg: var(--xs-static-constraint-derived-fg);
+  /* 「纯派生」标记的底 → C2 ｜ 用在哪：同上 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→deepseek-50/900 */
+  --xs-constraint-derived-bg: var(--xs-static-constraint-derived-bg);
+  /* 「锁定」行文字/图标 → C5 ｜ 用在哪：S6 勾选列表「默认在场 · 不可关」两行 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→bluish-600/400 */
+  --xs-constraint-locked-fg: var(--xs-static-constraint-locked-fg);
+  /* 锁定行的底 → C5 ｜ 用在哪：同上 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→bluish-75/800，与 surface-locked 同色（刻意对齐） */
+  --xs-constraint-locked-bg: var(--xs-static-constraint-locked-bg);
+  /* 「AI 不可见」常驻声明文字 → C3 ｜ 用在哪：S11 藏库顶部声明行 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→neutral-600/300（无蓝相族）；只用于声明行，不给 AI 动作上色（§9.1-2） */
+  --xs-constraint-noai-fg: var(--xs-static-constraint-noai-fg);
+  /* 「AI 不可见」声明的底 → C3 ｜ 用在哪：同上 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→neutral-100/800 */
+  --xs-constraint-noai-bg: var(--xs-static-constraint-noai-bg);
+  /* 「超预算未纳入」Tag 文字 → C7 ｜ 用在哪：S8 挂载预览折叠区、S6 发送前预览 ｜ 形态：别名引用 ｜ =amber-500 双模 */
+  --xs-constraint-budget-over-fg: var(--dsw-alias-state-warn-primary);
+  /* 「已裁剪 N→M 字」Tag 文字 → C7 ｜ 用在哪：同上 ｜ 形态：别名引用 ｜ 已裁剪=已处理的次要信息，非告警 */
+  --xs-constraint-budget-trimmed-fg: var(--dsw-alias-label-secondary);
+  /* 预算状态栏占用条 → C7 ｜ 用在哪：S6/S8 状态栏 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→deepseek-450 双模同值 */
+  --xs-constraint-budget-bar: var(--xs-static-constraint-budget-bar);
+  /* 「人工确认闸门」标记 → C4/C8/C9/C10 ｜ 用在哪：S10 确认弹窗顶部、S6 沉淀入口、S9 采用/合并/否决按钮行、S12 判定行 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→neutral-00/bluish-1000；只用于确认弹窗与按钮行容器（§9.1-3） */
+  --xs-constraint-human-gate-fg: var(--xs-static-constraint-human-gate-fg);
+  /* 人工闸门标记的底 ｜ 用在哪：同上 + C11「整体拷走/写入前先备份」确认说明 ｜ 形态：新增色值→var(尺度层) ｜ 新增色值→bluish-1000/50 实心高对比（=主按钮底取色）：全族唯一实心处理 */
+  --xs-constraint-human-gate-bg: var(--xs-static-constraint-human-gate-bg);
+  /* 宽/窄屏分界 ｜ 用在哪：全部屏响应式两态 ｜ 形态：字面值 ｜ 语义权威=assets README §3.1（宽 ≥1100 / 窄 <1100）；字典格保持「见 README §3.1」，本值仅作机读承载 */
+  --xs-size-breakpoint-wide: 1100px;
+  /* 面板内容最大宽度 ｜ 用在哪：S1/S5/S6/S11/S13 面板内容列 ｜ 形态：字面值 ｜ 票 03 定：宽屏 1100 分界内的阅读列上限，两侧留白随 page 间距 */
+  --xs-size-panel-content-max: 960px;
+  /* 卡最小高度 ｜ 用在哪：S1 四卡、S5 谱卡、S9 候选卡 ｜ 形态：字面值 ｜ 推导：卡头 28px + 2 行正文 2×20px + 卡内距 2×16px + 余量 = 108px（行高 20px 见 Plugin Manager 实测） */
+  --xs-size-card-minheight: 108px;
+  /* 正文内滚区最大高度 ｜ 用在哪：S2 命盘要点、S7 历史列表、S8 账本明细、S13 底稿正文 ｜ 形态：字面值 ｜ =10 行×20px + 40px 余量；Plugin Manager 内滚区实测有 240px 同值 */
+  --xs-size-scrollregion-max: 240px;
+  /* 抽屉宽度（宽屏） ｜ 用在哪：S2 命盘卡详情、S8 挂载账本 ｜ 形态：字面值 ｜ 票 03 定：详情阅读型抽屉常见幅，窄屏时转全宽+限高（见下条） */
+  --xs-size-drawer-width: 480px;
+  /* 抽屉最大高度（窄屏） ｜ 用在哪：同上（窄屏态） ｜ 形态：字面值 ｜ 票 03 定：窄屏底部抽屉的像素上限 */
+  --xs-size-drawer-maxheight: 640px;
+  /* 确认弹窗宽度 ｜ 用在哪：S10 沉淀确认、S9 否决理由、S15 整体拷走说明 ｜ 形态：字面值 ｜ 票 03 定：确认型弹窗标准幅 */
+  --xs-size-modal-width: 480px;
+  /* 侧栏行图标边长 ｜ 用在哪：S15 侧栏行（sidebar.panellist size prop） ｜ 形态：字面值 ｜ 对齐宿主侧栏行 20px 档（Plugin Manager 行高实测 20px 图标档） */
+  --xs-size-icon-sidebar: 20px;
+  /* 行内图标边长 ｜ 用在哪：S5/S6/S11 列表行、S8 账本行 ｜ 形态：字面值 ｜ =icons/inline 族 viewBox 16 */
+  --xs-size-icon-inline: 16px;
+  /* 品牌主图形边长 ｜ 用在哪：S1 页头、conversation.hero.brand.mark（若用） ｜ 形态：字面值 ｜ 对齐宿主 32px 图形档（Plugin Manager 实测主图形高 32px） */
+  --xs-size-glyph-brand: 32px;
+  /* 控件高度 ｜ 用在哪：全部按钮/输入/分段 ｜ 形态：字面值 ｜ Plugin Manager 控件高实测 28/32/40 三档，取中档 32px */
+  --xs-size-control-height: 32px;
+  /* 胶囊高度 ｜ 用在哪：谱级别 Tag、超预算 Tag、只读标记 ｜ 形态：字面值 ｜ 照 Tag 既有几何：line-height 17px + padding 1px×2 ≈ 19px→取 20px（Pill 为 24px 另一形态） */
+  --xs-size-chip-height: 20px;
+  /* 快动效时长（悬停/状态切换） ｜ 用在哪：列表行悬停、Tag 切换 ｜ 形态：字面值 ｜ =宿主 --ds-transition-duration-fast(.1s)；须尊重「减少动态效果」偏好 */
+  --xs-motion-duration-fast: 100ms;
+  /* 浮层进出时长 ｜ 用在哪：S2/S8 抽屉、S10 弹窗 ｜ 形态：字面值 ｜ =宿主 --ds-transition-duration-slow(.3s) */
+  --xs-motion-duration-overlay: 300ms;
+  /* 标准缓动 ｜ 用在哪：全部 ｜ 形态：字面值 ｜ =宿主 --ds-ease-in-out */
+  --xs-motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body[data-ds-dark-theme] {
+  /* ---- --xs-static-* 尺度层（字面值；新增色值的唯一落地处） ---- */
+  /* -- static -- */
+  --xs-static-level-base-bg: #f9fafb1f; /* 推导自 --dsw-static-neutral-bluish-1000(light)/-50(dark) 按 8%→12% 透明度阶梯；前景即 --dsw-alias-brand-primary */
+  --xs-static-level-optional-bg: #adb2b81f; /* 推导自 --dsw-static-neutral-bluish-600(light)/-400(dark)（=label-tertiary 取色）按 12% 透明度阶梯 */
+  --xs-static-level-baseplate-fg: #f7ad31; /* 取自 --dsw-static-amber-600(light)/-400(dark)；底座属玄学基底，用琥珀金族与 base/optional 中性灰区分（字典 §8.3-1） */
+  --xs-static-level-baseplate-bg: #27241f; /* 取自 --dsw-static-amber-100(light)/-900(dark)（同 --dsw-alias-state-warn-tertiary 双模取色模式） */
+  --xs-static-level-digao-fg: #7aaaff; /* 取自 --dsw-static-deepseek-500(light)/-400(dark)（同 --dsw-alias-state-business-primary 双模取色模式）；底稿为 AI 纯派生，用 deepseek 靛蓝族 */
+  --xs-static-level-digao-bg: #34415b; /* 取自 --dsw-static-deepseek-100(light)/-800(dark)（同 --dsw-alias-state-business-tertiary 双模取色模式） */
+  --xs-static-level-nonpu-fg: #60a5fa; /* 取自 --dsw-static-blue-600(light)/-400(dark)；「不是谱」用纯蓝族，与底稿的 deepseek 靛蓝相区分，且 §8.3-2 限定两族不同屏同现 */
+  --xs-static-level-nonpu-bg: #0e3074; /* 取自 --dsw-static-blue-100(light)/-900(dark) */
+  --xs-static-constraint-readonly-fg: #cfd3d6; /* 取自 --dsw-static-neutral-bluish-700(light)/-300(dark)（=label-secondary 取色）：只读=在场但降权 */
+  --xs-static-constraint-readonly-bg: #43454a; /* 取自 --dsw-static-neutral-bluish-100(light)/-750(dark) */
+  --xs-static-constraint-derived-fg: #b7c8fe; /* 取自 --dsw-static-deepseek-600(light)/-300(dark)：与底稿同属 deepseek 族（底稿即纯派生），明度错位一档与 level-digao 区分 */
+  --xs-static-constraint-derived-bg: #283142; /* 取自 --dsw-static-deepseek-50(light)/-900(dark) */
+  --xs-static-constraint-locked-fg: #adb2b8; /* 取自 --dsw-static-neutral-bluish-600(light)/-400(dark)（=label-tertiary 取色）：锁定=不可操作的静默态 */
+  --xs-static-constraint-locked-bg: #353638; /* 取自 --dsw-static-neutral-bluish-75(light)/-800(dark)；与 --xs-static-surface-locked 同值（锁定行面与锁定标记底同色，刻意对齐） */
+  --xs-static-constraint-noai-fg: #d4d4d4; /* 取自 --dsw-static-neutral-600(light)/-300(dark)：用无蓝相 neutral 族，与只读/锁定的 bluish 族区分（C3 是独立语义） */
+  --xs-static-constraint-noai-bg: #292929; /* 取自 --dsw-static-neutral-100(light)/-800(dark) */
+  --xs-static-constraint-budget-bar: #5686fe; /* 取自 --dsw-static-deepseek-450，双模同值（占用条为业务强调填充，非文字；双模对比度均足） */
+  --xs-static-constraint-human-gate-fg: #0f1115; /* 取自 --dsw-static-neutral-00(light)/--dsw-static-neutral-bluish-1000(dark)（=label-primary-foreground 双模取色模式） */
+  --xs-static-constraint-human-gate-bg: #f9fafb; /* 取自 --dsw-static-neutral-bluish-1000(light)/-50(dark)（=brand-primary/button-primary-fill 取色）：人工闸门=人亲手点的主动作容器（§9.1-3），用全族唯一实心高对比处理 */
+  --xs-static-surface-overlay-mask: #00000080; /* 推导自 --dsw-static-neutral-1000 按 24%(light)/50%(dark) 透明度；与 DSH Modal 遮罩 --dsw-alias-bg-mask-1 完全同值（证据：design-platform.css alias 表），玄枢遮罩同样不模糊背景 */
+  --xs-static-surface-readonly: #1b1b1c; /* 取自 --dsw-static-neutral-bluish-50(light)/-900(dark)（与 --dsw-specific-sidebar-fill 同阶梯）：只读面=半档下沉 */
+  --xs-static-surface-locked: #353638; /* 取自 --dsw-static-neutral-bluish-75(light)/-800(dark)；dark 与 card(875)/card-nested(850)/readonly(900) 逐级可区分 */
+  --xs-static-surface-skeleton: #ffffff14; /* 推导自 neutral-1000/00 按 4%/8% 透明度阶梯；与 DSH 自带 --dsw-alias-bg-skeleton 同值（DSH 有 token 无原语，玄枢骨架自研、取值对齐宿主） */
+  --xs-static-surface-empty: #151517; /* 取自 --dsw-static-neutral-bluish-60(light)/-950(dark)；dark 即 app 底色——空态区沉入应用底，与正常内容（卡面 875/850）自然分层 */
+  --xs-static-text-code: #b7c8fe; /* 取自 --dsw-static-deepseek-800(light)/-300(dark)：等宽内容（slug/路径）用深靛蓝，与正文 label-primary(bluish-1000/50) 可区分 */
+  --xs-static-text-on-accent: #0f1115; /* 取自 --dsw-static-neutral-00(light)/--dsw-static-neutral-bluish-1000(dark)（=label-primary-foreground 取色）：主按钮=brand-primary 实心底上的文字 */
+  --xs-static-edge-locked: #43454a; /* 取自 --dsw-static-neutral-bluish-200(light)/-750(dark)：比 border-l2 更可辨的静默描边 */
+  --xs-static-edge-readonly: #353638; /* 取自 --dsw-static-neutral-bluish-150(light)/-800(dark)：比 locked 弱半档 */
+  --xs-static-state-stale-fg: #dd8629; /* 取自 --dsw-static-amber-600，双模同值（=--dsw-alias-state-warn-label 的双模取色模式）：陈旧=降饱和的 warn，与 warning(amber-500) 区分 */
+
+  /* （无 --xs-* 语义层：--xs-* → var(--xs-static-*) 在使用点再解析，dark 只覆写 static 层，避免与 :root 整段重复） */
+}

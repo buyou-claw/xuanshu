@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" fill="none">
+<!-- asset.S5-3 · 谱管理 empty：空谱架 + 一本待写的谱，无任何可选谱 · S5 -->
+<path d="M22 24h28v30H22z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M28 30h16M28 37h16M28 44h16" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.3"/>
+<path d="M56 18h26v22H56z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M56 18l6-6h14l6 6" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M62 26h14M62 32h14" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.3"/>
+<path d="M28 54h52" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-dasharray="4 3" opacity="0.4"/>
+</svg>

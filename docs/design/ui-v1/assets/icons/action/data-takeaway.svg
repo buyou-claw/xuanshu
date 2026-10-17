@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<!-- asset.S15-3 · 设置内页条目「数据与拷走」：本地数据罐旁一枚带走箭头（归 action 族，nav/ 归 icons-a） · S15 -->
+<path d="M9.5 4.5c3 0 5 .95 5 2.1v6.3c0 1.15-2 2.1-5 2.1s-5-.95-5-2.1V6.6c0-1.15 2-2.1 5-2.1z"/>
+<path d="M4.5 6.6c0 1.15 2 2.1 5 2.1s5-.95 5-2.1"/>
+<path d="M4.5 9.75c0 1.15 2 2.1 5 2.1s5-.95 5-2.1"/>
+<path d="M14.5 14.75L17.25 12"/>
+<path d="M15.25 12h2v2"/>
+</svg>

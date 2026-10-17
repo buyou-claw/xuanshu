@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<!-- asset.S1-2, asset.S2-1 · 命盘卡头 / 抽屉头部命盘图标 · S1/S2 -->
+<circle cx="10" cy="10" r="6.5"/>
+<path d="M10 3.5 V16.5 M3.5 10 H16.5"/>
+<circle cx="10" cy="10" r="0.6" fill="currentColor" stroke="none"/>
+</svg>

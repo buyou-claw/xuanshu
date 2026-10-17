@@ -68,8 +68,8 @@
 - **首页替换**：注册新 main key `overview` + `sidebar.panellist` 首行并设为默认面板；DSH 原 `conversation` 面板保留（问事与工作区共用）；槽位遮蔽显式 priority（ADR-0002）。
 - **horosa 集成**：profile 补丁静态挂 `dsh-mcp-client` 行（serverName `horosa`，回环 streamable-http `127.0.0.1:8765/mcp`，非回环不暴露）；进程生命周期由 xuanshu-host 托管（ensure runtime → spawn serve → health check）；钉 v0.40.1 + runtime 同版本 + Windows ASCII runtime 根（ADR-0004）。
 - **八字录入**：出生地双通道（离线城市库 / 手动经纬），时区自动含 DST；调用 `horosa_cn_bazi_birth` 带 `agent_confirmed_settings:true` + `clarification_notes`；`timeAlg` 透传、缺省省略（=0 真太阳时，引擎内部换算，录入层不换算）；缺经纬度禁止出盘（防静默退化）。
-- **问事容器**：新 main key `consult` 面板 + `ctx.sessions.create`（`meta.xuanshu={kind:'consult', pus:[…], mounts:[…]}`）；会话复用 DSH 事件溯源 JSONL 存储；临时挂载注入按预算裁剪并披露（照星阙挂载账本模式）。
-- **多 AI 合参**：规格级复用星阙 Best-of-N——`/多模型` 命令；2–4 个 provider profile 或同模型四视角（classic/modern/cautious/concise，缺省经典+审慎）；N 路并行流式不带工具；judge `json_schema strict`、失败回落完成顺序第一份；采用/合并/停止；其余折叠进 `message.candidates`（`bestOf{adoptedId,ranking,judge,costUsd}`）；历史只带采用稿。LLM 层复用 DSH `ctx.llm` 多 adapter。
+- **问事容器**：新 main key `consult` 面板 + **玄枢自铸 sessionId 前缀**（会话分类载体，见 ADR-0009）；会话复用 DSH 事件溯源 JSONL 存储；`pus` / `mounts` 清单落旁挂文件（ADR-0009），**不塞 `meta`**（rc.2 的 `meta` 是闭集且逐字段挑，额外键静默丢弃）；临时挂载注入按预算裁剪并披露（照星阙挂载账本模式）。
+- **多 AI 合参**：规格级复用星阙 Best-of-N——`/多模型` 命令；2–4 个 provider profile 或同模型四视角（classic/modern/cautious/concise，缺省经典+审慎）；N 路并行流式不带工具；judge 走**工具调用参数 JSON + 校验**（rc.2 无结构化输出，见 ADR-0010）、失败回落完成顺序第一份；采用/合并/停止；`bestOf{adoptedId,ranking,judge,costUsd}` 落旁挂文件（rc.2 无 `message.candidates` 字段，见 ADR-0009 第 7 条）；历史只带采用稿。LLM 层复用 DSH `ctx.llm` 多 adapter。
 - **谱**：数据格式 = 谱规范 v1（目录 `manifest.md + 内容 + summary.md`；frontmatter `spec: pu/1` / `name` / `level` / `tags`（预留不启用）/ `source` / `updated_at`）；级别 `base|optional`、级别≠必填；加载协议 = manifest 概览 + summary 优先、按需深入。
 - **底稿**：纯派生 `~/.dsh/xuanshu/digao.md`；骨架与来源标记规则生成、摘要 LLM 提炼；`ctx.schedule` daily（默认）+ 手动刷新；用户不可手改。
 - **日课**：`ctx.schedule` daily（默认 07:30 可配）绑定玄枢内部系统会话投递；生成 = 内置 skill 读底座谱 + 当前时刻调 horosa 推运；不联网。
@@ -83,7 +83,7 @@
 
 **Seam 策略（一个主 seam + 三份既有契约）**：玄枢的一切能力最终表现为「装配后的 profile 对外暴露的东西」，因此测试只落在**装配契约**这一个 seam 上——用 DSH 官方 headless/sdk 宿主启动装配，断言三份既有契约，不新建任何测试通道：
 
-1. **装配契约（主）**：启动 xuanshu profile（headless）→ 断言工具表含 `mcp__horosa__*`、`ctx.sessions.create` 可带 xuanshu meta、`ctx.schedule` 含日课/底稿任务、数据目录初始化正确、补丁行 id 未漂移。
+1. **装配契约（主）**：启动 xuanshu profile（headless）→ 断言工具表含 `mcp__horosa__*`、玄枢自铸的会话 id 前缀与旁挂清单可读（ADR-0009 取代了原「`ctx.sessions.create` 可带 xuanshu meta」）、`ctx.schedule` 含日课/底稿任务（**前置：profile 的 bundles 必须含 `@deepseek-ai/dsh-experimental-schedule-bundle`，否则 `schedule` 行不存在且 boot 不报错**——该 bundle 只有三行：`time-context` / `schedule` / `ui-schedule`）、数据目录初始化正确、补丁行 id 未漂移。
 2. **文件契约**：谱/digao/藏注册表 = 纯文件（frontmatter+MD / JSONL），断言结构与内容（谱规范 v1 即契约）；底稿骨架与来源标记 = 确定性函数，可无 LLM 测。
 3. **MCP envelope 契约**：horosa 集成测试直打 `127.0.0.1:8765/mcp`（上游自己的 seam），断言 envelope `{ok,tool,version,data,summary,warnings,error}` + `technique_card` + 澄清闸拦截行为；八字用例断言 timeAlg 缺省口径。
 4. **UI 槽位契约**：客户端插件组件级测试（vitest，DSH 前端链自带）——面板注册进 main key、四卡渲染、勾选谱状态；可选 playwright e2e（后置）。

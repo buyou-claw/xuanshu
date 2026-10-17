@@ -1,0 +1,47 @@
+{
+  "name": "dsh-profile-xuanshu",
+  "private": true,
+  "description": "玄枢（XuanShu）的 DSH profile 分发包：装配 xuanshu-host / xuanshu-client 两个插件包，零 DSH 源码改动（ADR-0001）",
+  "license": "AGPL-3.0-only",
+  "dependencies": {
+    "@deepseek-ai/cordis-plugin-group": "~1.0.4",
+    "@deepseek-ai/cordis-plugin-include": "~1.0.9",
+    "@deepseek-ai/dsh": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-anonymous-user-id": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-attachment": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-base": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-bash-local": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-compaction": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-deepseek-account": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-fs": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-headless": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-jobs": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm-deepseek": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-output-retention": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-ptc-runtime": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-sandbox": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-persistence": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-query": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-telemetry": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-title-llm": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-shell": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-spill": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-subagent-in-process-driver": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-util-time": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-web-app": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-workflow": "0.2.0-rc.2",
+    "xuanshu-host": "file:../packages/xuanshu-host",
+    "xuanshu-client": "file:../packages/xuanshu-client"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-headless",
+        "@deepseek-ai/dsh-web-app",
+        "xuanshu-host",
+        "xuanshu-client"
+      ]
+    }
+  }
+}

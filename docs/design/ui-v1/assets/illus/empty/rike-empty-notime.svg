@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" fill="none">
+<!-- asset.S14-6 · 日课 empty：钟未到点 + 空白宜/忌/流日卡，今天未到点且无上一份 · S14 -->
+<circle cx="40" cy="28" r="15" stroke="currentColor" stroke-width="1.5"/>
+<path d="M40 22v6l5 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M40 43v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+<rect x="62" y="24" width="44" height="36" rx="4" stroke="currentColor" stroke-width="1.5"/>
+<path d="M70 36h28M70 43h28M70 50h18" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.3"/>
+</svg>

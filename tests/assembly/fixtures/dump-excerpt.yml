@@ -1,0 +1,34 @@
+# == @deepseek-ai/dsh-base
+- id: tool-plugin-manager
+  name: '@deepseek-ai/dsh-plugin-manager/tools'
+  disabled: true
+- id: plugin-manager
+  name: '@deepseek-ai/dsh-plugin-manager'
+  disabled: !!js '!ctx.get(''profileContext'')'
+- id: timer
+  name: '@deepseek-ai/cordis-plugin-timer'
+# == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-headless
+- id: hmr
+  name: '@deepseek-ai/dsh-hmr'
+  disabled: true
+  config:
+    root: []
+# == @deepseek-ai/dsh-base
+# ... 中略：这里还有 300+ 行 dsh-base 的行（本 fixture 只保留解析器需要覆盖的形状）
+# == @deepseek-ai/dsh-headless
+- id: headless-startup
+  name: '@deepseek-ai/dsh-headless/startup'
+- id: headless-runner
+  name: '@deepseek-ai/dsh-headless'
+  inject:
+    - headlessStartup
+  config:
+    task: !!js ctx.headlessStartup.task
+    sessionId: !!js ctx.headlessStartup.sessionId
+    json: !!js ctx.headlessStartup.json
+# == xuanshu-host
+- id: xuanshu-host
+  name: xuanshu-host
+# == xuanshu-client
+- id: xuanshu-client
+  name: xuanshu-client

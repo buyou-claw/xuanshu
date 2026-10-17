@@ -1,0 +1,151 @@
+{
+  "owner": "brand-skins",
+  "generated_for": "票 03 UI 素材资产制作",
+  "scope": "brand 4 + icon 1（asset.S15-2）+ texture 19（13 实体皮肤规格 + 6 纯 token 引用条）",
+  "entries": [
+    {
+      "ledger_id": "asset.S10-6",
+      "type": "brand",
+      "files": ["brand/badge-human-gate.svg"],
+      "notes": "弹窗标题旁「人工确认」标记；章形 + 人形底版；实现以 --xs-constraint-human-gate-fg/-bg 为准（C4/C8/C9/C10），SVG 内色值为底版占位（README §5 已登记）"
+    },
+    {
+      "ledger_id": "asset.S11-5",
+      "type": "brand",
+      "files": ["brand/badge-noai.svg"],
+      "notes": "常驻声明栏的「永不进 AI」标徽；封缄 + 斜杠眼底版（负面事实，不得做成按钮感）；实现以 --xs-constraint-noai-fg/-bg 为准（C3），仅用于那句常驻声明"
+    },
+    {
+      "ledger_id": "asset.S13-2",
+      "type": "brand",
+      "files": ["brand/badge-derived.svg"],
+      "notes": "「纯派生 · 不可手改」标记（与 S1 / S4 同一枚）；盾形 + 斜杠底版；实现以 --xs-constraint-derived-fg/-bg 为准（C2）；皮肤规格见 skins/badge-readonly.md"
+    },
+    {
+      "ledger_id": "asset.S15-7",
+      "type": "brand",
+      "files": ["brand/badge-noai-sm.svg"],
+      "notes": "侧栏「藏」行的「永不上 AI」小标（asset.S11-5 同族缩小版：去瞳仁简化）；实现以 --xs-constraint-noai-* 为准（C3）"
+    },
+    {
+      "ledger_id": "asset.S15-2",
+      "type": "icon",
+      "files": ["brand/brand-mark.svg", "brand/brand-mark-color.svg", "brand/brand-mark-notes.md"],
+      "notes": "玄枢品牌标（sidebar.brand.mark）+ 品牌名排版位说明：圆环绕一偏心枢点（枢轴 / 璇玑意象），单色 currentColor 版 + 品牌色版（玄青）各一；多档边长简化规则与 --xs-size-glyph-brand / sidebar.brand.name（--xs-text-brand）关系见 brand/brand-mark-notes.md"
+    },
+    {
+      "ledger_id": "asset.S1-10",
+      "type": "texture",
+      "files": ["skins/skeleton-card.md"],
+      "notes": "卡级骨架屏（四卡共用，简化为 2–4 条占位）；token 化骨架样式，扫光尊重「减少动态效果」偏好"
+    },
+    {
+      "ledger_id": "asset.S1-11",
+      "type": "texture",
+      "files": ["skins/badge-readonly.md"],
+      "notes": "只读 / 纯派生 两类标记（XsReadonlyBadge、XsPureDerivedBadge）徽标皮肤；与 asset.S2-5 同款同文件，别名 asset.S4-9 同款复用"
+    },
+    {
+      "ledger_id": "asset.S1-12",
+      "type": "texture",
+      "files": ["skins/quicklinks-cell.md"],
+      "notes": "快捷入口三格单元格皮肤（主标题 + 副标题 + 边界说明行）；窄屏不折行；fail-soft 置灰态"
+    },
+    {
+      "ledger_id": "asset.S2-5",
+      "type": "texture",
+      "files": ["skins/badge-readonly.md"],
+      "notes": "只读标记徽标（与 S1 XsReadonlyBadge 同款）：与 asset.S1-11 同文件 skins/badge-readonly.md，文中说明"
+    },
+    {
+      "ledger_id": "asset.S2-6",
+      "type": "texture",
+      "files": ["skins/basis-desc-list.md"],
+      "notes": "起盘口径只读行（三行，右侧值列）描述列表皮肤；只读面 + 值列不得用 --xs-text-link（防误读成可切换）"
+    },
+    {
+      "ledger_id": "asset.S2-7",
+      "type": "texture",
+      "files": ["skins/bazi-pillars-table.md"],
+      "notes": "四柱表（4×4，含缺项占位「—」与缺项说明行）表格皮肤；只读、无显隐开关"
+    },
+    {
+      "ledger_id": "asset.S2-10",
+      "type": "texture",
+      "files": ["skins/stale-banner.md"],
+      "notes": "stale 提示条（旧版本出盘）皮肤 + 图标位；边条式，--xs-state-stale-fg；常驻不静默当作最新"
+    },
+    {
+      "ledger_id": "asset.S3-6",
+      "type": "texture",
+      "files": ["skins/birth-confirm-table.md"],
+      "notes": "确认表（5 行 + 每行 [改]）表格皮肤；澄清闸容器走 --xs-constraint-human-gate-*（C10），状态位 ready/error 双档"
+    },
+    {
+      "ledger_id": "asset.S3-7",
+      "type": "texture",
+      "files": ["skins/cast-button-disabled.md"],
+      "notes": "禁用态出盘按钮 + 禁用理由行（缺经纬度禁止出盘的界面本体）；按钮皮肤 + 提示条皮肤，含两个修复入口"
+    },
+    {
+      "ledger_id": "asset.S3-12",
+      "type": "texture",
+      "files": ["skins/sticky-bottom-bar.md"],
+      "notes": "窄屏吸底操作条（主按钮 + 返回）容器皮肤；仅窄屏（< --xs-size-breakpoint-wide）出现；S2 抽屉窄屏吸底复用"
+    },
+    {
+      "ledger_id": "asset.S4-6",
+      "type": "texture",
+      "files": ["skins/primary-button.md"],
+      "notes": "主按钮皮肤（冷启动主行动「开始填写出生信息」）；全稿唯一主按钮皮肤，S1/S3/S2 stale 动作复用"
+    },
+    {
+      "ledger_id": "asset.S4-7",
+      "type": "texture",
+      "files": ["skins/why-empty-caption.md"],
+      "notes": "卡内「为什么空」说明行排版（小字 + 弱化）；弱化靠 text 族分档（secondary/tertiary），不降透明度；文案归 copy 分工 asset.S4-10"
+    },
+    {
+      "ledger_id": "asset.S4-8",
+      "type": "texture",
+      "files": ["skins/horosa-banner.md"],
+      "notes": "horosa 未就绪提示条（含 [重新检测] + [去排查 -> S15]）皮肤 + 图标位；边条式，--xs-state-error-fg；不整屏失败"
+    },
+    {
+      "ledger_id": "asset.S10-8",
+      "type": "texture",
+      "files": ["tokens/xs-tokens.css"],
+      "notes": "--xs-constraint-human-gate-fg/-bg（C4/C10 的确认容器）、diff 三记号、text-code（只读路径）、--xs-size-modal-width、--xs-motion-duration-overlay、state-warning（字数超阈）/ state-done"
+    },
+    {
+      "ledger_id": "asset.S11-8",
+      "type": "texture",
+      "files": ["tokens/xs-tokens.css"],
+      "notes": "--xs-constraint-noai-fg/-bg（仅那句常驻声明）、指针失效 state-warn 系、text-code（路径只读）、level-nonpu（藏不是谱）、--xs-size-panel-content-max"
+    },
+    {
+      "ledger_id": "asset.S12-8",
+      "type": "texture",
+      "files": ["tokens/xs-tokens.css"],
+      "notes": "--xs-constraint-human-gate-fg/-bg（C8 的判定条容器）、state-running / done / error、level-nonpu（工作流不是谱）、--xs-size-panel-content-max"
+    },
+    {
+      "ledger_id": "asset.S13-8",
+      "type": "texture",
+      "files": ["tokens/xs-tokens.css"],
+      "notes": "--xs-constraint-derived-fg/-bg（C2 徽标）、三路来源的边条 / 标签 / 组头、stale 横幅、surface-readonly / surface-panel、--xs-size-scrollregion-max、level-digao"
+    },
+    {
+      "ledger_id": "asset.S14-8",
+      "type": "texture",
+      "files": ["tokens/xs-tokens.css"],
+      "notes": "--xs-constraint-human-gate-fg/-bg（C10 的确认处）、state-running / done / error、level-baseplate（底座 + 时间基准）、--xs-size-card-minheight"
+    },
+    {
+      "ledger_id": "asset.S15-8",
+      "type": "texture",
+      "files": ["tokens/xs-tokens.css"],
+      "notes": "侧栏行（默认 / hover / active）与面板头：--xs-size-icon-sidebar、--xs-size-breakpoint-wide、surface-sidebar 等"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" fill="none">
+<!-- asset.S11-7 · 登记藏「只取指针」说明配图：链环指针指向文件，≠ 复制 · S11 -->
+<path d="M48 26h30v24H48z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M54 26V20h18v6" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M54 36h18M54 42h18" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.3"/>
+<path d="M42 34a6 6 0 0 1 6-6h1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M42 34a6 6 0 0 0 6 6h1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M78 38h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M84 34l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M96 50l14 14M104 64l14-14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+</svg>

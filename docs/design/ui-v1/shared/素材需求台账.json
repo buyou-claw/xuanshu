@@ -1,0 +1,2191 @@
+{
+  "version": 1,
+  "generated_for": "票 03 UI 素材资产制作",
+  "generated_from": "docs/design/ui-v1/screens/*.md 的各屏 §10 素材需求表",
+  "conventions": {
+    "type_enum": [
+      "icon",
+      "empty-state",
+      "illustration",
+      "brand",
+      "texture",
+      "placeholder",
+      "font-spec"
+    ],
+    "type_map": {
+      "icon": "线性图标（按钮/卡头/侧栏行/状态）",
+      "empty-state": "空态插画（必须成族，同一屏族内风格一致）",
+      "illustration": "说明性插画（引导、流程示意、成功/失败态）",
+      "brand": "品牌标识与徽标（含 C1–C4 的约束徽标底版）",
+      "texture": "组件皮肤与 token 引用（**取值由票 03 填**，语义见 shared/设计token字典.md）",
+      "placeholder": "占位/排版规格（非图形资源）",
+      "font-spec": "字体与排版规格"
+    },
+    "size_hint": "只写语义尺寸，不写像素；具体取值留票 03",
+    "note": "token 引用类条目不产出图形文件，只产出 token 取值；`shared/设计token字典.md` 是语义权威。"
+  },
+  "screens": [
+    "S1-自我总览",
+    "S10-沉淀确认",
+    "S11-藏库",
+    "S12-工作流创建向导",
+    "S13-底稿面板",
+    "S14-日课与定时任务",
+    "S15-管理入口与骨架落位",
+    "S2-命盘卡详情",
+    "S3-八字冷启动向导",
+    "S4-自我总览首次空态",
+    "S5-谱管理",
+    "S6-问事面板",
+    "S7-问事历史回看",
+    "S8-临时挂载账本",
+    "S9-多AI合参面板"
+  ],
+  "summary": {
+    "total": 124,
+    "by_type": {
+      "icon": 72,
+      "empty-state": 14,
+      "illustration": 10,
+      "texture": 19,
+      "brand": 4,
+      "placeholder": 5
+    },
+    "by_screen": {
+      "S1": 12,
+      "S10": 8,
+      "S11": 8,
+      "S12": 8,
+      "S13": 8,
+      "S14": 8,
+      "S15": 8,
+      "S2": 10,
+      "S3": 12,
+      "S4": 5,
+      "S5": 8,
+      "S6": 9,
+      "S7": 7,
+      "S8": 6,
+      "S9": 7
+    },
+    "aliases": 5
+  },
+  "assets": [
+    {
+      "id": "asset.S1-1",
+      "type": "icon",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "图标",
+      "usage": "侧栏「家」行图标",
+      "suggested_format": "SVG 24×24，线性，单色可继承",
+      "size_hint": "图标族 24×24",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-2",
+      "type": "icon",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "图标",
+      "usage": "命盘卡卡头图标",
+      "suggested_format": "SVG 20×20，线性",
+      "size_hint": "图标族 20×20",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-3",
+      "type": "icon",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "图标",
+      "usage": "日课卡卡头图标",
+      "suggested_format": "SVG 20×20，线性",
+      "size_hint": "图标族 20×20",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-4",
+      "type": "icon",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "图标",
+      "usage": "底稿卡卡头图标",
+      "suggested_format": "SVG 20×20，线性",
+      "size_hint": "图标族 20×20",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-5",
+      "type": "icon",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "图标",
+      "usage": "快捷入口三格图标（问事 / 工作区 / 工作流）",
+      "suggested_format": "SVG 24×24 ×3，线性，同视觉重量",
+      "size_hint": "图标族 24×24（多态）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-6",
+      "type": "empty-state",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "插画（空态图）",
+      "usage": "命盘卡 empty：「底座还没立起来」",
+      "suggested_format": "SVG，单色/双色，尺寸语义「卡内 1/3 高」",
+      "size_hint": "尺寸语义「卡内 1/3 高」",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-7",
+      "type": "empty-state",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "插画（空态图）",
+      "usage": "日课卡 empty：「今天还没有生成日课」",
+      "suggested_format": "SVG，同族风格",
+      "size_hint": "同族风格",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-8",
+      "type": "empty-state",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "插画（空态图）",
+      "usage": "底稿卡 empty（两种空因共用一张）",
+      "suggested_format": "SVG，同族风格",
+      "size_hint": "同族风格",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-9",
+      "type": "illustration",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "插画（错误态图）",
+      "usage": "四卡共用 error 态",
+      "suggested_format": "SVG，同族风格，语义可用「断线/读不到」",
+      "size_hint": "同族风格",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-10",
+      "type": "texture",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "卡级骨架屏（四卡共用，简化为 2–4 条占位）",
+      "suggested_format": "设计 token 化的骨架样式（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-11",
+      "type": "texture",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "只读 / 纯派生 两类标记（XsReadonlyBadge、XsPureDerivedBadge）",
+      "suggested_format": "徽标皮肤（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S1-12",
+      "type": "texture",
+      "screen": "S1",
+      "screens": [
+        "S1"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "快捷入口三格（含主标题 + 副标题 + 边界说明行）",
+      "suggested_format": "单元格皮肤（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S10-1",
+      "type": "icon",
+      "screen": "S10",
+      "screens": [
+        "S10"
+      ],
+      "raw_type": "图标",
+      "usage": "收尾条 [导出汇总]",
+      "suggested_format": "SVG（单色，随文字色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S10-2",
+      "type": "icon",
+      "screen": "S10",
+      "screens": [
+        "S10"
+      ],
+      "raw_type": "图标",
+      "usage": "草稿卡标题「沉淀草稿」",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S10-3",
+      "type": "icon",
+      "screen": "S10",
+      "screens": [
+        "S10"
+      ],
+      "raw_type": "图标",
+      "usage": "diff 记号 + 新增 / ~ 替换 / = 未变 三枚",
+      "suggested_format": "SVG（单色，三枚一组）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S10-4",
+      "type": "icon",
+      "screen": "S10",
+      "screens": [
+        "S10"
+      ],
+      "raw_type": "图标",
+      "usage": "[确认更新] 按钮（人工确认语义）",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S10-5",
+      "type": "icon",
+      "screen": "S10",
+      "screens": [
+        "S10"
+      ],
+      "raw_type": "图标",
+      "usage": "通知里的成功 / 失败两态",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S10-6",
+      "type": "brand",
+      "screen": "S10",
+      "screens": [
+        "S10"
+      ],
+      "raw_type": "标徽",
+      "usage": "弹窗标题旁「人工确认」标记",
+      "suggested_format": "SVG + --xs-constraint-human-gate-* token 引用",
+      "size_hint": "徽标/标记（文字同高，票 03 定）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S10-7",
+      "type": "empty-state",
+      "screen": "S10",
+      "screens": [
+        "S10"
+      ],
+      "raw_type": "空态插画",
+      "usage": "草稿卡 empty 态（会话刚收尾、尚无草稿）",
+      "suggested_format": "SVG（轻量线稿）",
+      "size_hint": "空态图 ≤ 半栏宽（可缩放到窄屏）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S10-8",
+      "type": "texture",
+      "screen": "S10",
+      "screens": [
+        "S10"
+      ],
+      "raw_type": "token 引用",
+      "usage": "--xs-constraint-human-gate-fg/-bg（C4/C10 的确认容器）、diff 三记号、text-code（只读路径）、--xs-size-modal-width、--xs-motion-duration-overlay、state-warning（字数超阈）/ state-done",
+      "suggested_format": "token 名引用（值由票 03 填，见 shared/设计token字典.md §12 的 S10 行）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S11-1",
+      "type": "icon",
+      "screen": "S11",
+      "screens": [
+        "S11"
+      ],
+      "raw_type": "图标",
+      "usage": "侧栏「藏」行",
+      "suggested_format": "SVG（单色，sidebar.panellist 的 size owner prop 两档）",
+      "size_hint": "sidebar.panellist 的 size owner prop 两档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S11-2",
+      "type": "icon",
+      "screen": "S11",
+      "screens": [
+        "S11"
+      ],
+      "raw_type": "图标",
+      "usage": "[登记藏]",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S11-3",
+      "type": "icon",
+      "screen": "S11",
+      "screens": [
+        "S11"
+      ],
+      "raw_type": "图标",
+      "usage": "卡片动作：打开 / 显示所在位置 / 复制路径 / 编辑 / 移除（五枚一组）",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S11-4",
+      "type": "icon",
+      "screen": "S11",
+      "screens": [
+        "S11"
+      ],
+      "raw_type": "图标",
+      "usage": "指针状态：指针有效 / 指针失效（两枚）",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S11-5",
+      "type": "brand",
+      "screen": "S11",
+      "screens": [
+        "S11"
+      ],
+      "raw_type": "标徽",
+      "usage": "常驻声明栏的「永不进 AI」标徽",
+      "suggested_format": "SVG + --xs-constraint-noai-fg/-bg token 引用",
+      "size_hint": "徽标/标记（文字同高，票 03 定）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S11-6",
+      "type": "empty-state",
+      "screen": "S11",
+      "screens": [
+        "S11"
+      ],
+      "raw_type": "空态插画",
+      "usage": "藏库 empty 态（还没有登记任何藏）",
+      "suggested_format": "SVG（轻量线稿）",
+      "size_hint": "空态图 ≤ 半栏宽（可缩放到窄屏）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S11-7",
+      "type": "empty-state",
+      "screen": "S11",
+      "screens": [
+        "S11"
+      ],
+      "raw_type": "空态插画",
+      "usage": "登记抽屉的「只取指针」说明配图（指针 ≠ 复制）",
+      "suggested_format": "SVG（轻量线稿）",
+      "size_hint": "空态图 ≤ 半栏宽（可缩放到窄屏）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S11-8",
+      "type": "texture",
+      "screen": "S11",
+      "screens": [
+        "S11"
+      ],
+      "raw_type": "token 引用",
+      "usage": "--xs-constraint-noai-fg/-bg（仅那句常驻声明）、指针失效 state-warn 系、text-code（路径只读）、level-nonpu（藏不是谱）、--xs-size-panel-content-max",
+      "suggested_format": "token 名引用（值由票 03 填，见 shared/设计token字典.md §12 的 S11 行）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S12-1",
+      "type": "icon",
+      "screen": "S12",
+      "screens": [
+        "S12"
+      ],
+      "raw_type": "图标",
+      "usage": "侧栏「工作流」行 + [创建工作流]",
+      "suggested_format": "SVG（单色，sidebar.panellist 的 size owner prop 两档）",
+      "size_hint": "sidebar.panellist 的 size owner prop 两档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S12-2",
+      "type": "icon",
+      "screen": "S12",
+      "screens": [
+        "S12"
+      ],
+      "raw_type": "图标",
+      "usage": "向导条三步（说要求 / 试跑 / 判定并导出）",
+      "suggested_format": "SVG（单色，三枚一组）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S12-3",
+      "type": "icon",
+      "screen": "S12",
+      "screens": [
+        "S12"
+      ],
+      "raw_type": "图标",
+      "usage": "试跑区 running / [停止]",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S12-4",
+      "type": "icon",
+      "screen": "S12",
+      "screens": [
+        "S12"
+      ],
+      "raw_type": "图标",
+      "usage": "判定条按钮（我判定跑通 / 继续改 / 先放着）",
+      "suggested_format": "SVG（单色，三枚一组）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S12-5",
+      "type": "icon",
+      "screen": "S12",
+      "screens": [
+        "S12"
+      ],
+      "raw_type": "图标",
+      "usage": "已导出条目（skill 产物）",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S12-6",
+      "type": "empty-state",
+      "screen": "S12",
+      "screens": [
+        "S12"
+      ],
+      "raw_type": "空态插画",
+      "usage": "门厅 empty 态（还没有工作流）",
+      "suggested_format": "SVG（轻量线稿）",
+      "size_hint": "空态图 ≤ 半栏宽（可缩放到窄屏）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S12-7",
+      "type": "empty-state",
+      "screen": "S12",
+      "screens": [
+        "S12"
+      ],
+      "raw_type": "空态插画",
+      "usage": "会话内 empty（种子刚起、还没说要求）",
+      "suggested_format": "SVG（轻量线稿）",
+      "size_hint": "空态图 ≤ 半栏宽（可缩放到窄屏）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S12-8",
+      "type": "texture",
+      "screen": "S12",
+      "screens": [
+        "S12"
+      ],
+      "raw_type": "token 引用",
+      "usage": "--xs-constraint-human-gate-fg/-bg（C8 的判定条容器）、state-running / done / error、level-nonpu（工作流不是谱）、--xs-size-panel-content-max",
+      "suggested_format": "token 名引用（值由票 03 填，见 shared/设计token字典.md §12 的 S12 行）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S13-1",
+      "type": "icon",
+      "screen": "S13",
+      "screens": [
+        "S13"
+      ],
+      "raw_type": "图标",
+      "usage": "侧栏「底稿」行 + 面板标题",
+      "suggested_format": "SVG（单色，sidebar.panellist 的 size owner prop 两档）",
+      "size_hint": "sidebar.panellist 的 size owner prop 两档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S13-2",
+      "type": "brand",
+      "screen": "S13",
+      "screens": [
+        "S13"
+      ],
+      "raw_type": "标徽",
+      "usage": "① 「纯派生 · 不可手改」标记（与 S1 / S4 同一枚）",
+      "suggested_format": "SVG + --xs-constraint-derived-fg/-bg token 引用",
+      "size_hint": "徽标/标记（文字同高，票 03 定）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S13-3",
+      "type": "icon",
+      "screen": "S13",
+      "screens": [
+        "S13"
+      ],
+      "raw_type": "图标",
+      "usage": "② 三跳转（谱 / 工作区 / 工作流）",
+      "suggested_format": "SVG（单色，三枚一组）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S13-4",
+      "type": "icon",
+      "screen": "S13",
+      "screens": [
+        "S13"
+      ],
+      "raw_type": "图标",
+      "usage": "④ [刷新] 与 running 转圈态",
+      "suggested_format": "SVG（单色，两枚）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S13-5",
+      "type": "icon",
+      "screen": "S13",
+      "screens": [
+        "S13"
+      ],
+      "raw_type": "图标",
+      "usage": "⑤ 只读动作（复制路径 / 打开目录 / MD 形态）",
+      "suggested_format": "SVG（单色，三枚一组）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S13-6",
+      "type": "icon",
+      "screen": "S13",
+      "screens": [
+        "S13"
+      ],
+      "raw_type": "图标",
+      "usage": "⑦ 三路来源标签底版（谱 / 工作区 / 工作流）",
+      "suggested_format": "SVG（单色，三枚一组，可带底）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S13-7",
+      "type": "empty-state",
+      "screen": "S13",
+      "screens": [
+        "S13"
+      ],
+      "raw_type": "空态插画",
+      "usage": "底稿 empty 态（三路皆空）",
+      "suggested_format": "SVG（轻量线稿）",
+      "size_hint": "空态图 ≤ 半栏宽（可缩放到窄屏）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S13-8",
+      "type": "texture",
+      "screen": "S13",
+      "screens": [
+        "S13"
+      ],
+      "raw_type": "token 引用",
+      "usage": "--xs-constraint-derived-fg/-bg（C2 徽标）、三路来源的边条 / 标签 / 组头、stale 横幅、surface-readonly / surface-panel、--xs-size-scrollregion-max、level-digao",
+      "suggested_format": "token 名引用（值由票 03 填，见 shared/设计token字典.md §12 的 S13 行）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S14-1",
+      "type": "icon",
+      "screen": "S14",
+      "screens": [
+        "S14"
+      ],
+      "raw_type": "图标",
+      "usage": "日课卡标题 + 卡片图标（S1 复用）",
+      "suggested_format": "SVG（单色，卡头 / 列表两档）",
+      "size_hint": "卡头 / 列表两档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S14-2",
+      "type": "icon",
+      "screen": "S14",
+      "screens": [
+        "S14"
+      ],
+      "raw_type": "图标",
+      "usage": "① 时间基准行（时钟 / 时区两枚）",
+      "suggested_format": "SVG（单色，两枚一组）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S14-3",
+      "type": "icon",
+      "screen": "S14",
+      "screens": [
+        "S14"
+      ],
+      "raw_type": "图标",
+      "usage": "[重新生成（今天）] 与 running 态",
+      "suggested_format": "SVG（单色，两枚）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S14-4",
+      "type": "icon",
+      "screen": "S14",
+      "screens": [
+        "S14"
+      ],
+      "raw_type": "图标",
+      "usage": "[查看投递会话]（投递语义）",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S14-5",
+      "type": "icon",
+      "screen": "S14",
+      "screens": [
+        "S14"
+      ],
+      "raw_type": "图标",
+      "usage": "[打开自动化任务面板]（跳 DSH 面板的指路语义）",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S14-6",
+      "type": "empty-state",
+      "screen": "S14",
+      "screens": [
+        "S14"
+      ],
+      "raw_type": "空态插画",
+      "usage": "日课 empty 态（今天未到点且无上一份）",
+      "suggested_format": "SVG（轻量线稿）",
+      "size_hint": "空态图 ≤ 半栏宽（可缩放到窄屏）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S14-7",
+      "type": "empty-state",
+      "screen": "S14",
+      "screens": [
+        "S14"
+      ],
+      "raw_type": "空态插画",
+      "usage": "底座未就绪态（指向 S3）",
+      "suggested_format": "SVG（轻量线稿）",
+      "size_hint": "空态图 ≤ 半栏宽（可缩放到窄屏）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S14-8",
+      "type": "texture",
+      "screen": "S14",
+      "screens": [
+        "S14"
+      ],
+      "raw_type": "token 引用",
+      "usage": "--xs-constraint-human-gate-fg/-bg（C10 的确认处）、state-running / done / error、level-baseplate（底座 + 时间基准）、--xs-size-card-minheight",
+      "suggested_format": "token 名引用（值由票 03 填，见 shared/设计token字典.md §12 的 S14 行）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S15-1",
+      "type": "icon",
+      "screen": "S15",
+      "screens": [
+        "S15"
+      ],
+      "raw_type": "图标",
+      "usage": "侧栏六行（总览 / 问事 / 谱 / 藏 / 底稿 / 工作流）",
+      "suggested_format": "SVG（单色，sidebar.panellist 的 size owner prop 两档，六枚一组）",
+      "size_hint": "sidebar.panellist 的 size owner prop 两档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S15-2",
+      "type": "icon",
+      "screen": "S15",
+      "screens": [
+        "S15"
+      ],
+      "raw_type": "图标",
+      "usage": "玄枢品牌标（sidebar.brand.mark）+ 品牌名排版位（sidebar.brand.name）",
+      "suggested_format": "SVG（单色，多档边长）",
+      "size_hint": "多档边长",
+      "notes": ""
+    },
+    {
+      "id": "asset.S15-3",
+      "type": "icon",
+      "screen": "S15",
+      "screens": [
+        "S15"
+      ],
+      "raw_type": "图标",
+      "usage": "设置内页条目的行图标（数据与拷走）",
+      "suggested_format": "SVG（单色）",
+      "size_hint": "图标族（侧栏档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S15-4",
+      "type": "icon",
+      "screen": "S15",
+      "screens": [
+        "S15"
+      ],
+      "raw_type": "图标",
+      "usage": "[复制路径] / [在文件管理器中打开]",
+      "suggested_format": "SVG（单色，两枚一组）",
+      "size_hint": "图标族（正文档，票 03 定档位）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S15-5",
+      "type": "illustration",
+      "screen": "S15",
+      "screens": [
+        "S15"
+      ],
+      "raw_type": "插画",
+      "usage": "「整体拷走」说明配图（两个目录 → 一处落地）",
+      "suggested_format": "SVG（轻量线稿，字面颜色仅限插画）",
+      "size_hint": "说明插画 ≤ 卡片宽",
+      "notes": ""
+    },
+    {
+      "id": "asset.S15-6",
+      "type": "empty-state",
+      "screen": "S15",
+      "screens": [
+        "S15"
+      ],
+      "raw_type": "空态插画",
+      "usage": "数据与拷走 的 empty 态（数据目录未初始化）",
+      "suggested_format": "SVG（轻量线稿）",
+      "size_hint": "空态图 ≤ 半栏宽（可缩放到窄屏）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S15-7",
+      "type": "brand",
+      "screen": "S15",
+      "screens": [
+        "S15"
+      ],
+      "raw_type": "标徽",
+      "usage": "侧栏「藏」行的「永不上 AI」小标",
+      "suggested_format": "SVG + --xs-constraint-noai-* token 引用",
+      "size_hint": "徽标/标记（文字同高，票 03 定）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S15-8",
+      "type": "texture",
+      "screen": "S15",
+      "screens": [
+        "S15"
+      ],
+      "raw_type": "token 引用",
+      "usage": "侧栏行（默认 / hover / active）与面板头：--xs-size-icon-sidebar、--xs-size-breakpoint-wide、surface-sidebar 等",
+      "suggested_format": "token 名引用（值由票 03 填，见 shared/设计token字典.md §12 的 S15 行）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S2-1",
+      "type": "icon",
+      "screen": "S2",
+      "screens": [
+        "S2"
+      ],
+      "raw_type": "图标",
+      "usage": "抽屉头部命盘图标",
+      "suggested_format": "SVG 20×20，线性",
+      "size_hint": "图标族 20×20",
+      "notes": ""
+    },
+    {
+      "id": "asset.S2-2",
+      "type": "icon",
+      "screen": "S2",
+      "screens": [
+        "S2"
+      ],
+      "raw_type": "图标",
+      "usage": "四柱表每列列头（年/月/日/时）装饰位",
+      "suggested_format": "SVG 16×16 ×4 或统一一枚",
+      "size_hint": "图标族 16×16（多态）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S2-3",
+      "type": "icon",
+      "screen": "S2",
+      "screens": [
+        "S2"
+      ],
+      "raw_type": "图标",
+      "usage": "大运展开 / 收起指示",
+      "suggested_format": "SVG 16×16 ×2 态",
+      "size_hint": "图标族 16×16（多态）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S2-4",
+      "type": "icon",
+      "screen": "S2",
+      "screens": [
+        "S2"
+      ],
+      "raw_type": "图标",
+      "usage": "其它要点各分块（纳音/神煞/空亡/命宫）",
+      "suggested_format": "SVG 16×16 ×4 同族",
+      "size_hint": "图标族 16×16（多态）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S2-5",
+      "type": "texture",
+      "screen": "S2",
+      "screens": [
+        "S2"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "只读标记徽标（与 S1 XsReadonlyBadge **同款**）",
+      "suggested_format": "徽标皮肤（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S2-6",
+      "type": "texture",
+      "screen": "S2",
+      "screens": [
+        "S2"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "起盘口径只读行（三行，右侧值列）",
+      "suggested_format": "描述列表皮肤（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S2-7",
+      "type": "texture",
+      "screen": "S2",
+      "screens": [
+        "S2"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "四柱表（4×4，含缺项占位「—」）",
+      "suggested_format": "表格皮肤（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S2-8",
+      "type": "empty-state",
+      "screen": "S2",
+      "screens": [
+        "S2"
+      ],
+      "raw_type": "插画（空态图）",
+      "usage": "快照缺失时（与 S1 命盘卡空态图**同族**）",
+      "suggested_format": "SVG，单色",
+      "size_hint": "空态图 ≤ 半栏宽（可缩放到窄屏）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S2-9",
+      "type": "illustration",
+      "screen": "S2",
+      "screens": [
+        "S2"
+      ],
+      "raw_type": "插画（错误态图）",
+      "usage": "快照读不出来 / 结构不符",
+      "suggested_format": "SVG，同族",
+      "size_hint": "同族",
+      "notes": ""
+    },
+    {
+      "id": "asset.S2-10",
+      "type": "texture",
+      "screen": "S2",
+      "screens": [
+        "S2"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "stale 提示条（旧版本出盘）",
+      "suggested_format": "提示条皮肤 + 图标（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-1",
+      "type": "icon",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "图标",
+      "usage": "步骤条五格（当前 / 已完成 / 未到）",
+      "suggested_format": "SVG 16×16 ×3 态，线性",
+      "size_hint": "图标族 16×16（多态）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-2",
+      "type": "icon",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "图标",
+      "usage": "时间编辑三方式提示位（popover / 键入 / 微调）",
+      "suggested_format": "SVG 16×16 ×3",
+      "size_hint": "图标族 16×16（多态）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-3",
+      "type": "icon",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "图标",
+      "usage": "城市库入口（离线 / 无匹配引导）",
+      "suggested_format": "SVG 20×20 ×2",
+      "size_hint": "图标族 20×20（多态）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-4",
+      "type": "icon",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "图标",
+      "usage": "经纬度手输字段前置图标",
+      "suggested_format": "SVG 16×16",
+      "size_hint": "图标族 16×16",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-5",
+      "type": "icon",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "图标",
+      "usage": "时区自动 / 手动覆盖标记（含夏令时标记）",
+      "suggested_format": "SVG 16×16 ×3",
+      "size_hint": "图标族 16×16（多态）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-6",
+      "type": "texture",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "确认表（5 行 + 每行 [改]）",
+      "suggested_format": "表格皮肤（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-7",
+      "type": "texture",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "禁用态出盘按钮 + 禁用理由行",
+      "suggested_format": "按钮皮肤 + 提示条皮肤（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-8",
+      "type": "illustration",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "插画（首启引导）",
+      "usage": "conversation.hero 上的引导插图",
+      "suggested_format": "SVG，单色，比例语义「hero 内 1/3 高」",
+      "size_hint": "比例语义「hero 内 1/3 高」",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-9",
+      "type": "illustration",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "插画（加载态）",
+      "usage": "出盘进行中",
+      "suggested_format": "SVG 动效（可降级为静态）",
+      "size_hint": "说明插画 ≤ 卡片宽",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-10",
+      "type": "empty-state",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "插画（空态/错误态）",
+      "usage": "底座未就绪、出盘失败、落谱失败三种错误图",
+      "suggested_format": "SVG 同族 ×3",
+      "size_hint": "同族 ×3",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-11",
+      "type": "illustration",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "插画（成功态）",
+      "usage": "出盘成功 → 命盘卡点亮",
+      "suggested_format": "SVG，与 S1 命盘卡同族",
+      "size_hint": "与 S1 命盘卡同族",
+      "notes": ""
+    },
+    {
+      "id": "asset.S3-12",
+      "type": "texture",
+      "screen": "S3",
+      "screens": [
+        "S3"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "窄屏吸底操作条（主按钮 + 返回）",
+      "suggested_format": "容器皮肤（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S4-1",
+      "type": "illustration",
+      "screen": "S4",
+      "screens": [
+        "S4"
+      ],
+      "raw_type": "插画（首启主图）",
+      "usage": "命盘卡冷启动主态（「底座还没立起来」）",
+      "suggested_format": "SVG，单色/双色，语义尺寸「卡内 2/3 高」",
+      "size_hint": "语义尺寸「卡内 2/3 高」",
+      "notes": ""
+    },
+    {
+      "id": "asset.S4-6",
+      "type": "texture",
+      "screen": "S4",
+      "screens": [
+        "S4"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "主按钮「开始填写出生信息」（冷启动期的主行动）",
+      "suggested_format": "按钮皮肤（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S4-7",
+      "type": "texture",
+      "screen": "S4",
+      "screens": [
+        "S4"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "卡内「为什么空」说明行的排版（小字 + 弱化）",
+      "suggested_format": "排版 token（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S4-8",
+      "type": "texture",
+      "screen": "S4",
+      "screens": [
+        "S4"
+      ],
+      "raw_type": "组件皮肤",
+      "usage": "horosa 未就绪提示条（含 [重新检测]）",
+      "suggested_format": "提示条皮肤 + 图标（值由 03 票填）",
+      "size_hint": "无图形尺寸（token 取值，见 token_handoff）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S4-10",
+      "type": "placeholder",
+      "screen": "S4",
+      "screens": [
+        "S4"
+      ],
+      "raw_type": "文案组",
+      "usage": "四条冷启动空态文案（命盘 / 日课 / 底稿 / 问事副标题）最终定稿",
+      "suggested_format": "Markdown 文案表（本稿 §2、§3 的文案位即权威来源）",
+      "size_hint": "排版/文案规格（无图形尺寸）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S5-1",
+      "type": "icon",
+      "screen": "S5",
+      "screens": [
+        "S5"
+      ],
+      "raw_type": "icon",
+      "usage": "侧栏「库」（分区语义名）· 谱入口行（label 谱）",
+      "suggested_format": "SVG（单色，可跟随主题）",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S5-2",
+      "type": "icon",
+      "screen": "S5",
+      "screens": [
+        "S5"
+      ],
+      "raw_type": "icon",
+      "usage": "「＋ 创建新谱」主按钮",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S5-3",
+      "type": "placeholder",
+      "screen": "S5",
+      "screens": [
+        "S5"
+      ],
+      "raw_type": "empty-state",
+      "usage": "无任何可选谱的空态（§6 empty）",
+      "suggested_format": "SVG",
+      "size_hint": "空态图 ≤ 半栏宽，可缩放到窄屏",
+      "notes": ""
+    },
+    {
+      "id": "asset.S5-4",
+      "type": "icon",
+      "screen": "S5",
+      "screens": [
+        "S5"
+      ],
+      "raw_type": "icon",
+      "usage": "级别标识：基础输入级 base / 可选输入级 optional（成对）",
+      "suggested_format": "SVG（一对，语义尺寸一致）",
+      "size_hint": "图标族一档（成对）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S5-5",
+      "type": "illustration",
+      "screen": "S5",
+      "screens": [
+        "S5"
+      ],
+      "raw_type": "illustration",
+      "usage": "创建谱向导「AI 转换中」的过程示意（打字 / 附件 → 结构 + 分节）",
+      "suggested_format": "SVG（静态占位，动画后置）",
+      "size_hint": "示意图 ≤ 卡片宽",
+      "notes": ""
+    },
+    {
+      "id": "asset.S5-6",
+      "type": "icon",
+      "screen": "S5",
+      "screens": [
+        "S5"
+      ],
+      "raw_type": "icon",
+      "usage": "谱来源标识：manual / ai-assisted / sediment / workflow（四枚）",
+      "suggested_format": "SVG（同族线性风格）",
+      "size_hint": "图标族一档（四枚）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S5-7",
+      "type": "icon",
+      "screen": "S5",
+      "screens": [
+        "S5"
+      ],
+      "raw_type": "icon",
+      "usage": "锁定行标记（与 S6 共用同一枚语义图标）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S5-8",
+      "type": "icon",
+      "screen": "S5",
+      "screens": [
+        "S5"
+      ],
+      "raw_type": "icon",
+      "usage": "⋯ 行菜单与「打开 / 编辑 / 删除」动作",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S6-1",
+      "type": "icon",
+      "screen": "S6",
+      "screens": [
+        "S6"
+      ],
+      "raw_type": "icon",
+      "usage": "侧栏「**问事**」入口行（label 问事；D1 的分区语义名为「书房」，见 S15）",
+      "suggested_format": "SVG（单色，可跟随主题）",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S6-2",
+      "type": "icon",
+      "screen": "S6",
+      "screens": [
+        "S6"
+      ],
+      "raw_type": "icon",
+      "usage": "锁定标记（底座 / 底稿锁定行，与 S5 共用）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S6-3",
+      "type": "icon",
+      "screen": "S6",
+      "screens": [
+        "S6"
+      ],
+      "raw_type": "icon",
+      "usage": "「＋ 开一次问事」/「＋ 新问事」主按钮",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S6-4",
+      "type": "icon",
+      "screen": "S6",
+      "screens": [
+        "S6"
+      ],
+      "raw_type": "icon",
+      "usage": "「历史回看」入口",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S6-5",
+      "type": "icon",
+      "screen": "S6",
+      "screens": [
+        "S6"
+      ],
+      "raw_type": "icon",
+      "usage": "「临时挂载」入口（挂载语义，区别于谱的勾选语义）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S6-6",
+      "type": "placeholder",
+      "screen": "S6",
+      "screens": [
+        "S6"
+      ],
+      "raw_type": "empty-state",
+      "usage": "未开过问事的面板落地态（§2.2）",
+      "suggested_format": "SVG",
+      "size_hint": "空态图 ≤ 半栏宽，可缩放到窄屏",
+      "notes": ""
+    },
+    {
+      "id": "asset.S6-7",
+      "type": "icon",
+      "screen": "S6",
+      "screens": [
+        "S6"
+      ],
+      "raw_type": "icon",
+      "usage": "审批卡状态标记（待审批 / 已允许 / 已拒绝，三态同族）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档（三态）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S6-8",
+      "type": "icon",
+      "screen": "S6",
+      "screens": [
+        "S6"
+      ],
+      "raw_type": "icon",
+      "usage": "「ⓘ 说明卡」类提示（锁定行、边界说明通用）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S6-9",
+      "type": "icon",
+      "screen": "S6",
+      "screens": [
+        "S6"
+      ],
+      "raw_type": "icon",
+      "usage": "「继续这次问事 ▸ conversation」渲染面切换入口（D5）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S7-1",
+      "type": "icon",
+      "screen": "S7",
+      "screens": [
+        "S7"
+      ],
+      "raw_type": "icon",
+      "usage": "「历史回看」子页切换入口（与 S6 共用）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S7-2",
+      "type": "placeholder",
+      "screen": "S7",
+      "screens": [
+        "S7"
+      ],
+      "raw_type": "empty-state",
+      "usage": "「还没有问事记录」首次空态（§2.3 ①）",
+      "suggested_format": "SVG",
+      "size_hint": "空态图 ≤ 半栏宽，可缩放到窄屏",
+      "notes": ""
+    },
+    {
+      "id": "asset.S7-3",
+      "type": "icon",
+      "screen": "S7",
+      "screens": [
+        "S7"
+      ],
+      "raw_type": "icon",
+      "usage": "合参轮次标记（合参√、只带采用稿的折叠行）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S7-4",
+      "type": "icon",
+      "screen": "S7",
+      "screens": [
+        "S7"
+      ],
+      "raw_type": "icon",
+      "usage": "工具调用折叠行（⚙ 读了 N 个文件）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S7-5",
+      "type": "icon",
+      "screen": "S7",
+      "screens": [
+        "S7"
+      ],
+      "raw_type": "icon",
+      "usage": "破坏性动作（删除记录）与确认弹窗",
+      "suggested_format": "SVG（与全稿同族；不填色值）",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S7-6",
+      "type": "icon",
+      "screen": "S7",
+      "screens": [
+        "S7"
+      ],
+      "raw_type": "icon",
+      "usage": "导出动作与落盘成功提示",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S7-7",
+      "type": "icon",
+      "screen": "S7",
+      "screens": [
+        "S7"
+      ],
+      "raw_type": "icon",
+      "usage": "「继续这次问事 ▸」跨面板切换（D6）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S8-1",
+      "type": "icon",
+      "screen": "S8",
+      "screens": [
+        "S8"
+      ],
+      "raw_type": "icon",
+      "usage": "「临时挂载」入口与抽屉标题（与 S6 共用同一枚）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S8-2",
+      "type": "icon",
+      "screen": "S8",
+      "screens": [
+        "S8"
+      ],
+      "raw_type": "icon",
+      "usage": "分区标识：工作区 / 工作流（成对）",
+      "suggested_format": "SVG（一对，语义尺寸一致）",
+      "size_hint": "图标族一档（成对）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S8-3",
+      "type": "icon",
+      "screen": "S8",
+      "screens": [
+        "S8"
+      ],
+      "raw_type": "icon",
+      "usage": "状态栏预算 / 字数指示（含「已纳入 N / M 层」）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S8-4",
+      "type": "placeholder",
+      "screen": "S8",
+      "screens": [
+        "S8"
+      ],
+      "raw_type": "empty-state",
+      "usage": "没有可挂对象时的空态（§2.4）",
+      "suggested_format": "SVG",
+      "size_hint": "空态图 ≤ 半栏宽，可缩放到窄屏",
+      "notes": ""
+    },
+    {
+      "id": "asset.S8-5",
+      "type": "icon",
+      "screen": "S8",
+      "screens": [
+        "S8"
+      ],
+      "raw_type": "icon",
+      "usage": "stale 陈旧告警与「重新预览」",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S8-6",
+      "type": "illustration",
+      "screen": "S8",
+      "screens": [
+        "S8"
+      ],
+      "raw_type": "illustration",
+      "usage": "「按段裁剪」的示意（段边界切分，供预览区展开处使用）",
+      "suggested_format": "SVG（示意图，非精确图）",
+      "size_hint": "示意图 ≤ 半栏宽",
+      "notes": ""
+    },
+    {
+      "id": "asset.S9-1",
+      "type": "icon",
+      "screen": "S9",
+      "screens": [
+        "S9"
+      ],
+      "raw_type": "icon",
+      "usage": "「多 AI 合参」触发按钮与区块标题",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S9-2",
+      "type": "icon",
+      "screen": "S9",
+      "screens": [
+        "S9"
+      ],
+      "raw_type": "icon",
+      "usage": "候选视角标识：经典派 / 审慎派 / 现代派 / 精炼派（首版用前两枚，共四枚同族）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档（四枚）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S9-3",
+      "type": "icon",
+      "screen": "S9",
+      "screens": [
+        "S9"
+      ],
+      "raw_type": "icon",
+      "usage": "判官区标记（只排序，不替你做决定）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S9-4",
+      "type": "icon",
+      "screen": "S9",
+      "screens": [
+        "S9"
+      ],
+      "raw_type": "icon",
+      "usage": "三动作图标：采用 / 合并 / 否决（+ 中断语义的「停止全部」）",
+      "suggested_format": "SVG（四枚同族，否决与采用需可区分）",
+      "size_hint": "图标族一档（四枚）",
+      "notes": ""
+    },
+    {
+      "id": "asset.S9-5",
+      "type": "illustration",
+      "screen": "S9",
+      "screens": [
+        "S9"
+      ],
+      "raw_type": "illustration",
+      "usage": "「2 路并排 → 判官排序 → 采用 / 合并 / 否决」流程示意（费用确认框与拦截引导处使用）",
+      "suggested_format": "SVG（示意图）",
+      "size_hint": "示意图 ≤ 卡片宽",
+      "notes": ""
+    },
+    {
+      "id": "asset.S9-6",
+      "type": "icon",
+      "screen": "S9",
+      "screens": [
+        "S9"
+      ],
+      "raw_type": "icon",
+      "usage": "回落告警（判官不可用）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档",
+      "notes": ""
+    },
+    {
+      "id": "asset.S9-7",
+      "type": "icon",
+      "screen": "S9",
+      "screens": [
+        "S9"
+      ],
+      "raw_type": "icon",
+      "usage": "设置里的合参开关（开 / 关两态，与全稿开关同族）",
+      "suggested_format": "SVG",
+      "size_hint": "图标族一档（两态）",
+      "notes": ""
+    }
+  ],
+  "aliases": [
+    {
+      "id": "asset.S4-2",
+      "reused_from": "asset.S1-7",
+      "screen": "S4",
+      "usage": "日课卡冷启动空态（与 S1 asset.S1-7 **同款复用**，不另画）"
+    },
+    {
+      "id": "asset.S4-3",
+      "reused_from": "asset.S1-8",
+      "screen": "S4",
+      "usage": "底稿卡冷启动空态（与 S1 asset.S1-8 **同款复用**）"
+    },
+    {
+      "id": "asset.S4-4",
+      "reused_from": "asset.S1-5",
+      "screen": "S4",
+      "usage": "快捷入口三格（**复用** asset.S1-5）"
+    },
+    {
+      "id": "asset.S4-5",
+      "reused_from": "asset.S1-1",
+      "screen": "S4",
+      "usage": "侧栏「家」行（**复用** asset.S1-1）"
+    },
+    {
+      "id": "asset.S4-9",
+      "reused_from": "asset.S1-11",
+      "screen": "S4",
+      "usage": "只读 / 纯派生徽标（**复用** asset.S1-11）"
+    }
+  ],
+  "token_handoff": {
+    "source": "docs/design/ui-v1/shared/设计token字典.md",
+    "values": "票 03 填（本台账不含任何色值/像素）",
+    "count": 93,
+    "tokens": [
+      {
+        "family": "surface",
+        "token": "--xs-surface-app",
+        "semantics": "应用最底层背景"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-panel",
+        "semantics": "面板容器底（与 app 底可同可不同）"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-card",
+        "semantics": "卡面（一张独立的卡片）"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-card-nested",
+        "semantics": "卡内嵌套面（卡里的分区）"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-overlay",
+        "semantics": "浮层底（抽屉 / 弹窗 / 浮卡）"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-overlay-mask",
+        "semantics": "浮层后方遮罩"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-sidebar",
+        "semantics": "侧栏列底（沿用 DSH，不改）"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-interactive-hover",
+        "semantics": "可交互行的悬停面"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-selected",
+        "semantics": "选中 / 激活面"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-readonly",
+        "semantics": "**只读面**（内容在场但不可编辑）"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-locked",
+        "semantics": "**锁定行面**（默认在场、不可关）"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-skeleton",
+        "semantics": "骨架屏占位块底"
+      },
+      {
+        "family": "surface",
+        "token": "--xs-surface-empty",
+        "semantics": "空态区的底（与正常内容区分）"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-brand",
+        "semantics": "品牌名「玄枢」"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-title",
+        "semantics": "屏 / 卡的主标题"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-heading",
+        "semantics": "区块小标题"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-body",
+        "semantics": "正文"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-secondary",
+        "semantics": "次要文字（说明句 / 卡副标题）"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-tertiary",
+        "semantics": "三级文字（元信息 / 时间 / 字数）"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-caption",
+        "semantics": "极小注记"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-link",
+        "semantics": "可跳转文字（跨屏跳转）"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-code",
+        "semantics": "等宽（谱 slug / 路径 / 文件名）"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-on-accent",
+        "semantics": "主按钮上的文字"
+      },
+      {
+        "family": "text",
+        "token": "--xs-text-disabled",
+        "semantics": "禁用态文字"
+      },
+      {
+        "family": "edge",
+        "token": "--xs-edge-card",
+        "semantics": "卡的描边"
+      },
+      {
+        "family": "edge",
+        "token": "--xs-edge-card-strong",
+        "semantics": "强调卡的描边（选中 / 焦点卡）"
+      },
+      {
+        "family": "edge",
+        "token": "--xs-edge-divider",
+        "semantics": "区块分隔线（发丝）"
+      },
+      {
+        "family": "edge",
+        "token": "--xs-edge-locked",
+        "semantics": "锁定行描边"
+      },
+      {
+        "family": "edge",
+        "token": "--xs-edge-readonly",
+        "semantics": "只读区描边"
+      },
+      {
+        "family": "edge",
+        "token": "--xs-edge-focus",
+        "semantics": "焦点环"
+      },
+      {
+        "family": "space",
+        "token": "--xs-space-page",
+        "semantics": "面板内容与面板边缘的距离"
+      },
+      {
+        "family": "space",
+        "token": "--xs-space-section",
+        "semantics": "大区块之间的垂直距离"
+      },
+      {
+        "family": "space",
+        "token": "--xs-space-card-gap",
+        "semantics": "卡片之间的栅格间隙"
+      },
+      {
+        "family": "space",
+        "token": "--xs-space-card-pad",
+        "semantics": "卡内边距"
+      },
+      {
+        "family": "space",
+        "token": "--xs-space-row",
+        "semantics": "列表行内的水平间距（图标↔文字↔右侧控件）"
+      },
+      {
+        "family": "space",
+        "token": "--xs-space-stack-sm",
+        "semantics": "紧邻文字行之间的垂直距离"
+      },
+      {
+        "family": "space",
+        "token": "--xs-space-stack-md",
+        "semantics": "控件 / 段落之间的垂直距离"
+      },
+      {
+        "family": "space",
+        "token": "--xs-space-toolbar",
+        "semantics": "一排控件之间的水平距离"
+      },
+      {
+        "family": "space",
+        "token": "--xs-space-overlay-inset",
+        "semantics": "浮层与视口边缘的距离"
+      },
+      {
+        "family": "space",
+        "token": "--xs-space-overlay-pad",
+        "semantics": "浮层内的边距"
+      },
+      {
+        "family": "radius",
+        "token": "--xs-radius-card",
+        "semantics": "卡片圆角"
+      },
+      {
+        "family": "radius",
+        "token": "--xs-radius-nested",
+        "semantics": "卡内嵌套面圆角（比卡小一档）"
+      },
+      {
+        "family": "radius",
+        "token": "--xs-radius-control",
+        "semantics": "控件圆角（按钮 / 输入 / 分段）"
+      },
+      {
+        "family": "radius",
+        "token": "--xs-radius-chip",
+        "semantics": "胶囊圆角"
+      },
+      {
+        "family": "radius",
+        "token": "--xs-radius-overlay",
+        "semantics": "浮层圆角"
+      },
+      {
+        "family": "radius",
+        "token": "--xs-radius-tile",
+        "semantics": "图标 / 图形底板圆角"
+      },
+      {
+        "family": "state",
+        "token": "--xs-state-empty-fg",
+        "semantics": "空态前景（说明文字与图形）"
+      },
+      {
+        "family": "state",
+        "token": "--xs-state-loading-fg",
+        "semantics": "加载态前景（骨架 / 扫光 / 转圈）"
+      },
+      {
+        "family": "state",
+        "token": "--xs-state-ready-fg",
+        "semantics": "就绪态前景（正常内容 / 可操作提示）"
+      },
+      {
+        "family": "state",
+        "token": "--xs-state-running-fg",
+        "semantics": "运行态前景"
+      },
+      {
+        "family": "state",
+        "token": "--xs-state-done-fg",
+        "semantics": "完成态前景"
+      },
+      {
+        "family": "state",
+        "token": "--xs-state-warning-fg",
+        "semantics": "告警态前景（不是失败）"
+      },
+      {
+        "family": "state",
+        "token": "--xs-state-error-fg",
+        "semantics": "错误态前景"
+      },
+      {
+        "family": "state",
+        "token": "--xs-state-stale-fg",
+        "semantics": "**陈旧态**前景（内容在场但已过期）"
+      },
+      {
+        "family": "state",
+        "token": "--xs-state-busy-track",
+        "semantics": "进度 / 运行条的轨道"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-base-fg",
+        "semantics": "level: base 谱的标识文字 / 图标"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-base-bg",
+        "semantics": "level: base 的标识底（Tag 底）"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-optional-fg",
+        "semantics": "level: optional 谱的标识文字 / 图标"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-optional-bg",
+        "semantics": "level: optional 的标识底"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-baseplate-fg",
+        "semantics": "**底座（八字）** 的标识 —— 唯一「始终在场」者"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-baseplate-bg",
+        "semantics": "底座标识底"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-digao-fg",
+        "semantics": "**底稿** 的标识（与八字同级、纯派生）"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-digao-bg",
+        "semantics": "底稿标识底"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-readonly-fg",
+        "semantics": "「只读」标记的文字 / 图标"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-readonly-bg",
+        "semantics": "「只读」标记的底"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-derived-fg",
+        "semantics": "「纯派生」标记的文字 / 图标"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-derived-bg",
+        "semantics": "「纯派生」标记的底"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-locked-fg",
+        "semantics": "「锁定」行的文字 / 图标（无 checkbox 的行）"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-locked-bg",
+        "semantics": "锁定行的底"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-noai-fg",
+        "semantics": "「AI 不可见」常驻声明的文字"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-noai-bg",
+        "semantics": "同上声明的底"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-budget-over-fg",
+        "semantics": "「超预算未纳入」Tag 的文字"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-budget-trimmed-fg",
+        "semantics": "「已裁剪 N→M 字」Tag 的文字"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-budget-bar",
+        "semantics": "挂载 N 字 / 预算 M 字 状态栏的占用条"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-human-gate-fg",
+        "semantics": "「人工确认闸门」标记（人点过才可写）"
+      },
+      {
+        "family": "constraint",
+        "token": "--xs-constraint-human-gate-bg",
+        "semantics": "同上标记的底"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-breakpoint-wide",
+        "semantics": "宽 / 窄屏分界（语义已由 README §3.1 定为「宽 ≥1100 / 窄 <1100」，本 token 只承载这个名字，**取值不在此重复**）"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-panel-content-max",
+        "semantics": "面板内容最大宽度（宽屏下的阅读宽度上限）"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-card-minheight",
+        "semantics": "卡的最小高度（语义「≈ 2 行 + 卡头」）"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-scrollregion-max",
+        "semantics": "正文内滚区最大高度（语义「≈ 10 行（内滚）」）"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-drawer-width",
+        "semantics": "抽屉宽度（宽屏）"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-drawer-maxheight",
+        "semantics": "抽屉最大高度（窄屏时）"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-modal-width",
+        "semantics": "确认弹窗宽度"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-icon-sidebar",
+        "semantics": "侧栏行的图标边长"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-icon-inline",
+        "semantics": "行内图标边长（Tag 前 / 行首）"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-glyph-brand",
+        "semantics": "品牌主图形边长"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-control-height",
+        "semantics": "控件高度语义（按钮 / 输入 / 分段）"
+      },
+      {
+        "family": "size",
+        "token": "--xs-size-chip-height",
+        "semantics": "胶囊高度语义（Tag / Pill 落在文本行上）"
+      },
+      {
+        "family": "motion",
+        "token": "--xs-motion-duration-fast",
+        "semantics": "快动效时长语义（悬停 / 状态切换）"
+      },
+      {
+        "family": "motion",
+        "token": "--xs-motion-duration-overlay",
+        "semantics": "浮层进出时长语义"
+      },
+      {
+        "family": "motion",
+        "token": "--xs-motion-ease-standard",
+        "semantics": "标准缓动"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-nonpu-fg",
+        "semantics": "「不是谱」的实体（藏 / 工作区 / 工作流）在「挂载」与「藏库」语境下的标识文字 / 图标（S8 / S11 / S12 / S15）"
+      },
+      {
+        "family": "level",
+        "token": "--xs-level-nonpu-bg",
+        "semantics": "同上，标识底（成对填）"
+      }
+    ]
+  }
+}

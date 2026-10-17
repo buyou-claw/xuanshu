@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+<!-- asset.S5-7, asset.S6-2 · 锁定行标记（默认在场·不可关） · S5/S6 -->
+<rect x="3.5" y="7" width="9" height="6" rx="1.5"/>
+<path d="M5.5 7 V5 A2.5 2.5 0 0 1 10.5 5 V7"/>
+<circle cx="8" cy="10" r="0.8" fill="currentColor" stroke="none"/>
+</svg>

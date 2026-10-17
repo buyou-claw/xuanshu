@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<!-- asset.S1-4 · 底稿卡头 · S1 -->
+<rect x="4.5" y="3.5" width="11" height="13" rx="1.5"/>
+<path d="M8 3.5 V2 H12 A1.5 1.5 0 0 1 13.5 3.5"/>
+<path d="M7.5 8 H12.5"/>
+<path d="M7.5 11 H12.5"/>
+<path d="M7.5 14 H10.5"/>
+</svg>

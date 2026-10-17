@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+<!-- asset.S15-7 · 「永不上 AI」小标底版（asset.S11-5 同族缩小版：封缄 + 斜杠眼，去瞳仁简化） · S15 -->
+<!-- 底版占位色 #525a66（底）/ #f4f5f7（字形）；实现以 --xs-constraint-noai-bg / --xs-constraint-noai-fg 为准（设计token字典 §9，C3；assets README §3.3/§5） -->
+<rect x="0.8" y="0.8" width="14.4" height="14.4" rx="3.6" fill="#525a66"/>
+<path d="M2.8 8 C4.2 5.9 6 5 8 5 C10 5 11.8 5.9 13.2 8 C11.8 10.1 10 11 8 11 C6 11 4.2 10.1 2.8 8 Z" stroke="#f4f5f7" stroke-width="1.2" stroke-linejoin="round"/>
+<path d="M4.4 11.6 L11.6 4.4" stroke="#f4f5f7" stroke-width="1.2" stroke-linecap="round"/>
+</svg>

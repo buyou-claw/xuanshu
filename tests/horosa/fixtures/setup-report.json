@@ -1,0 +1,76 @@
+{
+  "schema": "xuanshu/setup-report@1",
+  "generatedAt": "__GENERATED_AT__",
+  "ok": true,
+  "pin": {
+    "version": "__VERSION__",
+    "wheel": {
+      "name": "horosa_skill-__VERSION__-py3-none-any.whl",
+      "sha256": "feb377d6417ed82a49d0025f4190109435be06561f6fd33f05306b8f98819f83",
+      "path": "__WHEEL__",
+      "action": "cache-hit",
+      "bytes": 1403270,
+      "url": null
+    },
+    "runtime": {
+      "platform": "win32-x64",
+      "sha256": "2b3cce77b2779efbf41feba3d0377c10dadcd5e3b07f01c43985740edd3986d7",
+      "path": "__RUNTIME_ROOT__",
+      "action": "already-installed",
+      "bytes": 718649254,
+      "url": null,
+      "candidates": []
+    }
+  },
+  "runtime": {
+    "root": "__RUNTIME_ROOT__",
+    "dataDir": "__DATA_DIR__",
+    "action": "already-installed",
+    "version": "__VERSION__",
+    "evidence": {
+      "versionKey": "runtime_payload_version",
+      "doctorBefore": {
+        "ok": false,
+        "installed": true,
+        "status": "needs_attention",
+        "manifest_version": "__VERSION__",
+        "runtime_payload_version": "__VERSION__",
+        "runtime_root": "__RUNTIME_ROOT__",
+        "current_dir": "__RUNTIME_ROOT__\\\\current",
+        "platform": "win32-x64",
+        "issues": ["services:not_running"],
+        "endpoints": [
+          { "label": "java_backend", "reachable": false },
+          { "label": "python_chart", "reachable": false }
+        ],
+        "freshness": { "installed_version": "__VERSION__", "latest_version": null }
+      },
+      "doctorAfter": null,
+      "install": null
+    }
+  },
+  "profile": {
+    "name": "xuanshu",
+    "home": "__DSH_HOME__",
+    "mode": "link",
+    "action": "already",
+    "target": "__DSH_HOME__\\\\profiles\\\\xuanshu"
+  },
+  "checks": [
+    { "id": "assembly", "ok": true, "detail": "verify-assembly exit 0 且报告 ok=true（s1+s4+s3+s2+s5）" },
+    { "id": "horosa8765", "ok": true, "detail": "自起的 horosa 应答正常：tools/list 120 条" },
+    { "id": "bazi", "ok": true, "detail": "C3 通过：tools/list 含 horosa_cn_bazi_birth（共 120 条）" }
+  ],
+  "exitCode": 0,
+  "notes": [
+    "DSH home：__DSH_HOME__（来源 default (<repo>/.dsh-home)）",
+    "runtime 根：__RUNTIME_ROOT__（来源 default (C:\\horosa)）",
+    "本文件是 tests/horosa 的**形状真实**假报告（裁剪自真机 captures/setup-e2e-run2.json），只用于宿主侧读 pin.version/pin.wheel.path"
+  ],
+  "serve": {
+    "started": false,
+    "pid": null,
+    "stopped": false,
+    "detail": "P6/P9 的用例不起真实 serve（宿主侧只读 pin 与 wheel 路径）。"
+  }
+}

@@ -1,0 +1,173 @@
+{
+  "name": "icons-b",
+  "owner": "icons-b-dev",
+  "scope": "S8 / S9 / S10 / S14 全量 + S11/S12/S13/S15 非 nav 部分（台账 33 条 icon）",
+  "notes_global": "目录归族按 assets/README.md §1：nav 归 icons-a，本清单只产 action/status/inline/card。viewBox 档位：inline/status=16（stroke-width 1.25）、action/card=20（stroke-width 1.5）。一条多枚按 §2 命名法加态名后缀（add/replace/same/valid/invalid/open/close…）。",
+  "entries": [
+    {
+      "ledger_id": "asset.S8-1",
+      "files": ["icons/action/mount.svg"],
+      "notes": "「临时挂载」入口与抽屉标题。与 S6-5 同枚（icons-a 产），本清单只登记指向、不重复产。"
+    },
+    {
+      "ledger_id": "asset.S8-2",
+      "files": ["icons/inline/workspace.svg", "icons/inline/workflow.svg"],
+      "notes": "分区标识：工作区 / 工作流（成对，语义尺寸一致）。与 S13-3/S13-6 共用实体字形，同枚复用保持全稿一致。"
+    },
+    {
+      "ledger_id": "asset.S8-3",
+      "files": ["icons/status/budget.svg"],
+      "notes": "状态栏预算 / 字数指示（含「已纳入 N / M 层」）：量杯刻度 + 水位线。"
+    },
+    {
+      "ledger_id": "asset.S8-5",
+      "files": ["icons/status/stale.svg", "icons/action/refresh.svg"],
+      "notes": "stale 陈旧告警（时钟带叹号）与「重新预览」（refresh 与 S13-4 [刷新] 同枚）。"
+    },
+    {
+      "ledger_id": "asset.S9-1",
+      "files": ["icons/action/bestof.svg"],
+      "notes": "「多 AI 合参」触发按钮与区块标题：并列双柱 + 顶弧相合。"
+    },
+    {
+      "ledger_id": "asset.S9-2",
+      "files": ["icons/inline/angle-classic.svg", "icons/inline/angle-prudent.svg", "icons/inline/angle-modern.svg", "icons/inline/angle-refined.svg"],
+      "notes": "候选视角标识四枚同族同重量：经典派=方圆章、审慎派=盾、现代派=棱形闪电、精炼派=漏斗。首版只用前两枚，四枚一次产出。"
+    },
+    {
+      "ledger_id": "asset.S9-3",
+      "files": ["icons/inline/judge.svg"],
+      "notes": "判官区标记：天平（只排序，不替你做决定）。"
+    },
+    {
+      "ledger_id": "asset.S9-4",
+      "files": ["icons/action/adopt.svg", "icons/action/merge.svg", "icons/action/reject.svg", "icons/action/stop.svg"],
+      "notes": "三动作 + 停止全部四枚同族：采用=对勾入囊、合并=双流汇合、否决=叉封囊口（与采用以勾/叉明确区分）、停止=实心方（与 S12-3 [停止] 同枚）。"
+    },
+    {
+      "ledger_id": "asset.S9-6",
+      "files": ["icons/status/alert.svg"],
+      "notes": "回落告警（判官不可用）：三角叹号。"
+    },
+    {
+      "ledger_id": "asset.S9-7",
+      "files": ["icons/inline/switch-open.svg", "icons/inline/switch-close.svg"],
+      "notes": "设置里的合参开关两态（开=滑珠居右带点芯 / 关=滑珠居左空心），与全稿开关同族。"
+    },
+    {
+      "ledger_id": "asset.S10-1",
+      "files": ["icons/action/export.svg"],
+      "notes": "收尾条 [导出汇总]：箭头出盒。"
+    },
+    {
+      "ledger_id": "asset.S10-2",
+      "files": ["icons/card/card-sediment.svg"],
+      "notes": "草稿卡标题「沉淀草稿」：器中层积 + 一粒沉降。"
+    },
+    {
+      "ledger_id": "asset.S10-3",
+      "files": ["icons/inline/diff-add.svg", "icons/inline/diff-replace.svg", "icons/inline/diff-same.svg"],
+      "notes": "diff 记号三枚一组：+ 新增 / ~ 替换 / = 未变（态名后缀 add/replace/same）。"
+    },
+    {
+      "ledger_id": "asset.S10-4",
+      "files": ["icons/action/confirm.svg"],
+      "notes": "[确认更新]（人工确认语义）：签署式对勾落基线。"
+    },
+    {
+      "ledger_id": "asset.S10-5",
+      "files": ["icons/status/done.svg", "icons/status/error.svg"],
+      "notes": "通知成功 / 失败两态（态名取稳定状态词 done/error）。"
+    },
+    {
+      "ledger_id": "asset.S11-2",
+      "files": ["icons/action/cang-add.svg"],
+      "notes": "[登记藏]：函套封签 + 登记符（藏=函套+封签语义）。"
+    },
+    {
+      "ledger_id": "asset.S11-3",
+      "files": ["icons/action/open.svg", "icons/action/open-folder.svg", "icons/action/copy-path.svg", "icons/action/edit.svg", "icons/action/remove.svg"],
+      "notes": "卡片动作五枚：打开=箭头离框 / 显示所在位置=夹内指出（与 S13-5、S15-4 同枚）/ 复制路径=双层叠纸（与 S13-5、S15-4 同枚）/ 编辑=斜笔 / 移除=卡面一横（只移除登记，不删文件）。"
+    },
+    {
+      "ledger_id": "asset.S11-4",
+      "files": ["icons/status/pointer-valid.svg", "icons/status/pointer-invalid.svg"],
+      "notes": "指针状态两枚：有效=链环相扣 / 失效=链环断口带叉（指针=链环语义，态名 valid/invalid）。"
+    },
+    {
+      "ledger_id": "asset.S12-2",
+      "files": ["icons/inline/wizard-step-1.svg", "icons/inline/wizard-step-2.svg", "icons/inline/wizard-step-3.svg"],
+      "notes": "向导条三步：1 说要求=会话泡、2 试跑=圆中播、3 你判定并导出=箭头升出盒（描述步骤，不含通过/失败语义）。"
+    },
+    {
+      "ledger_id": "asset.S12-3",
+      "files": ["icons/status/running.svg", "icons/action/stop.svg"],
+      "notes": "试跑区 running（缺口弧，与 S13-4/S14-3 同枚）/ [停止]（实心方，与 S9-4 停止全部同枚）。"
+    },
+    {
+      "ledger_id": "asset.S12-4",
+      "files": ["icons/action/judge-pass.svg", "icons/action/revise.svg", "icons/action/shelve.svg"],
+      "notes": "判定条三枚：我判定跑通→导出=圆勾右出 / 继续改要求=回环返修 / 先放着=盒搁架上。全为人点动作，无系统判定语义。"
+    },
+    {
+      "ledger_id": "asset.S12-5",
+      "files": ["icons/inline/skill.svg"],
+      "notes": "已导出条目（skill 产物）：配方卷轴角缀一星。"
+    },
+    {
+      "ledger_id": "asset.S13-3",
+      "files": ["icons/inline/pu.svg", "icons/inline/workspace.svg", "icons/inline/workflow.svg"],
+      "notes": "② 三跳转（谱 / 工作区 / 工作流）：跳转语义由按钮文案承担，图标为目的实体字形，与 S13-6 来源标签同枚。"
+    },
+    {
+      "ledger_id": "asset.S13-4",
+      "files": ["icons/action/refresh.svg", "icons/status/running.svg"],
+      "notes": "④ [刷新]（与 S8-5 重新预览同枚）与 running 转圈态（缺口弧，与 S12-3/S14-3 同枚）。"
+    },
+    {
+      "ledger_id": "asset.S13-5",
+      "files": ["icons/action/copy-path.svg", "icons/action/open-folder.svg", "icons/inline/file-md.svg"],
+      "notes": "⑤ 只读动作三枚：复制路径、打开目录（均与 S11-3/S15-4 同枚）、MD 形态=折角文档。"
+    },
+    {
+      "ledger_id": "asset.S13-6",
+      "files": ["icons/inline/pu.svg", "icons/inline/workspace.svg", "icons/inline/workflow.svg"],
+      "notes": "⑦ 三路来源标签底版（谱 / 工作区 / 工作流）：与 S13-3/S8-2 同枚；台账「可带底」的底色由消费方走 token，SVG 保持 currentColor 单色。"
+    },
+    {
+      "ledger_id": "asset.S14-1",
+      "files": ["icons/card/card-rike.svg"],
+      "notes": "日课卡标题 + 卡片图标。与 S1-3 同枚（icons-a 产），本清单只登记指向、不重复产。"
+    },
+    {
+      "ledger_id": "asset.S14-2",
+      "files": ["icons/inline/clock.svg", "icons/inline/timezone.svg"],
+      "notes": "① 时间基准行两枚：时刻=钟面双针、时区=球面经线赤道。"
+    },
+    {
+      "ledger_id": "asset.S14-3",
+      "files": ["icons/action/regenerate.svg", "icons/status/running.svg"],
+      "notes": "[重新生成（今天）]（环箭绕当日一点，与通用刷新区分）与 running 态（与 S12-3/S13-4 同枚）。"
+    },
+    {
+      "ledger_id": "asset.S14-4",
+      "files": ["icons/action/deliver.svg"],
+      "notes": "[查看投递会话]（投递语义）：箭矢投入托盘。"
+    },
+    {
+      "ledger_id": "asset.S14-5",
+      "files": ["icons/action/open-panel.svg"],
+      "notes": "[打开自动化任务面板]（跳 DSH 面板的指路语义）：带楣面板 + 指路箭头。"
+    },
+    {
+      "ledger_id": "asset.S15-3",
+      "files": ["icons/action/data-takeaway.svg"],
+      "notes": "设置内页条目「数据与拷走」行图标：本地数据罐 + 带走箭头。归 action 族（nav/ 归 icons-a；设置条目属导航性质，viewBox 20）。"
+    },
+    {
+      "ledger_id": "asset.S15-4",
+      "files": ["icons/action/copy-path.svg", "icons/action/open-folder.svg"],
+      "notes": "[复制路径] / [在文件管理器中打开] 两枚（均与 S11-3/S13-5 同枚）。"
+    }
+  ]
+}

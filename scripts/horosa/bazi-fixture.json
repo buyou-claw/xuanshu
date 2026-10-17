@@ -1,0 +1,10 @@
+{
+  "date": "1990-01-01",
+  "time": "12:00",
+  "zone": "+08:00",
+  "lat": "31n14",
+  "lon": "121e29",
+  "gender": "1",
+  "agent_confirmed_settings": true,
+  "clarification_notes": "xuanshu setup self-check fixture: fixed synthetic birth data (1990-01-01 12:00 +08:00, Shanghai 31n14/121e29), not a real person; agent_confirmed_settings=true per setup self-check contract."
+}

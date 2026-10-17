@@ -1,4 +1,28 @@
 # 上游侦察克隆（研究用途，不入库）
 .upstream/
+
+# 依赖与构建产物
 node_modules/
+.pnpm-store/
 dist/
+
+# profile 在仓库内就地安装产生的依赖树（分发包只提交 package.json / cordis.patch.yml / lockfile）
+profile/node_modules/
+
+# DSH 每次启动 CLI 都会重写 profile 根的 cordis.yml（空 root 配置）——运行期产物，不是分发物。
+# 证据：dsh-app-boot/lib/index.js prepareProfile → dsh/lib/profile-boot-BZ2ZjNWi.js:189
+profile/cordis.yml
+
+# 测试用 DSH 家目录（装配契约测试台用 DSH_HOME 隔离，不入库）
+.dsh-home/
+tests/**/.tmp/
+# 测试台开发期的临时探针产物（如 dump 出来的 schema JSON，动辄几百 KB）
+tests/**/.probe/
+
+# 上游证据摘录（侦察期临时工作文件）
+.scratch/
+
+# 编辑器/系统
+*.tsbuildinfo
+.DS_Store
+Thumbs.db

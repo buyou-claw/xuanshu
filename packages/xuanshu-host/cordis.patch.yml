@@ -1,0 +1,35 @@
+# 玄枢主机插件的 bundle 补丁：把本插件行插进 profile 名册。
+#
+# 形态照抄上游样板 @linxin666/dsh-client-ui-skill-explorer/cordis.patch.yml
+# （bundle 层的 `insert` 写法）。行 id / name 按票 01 契约第 0 节固定 = 包名，
+# 装配后必须出现在运行时树的 id 列表里（seam S1：`dsh --profile xuanshu --dump-config`）。
+#
+# 本行没有 config：lib/index.js 的 apply 不需要任何配置即可建目录、写装配报告；
+# 它也不 inject 任何宿主 service（契约 §3 硬约束：不调 LLM、不联网、不开端口）。
+- insert:
+    - id: xuanshu-host
+      name: 'xuanshu-host'
+
+# ── 票 13 前置：schedule 三行 ────────────────────────────────────────────────────────────────
+# 日课与底稿刷新都建在 `ctx.schedule` 上，而它的提供者 `@deepseek-ai/dsh-schedule`
+# **不在** shipped 组合里：`dsh-base` / `dsh-web-app` / `dsh-headless` 三份 patch 都没有
+# `time-context` / `schedule` / `ui-schedule` 这三个 id（票 13 契约 §0 已核）。
+# 不启用的话 `ctx.schedule` 是 `undefined` 而 boot **不报错** —— 这是本票最恶劣的失败形态，
+# 所以这三行必须落在**随包分发**的补丁里（复制模式装到别的机器上也一样生效）。
+#
+# 为什么走「自有 patch 插三行」而不是 `plugin_manager` 的 `set_bundle`：
+# 契约 §0 给了两条路并要求择一记录证据。`set_bundle` 需要 `plugin_manager` 工具面，
+# 而实现者会话里没有该工具（它只挂给 GUI 会话），CLI 的 `dsh plugin` 是 pnpm 通道、不管 bundle；
+# 所以走契约明许的**退路**：id / name 与 shipped bundle
+# （`dsh-experimental-schedule-bundle/cordis.patch.yml`）**逐字一致**，不会与 shipped 层撞 id。
+# 代价（写在明处）：将来若有人在 GUI 里对同一 profile 再 `set_bundle` 启用官方那个 bundle，
+# 会出现重复行 —— 那时应删掉本节、改由 `dsh.profile.bundles` 管理。
+- insert:
+    - id: time-context
+      name: '@deepseek-ai/dsh-time-context'
+
+    - id: schedule
+      name: '@deepseek-ai/dsh-schedule'
+
+    - id: ui-schedule
+      name: '@deepseek-ai/dsh-client-ui-schedule'

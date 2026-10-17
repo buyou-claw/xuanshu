@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" fill="none">
+<!-- asset.S1-8 · 底稿卡 empty（两种空因共用）：空文稿 + 三路来源空槽 · S1 -->
+<rect x="30" y="16" width="60" height="48" rx="4" stroke="currentColor" stroke-width="1.5"/>
+<path d="M30 24h60" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.4"/>
+<path d="M38 34h30M38 42h42M38 50h24" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.3"/>
+<path d="M44 58h8M60 58h8M76 58h8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+</svg>

@@ -1,0 +1,380 @@
+{
+  "ok": false,
+  "tool": "bazi_birth",
+  "version": "0.40.1",
+  "input_normalized": {},
+  "data": {},
+  "summary": [],
+  "warnings": [],
+  "memory_ref": null,
+  "trace_id": null,
+  "group_id": null,
+  "error": {
+    "code": "agent_guidance.required",
+    "message": "This Horosa tool is protected by the agent guidance gate. Ask the user for missing result-changing settings first, or pass `agent_confirmed_settings: true` / `defaults_accepted: true` after explicit confirmation.",
+    "details": {
+      "ok": false,
+      "tool_name": "bazi_birth",
+      "enforced": true,
+      "code": "agent_guidance.required",
+      "message": "This Horosa tool is protected by the agent guidance gate. Ask the user for missing result-changing settings first, or pass `agent_confirmed_settings: true` / `defaults_accepted: true` after explicit confirmation.",
+      "ask_if_missing": [
+        {
+          "field": "birth data",
+          "question": "请提供出生日期、时间、时区和地点。"
+        },
+        {
+          "field": "timeAlg/after23NewDay/lateZiHourUseNextDay",
+          "question": "真太阳时、子时换日、晚子时时柱是否沿用星阙默认？",
+          "options": [
+            "沿用默认",
+            "指定设置"
+          ]
+        },
+        {
+          "field": "godKeyPos/minggongMethod/school",
+          "question": "神煞主位、命宫起法、断命流派是否沿用星阙默认？",
+          "options": [
+            "沿用默认（神煞按年柱 · 命宫通行版 · 传统综合）",
+            "指定（键见 options_keys）"
+          ]
+        },
+        {
+          "field": "southMonth",
+          "question": "出生地在南半球：月令是否对冲？（只对南纬生效；星阙默认不对冲，月柱同北半球）",
+          "options": [
+            "不对冲（星阙默认）",
+            "对冲（月支取对冲之支）"
+          ],
+          "values": [
+            "none",
+            "chong"
+          ],
+          "when": "lat < 0 / 纬度串带 s"
+        }
+      ],
+      "safe_defaults": [
+        {
+          "field": "timeAlg",
+          "value": 0,
+          "meaning": "星阙默认：真太阳时"
+        },
+        {
+          "field": "after23NewDay",
+          "value": 1,
+          "meaning": "星阙默认：23 点换日（缺省不传=引擎默认 1）；0=24 点换日"
+        },
+        {
+          "field": "godKeyPos",
+          "value": "年",
+          "meaning": "星阙默认：按年柱查神煞"
+        },
+        {
+          "field": "minggongMethod",
+          "value": "tongxing",
+          "meaning": "星阙默认：命宫通行版"
+        },
+        {
+          "field": "southMonth",
+          "value": "none",
+          "meaning": "星阙默认：南半球月令不对冲（北纬出生无影响）"
+        },
+        {
+          "field": "byLon",
+          "value": false,
+          "meaning": "星阙默认（给 true 则整盘走 Java，本地引擎无此算法）"
+        }
+      ],
+      "do_not_assume": [
+        "birth time",
+        "timezone",
+        "birthplace"
+      ],
+      "confirmation_fields": [
+        "agent_confirmed_settings",
+        "defaults_accepted",
+        "clarification_notes"
+      ],
+      "agent_recovery": {
+        "must_ask_user": true,
+        "reason": "missing_agent_confirmation",
+        "prompt_to_user": "调用 `bazi_birth` 前需要先确认这些会影响结果的设置：\nBefore running `bazi_birth`, please confirm these result-changing settings:\n1. 请提供出生日期、时间、时区和地点。\n2. 真太阳时、子时换日、晚子时时柱是否沿用星阙默认？ 可选 / options：沿用默认 / 指定设置\n3. 神煞主位、命宫起法、断命流派是否沿用星阙默认？ 可选 / options：沿用默认（神煞按年柱 · 命宫通行版 · 传统综合） / 指定（键见 options_keys）\n4. 出生地在南半球：月令是否对冲？（只对南纬生效；星阙默认不对冲，月柱同北半球） 可选 / options：不对冲（星阙默认） / 对冲（月支取对冲之支）\n如果你想快速继续，也可以明确说“按星阙默认”，我会使用：timeAlg=0; after23NewDay=1; godKeyPos=年; minggongMethod=tongxing; southMonth=none。\nTo continue immediately, say “use Xingque defaults” and I will use: timeAlg=0; after23NewDay=1; godKeyPos=年; minggongMethod=tongxing; southMonth=none.",
+        "ask_if_missing": [
+          {
+            "field": "birth data",
+            "question": "请提供出生日期、时间、时区和地点。"
+          },
+          {
+            "field": "timeAlg/after23NewDay/lateZiHourUseNextDay",
+            "question": "真太阳时、子时换日、晚子时时柱是否沿用星阙默认？",
+            "options": [
+              "沿用默认",
+              "指定设置"
+            ]
+          },
+          {
+            "field": "godKeyPos/minggongMethod/school",
+            "question": "神煞主位、命宫起法、断命流派是否沿用星阙默认？",
+            "options": [
+              "沿用默认（神煞按年柱 · 命宫通行版 · 传统综合）",
+              "指定（键见 options_keys）"
+            ]
+          },
+          {
+            "field": "southMonth",
+            "question": "出生地在南半球：月令是否对冲？（只对南纬生效；星阙默认不对冲，月柱同北半球）",
+            "options": [
+              "不对冲（星阙默认）",
+              "对冲（月支取对冲之支）"
+            ],
+            "values": [
+              "none",
+              "chong"
+            ],
+            "when": "lat < 0 / 纬度串带 s"
+          }
+        ],
+        "safe_defaults": [
+          {
+            "field": "timeAlg",
+            "value": 0,
+            "meaning": "星阙默认：真太阳时"
+          },
+          {
+            "field": "after23NewDay",
+            "value": 1,
+            "meaning": "星阙默认：23 点换日（缺省不传=引擎默认 1）；0=24 点换日"
+          },
+          {
+            "field": "godKeyPos",
+            "value": "年",
+            "meaning": "星阙默认：按年柱查神煞"
+          },
+          {
+            "field": "minggongMethod",
+            "value": "tongxing",
+            "meaning": "星阙默认：命宫通行版"
+          },
+          {
+            "field": "southMonth",
+            "value": "none",
+            "meaning": "星阙默认：南半球月令不对冲（北纬出生无影响）"
+          },
+          {
+            "field": "byLon",
+            "value": false,
+            "meaning": "星阙默认（给 true 则整盘走 Java，本地引擎无此算法）"
+          }
+        ],
+        "do_not_assume": [
+          "birth time",
+          "timezone",
+          "birthplace"
+        ],
+        "retry_requires_one_of": [
+          {
+            "agent_confirmed_settings": true,
+            "meaning": "Use after the user explicitly answered the clarification."
+          },
+          {
+            "defaults_accepted": true,
+            "meaning": "Use only after the user explicitly accepted Horosa/Xingque defaults."
+          }
+        ],
+        "retry_should_include": [
+          "clarification_notes"
+        ],
+        "kind": "input",
+        "next_action": "ask_user_then_confirm"
+      },
+      "hint": "参数缺失或无效。请按 details.hint 补齐/修正后重试；入参口径可先看 horosa_agent_guidance(tool_name=…)。 / Missing or invalid input: fix it per details.hint and retry; horosa_agent_guidance(tool_name=…) documents the contract.",
+      "next_action": "ask_user_then_confirm",
+      "elicitation": {
+        "status": "unsupported"
+      }
+    }
+  },
+  "code": "agent_guidance.required",
+  "message": "This Horosa tool is protected by the agent guidance gate. Ask the user for missing result-changing settings first, or pass `agent_confirmed_settings: true` / `defaults_accepted: true` after explicit confirmation.",
+  "details": {
+    "ok": false,
+    "tool_name": "bazi_birth",
+    "enforced": true,
+    "code": "agent_guidance.required",
+    "message": "This Horosa tool is protected by the agent guidance gate. Ask the user for missing result-changing settings first, or pass `agent_confirmed_settings: true` / `defaults_accepted: true` after explicit confirmation.",
+    "ask_if_missing": [
+      {
+        "field": "birth data",
+        "question": "请提供出生日期、时间、时区和地点。"
+      },
+      {
+        "field": "timeAlg/after23NewDay/lateZiHourUseNextDay",
+        "question": "真太阳时、子时换日、晚子时时柱是否沿用星阙默认？",
+        "options": [
+          "沿用默认",
+          "指定设置"
+        ]
+      },
+      {
+        "field": "godKeyPos/minggongMethod/school",
+        "question": "神煞主位、命宫起法、断命流派是否沿用星阙默认？",
+        "options": [
+          "沿用默认（神煞按年柱 · 命宫通行版 · 传统综合）",
+          "指定（键见 options_keys）"
+        ]
+      },
+      {
+        "field": "southMonth",
+        "question": "出生地在南半球：月令是否对冲？（只对南纬生效；星阙默认不对冲，月柱同北半球）",
+        "options": [
+          "不对冲（星阙默认）",
+          "对冲（月支取对冲之支）"
+        ],
+        "values": [
+          "none",
+          "chong"
+        ],
+        "when": "lat < 0 / 纬度串带 s"
+      }
+    ],
+    "safe_defaults": [
+      {
+        "field": "timeAlg",
+        "value": 0,
+        "meaning": "星阙默认：真太阳时"
+      },
+      {
+        "field": "after23NewDay",
+        "value": 1,
+        "meaning": "星阙默认：23 点换日（缺省不传=引擎默认 1）；0=24 点换日"
+      },
+      {
+        "field": "godKeyPos",
+        "value": "年",
+        "meaning": "星阙默认：按年柱查神煞"
+      },
+      {
+        "field": "minggongMethod",
+        "value": "tongxing",
+        "meaning": "星阙默认：命宫通行版"
+      },
+      {
+        "field": "southMonth",
+        "value": "none",
+        "meaning": "星阙默认：南半球月令不对冲（北纬出生无影响）"
+      },
+      {
+        "field": "byLon",
+        "value": false,
+        "meaning": "星阙默认（给 true 则整盘走 Java，本地引擎无此算法）"
+      }
+    ],
+    "do_not_assume": [
+      "birth time",
+      "timezone",
+      "birthplace"
+    ],
+    "confirmation_fields": [
+      "agent_confirmed_settings",
+      "defaults_accepted",
+      "clarification_notes"
+    ],
+    "agent_recovery": {
+      "must_ask_user": true,
+      "reason": "missing_agent_confirmation",
+      "prompt_to_user": "调用 `bazi_birth` 前需要先确认这些会影响结果的设置：\nBefore running `bazi_birth`, please confirm these result-changing settings:\n1. 请提供出生日期、时间、时区和地点。\n2. 真太阳时、子时换日、晚子时时柱是否沿用星阙默认？ 可选 / options：沿用默认 / 指定设置\n3. 神煞主位、命宫起法、断命流派是否沿用星阙默认？ 可选 / options：沿用默认（神煞按年柱 · 命宫通行版 · 传统综合） / 指定（键见 options_keys）\n4. 出生地在南半球：月令是否对冲？（只对南纬生效；星阙默认不对冲，月柱同北半球） 可选 / options：不对冲（星阙默认） / 对冲（月支取对冲之支）\n如果你想快速继续，也可以明确说“按星阙默认”，我会使用：timeAlg=0; after23NewDay=1; godKeyPos=年; minggongMethod=tongxing; southMonth=none。\nTo continue immediately, say “use Xingque defaults” and I will use: timeAlg=0; after23NewDay=1; godKeyPos=年; minggongMethod=tongxing; southMonth=none.",
+      "ask_if_missing": [
+        {
+          "field": "birth data",
+          "question": "请提供出生日期、时间、时区和地点。"
+        },
+        {
+          "field": "timeAlg/after23NewDay/lateZiHourUseNextDay",
+          "question": "真太阳时、子时换日、晚子时时柱是否沿用星阙默认？",
+          "options": [
+            "沿用默认",
+            "指定设置"
+          ]
+        },
+        {
+          "field": "godKeyPos/minggongMethod/school",
+          "question": "神煞主位、命宫起法、断命流派是否沿用星阙默认？",
+          "options": [
+            "沿用默认（神煞按年柱 · 命宫通行版 · 传统综合）",
+            "指定（键见 options_keys）"
+          ]
+        },
+        {
+          "field": "southMonth",
+          "question": "出生地在南半球：月令是否对冲？（只对南纬生效；星阙默认不对冲，月柱同北半球）",
+          "options": [
+            "不对冲（星阙默认）",
+            "对冲（月支取对冲之支）"
+          ],
+          "values": [
+            "none",
+            "chong"
+          ],
+          "when": "lat < 0 / 纬度串带 s"
+        }
+      ],
+      "safe_defaults": [
+        {
+          "field": "timeAlg",
+          "value": 0,
+          "meaning": "星阙默认：真太阳时"
+        },
+        {
+          "field": "after23NewDay",
+          "value": 1,
+          "meaning": "星阙默认：23 点换日（缺省不传=引擎默认 1）；0=24 点换日"
+        },
+        {
+          "field": "godKeyPos",
+          "value": "年",
+          "meaning": "星阙默认：按年柱查神煞"
+        },
+        {
+          "field": "minggongMethod",
+          "value": "tongxing",
+          "meaning": "星阙默认：命宫通行版"
+        },
+        {
+          "field": "southMonth",
+          "value": "none",
+          "meaning": "星阙默认：南半球月令不对冲（北纬出生无影响）"
+        },
+        {
+          "field": "byLon",
+          "value": false,
+          "meaning": "星阙默认（给 true 则整盘走 Java，本地引擎无此算法）"
+        }
+      ],
+      "do_not_assume": [
+        "birth time",
+        "timezone",
+        "birthplace"
+      ],
+      "retry_requires_one_of": [
+        {
+          "agent_confirmed_settings": true,
+          "meaning": "Use after the user explicitly answered the clarification."
+        },
+        {
+          "defaults_accepted": true,
+          "meaning": "Use only after the user explicitly accepted Horosa/Xingque defaults."
+        }
+      ],
+      "retry_should_include": [
+        "clarification_notes"
+      ],
+      "kind": "input",
+      "next_action": "ask_user_then_confirm"
+    },
+    "hint": "参数缺失或无效。请按 details.hint 补齐/修正后重试；入参口径可先看 horosa_agent_guidance(tool_name=…)。 / Missing or invalid input: fix it per details.hint and retry; horosa_agent_guidance(tool_name=…) documents the contract.",
+    "next_action": "ask_user_then_confirm",
+    "elicitation": {
+      "status": "unsupported"
+    }
+  }
+}

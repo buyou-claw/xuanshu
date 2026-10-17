@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" fill="none">
+<!-- asset.S15-6 · 数据与拷走 empty：空目录夹 + 未初始化火花，数据目录未初始化 · S15 -->
+<path d="M34 30l10-8h22l10 8" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M34 30h52a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H34a4 4 0 0 1-4-4V34a4 4 0 0 1 4-4z" stroke="currentColor" stroke-width="1.5"/>
+<path d="M42 44h22M42 50h14" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.3"/>
+<path d="M86 40l3 6 6 1-4.5 4 1 6-5.5-3-5.5 3 1-6L77 47l6-1z" stroke="currentColor" stroke-width="1" stroke-linejoin="round" opacity="0.4"/>
+</svg>

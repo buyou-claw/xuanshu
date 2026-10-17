@@ -1,0 +1,1 @@
+<div class="xs-bestof__warn" data-xs-bestof="adopted"><h4>已采用 c1</h4><p class="xs-bestof__note">采用只影响这次对话与回看；写进谱要在结束沉淀时由你确认。历史只带这一份采用稿。 其余候选已折叠保存在本地合参记录里，需要时展开查看。</p><p class="xs-bestof__note">合参没有改动本次会话的挂载账本与字数状态（旁路，不写页面态）。</p></div>
