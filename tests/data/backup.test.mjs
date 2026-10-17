@@ -10,7 +10,7 @@
  */
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -81,6 +81,7 @@ describe('票 30 · 一键备份：目录、清单与逐文件 sha256 对账（�
     await writeFileOf(join(dataDir, 'logs'), 'serve.log', 'log line 1\n')
     await writeFileOf(join(home, 'storages'), 'scratch.tmp', 'half-written')
     await writeFileOf(join(home, 'profiles', 'xuanshu'), 'package.json', '{"name":"xuanshu"}')
+    await writeFileOf(join(dataDir, 'runtime'), 'shell-notify.json', '{"token":"notification-token-must-stay-local"}')
 
     const methods = createDataMethods({}, {
       home,
@@ -157,6 +158,14 @@ describe('票 30 · 一键备份：目录、清单与逐文件 sha256 对账（�
     expect(onDisk).toEqual(result.manifest)
   })
 
+  it('运行时通知凭据不随备份迁移，并说明排除原因', async () => {
+    expect(result.manifest.items.some((item) => item.path.startsWith('xuanshu/runtime/'))).toBe(false)
+    expect(result.manifest.excluded).toContainEqual(expect.objectContaining({ path: 'xuanshu/runtime' }))
+    for (const file of await listFiles(result.backupDir)) {
+      expect(await readFile(at(result.backupDir, file), 'utf8')).not.toContain('notification-token-must-stay-local')
+    }
+  })
+
   it('清单路径形如 contract 的例子（相对 home 的 POSIX 路径）', () => {
     expect(result.manifest.items.map((item) => item.path)).toEqual(
       expect.arrayContaining(['xuanshu/pus/_base/bazi.md', 'sessions/--proj--/s1/session.v4.jsonl']),
@@ -218,12 +227,89 @@ describe('票 30 · 备份的拒收条件（可读原因，不抛异常）', () 
     }
   })
 
+  it('目标通过目录联接指向 home 内时也拒收，且不落备份目录', async () => {
+    const inside = join(home, 'aliased-backups')
+    const alias = join(root, 'backup-alias')
+    await mkdir(inside)
+    await symlink(inside, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    try {
+      const refused = await methods['data.backup']({ targetDir: alias, confirmed: true })
+      expect(refused.ok).toBe(false)
+      expect(refused.error.code).toBe('target-inside-home')
+      expect(await readdir(inside)).toEqual([])
+    } finally {
+      await unlink(alias)
+    }
+  })
+
+  it('dataDir 覆盖到 home 外时，目标仍不可放进业务数据目录', async () => {
+    const externalData = join(root, 'external-data')
+    const inside = join(externalData, 'backups')
+    await mkdir(inside, { recursive: true })
+    const external = createDataMethods({}, { home, dataDir: externalData })
+    const refused = await external['data.backup']({ targetDir: inside, confirmed: true })
+    expect(refused.ok).toBe(false)
+    expect(refused.error.code).toBe('target-inside-data')
+    expect(await readdir(inside)).toEqual([])
+  })
+
   it('失败是返回值而不是异常（界面拿到的是可读原因）', async () => {
     const promise = methods['data.backup']({ targetDir: join(root, 'missing'), confirmed: true })
     expect(typeof promise.then).toBe('function')
     const refused = await promise
     expect(refused.ok).toBe(false)
     expect(typeof refused.error.message).toBe('string')
+  })
+})
+
+describe('备份完整性：遍历达到上限不能把残缺副本报成成功', () => {
+  let root
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), 'xs-data-backup-cap-'))
+  })
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('dataDir=home 时，凭据库与运行时目录按平台文件名语义排除（Windows 含大写变体）', async () => {
+    const home = join(root, 'case-home')
+    const target = join(root, 'case-target')
+    const platformName = (name) => process.platform === 'win32' ? name.toUpperCase() : name
+    await mkdir(join(home, platformName('runtime')), { recursive: true })
+    await mkdir(target)
+    await writeFile(join(home, platformName('.credentials.yaml')), 'case-sensitive-secret')
+    await writeFile(join(home, platformName('runtime'), 'shell-notify.json'), '{"token":"runtime-secret"}')
+    await writeFile(join(home, 'keep.md'), 'business data')
+    const methods = createDataMethods({}, { home, dataDir: home })
+    const overview = await methods['data.overview']()
+    expect(overview.total.files).toBe(1)
+    const result = await methods['data.backup']({ targetDir: target, confirmed: true })
+    expect(result.ok).toBe(true)
+    expect(result.manifest.items.map((item) => item.path)).toEqual(['keep.md'])
+    for (const file of await listFiles(result.backupDir)) {
+      const content = await readFile(at(result.backupDir, file), 'utf8')
+      expect(content).not.toContain('case-sensitive-secret')
+      expect(content).not.toContain('runtime-secret')
+    }
+  })
+
+  it.each([
+    ['文件数', { files: 1 }],
+    ['目录深度', { depth: 0 }],
+  ])('%s达到上限：返回可读失败，目标目录无残缺备份', async (_name, limits) => {
+    const home = join(root, _name, 'home')
+    const dataDir = join(home, 'xuanshu')
+    const target = join(root, _name, 'target')
+    await mkdir(join(dataDir, 'pus'), { recursive: true })
+    await mkdir(target)
+    await writeFile(join(dataDir, 'pus', 'a.md'), 'a')
+    await writeFile(join(dataDir, 'pus', 'b.md'), 'b')
+    const methods = createDataMethods({}, { home, dataDir, limits })
+    const refused = await methods['data.backup']({ targetDir: target, confirmed: true })
+    expect(refused.ok).toBe(false)
+    expect(refused.error.code).toBe('source-limit')
+    expect(refused.error.message).toMatch(/上限/)
+    expect(await readdir(target)).toEqual([])
   })
 })
 

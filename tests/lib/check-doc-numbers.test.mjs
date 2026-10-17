@@ -11,7 +11,7 @@
  * 另一半同样重要：**只认当前验证块**。合成文档里塞了历史章节 / 历史状态行
  * （§11 的 `[inventory] 用例 900 条`、§16.6 的 `[inventory] 用例 1811 条`、README `## 历史` 的旧数字），
  * 它们**不许**被当成漂移。真仓库 §11/§12/§13/§16.6 里就有同类旧数字（见 `docs/development-status.md`）。
- * 反过来，当前块**必须**是 §16.7：它缺失或数字被改坏都要红/没法验，不能静默绿。
+ * 反过来，当前块**必须**是 §16.7 与 §16.8：它们缺失或数字被改坏都要红/没法验，不能静默绿。
  *
  * 环境：真文件系统（临时目录）、零网络、秒级；每个用例都是 spawn 真脚本，不 import 内部函数。
  */
@@ -59,7 +59,68 @@ function editLine(text, needle, edit, occurrence = 0) {
 }
 
 /**
- * 造一个合成仓库：真源 + 产物 + README 当前状态段 + development-status 的 §16.3 / §16.7 当前块。
+ * 按标题找一节的行区间（0-based，含标题行、不含下一个同级或更高级标题；`occurrence` 选第几个命中）。
+ * 用于「只改 §16.8 那一块」的定向注入 —— 与门自己的 `findSection` 是两套独立实现。
+ */
+function sectionRange(text, headingNeedle, occurrence = 0) {
+  const lines = text.split('\n')
+  const starts = []
+  lines.forEach((line, index) => {
+    if (line.includes(headingNeedle)) starts.push(index)
+  })
+  expect(starts.length, `夹具里找不到「${headingNeedle}」`).toBeGreaterThan(occurrence)
+  const start = starts[occurrence]
+  const level = (lines[start].match(/^#+/u)?.[0].length) ?? 1
+  let end = lines.length
+  // 代码围栏里的 `# 注释行` 不是标题（§16.3/§16.8 的代码块第一行就是 `# pnpm …`）。
+  let inFence = false
+  for (let cursor = start + 1; cursor < lines.length; cursor += 1) {
+    const line = lines[cursor]
+    if (/^\s*```/u.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+    const heading = line.match(/^(#+)\s/u)
+    if (heading !== null && heading[1].length <= level) {
+      end = cursor
+      break
+    }
+  }
+  return { lines, start, end }
+}
+
+/** 某一节里第一个含 needle 的行号（1-based，与脚本打印的「文件:行」同口径）。 */
+function lineInSection(text, headingNeedle, needle) {
+  const { lines, start, end } = sectionRange(text, headingNeedle)
+  let index = -1
+  for (let cursor = start; cursor < end; cursor += 1) {
+    if (lines[cursor].includes(needle)) {
+      index = cursor
+      break
+    }
+  }
+  expect(index, `「${headingNeedle}」里找不到「${needle}」`).toBeGreaterThanOrEqual(0)
+  return index + 1
+}
+
+/** 改某一节里的第一处 needle（注入漂移用；改不到就当场炸夹具）。 */
+function editInSection(text, headingNeedle, needle, edit) {
+  const { lines, start, end } = sectionRange(text, headingNeedle)
+  let index = -1
+  for (let cursor = start; cursor < end; cursor += 1) {
+    if (lines[cursor].includes(needle)) {
+      index = cursor
+      break
+    }
+  }
+  expect(index, `「${headingNeedle}」里找不到「${needle}」`).toBeGreaterThanOrEqual(0)
+  lines[index] = edit(lines[index])
+  return lines.join('\n')
+}
+
+/**
+ * 造一个合成仓库：真源 + 产物 + README 当前状态段 + development-status 的 §16.3 / §16.7 / §16.8 当前块。
  * 历史章节里故意放**旧数字**（§11、§16.6、README `## 历史`）——门必须只核当前块。
  */
 function makeRepo({ total = 7, fileCount = 3, bytes = 1234 } = {}) {
@@ -135,6 +196,19 @@ function makeRepo({ total = 7, fileCount = 3, bytes = 1234 } = {}) {
     '#### 16.7 环境加固轮（当前验证块）',
     '',
     `**验证**：\`pnpm verify:all\` exit 0；\`[doc-numbers] OK：${total} 条用例 / ${fileCount} 个文件 / ${bytes} B\`。`,
+    '',
+    '#### 16.8 main 全量复核与打磨（当前验证块）',
+    '',
+    '**最终验证（抄工具输出）**：',
+    '',
+    '```',
+    '# pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）',
+    `[inventory] 用例 ${total} 条（基线 ${total}）/ 文件 ${fileCount} 个 / 失败 0 条（已知红 0 条） / 文件级失败 0 个 / 跳过 0 条 / vitest exit 0`,
+    `[doc-numbers] OK：${total} 条用例 / ${fileCount} 个文件 / ${bytes} B`,
+    '',
+    '# pnpm verify:assembly → exit 0',
+    `[S3] PASS 客户端产物 ${bytes}B；物化/注册/槽位自检全过`,
+    '```',
     '',
   ].join('\n')
   write('docs/development-status.md', status)
@@ -273,6 +347,85 @@ describe('E3 · 当前块 = §16.7：历史 §16.6 不核、当前 §16.7 三个
     expect(result.output).not.toContain('1811')
     expect(result.output).not.toContain('164')
     expect(result.output).not.toContain('不一致')
+  })
+})
+
+/* ───────── 3c. 当前块 = §16.8（main 全量复核的最终验证块也进数字门） ───────── */
+
+describe('E3 · 当前块 = §16.8：main 全量复核的最终验证块（inventory / S3 字节 / doc-numbers 都核）', () => {
+  // 与真实台账同一个规模：1876 条用例 / 168 文件 / 522735 B。
+  const REAL = { total: 1876, fileCount: 168, bytes: 522735 }
+  const HEADING = '#### 16.8'
+
+  it('§16.8 当前块与工具源一致 → exit 0（1876 / 168 / 522735）', () => {
+    const repo = makeRepo(REAL)
+    const result = run(['--root', repo.root])
+    expect(result.stderr, result.output).toBe('')
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('1876 条用例')
+    expect(result.stdout).toContain('168 个文件')
+    expect(result.stdout).toContain('522735 B')
+  })
+
+  it('§16.8 的 inventory / S3 字节 / doc-numbers 任一改坏 → exit 1，点名行、期望、实际', () => {
+    const cases = [
+      {
+        label: '§16.8 inventory 用例数',
+        needle: `用例 ${REAL.total} 条（基线`,
+        from: `${REAL.total} 条（基线`,
+        to: `${REAL.total + 1} 条（基线`,
+        expectNeedle: `${REAL.total + 1} 条（基线`,
+        finding: '用例数',
+        expected: REAL.total,
+        actual: REAL.total + 1,
+      },
+      {
+        label: '§16.8 S3 产物字节',
+        needle: `客户端产物 ${REAL.bytes}B`,
+        from: `${REAL.bytes}B`,
+        to: `${REAL.bytes + 1}B`,
+        expectNeedle: `客户端产物 ${REAL.bytes + 1}B`,
+        finding: '客户端产物字节',
+        expected: REAL.bytes,
+        actual: REAL.bytes + 1,
+      },
+      {
+        label: '§16.8 doc-numbers 用例数',
+        needle: '[doc-numbers] OK',
+        from: `${REAL.total} 条用例`,
+        to: `${REAL.total + 1} 条用例`,
+        expectNeedle: '[doc-numbers] OK',
+        finding: '用例数',
+        expected: REAL.total,
+        actual: REAL.total + 1,
+      },
+    ]
+    for (const item of cases) {
+      const repo = makeRepo(REAL)
+      const broken = editInSection(repo.status, HEADING, item.needle, (line) => line.replace(item.from, item.to))
+      expect(broken, `夹具里没改到「${item.label}」`).not.toBe(repo.status)
+      repo.write('docs/development-status.md', broken)
+      const result = run(['--root', repo.root])
+      const at = lineInSection(broken, HEADING, item.expectNeedle)
+      expect(result.status, `${item.label} 改坏应 exit 1：${result.output}`).toBe(1)
+      expect(result.output).toContain(`docs/development-status.md:${at}`)
+      expect(result.output).toContain(`${item.finding}不一致`)
+      expect(result.output).toContain(`期望 ${item.expected}`)
+      expect(result.output).toContain(`实际 ${item.actual}`)
+      expect(result.output).toMatch(/原文[:：]/u)
+    }
+  })
+
+  it('缺 §16.8 当前验证块 → exit 2，点名 16.8（当前块缺失 = 没法验，不静默绿）', () => {
+    const repo = makeRepo(REAL)
+    const { lines, start, end } = sectionRange(repo.status, HEADING)
+    const stripped = [...lines.slice(0, start), ...lines.slice(end)].join('\n')
+    const result = run(['--root', repo.root])
+    expect(result.status, result.output).toBe(0) // 先确认夹具原样是绿的
+    repo.write('docs/development-status.md', stripped)
+    const missing = run(['--root', repo.root])
+    expect(missing.status).toBe(2)
+    expect(missing.output).toContain('16.8')
   })
 })
 

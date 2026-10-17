@@ -52,6 +52,12 @@ export interface DigaoStatus {
   schedule?: DigaoSchedule;
   /** 事记条目（**可选**：还没有事记账本时省略键）。 */
   shiji?: DigaoShijiRead;
+  /**
+   * 事记读面降级的原因（加性读面坏，如账本 EISDIR/EACCES）。
+   * **与 `reason` 分开**：`reason` 只表示 digao 自身失败（客户端据此把卡判成 error）；
+   * `shiji` 缺席而 `shijiReason` 在场 = 底稿本身健康，只是这次没有事记条目。
+   */
+  shijiReason?: string;
   reason?: string;
 }
 
@@ -61,6 +67,10 @@ export interface DigaoRead {
   meta: DigaoMeta | null;
   schedule?: DigaoSchedule;
   shiji?: DigaoShijiRead;
+  /** 事记读面降级的原因（同 `DigaoStatus.shijiReason`；不占用 `reason`）。 */
+  shijiReason?: string;
+  /** digao 自身失败的原因（RPC 级；加性读面坏不要用这个字段）。 */
+  reason?: string;
 }
 
 /** 底稿 daily 任务的计划时刻投影（只读展示用；改它去 DSH 的「自动化任务」面板）。 */

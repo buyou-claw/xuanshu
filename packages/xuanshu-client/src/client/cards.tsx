@@ -887,16 +887,23 @@ function WanshengConsultLine({ facts }: { facts?: WanshengFacts }) {
   );
 }
 
-/** 「哪些项目有活动」这一行（事实缺失 → 未知）。 */
-function WanshengWorkspaceLine({ facts }: { facts?: WanshengFacts }) {
-  const workspaces = facts?.activeWorkspaces;
+/** 工作区与工作流各自的活动事实（任一路缺失都写未知；空态两路同一句式，复核 A3）。 */
+function WanshengActivityLines({ facts }: { facts?: WanshengFacts }) {
+  const groups = [
+    { key: 'workspaces', label: '项目', items: facts?.activeWorkspaces },
+    { key: 'workflows', label: '工作流', items: facts?.activeWorkflows },
+  ];
   return (
-    <p className="xs-line" data-xuanshu-fact="workspaces">
-      <span className="xs-line__label">项目</span>
-      <span className="xs-line__value">
-        {workspaces === undefined ? '哪些项目有活动：未知（宿主没回传）' : `今天 ${workspaces.length} 个项目有活动`}
-      </span>
-    </p>
+    <>{groups.map(({ key, label, items }) => (
+      <p key={key} className="xs-line" data-xuanshu-fact={key}>
+        <span className="xs-line__label">{label}</span>
+        <span className="xs-line__value">
+          {items === undefined ? `哪些${label}有活动：未知（宿主没回传）`
+            : items.length === 0 ? `今天没有${label}活动`
+              : `今天 ${items.length} 个${label}有活动`}
+        </span>
+      </p>
+    ))}</>
   );
 }
 
@@ -1019,7 +1026,7 @@ export function XsWanshengCard({
         <div className="xs-card__body" data-xuanshu-ready="wansheng">
           <div className="xs-lines">
             <WanshengConsultLine facts={facts} />
-            <WanshengWorkspaceLine facts={facts} />
+            <WanshengActivityLines facts={facts} />
             <WanshengArtifactLines facts={facts} />
           </div>
           <RikkeNotifyLine notify={notify} />

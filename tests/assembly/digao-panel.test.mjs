@@ -443,6 +443,29 @@ describe('票 13 · 底稿面板（只读视图）', () => {
     expect(html).toContain('没有读到事记账本')
   })
 
+  it('ready：账本读失败（shijiReason）→ 正文照常，只有一段带原因的 note（不冒充「没有账本」）', () => {
+    const shijiReason = '事记读不出来：事记账本读不出来（…；EISDIR）：EISDIR: illegal operation on a directory, read'
+    const html = render(
+      h(DigaoPanel, {
+        api: spyApi().api,
+        shiji: spyShiji().api,
+        ...injected(),
+        preloaded: {
+          status: { exists: true, meta: META, shijiReason },
+          read: { markdown: DIGAO_MARKDOWN, meta: META, shijiReason },
+        },
+      }),
+    )
+    // 底稿主体不受影响：正文那一段照旧渲染出来。
+    expect(html).toContain('2026-09-01～2026-10-17')
+    expect(html).not.toContain('data-xuanshu-action="delete-shiji"')
+    // 原因走 note 通道（加性读面坏了 ≠ 没有账本），且不再说「没有读到事记账本」。
+    expect(html).toContain('data-xuanshu-note="shiji-read-failed"')
+    expect(html).toContain('事记读不出来')
+    expect(html).toContain('EISDIR')
+    expect(html).not.toContain('没有读到事记账本')
+  })
+
   it('摘要来源如实标注（digest=llm → AI 提炼；骨架 = 确定性规则）', () => {
     const llm = render(h(DigaoPanel, { api: spyApi().api, ...injected(), preloaded: preloadedReady }))
     expect(llm).toContain('骨架＝确定性规则')

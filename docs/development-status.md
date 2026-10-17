@@ -745,18 +745,18 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 #### 16.3 验证（数字全部抄工具输出）
 
 ```
-# pnpm test:inventory（profile 已装；t33 复核修复轮 + 两轴再复核修复 + 环境加固轮之后）
-[inventory] 用例 1839 条（基线 1839）/ 文件 167 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+# pnpm test:inventory（profile 已装；main 全量复核打磨后，见 §16.8）
+[inventory] 用例 1893 条（基线 1893）/ 文件 171 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
-结果：8/8 通过，exit 0（7527ms）
+结果：8/8 通过，exit 0（6503ms）
 启动器[home] PASS  隔离 home <repo>/.dsh-home（来源 --home）；真实 home ~/.dsh 不会被碰
 …（home 两档默认都不是真实 home；换 home 后两条派生路径两两不同）
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 522070B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 523432B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（1839 / 167）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（1893 / 171）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -926,14 +926,58 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 | 票 | 交付 |
 |---|---|
 | E1 | `scripts/worktree-create.mjs`：一条命令建工作树 + 分支 + 根/包级 `node_modules` 链接（**只链不复制**、不装包），`--base/--branch/--repo/--dry-run`，已存在/非法名可读拒绝；7 条临时 git 仓库端到端用例（含「摘链接删树后目标哨兵仍在」）。清理仍只走 `pnpm cleanup:worktrees`（§16.4 第 7 条的护栏） |
-| E3 | `scripts/check-doc-numbers.mjs`：真值 = 清单基线 total/files + 客户端产物 `statSync` 字节；只核对 README 与 §16.3/§16.7 的**当前**验证块（历史旧数字不误报）；漂移 exit 1 逐条点名「文件:行 期望/实际」，不可验证 exit 2；接线 `verify:all` 末步 + CI「doc numbers gate」；17 条判据（一致/单点/多处/真源缺/块缺/历史不误报/注入面） |
+| E3 | `scripts/check-doc-numbers.mjs`：真值 = 清单基线 total/files + 客户端产物 `statSync` 字节；只核对 README 与 §16.3/§16.7/§16.8 的**当前**验证块（历史旧数字不误报）；漂移 exit 1 逐条点名「文件:行 期望/实际」，不可验证 exit 2；接线 `verify:all` 末步 + CI「doc numbers gate」；20 条判据（一致/单点/多处/真源缺/块缺/历史不误报/注入面） |
 | E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
 
-**验证（数字抄工具输出）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
-`[doc-numbers] OK：1839 条用例 / 167 个文件 / 522070 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+**验证（数字抄工具输出；本行随当前验证块刷新，原轮次基线见下一行）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
+`[doc-numbers] OK：1893 条用例 / 171 个文件 / 523432 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
 E1/E3 与两轴复核修复新增 25 条用例后基线 `--update` 为 **1839 条 / 167 文件**，文档数字由新门核对。
 
 **这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
 只能靠判断的（装配面证据、夹具域字段、重复表对拍）写成 reviewer 的按需清单，并用指针挂到 `AGENTS.md`，
 不占实施者的上下文。
+
+#### 16.8 main 全量复核与打磨（2026-10-17）
+
+Spec 002 已随 PR #32 并入 `main`（`7b829d2`）。本轮按用户确认的全量范围，
+以合并前的 `09951eb` 为固定点，分别运行 Standards / Spec 两个独立复核上下文，
+修复位于 `codex/spec002-review-polish` 工作区。完整原始发现、触发条件与回归证据见
+[`docs/reviews/spec002-7b829d2-review.md`](reviews/spec002-7b829d2-review.md)。
+
+**Standards：2 项，均已修复。** 事记只把 ENOENT 当空账，其余读取失败阻止重写；
+晚省改读真实 `sessionListMetadata.lastPromptAt`，修正与实现同错的 header 夹具，并提供日志回落。
+
+**Spec：7 项，均已修复。** 事记扫描串行、提交前合并最新人工删除/恢复/保存；
+备份遇到上限或源读取失败明确拒绝；判官全程限时并继承取消，迟到结果不回填；
+日课读底稿「最近」正文；晚省补工作流活动及卡/面板显示；备份排除 runtime 凭据与
+Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或外置 dataDir。
+追加复核发现的坏工作流清单误报零条也已收口：事实统计使用严格读面，原宽松列表的默认行为保持兼容。
+
+**最终验证（抄工具输出）**：
+
+```
+# pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）
+[inventory] 用例 1893 条（基线 1893）/ 文件 171 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
+[doc-numbers] OK：1893 条用例 / 171 个文件 / 523432 B
+
+# pnpm verify:isolation
+结果：8/8 通过，exit 0（6503ms）
+
+# pnpm verify:assembly → exit 1，仅 S1 既有上游缺陷
+[S2] PASS 192 行挂载；xuanshu-host.state=2 xuanshu-client.state=2
+[S3] PASS 客户端产物 523432B；物化/注册/槽位自检全过
+[S4] PASS 基线 185 行全部命中
+[S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
+[S1] FAIL unrecognized Loader tree carrier（同 §16.3）
+```
+
+`tests/test-inventory.json` 由清单工具 `--update` 刷新；knownRed 未增改。
+客户端已从源码重建，宿主/客户端运行副本已用 `install-profile --home .dsh-home --skip-install` 同步。
+原始事记并发、判官超时、真实投影与 Windows 凭据反例均复跑过修复后的结果；未联网、未调用真实 LLM。
+
+**边界**：事记队列/提交前合并属于同一宿主进程，没有跨进程文件锁；
+备份达到规模上限现在明确失败，需检查目录规模；投影缺席时按需读相关会话日志。
+真实 Electron 窗口/托盘/toast/自启、真实多家 provider、浏览器点击链与 setup 默认档端到端的
+验收边界沿用 §16.5，本轮的模块/装配验证不能代替这些真机验收。
 

@@ -12,10 +12,11 @@
  *
  * 核对什么（**只核当前验证块**，历史章节里的旧数字不判漂移）：
  *   - `README.md` 的 `## 状态` 段：`pnpm test:inventory` 行（用例数 / 文件数）与 `build-client --check` 行（产物字节）；
- *   - `docs/development-status.md` 的 `#### 16.3` 与 `#### 16.7` 两个当前验证块：
+ *   - `docs/development-status.md` 的 `#### 16.3` / `#### 16.7` / `#### 16.8` 三个当前验证块：
  *     §16.3 核 `[inventory]` 行（用例数 / 文件数）、`[S3] PASS 客户端产物 NB` 行，
  *     以及「清单基线已按最终用例数 `--update`（N / M）」那一行；
- *     §16.7 核 `[doc-numbers] OK：N 条用例 / M 个文件 / K B` 一行（三个数字都核）。
+ *     §16.7 与 §16.8 都核 `[doc-numbers] OK：N 条用例 / M 个文件 / K B` 一行（三个数字都核）；
+ *     §16.8 另外核 `[inventory]` 行与 `[S3]` 产物字节行（main 全量复核块的最终验证）。
  *     （§16.6 是历史轮：数字属于那一轮，**不核**——门只认当前块，见 tests/lib/check-doc-numbers.test.mjs。）
  *
  * 退出码（「没验」与「验了但红了」分开，与 `scripts/check-test-inventory.mjs` 同一口径）：
@@ -191,7 +192,7 @@ const README_INVENTORY_LINE = {
 }
 
 /**
- * §16.7 的当前块：`[doc-numbers] OK：1835 条用例 / 167 个文件 / 522070 B`（verify:all 末步的 summary）。
+ * §16.7 / §16.8 共用的当前块行：`[doc-numbers] OK：1835 条用例 / 167 个文件 / 522070 B`（verify:all 末步的 summary）。
  * 一行里三个数字，拆成两条规则共享同一个 `when`：`kind` 决定「当前块必须出现哪类数字」的覆盖检查。
  */
 const whenDocNumbersOk = (line) => line.includes('[doc-numbers] OK')
@@ -229,6 +230,7 @@ const DOC_SPECS = [
     sections: [
       { id: '「#### 16.3」当前验证块', pattern: /^#{1,6}\s*16\.3\b/u, rules: [INVENTORY_IN_BRACKETS, ARTIFACT_S3_LINE, BASELINE_PAIR], required: ['inventory', 'artifact'] },
       { id: '「#### 16.7」当前验证块', pattern: /^#{1,6}\s*16\.7\b/u, rules: [DOC_NUMBERS_OK_COUNTS, DOC_NUMBERS_OK_ARTIFACT], required: ['inventory', 'artifact'] },
+      { id: '「#### 16.8」当前验证块', pattern: /^#{1,6}\s*16\.8\b/u, rules: [INVENTORY_IN_BRACKETS, ARTIFACT_S3_LINE, DOC_NUMBERS_OK_COUNTS, DOC_NUMBERS_OK_ARTIFACT], required: ['inventory', 'artifact'] },
     ],
   },
 ]

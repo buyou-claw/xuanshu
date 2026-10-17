@@ -18,6 +18,7 @@ import { generateRikke } from '../../packages/xuanshu-host/lib/rikke/generate.mj
 import { writeRikkeSettings } from '../../packages/xuanshu-host/lib/rikke/settings.mjs'
 import { readRikke } from '../../packages/xuanshu-host/lib/rikke/store.mjs'
 import { createPuRepository } from '../../packages/xuanshu-host/lib/pu/repository.mjs'
+import { buildDigaoMeta, renderDigaoMarkdown } from '../../packages/xuanshu-host/lib/digao/skeleton.mjs'
 import {
   BIRTH, fakeHorosa, fakeLlm, huangliFixture, makeCtx, makeSandbox, writeBaseSnapshot,
 } from './lib/sandbox.mjs'
@@ -31,11 +32,14 @@ const TODAY = '2026-10-15'
 const TZ = 'Asia/Shanghai'
 const BASE_SUMMARY = '擅长 Rust；做过十年工具链。'
 const DIGAO_GENERATED_AT = '2026-10-15T03:00:00.000Z'
+const RECENT_TEXT = '最近在准备周五交付：完成账户迁移，并安排一次验收。'
+const PAST_TEXT = '过去完成了一个老项目，这件事不属于今天安排。'
+const DIGEST_TEXT = '综合摘要可能同时带最近与曾经，不能当成最近素材。'
 const AI_TEXT = '今天安排别太满：先把要交付的那件事收口，再处理走动类的事。'
 
 /**
- * 一个完整的生成现场：底座快照 + 真机的黄历信封 + 底座谱 + 底稿元数据（+ 可选假 LLM）。
- * @param {{llm?: object|null, withBase?: boolean, withDigao?: boolean}} [parts]
+ * 一个完整的生成现场：底座快照 + 真机的黄历信封 + 底座谱 + 真实两段底稿（+ 可选假 LLM）。
+ * @param {{llm?: object|null, withBase?: boolean, withDigao?: boolean, recentText?: string}} [parts]
  */
 function scene(parts = {}) {
   const sandbox = makeSandbox('rikke-ai')
@@ -45,13 +49,13 @@ function scene(parts = {}) {
     createPuRepository(sandbox.dataDir).writeBase({}, { summary: BASE_SUMMARY })
   }
   if (parts.withDigao !== false) {
-    sandbox.write('digao.json', `${JSON.stringify({
-      schema: 'xuanshu/digao@1',
-      generatedAt: DIGAO_GENERATED_AT,
-      segments: 15,
-      sources: 3,
-      digest: 'llm',
-    }, null, 2)}\n`)
+    const segments = [
+      { source: 'workspace', name: '本周交付', text: parts.recentText ?? RECENT_TEXT },
+      { source: 'shiji', name: '历史项目', text: PAST_TEXT, firstSeenAt: '2026-01-01', lastActiveAt: '2026-01-02' },
+    ]
+    const input = { segments, generatedAt: DIGAO_GENERATED_AT, digest: 'llm', digestText: DIGEST_TEXT }
+    sandbox.write('digao.json', `${JSON.stringify(buildDigaoMeta(input), null, 2)}\n`)
+    sandbox.write('digao.md', renderDigaoMarkdown(input))
   }
   const services = { xuanshuHorosa: fakeHorosa(huangliFixture('huangli-ok')).service }
   if (parts.llm !== null) services.llm = parts.llm ?? fakeLlm({ text: AI_TEXT })
@@ -121,7 +125,37 @@ describe('#24 · AI 段三态：关 / 成功 / 失败（失败也给可读理由
     expect(prompt).toContain('动土')
     expect(prompt).toContain('甲戌日 · 土')
     expect(prompt).toContain(BASE_SUMMARY) // 底座谱
-    expect(prompt).toContain(DIGAO_GENERATED_AT) // 底稿「最近」
+    expect(prompt).toContain(DIGAO_GENERATED_AT)
+    expect(prompt).toContain(RECENT_TEXT) // 要有正在做什么；只有生成时间/段数不算素材。
+    expect(prompt).not.toContain(PAST_TEXT)
+    expect(prompt).not.toContain(DIGEST_TEXT)
+  })
+
+  it('底稿最近正文有界，截断有信号且不带曾经那段', async () => {
+    const target = scene({ recentText: '当前工作'.repeat(1000) + '超出预算的末尾标记' })
+    await composeAiNote({
+      ctx: target.ctx, dataDir: target.sandbox.dataDir, date: TODAY,
+      content: { yi: '祭祀', ji: '动土', liuri: '甲戌日' },
+    })
+    const prompt = target.llm.calls.find((call) => call.method === 'stream').options.messages[0].content[0].text
+    expect(prompt).toContain('当前工作')
+    expect(prompt).toContain('…')
+    expect(prompt).not.toContain('超出预算的末尾标记')
+    expect(prompt).not.toContain(PAST_TEXT)
+    expect(prompt.length).toBeLessThan(3000)
+  })
+
+  it('只有元数据或旧版正文时说明最近正文不可得，不用历史内容顶替', async () => {
+    const target = scene()
+    target.sandbox.write('digao.md', `# 底稿\n\n## 曾经做过什么\n${PAST_TEXT}\n`)
+    const ai = await composeAiNote({
+      ctx: target.ctx, dataDir: target.sandbox.dataDir, date: TODAY,
+      content: { yi: '祭祀', ji: '动土', liuri: '甲戌日' },
+    })
+    expect(ai.mode).toBe('ok')
+    const prompt = target.llm.calls.find((call) => call.method === 'stream').options.messages[0].content[0].text
+    expect(prompt).toContain('最近正文不可得')
+    expect(prompt).not.toContain(PAST_TEXT)
   })
 
   it('素材缺失（没有底座谱 / 没有底稿）也照样能跑：如实写「还没有」，不编', () => {

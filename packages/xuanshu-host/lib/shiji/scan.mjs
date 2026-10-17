@@ -22,6 +22,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
 
 import { projectConsultMessages } from '../consult/history.mjs'
+import { isUserPromptEvent, readSessionProjection, sessionHeadersOf } from '../consult/session-activity.mjs'
 import { resolveSearchHome } from '../home.mjs'
 import { skillFile } from '../workflow/skill-export.mjs'
 import { listWorkflows } from '../workflow/store.mjs'
@@ -65,11 +66,6 @@ export function resolveShijiDshHome(ctx, dataDir, explicit, options = {}) {
   return resolveSearchHome({ ctx, dataDir, explicit, ...options }).home
 }
 
-/** 人说的那一句（注入的上下文 / 采用稿 / 定时提醒都不算）。 */
-function isUserEvent(event) {
-  return event?.type === 'user/message' && event?.data?.source?.kind === 'user'
-}
-
 /** 有界化一句人问的话（折叠空白 + 截断；摘要 prompt 的素材不许无限长）。 */
 function boundedQuestion(text) {
   const collapsed = text.replace(/\s+/gu, ' ').trim()
@@ -106,6 +102,10 @@ function questionsOf(snapshot) {
  *     与 DSH 侧栏显示一致（缓存可能落后，但落后到把有轮次读成没有的概率远低于每轮读全量日志的成本）；
  *     但缓存**缺 `sessionListMetadata` 键**（这一层没挂载该投影）不等于「没有轮次」→ 回落读日志。
  *
+ * 「投影缓存 → 日志回落」的**零件**与 `wansheng/facts.mjs` 共用（`consult/session-activity.mjs`），
+ * 但**策略**两边有意不同：这里单场读失败只记 note 继续（一条事记不该让整轮扫描失败），
+ * 晚省那边是抛给调用方省略整个事实键。差异表见 `tests/wansheng/session-activity-parity.test.mjs`。
+ *
  * @returns {Promise<{bySession: Map<string, {title: string, lastActiveMs: number, questions: string[]|null}>,
  *          available: boolean}>} `questions:null` = 这一场还没读过日志（投影缓存答了活跃时间）；
  *          `questions:[]` = 读过日志、确实没有可摘的人问文本。
@@ -119,14 +119,10 @@ async function collectSessionEvidence(ctx, sessionIds, notes) {
   const queryAvailable = typeof query?.listSessions === 'function' || typeof query?.readSession === 'function'
   const available = cacheAvailable || queryAvailable
 
-  const headers = new Map()
+  let headers = new Map()
   if (typeof query?.listSessions === 'function') {
     try {
-      const records = await query.listSessions()
-      for (const record of Array.isArray(records) ? records : []) {
-        const id = typeof record?.header?.id === 'string' ? record.header.id : ''
-        if (id !== '') headers.set(id, record.header)
-      }
+      headers = sessionHeadersOf(await query.listSessions())
     } catch (error) {
       notes.push(`会话清单读不出来（${String(error?.message ?? error)}）：本次按已有依据记，活跃时间可能偏旧。`)
     }
@@ -139,25 +135,26 @@ async function collectSessionEvidence(ctx, sessionIds, notes) {
     let questions = null
     const header = headers.get(id)
     if (header !== undefined && cacheAvailable) {
-      try {
-        const snapshot = cache.cachedSnapshot(header, ['title', 'sessionListMetadata'])
+      const projection = readSessionProjection(cache, header, ['title', 'sessionListMetadata'])
+      if (projection.error !== undefined) {
+        notes.push(`会话投影缓存读不出来（${id}）：${String(projection.error?.message ?? projection.error)}`)
+      } else {
+        const values = projection.values
         // 只有**明确给出** `sessionListMetadata` 时才算「缓存答了」（值是 null 也算：确实没人说过话）。
         // 缺这个键 = 这一层没挂载该投影（本机不同会话的缓存 key 集合确实不同，探路笔记 §5.2）——
         // 那不是「没有轮次」，要回落读日志，否则会把问过的会话数成 0 场。
-        const metadata = snapshot?.values?.sessionListMetadata
+        const metadata = values?.sessionListMetadata
         answeredByCache = metadata !== undefined && metadata !== null
-        if (typeof snapshot?.values?.title === 'string') title = snapshot.values.title
+        if (typeof values?.title === 'string') title = values.title
         const lastPromptAt = metadata?.lastPromptAt
         if (Number.isFinite(lastPromptAt) && lastPromptAt > 0) lastActiveMs = lastPromptAt
-      } catch (error) {
-        notes.push(`会话投影缓存读不出来（${id}）：${String(error?.message ?? error)}`)
       }
     }
     if (!answeredByCache && typeof query?.readSession === 'function') {
       try {
         const snapshot = await query.readSession(id)
         const events = Array.isArray(snapshot?.events) ? snapshot.events : []
-        const userEvents = events.filter(isUserEvent)
+        const userEvents = events.filter(isUserPromptEvent)
         if (userEvents.length > 0) {
           lastActiveMs = Math.max(...userEvents.map((event) => (Number.isFinite(event?.time) ? event.time : 0)))
         }

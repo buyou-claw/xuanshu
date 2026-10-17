@@ -63,7 +63,7 @@ export const DIGAO_NO_SHIJI_READ_NOTE =
 type DigaoView =
   | { kind: 'loading' }
   | { kind: 'empty'; meta: DigaoMeta | null; schedule?: DigaoSchedule }
-  | { kind: 'ready'; meta: DigaoMeta | null; markdown: string; schedule?: DigaoSchedule; shiji?: DigaoShijiRead }
+  | { kind: 'ready'; meta: DigaoMeta | null; markdown: string; schedule?: DigaoSchedule; shiji?: DigaoShijiRead; shijiReason?: string }
   | { kind: 'error'; message: string };
 
 /** 静态预置（测试 / SSR：给了就不取数；`error` 形状直接落错误态）。 */
@@ -96,12 +96,14 @@ function initialView(preloaded: DigaoPreloaded | undefined): DigaoView {
   if (preloaded.read === undefined) return { kind: 'error', message: '底稿文件存在但正文没读回来。' };
   const schedule = preloaded.read.schedule ?? preloaded.status.schedule;
   const shiji = preloaded.read.shiji ?? preloaded.status.shiji;
+  const shijiReason = preloaded.read.shijiReason ?? preloaded.status.shijiReason;
   return {
     kind: 'ready',
     meta: preloaded.read.meta ?? preloaded.status.meta,
     markdown: preloaded.read.markdown,
     ...(schedule === undefined ? {} : { schedule }),
     ...(shiji === undefined ? {} : { shiji }),
+    ...(shijiReason === undefined ? {} : { shijiReason }),
   };
 }
 
@@ -145,12 +147,15 @@ export function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }
         if (mine !== sequence.current) return;
         const schedule = read.schedule ?? status.schedule;
         const shiji = read.shiji ?? status.shiji;
+        // 事记读面坏 ≠ 底稿坏：只把原因带进 `ready` 态（卡态仍 ready），由正文那一段的 note 展示。
+        const shijiReason = read.shijiReason ?? status.shijiReason;
         setView({
           kind: 'ready',
           meta: read.meta ?? status.meta,
           markdown: read.markdown,
           ...(schedule === undefined ? {} : { schedule }),
           ...(shiji === undefined ? {} : { shiji }),
+          ...(shijiReason === undefined ? {} : { shijiReason }),
         });
       })
       .catch((error: unknown) => {
@@ -188,6 +193,7 @@ export function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }
           markdown: read.markdown,
           ...(read.schedule === undefined ? {} : { schedule: read.schedule }),
           ...(read.shiji === undefined ? {} : { shiji: read.shiji }),
+          ...(read.shijiReason === undefined ? {} : { shijiReason: read.shijiReason }),
         });
       })
       .catch((error: unknown) => {
@@ -216,6 +222,7 @@ export function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }
         meta: read.meta,
         markdown: read.markdown,
         ...(read.shiji === undefined ? {} : { shiji: read.shiji }),
+        shijiReason: read.shijiReason,
       };
     });
   };
@@ -323,6 +330,7 @@ export function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }
           meta={view.meta}
           raw={raw}
           {...(view.shiji === undefined ? {} : { shijiRead: view.shiji })}
+          {...(view.shijiReason === undefined ? {} : { shijiReason: view.shijiReason })}
           {...(shiji === undefined ? {} : { shiji })}
           reload={reloadAfterDelete}
         />
@@ -437,11 +445,14 @@ function PastSection({
   group,
   shijiRead,
   shiji,
+  shijiReason,
   reload,
 }: {
   group: DigaoGroup | undefined;
   shijiRead: DigaoShijiRead | undefined;
   shiji: ShijiApi | undefined;
+  /** 事记读面降级的原因（账本 EISDIR/EACCES…）：`shiji` 缺席但底稿本身健康。 */
+  shijiReason?: string;
   reload: () => Promise<void>;
 }) {
   const records = group?.segments ?? [];
@@ -508,8 +519,8 @@ function PastSection({
         />
       ))}
       {shijiRead === undefined && records.length > 0 ? (
-        <p className="xs-digao__note" data-xuanshu-note="shiji-unread">
-          {DIGAO_NO_SHIJI_READ_NOTE}
+        <p className="xs-digao__note" data-xuanshu-note={shijiReason === undefined ? 'shiji-unread' : 'shiji-read-failed'}>
+          {shijiReason ?? DIGAO_NO_SHIJI_READ_NOTE}
         </p>
       ) : null}
       {gone > 0 ? (
@@ -537,6 +548,7 @@ function DigaoBody({
   raw,
   shijiRead,
   shiji,
+  shijiReason,
   reload,
 }: {
   markdown: string;
@@ -544,6 +556,7 @@ function DigaoBody({
   raw: boolean;
   shijiRead?: DigaoShijiRead;
   shiji?: ShijiApi;
+  shijiReason?: string;
   reload: () => Promise<void>;
 }) {
   const groups: DigaoGroup[] = parseDigaoMarkdown(markdown);
@@ -593,7 +606,15 @@ function DigaoBody({
         </section>
       ) : null}
 
-      {twoSections ? <PastSection group={past} shijiRead={shijiRead} shiji={shiji} reload={reload} /> : null}
+      {twoSections ? (
+        <PastSection
+          group={past}
+          shijiRead={shijiRead}
+          shiji={shiji}
+          {...(shijiReason === undefined ? {} : { shijiReason })}
+          reload={reload}
+        />
+      ) : null}
 
       {legacy.length > 0 ? (
         <>

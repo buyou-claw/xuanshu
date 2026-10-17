@@ -109,13 +109,16 @@ export function normalizeShijiEntry(parsed) {
 /**
  * 读账本。
  * @returns {{entries: object[], notes: string[]}} 坏行 / 旧 schema 行跳过，note 里带**行号**
+ * @throws 文件存在却读不出来时抛可读错误。只有 ENOENT 是空账；否则后续整账重写会丢墓碑与历史。
  */
 export function readShijiEntries(dataDir) {
   let raw
   try {
     raw = readFileSync(shijiFile(dataDir), 'utf8')
-  } catch {
-    return { entries: [], notes: [] }
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { entries: [], notes: [] }
+    throw new Error(`事记账本读不出来（${shijiFile(dataDir)}；${String(error?.code ?? 'unknown')}）：`
+      + `${String(error?.message ?? error)}。本次不改写账本。`, { cause: error })
   }
   const entries = []
   const notes = []

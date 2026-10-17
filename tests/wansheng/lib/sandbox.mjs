@@ -13,7 +13,7 @@ import { createConsultStore } from '../../../packages/xuanshu-host/lib/consult/s
 import { writeRikke } from '../../../packages/xuanshu-host/lib/rikke/store.mjs'
 import { makeScratch } from '../../notify/lib/sandbox.mjs'
 
-export { fakeSessionQuery, fakeWorkspaceRegistry } from '../../shiji/lib/sandbox.mjs'
+export { fakeProjectionCache, fakeSessionQuery, fakeWorkspaceRegistry, userEvent } from '../../shiji/lib/sandbox.mjs'
 
 /** 一次性 dataDir（形状同 notify / digao 的沙箱）。 */
 export function makeWanshengSandbox(label = 'wansheng') {

@@ -22,7 +22,7 @@ import type { NotifyApi, TrafficStatus } from './notify-api.js';
 import { DeliveryHistoryHost, notifyFailureText, notifyReasonCode } from './notify.js';
 import type { RikkeNotify } from './rikke-api.js';
 import { installRikkeStyle } from './rikke-style.js';
-import type { WanshengApi, WanshengFacts, WanshengStatus } from './wansheng-api.js';
+import type { WanshengApi, WanshengFacts, WanshengStatus, WanshengWorkspace } from './wansheng-api.js';
 import type { RpcContext } from './rpc.js';
 
 /** 面板的四态（`busy` 由按钮文案表达：内容保持可读）。 */
@@ -86,10 +86,34 @@ function touchLines(status: WanshengStatus | undefined): ReactElement | null {
   );
 }
 
+/** 两路活动共用展示，数据缺席与已知空列表分别表述（空态两路同一句式，复核 A3）。 */
+function ActivityList({ items, kind, label }: {
+  items?: WanshengWorkspace[];
+  kind: 'workspace' | 'workflow';
+  label: string;
+}) {
+  return <>
+    <p className="xs-wansheng__fact" data-xuanshu-fact={`${kind}s`}>
+      {items === undefined ? `哪些${label}有活动：未知（宿主没回传）`
+        : items.length === 0 ? `今天没有${label}活动`
+          : `今天 ${items.length} 个${label}有活动`}
+    </p>
+    {items === undefined || items.length === 0 ? null : (
+      <ul className="xs-wansheng__workspace-list">
+        {items.map((item) => (
+          <li key={item.id} {...(kind === 'workspace' ? { 'data-xuanshu-workspace': item.id } : { 'data-xuanshu-workflow': item.id })}>
+            {`${item.title} · ${item.sessionCount} 场会话`}
+            {item.lastActiveAt === undefined ? null : <span className="xs-wansheng__note">{` · 最后活跃 ${item.lastActiveAt}`}</span>}
+          </li>
+        ))}
+      </ul>
+    )}
+  </>;
+}
+
 /** 事实区：拿不到的项写「未知」（不写 0 / false 冒充已知）。 */
 function FactsSection({ facts }: { facts?: WanshengFacts }) {
   const sessions = facts?.consultSessions;
-  const workspaces = facts?.activeWorkspaces;
   return (
     <section className="xs-wansheng__facts" data-xuanshu-facts="wansheng">
       <h2>今天的事实</h2>
@@ -108,23 +132,8 @@ function FactsSection({ facts }: { facts?: WanshengFacts }) {
           ))}
         </ul>
       )}
-      <p className="xs-wansheng__fact" data-xuanshu-fact="workspaces">
-        {workspaces === undefined
-          ? '哪些项目有活动：未知（宿主没回传）'
-          : workspaces.length === 0
-            ? '今天没有项目活动'
-            : `今天 ${workspaces.length} 个项目有活动`}
-      </p>
-      {workspaces === undefined || workspaces.length === 0 ? null : (
-        <ul className="xs-wansheng__workspace-list">
-          {workspaces.map((workspace) => (
-            <li key={workspace.id} data-xuanshu-workspace={workspace.id}>
-              {`${workspace.title} · ${workspace.sessionCount} 场会话`}
-              {workspace.lastActiveAt === undefined ? null : <span className="xs-wansheng__note">{` · 最后活跃 ${workspace.lastActiveAt}`}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
+      <ActivityList items={facts?.activeWorkspaces} kind="workspace" label="项目" />
+      <ActivityList items={facts?.activeWorkflows} kind="workflow" label="工作流" />
       {facts?.rikke?.generatedAt === undefined ? null : (
         <p className="xs-wansheng__fact" data-xuanshu-fact="rikke">{`日课：${facts.rikke.generatedAt} 生成`}</p>
       )}
