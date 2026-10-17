@@ -5,11 +5,16 @@
  * 壳自己关心 `closeBehavior` / `autostart`（#23），宿主关心 `notifySummary`（决定通知正文带不带
  * 一句不含私事的短句）。两边读同一份文件，因此谁先起都能读到对方的设置。
  *
- * 两条纪律：
- *   - **写后回读**：写操作不许静默（`TrafficSettings` 的界面会按返回值显示「开 / 关」，
- *     写坏了却回新值等于骗人）；
+ * #25 的加性键：`rikkeTime` / `wanshengTime`（两条触达的计划时刻期望值）。
+ * **它们不进 `DEFAULT_SHELL_SETTINGS`**：壳的读面（`readShellSettings`）与 #23 的本地副本逐字对拍
+ * （`tests/shell/contract-parity.test.mjs`），壳不认这两个键；宿主用 `readTouchTimes` 单独读。
+ *
+ * 三条纪律：
+ *   - **写后回读**：写操作不许静默（界面会按返回值显示「开 / 关」，写坏了却回新值等于骗人）；
  *   - **坏文件不当设置**：schema 不认识 / JSON 坏了 → 读面回落默认值（与 `digao/store.mjs` 的
- *     「schema 不认识就当没有」同款），下一次写会覆盖成合法形状。
+ *     「schema 不认识就当没有」同款），下一次写会覆盖成合法形状；
+ *   - **壳的默认值 vs 宿主的默认值分开**：`DEFAULT_SHELL_SETTINGS` 是壳契约，#25 的两键在
+ *     `DEFAULT_TOUCH_TIMES` 里（同一份文件、不同的读面）。
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -36,14 +41,15 @@ export const CLOSE_BEHAVIORS = Object.freeze(['hide', 'quit'])
  */
 export const TOUCH_TIME_KEYS = Object.freeze({ rikkeTime: '07:30', wanshengTime: '21:30' })
 
-/** 缺文件 / 缺键时的默认值（契约 §5 的 JSON 就是它，外加 #25 的两个时刻）。 */
+/** 壳关心的三项（#23/#24 冻结；#25 **不扩**这一层 —— 壳的本地副本与这里逐字对拍）。 */
 export const DEFAULT_SHELL_SETTINGS = Object.freeze({
   closeBehavior: 'hide',
   autostart: false,
   notifySummary: false,
-  rikkeTime: TOUCH_TIME_KEYS.rikkeTime,
-  wanshengTime: TOUCH_TIME_KEYS.wanshengTime,
 })
+
+/** 宿主关心的两个时刻（#25 加性；壳不读）。 */
+export const DEFAULT_TOUCH_TIMES = Object.freeze({ ...TOUCH_TIME_KEYS })
 
 /**
  * `'H:mm'` / `'HH:mm'` / `'HH:mm:ss'` → `'HH:mm'`；非法 → null（设置面只显示到分钟）。
@@ -65,44 +71,75 @@ export function shellSettingsFile(dataDir) {
 }
 
 /**
- * 读设置（任何读不懂的东西都回落默认值，不抛）。
- * @param {string} dataDir
- * @returns {{closeBehavior: 'hide'|'quit', autostart: boolean, notifySummary: boolean}}
+ * 读盘上那份设置对象：文件缺失 / JSON 坏 / schema 不认识 / 非对象 → null（调用方给默认值）。
+ * @returns {object|null}
  */
-export function readShellSettings(dataDir) {
+function readParsed(dataDir) {
   let parsed
   try {
     parsed = JSON.parse(readFileSync(shellSettingsFile(dataDir), 'utf8'))
   } catch {
-    return { ...DEFAULT_SHELL_SETTINGS }
+    return null
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.schema !== SHELL_SETTINGS_SCHEMA) {
-    return { ...DEFAULT_SHELL_SETTINGS }
+    return null
   }
+  return parsed
+}
+
+/**
+ * 读**壳**关心的三项（任何读不懂的东西都回落默认值，不抛）。
+ * 这一层的形状与 #23 壳的本地副本逐字对拍 —— 不要往这里加 #25 的时刻键。
+ * @param {string} dataDir
+ * @returns {{closeBehavior: 'hide'|'quit', autostart: boolean, notifySummary: boolean}}
+ */
+export function readShellSettings(dataDir) {
+  const parsed = readParsed(dataDir)
+  if (parsed === null) return { ...DEFAULT_SHELL_SETTINGS }
   return {
     closeBehavior: CLOSE_BEHAVIORS.includes(parsed.closeBehavior) ? parsed.closeBehavior : DEFAULT_SHELL_SETTINGS.closeBehavior,
     autostart: typeof parsed.autostart === 'boolean' ? parsed.autostart : DEFAULT_SHELL_SETTINGS.autostart,
     notifySummary: typeof parsed.notifySummary === 'boolean' ? parsed.notifySummary : DEFAULT_SHELL_SETTINGS.notifySummary,
-    // #25：两个时刻缺失 / 坏形状 → 回落缺省（坏设置不该让安装或到点链失败）。
-    rikkeTime: normalizeClockTime(parsed.rikkeTime) ?? DEFAULT_SHELL_SETTINGS.rikkeTime,
-    wanshengTime: normalizeClockTime(parsed.wanshengTime) ?? DEFAULT_SHELL_SETTINGS.wanshengTime,
   }
+}
+
+/**
+ * 读**宿主**关心的两个触达时刻（#25）。坏形状 / 缺失 → 回落缺省（坏设置不该让安装或到点链失败）。
+ * @param {string} dataDir
+ * @returns {{rikkeTime: string, wanshengTime: string}} `HH:mm`
+ */
+export function readTouchTimes(dataDir) {
+  const parsed = readParsed(dataDir)
+  if (parsed === null) return { ...DEFAULT_TOUCH_TIMES }
+  return {
+    rikkeTime: normalizeClockTime(parsed.rikkeTime) ?? DEFAULT_TOUCH_TIMES.rikkeTime,
+    wanshengTime: normalizeClockTime(parsed.wanshengTime) ?? DEFAULT_TOUCH_TIMES.wanshengTime,
+  }
+}
+
+/** 全部五个键（宿主内部用：写入前的合并与写后回读）。 */
+function readAllSettings(dataDir) {
+  return { ...readShellSettings(dataDir), ...readTouchTimes(dataDir) }
 }
 
 /**
  * 改设置（部分更新；**校验 + 原子写 + 回读**）。
  *
+ * 接受的键：壳的三项（`closeBehavior` / `autostart` / `notifySummary`）+ #25 的两个时刻。
+ * **返回值保持 #24 的形状（壳的三项）** —— 时刻请用 `readTouchTimes` 读
+ * （`traffic.settings.get` 会把两者拼在一起给界面）。
+ *
  * @param {string} dataDir
  * @param {{closeBehavior?: 'hide'|'quit', autostart?: boolean, notifySummary?: boolean,
  *          rikkeTime?: string, wanshengTime?: string}} patch
- * @returns {{closeBehavior: 'hide'|'quit', autostart: boolean, notifySummary: boolean,
- *            rikkeTime: string, wanshengTime: string}} 回读后的完整设置
+ * @returns {{closeBehavior: 'hide'|'quit', autostart: boolean, notifySummary: boolean}}
  */
 export function writeShellSettings(dataDir, patch = {}) {
   const source = patch !== null && typeof patch === 'object' && !Array.isArray(patch) ? patch : {}
+  const allowed = [...Object.keys(DEFAULT_SHELL_SETTINGS), ...Object.keys(TOUCH_TIME_KEYS)]
   for (const key of Object.keys(source)) {
-    if (!Object.hasOwn(DEFAULT_SHELL_SETTINGS, key)) {
-      throw new Error(`shell-settings 不认识这个键：${JSON.stringify(key)}（只认 ${Object.keys(DEFAULT_SHELL_SETTINGS).join(' / ')}）`)
+    if (!allowed.includes(key)) {
+      throw new Error(`shell-settings 不认识这个键：${JSON.stringify(key)}（只认 ${allowed.join(' / ')}）`)
     }
   }
   if (source.closeBehavior !== undefined && !CLOSE_BEHAVIORS.includes(source.closeBehavior)) {
@@ -126,19 +163,19 @@ export function writeShellSettings(dataDir, patch = {}) {
   for (const key of Object.keys(TOUCH_TIME_KEYS)) {
     if (normalized[key] !== undefined) normalized[key] = normalizeClockTime(normalized[key])
   }
-  const merged = { ...readShellSettings(dataDir), ...normalized }
+  const merged = { ...readAllSettings(dataDir), ...normalized }
   const file = shellSettingsFile(dataDir)
   writeAtomic(file, `${JSON.stringify({ schema: SHELL_SETTINGS_SCHEMA, ...merged }, null, 2)}\n`)
 
   // 写后回读：磁盘上还是旧的（或写坏了）就如实抛，不把「没写进去」说成「改成了」。
-  const readBack = readShellSettings(dataDir)
+  const readBack = readAllSettings(dataDir)
   for (const key of Object.keys(merged)) {
     if (readBack[key] !== merged[key]) {
       throw new Error(`设置没写进去（${key} 回读是 ${JSON.stringify(readBack[key])}）：${file}`)
     }
   }
   if (!existsSync(file)) throw new Error(`设置文件写完之后不在了：${file}`)
-  return readBack
+  return readShellSettings(dataDir)
 }
 
 /**

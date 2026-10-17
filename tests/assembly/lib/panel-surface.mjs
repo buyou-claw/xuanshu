@@ -59,6 +59,13 @@ export const EXTRA_REGISTRATIONS = [
       'conversation.composer.dock\u0000xuanshu-bestof-trigger',
     ],
   },
+  {
+    // 票 27（#27）：会话内「存成今天的事记」——**一个** composer 入口条，不新增 main key / 侧栏行。
+    // 与 sediment / bestof 一样挂在 `workflow` 那一对之后，排在它们之后（`installShiji` 是最后一个 install）。
+    after: 'workflow',
+    names: ['conversation.composer.dock'],
+    cells: ['conversation.composer.dock\u0000xuanshu.shiji-entry'],
+  },
 ]
 
 /** 每个 key 产生的一对注册名（main 面板 + 侧栏行）。 */

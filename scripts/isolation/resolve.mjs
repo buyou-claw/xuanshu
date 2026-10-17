@@ -27,12 +27,15 @@ import {
   DEFAULT_HOROSA_PORT,
   DEFAULT_PROFILE,
   DEFAULT_WEB_PORT,
+  DEV_HOME_DIR_NAME,
   DSH_BASE_PACKAGE,
   DSH_HOME_ENV,
   DSH_PACKAGE,
   ENV,
+  HOME_MODES,
   HOROSA_MCP_PATH,
   PROBE_HOST,
+  PRODUCT_HOME_DIR_NAME,
 } from './defaults.mjs'
 
 const CASE_INSENSITIVE = process.platform === 'win32'
@@ -90,6 +93,84 @@ export function realDshHome() {
   return join(homedir(), '.dsh')
 }
 
+/**
+ * `home` 是不是（或落在）用户真实 DSH home 里 —— **全仓唯一的「真实 home」判据**。
+ *
+ * 为什么收成一条：验收台、启动器、setup 门、host 插件各写过一次 `samePath || isUnderPath`，
+ * 而「落在里面」（`~/.dsh/profiles/xuanshu`）比「等于」更危险。写成一条以后，
+ * 「玄枢 home 永不等于 `~/.dsh`」这条验收要求只有一个地方会漂移。
+ *
+ * 语义故意取「**指向真实 home = true**」：调用方一律写 `!pointsAtRealDshHome(...)`，
+ * 比 `!samePath && !isUnderPath` 更难读错方向。空值 / 非字符串 → false（没有 home 不等于「指向 ~/.dsh」）。
+ */
+export function pointsAtRealDshHome(home, { realHome = realDshHome() } = {}) {
+  if (typeof home !== 'string' || home === '') return false
+  return samePath(home, realHome) || isUnderPath(realHome, home)
+}
+
+/* ───────────────────────────── 默认 home（两档） ───────────────────────────── */
+
+/**
+ * home 的**来源**（封闭枚举）。报告、断言台、runbook 都拿它做比较 / 展示：
+ * 「这次打的是哪儿、这个值是谁定的」必须一句话说清，否则排障第一句话就答不上来。
+ */
+export const HOME_SOURCES = {
+  explicit: '--home',
+  env: ENV.home,
+  dshEnv: DSH_HOME_ENV,
+  defaultDev: `default (dev <repo>/${DEV_HOME_DIR_NAME})`,
+  defaultProduct: `default (product ~/${PRODUCT_HOME_DIR_NAME})`,
+}
+
+/**
+ * 默认 home 的**唯一一份**：`dev` = `<repo>/.dsh-home`，`product` = `<homedir>/.xuanshu`。
+ *
+ * 为什么必须有 product 这一档（ADR-0014）：玄枢与 DSH 桌面版**零交集**，装好的玄枢自己的家只能是
+ * `~/.xuanshu`；而仓库检出里的开发/测试继续用仓库内的 `.dsh-home`（已 gitignore，几百 MB 的 profile
+ * 不该落在用户家目录）。两档都不是 `~/.dsh` —— 由 `pointsAtRealDshHome()` 在验收台与测试里钉着。
+ *
+ * `repoRoot` 必须由调用方给出（dev 档不猜路径：猜出来的家比报错危险）。
+ */
+export function defaultHome({ mode = 'dev', repoRoot, homedirPath = homedir() } = {}) {
+  if (mode === 'product') {
+    return { home: join(homedirPath, PRODUCT_HOME_DIR_NAME), source: HOME_SOURCES.defaultProduct, mode: 'product' }
+  }
+  if (typeof repoRoot !== 'string' || repoRoot === '') {
+    throw new Error(
+      `dev home default needs the repo root (expected ${DEV_HOME_DIR_NAME} under a checkout): `
+      + 'pass repoRoot, or use mode "product"',
+    )
+  }
+  return { home: join(repoRoot, DEV_HOME_DIR_NAME), source: HOME_SOURCES.defaultDev, mode: 'dev' }
+}
+
+/**
+ * 这次该用哪一档默认：显式 `mode` ＞「能不能找到仓库根」这一条客观判据。
+ *
+ * 为什么用「仓库根」当判别器（而不是 ADR 没规定的那类隐式规则）：仓库检出 = 开发期
+ * （`<repo>/.dsh-home`），找不到仓库 = 这不是一份仓库检出 = 产品机（`~/.xuanshu`）。
+ * 两种判错的代价都不对称地安全：判成 dev 只是把家落在一个仓库内目录，**永远不会落到 `~/.dsh`**。
+ *
+ * `locateRepoRoot` 是给测试用的接缝（产品机上 `resolveRepoRoot()` 会抛，本函数把它折成 product）。
+ */
+export function resolveHomeMode({ mode, repoRoot, locateRepoRoot = resolveRepoRoot } = {}) {
+  if (!isBlank(mode)) {
+    const normalized = String(mode).trim().toLowerCase()
+    if (!HOME_MODES.includes(normalized)) {
+      throw new Error(`invalid home mode: ${JSON.stringify(mode)} (expected ${HOME_MODES.join('|')})`)
+    }
+    return { mode: normalized, source: `explicit (mode=${normalized})` }
+  }
+  if (!isBlank(repoRoot)) return { mode: 'dev', source: 'detected (repo checkout)' }
+  try {
+    locateRepoRoot()
+    return { mode: 'dev', source: 'detected (repo checkout)' }
+  } catch {
+    return { mode: 'product', source: 'detected (no repo checkout)' }
+  }
+}
+
+
 /* ───────────────────────────── 仓库根 ───────────────────────────── */
 
 /**
@@ -116,9 +197,10 @@ export function resolveRepoRoot(from = process.cwd()) {
  *
  * 优先级（每一级都能被下一级的人为覆盖，且来源可追溯）：
  *   1. 显式 `home` 参数（CLI `--home`）
- *   2. `XUANSHU_DSH_HOME`（本票自己的变量，专给「我就是想换个隔离目录」用）
+ *   2. `XUANSHU_DSH_HOME`（本票自己的变量，专给「我就是想换个隔离目录」用；壳也认它）
  *   3. `$DSH_HOME` —— **仅当它不指向用户真实 `~/.dsh`（或其子目录）时才采纳**
- *   4. `<repo>/.dsh-home`（默认；已 gitignore）
+ *   4. 默认，两档（ADR-0014）：`mode: 'product'` → `~/.xuanshu`；`mode: 'dev'` → `<repo>/.dsh-home`。
+ *      `mode` 缺省时按 `resolveHomeMode()` 判（仓库检出 = dev，找不到仓库 = product）。
  *
  * 第 3 条的例外为什么必要（评审裁决 §5.1 **R16** 确认的语义）：在一个 DSH 会话里跑本脚本时，
  * 环境里天然带着 `DSH_HOME=C:\Users\<me>\.dsh`（desktop 自己的 home）。若照单全收，默认调用会
@@ -126,28 +208,44 @@ export function resolveRepoRoot(from = process.cwd()) {
  *   - **环境里那支 `DSH_HOME`** 指向真实 `~/.dsh` → 忽略 + 记 notes（软处理）；
  *   - **显式 `--home` / `XUANSHU_DSH_HOME`** 指向真实 `~/.dsh` → 硬拒绝（exit 1，见 startup.mjs）。
  * 「显式」= 有人真的打出来了，那就该按字面执行并拒绝；「环境里带的」= 不是这次调用的意图。
+ *
+ * `repoRoot` 不再**无条件**求值（旧实现 `resolveRepoRoot()` 在产品机上直接抛，于是「产品默认
+ * `~/.xuanshu`」根本走不到）；现在只是尽力而为：找得到就写进返回（dev 档要用它），找不到就是 undefined。
  */
-export function resolveHomeWithSource({ home, env = process.env, repoRoot, realHome = realDshHome() } = {}) {
-  const root = repoRoot ?? resolveRepoRoot()
+export function resolveHomeWithSource({
+  home, env = process.env, repoRoot, realHome = realDshHome(), mode, locateRepoRoot,
+} = {}) {
+  const root = isBlank(repoRoot) ? bestEffortRepoRoot(locateRepoRoot) : repoRoot
+  const resolvedMode = resolveHomeMode({ mode, repoRoot: root, locateRepoRoot })
   const ignored = []
-  const base = { ignored, realHome, repoRoot: root }
+  const base = { ignored, realHome, repoRoot: root, mode: resolvedMode.mode, modeSource: resolvedMode.source }
 
-  if (!isBlank(home)) return { ...base, home: resolve(home), source: '--home' }
+  if (!isBlank(home)) return { ...base, home: resolve(home), source: HOME_SOURCES.explicit }
 
   const fromEnv = env?.[ENV.home]
-  if (!isBlank(fromEnv)) return { ...base, home: resolve(fromEnv), source: ENV.home }
+  if (!isBlank(fromEnv)) return { ...base, home: resolve(fromEnv), source: HOME_SOURCES.env }
 
   const dshHome = env?.[DSH_HOME_ENV]
   if (!isBlank(dshHome)) {
     const candidate = resolve(dshHome)
-    if (samePath(candidate, realHome) || isUnderPath(realHome, candidate)) {
+    if (pointsAtRealDshHome(candidate, { realHome })) {
       ignored.push(`${DSH_HOME_ENV}=${candidate} 指向用户真实 DSH home，已忽略（改用默认隔离 home）`)
     } else {
-      return { ...base, home: candidate, source: DSH_HOME_ENV }
+      return { ...base, home: candidate, source: HOME_SOURCES.dshEnv }
     }
   }
 
-  return { ...base, home: join(root, '.dsh-home'), source: 'default (<repo>/.dsh-home)' }
+  const fallback = defaultHome({ mode: resolvedMode.mode, repoRoot: root })
+  return { ...base, home: fallback.home, source: fallback.source }
+}
+
+/** 找得到仓库根就返回它，找不到返回 undefined（产品机上找不到是**正常**的，不是错误）。 */
+function bestEffortRepoRoot(locate = resolveRepoRoot) {
+  try {
+    return locate()
+  } catch {
+    return undefined
+  }
 }
 
 /** 契约 §4.4 的窄接口：只要绝对路径字符串。 */
@@ -364,9 +462,13 @@ function pickProbePort(candidates, fallback, label) {
  *
  * 硬规矩：只读 `home`、`repoRoot` 与显式 `cliBin`；不扫真实 `~/.dsh`。
  */
-export function resolveInstance({ home, profile, webPort, horosaPort, repoRoot, env = process.env, cliBin, explicit } = {}) {
+export function resolveInstance({ home, profile, webPort, horosaPort, repoRoot, env = process.env, cliBin, explicit, mode } = {}) {
   const root = repoRoot ?? resolveRepoRoot()
-  const resolvedHome = resolve(home ?? join(root, '.dsh-home'))
+  // home 的默认值只有一份（`defaultHome`），别在这里再写一遍 `.dsh-home` —— 两处各写一份时，
+  // 换默认值只改一处不会红（所有测试都显式传 home），但语义会悄悄分叉。
+  const resolvedHome = isBlank(home)
+    ? defaultHome({ mode: resolveHomeMode({ mode, repoRoot: root }).mode, repoRoot: root }).home
+    : resolve(home)
   const profileName = isBlank(profile) ? (isBlank(env?.[ENV.profile]) ? DEFAULT_PROFILE : String(env[ENV.profile])) : String(profile)
   if (profileName === '.' || profileName === '..' || /[\\/]/.test(profileName)) {
     throw new Error(`invalid profile name: ${JSON.stringify(profileName)}`)

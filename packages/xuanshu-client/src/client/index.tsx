@@ -36,6 +36,8 @@ import { createElement as h } from 'react';
 
 import { createBaziApi } from './bazi-api.js';
 import { createBaziUiController } from './bazi-controller.js';
+import { createAiApi } from './ai-api.js';
+import { createAiReadinessController } from './ai-model.js';
 import { createBestofApi } from './bestof-api.js';
 import { createBestofController } from './bestof-model.js';
 import { installBestOf } from './bestof.js';
@@ -69,6 +71,8 @@ import type { RpcContext } from './rpc.js';
 import { createSedimentApi } from './sediment-api.js';
 import { createSedimentController } from './sediment-model.js';
 import { installSediment } from './sediment-views.js';
+import { createShijiApi } from './shiji-api.js';
+import { installShiji } from './shiji-views.js';
 import { installOverviewStyle } from './style.js';
 import { THEME_SOURCE, THEME_TOKENS } from './tokens.js';
 import { EMPTY_MAIN_PANELS, createMainPanelsWatch } from './watch.js';
@@ -149,7 +153,16 @@ export function apply(ctx: Context): void {
   const rpc = ctx as Context & RpcContext;
   const bazi = createBaziApi(rpc);
   const baziController = createBaziUiController();
-  const baziDeps = { api: bazi, controller: baziController, navigate };
+
+  // #29「接上 AI」：**一份**只读控制器，概览（问事入口门禁）与向导第 6 步共用。
+  // 它只调 `routes.list`（票 28 那份只读清单）：配好后自己停轮询；窗口聚焦 / 手动重试可再问一次。
+  //
+  // `onOpenAiSettings` 今天**刻意不给**：DSH 0.2.0-rc.2 没有公开的「打开设置」客户端 API
+  // （`openSection` 只经 `settings.onboarding` 的 owner props 下发，`settings.launcher` 是 single 槽
+  // 且已被占用；见票 28 侦察 §5.3）。给不出就不渲染按钮，界面显示逐字路径「设置 → 模型」——
+  // 绝不做一个点了没反应的按钮（那正是本票要修的 bug）。将来宿主给了公开入口，这里换一行即可。
+  const aiReadiness = createAiReadinessController({ api: createAiApi(rpc) });
+  const baziDeps = { api: bazi, controller: baziController, navigate, aiStatus: aiReadiness };
 
   // 票 10：问事门厅的数据面 + 「进入正式对话」的导航面。
   // `openSession` 只**导航**（`dsh-api-facts.md` §6.2：它不创建）；拿不到 `uiWorkspace` 时给
@@ -200,6 +213,9 @@ export function apply(ctx: Context): void {
   const notify = createNotifyApi(rpc);
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
+  // 票 27（#27）：事记数据面（底稿面板的 [删除] + 会话里的「存成今天的事记」共用一份）。
+  // 造它不发请求：两个写动作都只由人点触发，`confirmed: true` 写死在 `shiji-api.ts` 里。
+  const shiji = createShijiApi(rpc);
 
   // 票 16：工作流门厅的数据面（创建 / 列表 / 导出三件事都**只由人点**触发，apply 期不发请求）。
   const workflow = createWorkflowApi(rpc);
@@ -235,6 +251,8 @@ export function apply(ctx: Context): void {
     // #25：晚省（第 5 张卡）。
     wansheng,
     wanshengController,
+    // #29：问事入口的门禁读这一份只读状态（与向导第 6 步同一个控制器）。
+    aiStatus: aiReadiness,
   });
 
   // ③ 主面板：keyed 槽按 key 分派；key 必须与侧栏行 id 相同。
@@ -288,7 +306,9 @@ export function apply(ctx: Context): void {
   installMounts(rpc, { api: mountsApi, workspaces: () => workspaceCatalog.list(), workspaceAvailable: workspaceCatalog.available });
 
   // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
-  installDigao(rpc, { api: digao, navigate });
+  // #27：底稿面板多了「曾经做过什么」的事记 [删除]（走 `shiji.remove`，删的是账本那一条），
+  // 所以面板也要事记数据面。
+  installDigao(rpc, { api: digao, shiji, navigate });
   installRikke(rpc, { api: rikke, navigate, notify });
   // #24：设置里的一行两项开关（AI 建议段 / 通知摘要）。纯加性，不新增面板、不新增侧栏行。
   installTouchSettings(rpc, { rikke, notify });
@@ -321,7 +341,13 @@ export function apply(ctx: Context): void {
     },
   });
 
-  // ⑫ 票 04（#25）：晚省面板（main key `wansheng`，order 110）—— 当天事实 + [立即生成] + 投递历史。
+  // ⑫ 票 27（#27）：会话内「存成今天的事记」——`conversation.composer.dock` 上的**一个** cell。
+  //    只在问事会话里渲染（判据是自铸 id 前缀）；点了并确认之后才调 `shiji.fromSession`。
+  //    注册序：`panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 里它排在 sediment / bestof 之后
+  //    （三者都挂在 `workflow` 那一对之后，靠数组顺序分先后 —— 这里谁在后，那边谁就在后）。
+  installShiji(rpc, { api: shiji, navigate });
+
+  // ⑬ 票 04（#25）：晚省面板（main key `wansheng`，order 110）—— 当天事实 + [立即生成] + 投递历史。
   //    **最后 install**：`tests/assembly/lib/panel-surface.mjs` 的 `PANEL_KEYS` 末尾就是它，
   //    注册序 = 本文件 install 序（顺序不符会被 `expectedRegisterNames()` 抓到）。
   installWansheng(rpc, { api: wansheng, navigate, notify });

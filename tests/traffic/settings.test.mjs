@@ -11,7 +11,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
-  DEFAULT_SHELL_SETTINGS, SHELL_SETTINGS_SCHEMA, readShellSettings, shellSettingsFile, writeShellSettings,
+  DEFAULT_SHELL_SETTINGS, DEFAULT_TOUCH_TIMES, SHELL_SETTINGS_SCHEMA,
+  readShellSettings, readTouchTimes, shellSettingsFile, writeShellSettings,
 } from '../../packages/xuanshu-host/lib/notify/settings.mjs'
 import { createTrafficMethods } from '../../packages/xuanshu-host/lib/notify/service.mjs'
 import { makeScratch } from '../notify/lib/sandbox.mjs'
@@ -28,25 +29,24 @@ function scene() {
 /* ───────────────────────── 1. 设置文件本身 ───────────────────────── */
 
 describe('#24 · shell-settings.json：缺失 = 默认值，写入 = 原子 + 回读', () => {
-  it('文件缺失 → 契约 §5 的三个默认值 + #25 的两个时刻（07:30 / 21:30），不报错', () => {
+  it('文件缺失 → 壳的三项默认值 + #25 的两个时刻（07:30 / 21:30），不报错', () => {
     const box = makeScratch('traffic-settings')
     boxes.push(box)
     expect(shellSettingsFile(box.dataDir)).toBe(box.path('shell-settings.json'))
-    expect(readShellSettings(box.dataDir)).toEqual({
-      closeBehavior: 'hide', autostart: false, notifySummary: false, rikkeTime: '07:30', wanshengTime: '21:30',
-    })
-    expect(DEFAULT_SHELL_SETTINGS).toEqual({
-      closeBehavior: 'hide', autostart: false, notifySummary: false, rikkeTime: '07:30', wanshengTime: '21:30',
-    })
+    // 壳的读面保持 #23/#24 的三键（`tests/shell/contract-parity.test.mjs` 与壳的本地副本逐字对拍）。
+    expect(readShellSettings(box.dataDir)).toEqual({ closeBehavior: 'hide', autostart: false, notifySummary: false })
+    expect(DEFAULT_SHELL_SETTINGS).toEqual({ closeBehavior: 'hide', autostart: false, notifySummary: false })
+    // #25 的两个时刻是**宿主**的读面（壳不认这两个键）。
+    expect(readTouchTimes(box.dataDir)).toEqual({ rikkeTime: '07:30', wanshengTime: '21:30' })
+    expect(DEFAULT_TOUCH_TIMES).toEqual({ rikkeTime: '07:30', wanshengTime: '21:30' })
   })
 
   it('写 notifySummary 后文件是契约 §5 的形状（schema + 三键）+ #25 的两个时刻，读回来就是新值', () => {
     const box = makeScratch('traffic-settings')
     boxes.push(box)
+    // 返回值保持 #24 的形状（壳的三项）；时刻用 readTouchTimes 读。
     const written = writeShellSettings(box.dataDir, { notifySummary: true })
-    expect(written).toEqual({
-      closeBehavior: 'hide', autostart: false, notifySummary: true, rikkeTime: '07:30', wanshengTime: '21:30',
-    })
+    expect(written).toEqual({ closeBehavior: 'hide', autostart: false, notifySummary: true })
     expect(box.readJson('shell-settings.json')).toEqual({
       schema: SHELL_SETTINGS_SCHEMA,
       closeBehavior: 'hide',
@@ -63,14 +63,12 @@ describe('#24 · shell-settings.json：缺失 = 默认值，写入 = 原子 + �
   it('#25：两个时刻可写、归一成 HH:mm、非法值抛；坏文件里的坏时刻回落默认', () => {
     const box = makeScratch('traffic-settings')
     boxes.push(box)
-    expect(writeShellSettings(box.dataDir, { rikkeTime: '6:45', wanshengTime: '22:15:00' })).toMatchObject({
-      rikkeTime: '06:45',
-      wanshengTime: '22:15',
-    })
+    writeShellSettings(box.dataDir, { rikkeTime: '6:45', wanshengTime: '22:15:00' })
+    expect(readTouchTimes(box.dataDir)).toEqual({ rikkeTime: '06:45', wanshengTime: '22:15' })
     expect(() => writeShellSettings(box.dataDir, { rikkeTime: '25:00' })).toThrow(/rikkeTime/u)
     expect(() => writeShellSettings(box.dataDir, { wanshengTime: '9pm' })).toThrow(/wanshengTime/u)
     box.write('shell-settings.json', '{"schema":"xuanshu/shell-settings@1","rikkeTime":"99:99","wanshengTime":"abc"}')
-    expect(readShellSettings(box.dataDir)).toMatchObject({ rikkeTime: '07:30', wanshengTime: '21:30' })
+    expect(readTouchTimes(box.dataDir)).toEqual({ rikkeTime: '07:30', wanshengTime: '21:30' })
   })
 
   it('非法值 / schema 不认识 / 文件坏掉 → 写抛；读回默认（不把坏文件当设置）', () => {
@@ -113,21 +111,21 @@ describe('#24 · traffic.settings.*：#24 摘要 + #25 两个时刻（加性）'
   })
 })
 
-describe('#24 · shell.settings.*：契约 §5 点名的宿主半边（加性）', () => {
-  it('get / set 三个壳键 + #25 两个时刻都在，且写的是同一个文件', async () => {
+describe('#24 · shell.settings.*：契约 §5 点名的宿主半边（壳的三键；与 #23 本地副本同判）', () => {
+  it('get / set 只回壳的三个键（时刻走 traffic.settings），且写的是同一个文件', async () => {
     const { box, methods } = scene()
     expect(await methods['shell.settings.get']({})).toEqual({
-      closeBehavior: 'hide', autostart: false, notifySummary: false, rikkeTime: '07:30', wanshengTime: '21:30',
+      closeBehavior: 'hide', autostart: false, notifySummary: false,
     })
     expect(await methods['shell.settings.set']({ closeBehavior: 'quit', autostart: true, notifySummary: false })).toEqual({
       closeBehavior: 'quit',
       autostart: true,
       notifySummary: false,
-      rikkeTime: '07:30',
-      wanshengTime: '21:30',
     })
     expect(box.readJson('shell-settings.json')).toMatchObject({ closeBehavior: 'quit', autostart: true })
     expect((await methods['shell.settings.get']({})).closeBehavior).toBe('quit')
+    // #25 的两个时刻仍在同一份文件里（只是不走 shell 的读面）。
+    expect(readTouchTimes(box.dataDir)).toEqual({ rikkeTime: '07:30', wanshengTime: '21:30' })
   })
 })
 

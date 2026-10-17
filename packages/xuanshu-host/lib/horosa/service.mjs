@@ -204,12 +204,15 @@ function namedLogger(ctx) {
   return SILENT_LOGGER
 }
 
-/** 解析 DSH home：profileContext.home → `$DSH_HOME` → `~/.dsh`（与票 01 `lib/index.js` 同口径）。 */
+/**
+ * 解析 DSH home：profileContext.home → `$DSH_HOME` → 交给 `resolveHorosaPaths` 走兜底。
+ * 兜底是**玄枢自己的 home**（`XUANSHU_DSH_HOME` ＞ `~/.xuanshu`，ADR-0014），不是 `~/.dsh`。
+ */
 function resolveDshHome(ctx, env) {
   const profileCtx = softService(ctx, 'profileContext')
   if (typeof profileCtx?.home === 'string' && profileCtx.home !== '') return profileCtx.home
   if (typeof env?.DSH_HOME === 'string' && env.DSH_HOME !== '') return env.DSH_HOME
-  return undefined // 交给 resolveHorosaPaths 走 ~/.dsh 缺省
+  return undefined // 交给 resolveHorosaPaths 走玄枢自己的兜底
 }
 
 /** `process.kill(pid, 0)` 探活（EPERM 表示存在但不属于我 → 仍算活着）。 */

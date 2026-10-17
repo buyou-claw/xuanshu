@@ -14,7 +14,7 @@
  */
 
 import { resolveDataDir } from '../bazi/service.mjs'
-import { readShellSettings, writeShellSettings } from './settings.mjs'
+import { readShellSettings, readTouchTimes, writeShellSettings } from './settings.mjs'
 import { markTrafficRead, readTraffic } from './traffic.mjs'
 
 /** 请求对象兜底（非对象一律当空请求）。 */
@@ -45,10 +45,10 @@ export function createTrafficMethods(ctx, config = {}) {
     'traffic.markRead': async (request) => markTrafficRead(dataDir, requestOf(request).ids),
 
     /** 触达设置：通知摘要 + #25 的两个计划时刻（缺失 = 宿主缺省值）。 */
-    'traffic.settings.get': async () => {
-      const settings = readShellSettings(dataDir)
-      return { notifySummary: settings.notifySummary, rikkeTime: settings.rikkeTime, wanshengTime: settings.wanshengTime }
-    },
+    'traffic.settings.get': async () => ({
+      notifySummary: readShellSettings(dataDir).notifySummary,
+      ...readTouchTimes(dataDir),
+    }),
 
     /**
      * 改触达设置（部分更新）：`notifySummary` / `rikkeTime` / `wanshengTime` 三选一以上；
@@ -66,10 +66,10 @@ export function createTrafficMethods(ctx, config = {}) {
         throw new Error('traffic.settings.set 要 notifySummary / rikkeTime / wanshengTime 之一')
       }
       const saved = writeShellSettings(dataDir, patch)
-      return { notifySummary: saved.notifySummary, rikkeTime: saved.rikkeTime, wanshengTime: saved.wanshengTime }
+      return { notifySummary: saved.notifySummary, ...readTouchTimes(dataDir) }
     },
 
-    /** 契约 §5 点名的宿主半边（壳读同一份文件；这里给宿主一个可测的读写面）。 */
+    /** 契约 §5 点名的宿主半边（壳读同一份文件；只回壳关心的三项，与 #23 的本地副本逐字对拍）。 */
     'shell.settings.get': async () => readShellSettings(dataDir),
     'shell.settings.set': async (request) => writeShellSettings(dataDir, requestOf(request)),
   }

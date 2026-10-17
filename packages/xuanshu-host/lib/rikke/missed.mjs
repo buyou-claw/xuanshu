@@ -23,7 +23,7 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { readShellSettings } from '../notify/settings.mjs'
+import { readTouchTimes } from '../notify/settings.mjs'
 import { MISSED_NOTIFY_REASON } from '../notify/touch.mjs'
 import { readTraffic } from '../notify/traffic.mjs'
 import { generateWansheng } from '../wansheng/generate.mjs'
@@ -119,7 +119,7 @@ export async function settleMissedTouches({ ctx, dataDir, zone, timeZone, now, e
     const at = typeof now === 'function' ? now() : new Date()
     const resolvedZone = typeof zone === 'string' && zone !== '' ? zone : zoneFor(dataDir, timeZone)
     const today = dateInZone(resolvedZone, at)
-    const settings = readShellSettings(dataDir)
+    const settings = readTouchTimes(dataDir)
     const ledger = readTraffic(dataDir)
 
     for (const kind of ['rikke', 'wansheng']) {

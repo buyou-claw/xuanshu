@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWanshengMethods } from '../../packages/xuanshu-host/lib/wansheng/service.mjs'
 import { createRikkeMethods } from '../../packages/xuanshu-host/lib/rikke/service.mjs'
-import { writeShellSettings, readShellSettings } from '../../packages/xuanshu-host/lib/notify/settings.mjs'
+import { writeShellSettings, readShellSettings, readTouchTimes } from '../../packages/xuanshu-host/lib/notify/settings.mjs'
 import { createTrafficMethods } from '../../packages/xuanshu-host/lib/notify/service.mjs'
 import {
   RIKKE_TASK_TITLE, WANSHENG_DEFAULT_TIME, WANSHENG_SESSION_PREFIX, WANSHENG_TASK_TITLE,
@@ -90,8 +90,8 @@ describe('#25 · 时刻可调：安装期按设置建任务，改时刻同步设
     expect(creates.find((call) => call.request.title === WANSHENG_TASK_TITLE).request.daily.time).toBe('22:15:00')
     expect(creates.find((call) => call.request.title === RIKKE_TASK_TITLE).request.daily.time).toBe('06:45:00')
 
-    // 设置文件读面把两个时刻归一到 HH:mm（契约 §4 的 RPC 形状）。
-    expect(readShellSettings(sandbox.dataDir)).toMatchObject({ rikkeTime: '06:45', wanshengTime: '22:15' })
+    // 设置文件的读面把两个时刻归一到 HH:mm（契约 §4 的 RPC 形状）。
+    expect(readTouchTimes(sandbox.dataDir)).toEqual({ rikkeTime: '06:45', wanshengTime: '22:15' })
   })
 
   it('设置里是坏时刻 → 回落缺省建任务（坏文件不当设置，也不让安装失败）', async () => {
@@ -118,7 +118,7 @@ describe('#25 · 时刻可调：安装期按设置建任务，改时刻同步设
     const updated = schedule.calls.find((call) => call.method === 'update')
     expect(updated.request.change.daily.time).toBe('22:05:00')
     // 设置文件是「下次安装 / 界面显示」的期望值。
-    expect(readShellSettings(sandbox.dataDir).wanshengTime).toBe('22:05')
+    expect(readTouchTimes(sandbox.dataDir).wanshengTime).toBe('22:05')
   })
 
   it('日课 setTime 也同步设置（两条任务同一套语义）；非法时刻抛可读错误', async () => {
@@ -126,7 +126,7 @@ describe('#25 · 时刻可调：安装期按设置建任务，改时刻同步设
     await installDailyTasks({ ctx, dataDir: sandbox.dataDir, timeZone: 'Asia/Shanghai', now: NOW })
     const rikke = createRikkeMethods(ctx, { dataDir: sandbox.dataDir, now: NOW })
     await rikke['rikke.setTime']({ time: '06:45' })
-    expect(readShellSettings(sandbox.dataDir).rikkeTime).toBe('06:45')
+    expect(readTouchTimes(sandbox.dataDir).rikkeTime).toBe('06:45')
 
     const wansheng = createWanshengMethods(ctx, { dataDir: sandbox.dataDir, now: NOW })
     await expect(wansheng['wansheng.setTime']({ time: '9pm' })).rejects.toThrow(/HH:mm/u)

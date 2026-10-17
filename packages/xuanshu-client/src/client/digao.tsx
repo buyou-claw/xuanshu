@@ -1,5 +1,6 @@
 /**
- * 票 13 · 底稿只读面板（main key `digao`）+ 加性注册（S13；冻结契约 §1 / §3）。
+ * 票 13 · 底稿只读面板（main key `digao`）+ 加性注册（S13；冻结契约 §1 / §3）；
+ * 票 27（#27）：正文两段（最近在做什么 / 曾经做过什么），事记条目上带 [删除]。
  *
  * 这一屏是**纯派生视图**（C2 ●）：
  *   - 顶部固定徽标逐字「纯派生 · 不可手改」（与 S1 底稿卡同一枚，跨屏一致）；
@@ -7,14 +8,18 @@
  *   - **零编辑控件**：没有 input / textarea / select / contenteditable，也不注册任何写底稿的命令；
  *   - 唯一的功能按钮是 `[刷新]`（重算派生文件，不是改底稿）；只读动作 `[查看 MD 形态]` 只切视图。
  *
- * 数据只读：`digao.status`（在不在 + 元数据）与 `digao.read`（正文）。
- * 正文的来源分组由 `digao-model.ts` 从 markdown 里解析 —— **界面是同一份文件的投影**，
+ * #27 的边界（评审要盯的那条）：**底稿仍然没有写入口**。本屏唯一会写盘的动作是「曾经做过什么」
+ * 里每条事记的 `[删除]` —— 它删的是**事记账本里的那一条**（`shiji.remove`，写墓碑），不是改
+ * `digao.md`；下一次刷新时那一条不再出现在正文里。恢复不在本屏（RPC 面存在，界面只给一句
+ * 「可以在设置里恢复」，不放假按钮）。
+ *
+ * 数据只读：`digao.status`（在不在 + 元数据 + 事记读面）与 `digao.read`（正文 + 事记读面）。
+ * 正文的两段与事记条目由 `digao-model.ts` 从 markdown 里解析 —— **界面是同一份文件的投影**，
  * 不另存一套来源归属（契约 §1：来源标记必须活在 MD 文本里）。
  *
  * 两处**刻意不编造**的地方（诚实边界）：
- *   1. 「下次刷新」不来自本屏：契约 §2 的 `digao.status` 只有 `{exists, meta}`，
- *      没有 schedule 信息，所以这里只写「由自动化任务面板里的 daily 任务决定（播种默认 03:30）」，
- *      不显示一个界面自己算出来的时刻；
+ *   1. 「下次刷新」不来自本屏：宿主回传 `schedule` 就显示，回传不了就只指路，不显示一个界面
+ *      自己算出来的时刻；
  *   2. `[复制路径] / [打开所在目录]`（S13 §2 ⑤）没有落地：冻结契约没有给路径字段，
  *      也没有 open-in-app 能力面 —— 宁可不做，也不在界面上放一个做不到的按钮。
  */
@@ -22,17 +27,19 @@ import { useEffect, useRef, useState } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 
 import { XsPureDerivedBadge } from './cards.js';
-import type { DigaoApi, DigaoMeta, DigaoRead, DigaoSchedule, DigaoStatus } from './digao-api.js';
-import { parseDigaoMarkdown } from './digao-model.js';
-import type { DigaoGroup } from './digao-model.js';
+import type { DigaoApi, DigaoMeta, DigaoRead, DigaoSchedule, DigaoShijiRead, DigaoStatus } from './digao-api.js';
+import { matchShijiEntries, parseDigaoMarkdown } from './digao-model.js';
+import type { DigaoGroup, DigaoSegment } from './digao-model.js';
 import { installDigaoStyle } from './digao-style.js';
 import { DIGAO_ID, DIGAO_LABEL, DIGAO_ORDER, EMPTY_COPY, clockOf } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
 import type { RpcContext } from './rpc.js';
+import type { ShijiApi, ShijiEntry } from './shiji-api.js';
 
-/** 负向声明（S13 §9 C2 逐字：本屏没有编辑框、没有保存按钮）。 */
+/** 负向声明（S13 §9 C2 逐字：本屏没有编辑框、没有保存按钮；#27 补一句「删的是事记」）。 */
 export const DIGAO_NO_EDIT_NOTE =
-  '本面板没有编辑框、没有保存按钮：内容由「规则骨架 + AI 摘要」生成；改了源头，刷新即变。';
+  '本面板没有编辑框、没有保存按钮：内容由「规则骨架 + AI 摘要」生成；改了源头，刷新即变。'
+  + '唯一能删的是「曾经做过什么」里的事记（删的是账本里的那一条，不是改底稿），删完可在设置里恢复。';
 
 /** 三源头跳转的前缀（S13 §3 ②：文案统一为「要改就改源头」）。 */
 export const DIGAO_JUMP_NOTE = '要改就改源头：';
@@ -48,11 +55,15 @@ export const DIGAO_JUMPS: readonly { target: PanelNavTarget; label: string }[] =
 export const DIGAO_NEXT_REFRESH_NOTE =
   '下次刷新：由「自动化任务」面板里的底稿 daily 任务决定（播种默认 03:30，可在那里改或停用）。';
 
+/** 没有事记读面时「曾经」那一段的说明（不许自己编 id 去删）。 */
+export const DIGAO_NO_SHIJI_READ_NOTE =
+  '没有读到事记账本：这一段的条目暂时不能在这里删（正文照原文展示；刷新一次底稿就会写账本）。';
+
 /** 面板的四态（`running` 用 `busy` 表达：内容保持可读，按钮转「刷新中…」）。 */
 type DigaoView =
   | { kind: 'loading' }
   | { kind: 'empty'; meta: DigaoMeta | null; schedule?: DigaoSchedule }
-  | { kind: 'ready'; meta: DigaoMeta | null; markdown: string; schedule?: DigaoSchedule }
+  | { kind: 'ready'; meta: DigaoMeta | null; markdown: string; schedule?: DigaoSchedule; shiji?: DigaoShijiRead }
   | { kind: 'error'; message: string };
 
 /** 静态预置（测试 / SSR：给了就不取数；`error` 形状直接落错误态）。 */
@@ -61,6 +72,8 @@ export type DigaoPreloaded = { status: DigaoStatus; read?: DigaoRead } | { error
 export interface DigaoPanelProps {
   /** 底稿数据面（`index.tsx` 用 `createDigaoApi(ctx)` 造好注入）。 */
   api: DigaoApi;
+  /** 事记数据面（删除动作走它；**拿不到就不给删除入口**，不猜一个 id 去写）。 */
+  shiji?: ShijiApi;
   /** 面板导航（三个源头跳转都是跨面板跳转）。 */
   navigate: (target: PanelNavTarget) => void;
   /** 静态预置（测试 / SSR：给了就不发 `digao.status` / `digao.read`）。 */
@@ -82,11 +95,13 @@ function initialView(preloaded: DigaoPreloaded | undefined): DigaoView {
   }
   if (preloaded.read === undefined) return { kind: 'error', message: '底稿文件存在但正文没读回来。' };
   const schedule = preloaded.read.schedule ?? preloaded.status.schedule;
+  const shiji = preloaded.read.shiji ?? preloaded.status.shiji;
   return {
     kind: 'ready',
     meta: preloaded.read.meta ?? preloaded.status.meta,
     markdown: preloaded.read.markdown,
     ...(schedule === undefined ? {} : { schedule }),
+    ...(shiji === undefined ? {} : { shiji }),
   };
 }
 
@@ -95,12 +110,13 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+
 /**
  * 底稿只读面板。
  * @param props - 数据面、导航与静态预置。
  * @returns 只读面板节点。
  */
-export function DigaoPanel({ api, navigate, preloaded, preloadedRawView }: DigaoPanelProps) {
+export function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }: DigaoPanelProps) {
   const seeded = preloaded !== undefined;
   const [view, setView] = useState<DigaoView>(() => initialView(preloaded));
   const [busy, setBusy] = useState(false);
@@ -128,11 +144,13 @@ export function DigaoPanel({ api, navigate, preloaded, preloadedRawView }: Digao
         const read = await api.read();
         if (mine !== sequence.current) return;
         const schedule = read.schedule ?? status.schedule;
+        const shiji = read.shiji ?? status.shiji;
         setView({
           kind: 'ready',
           meta: read.meta ?? status.meta,
           markdown: read.markdown,
           ...(schedule === undefined ? {} : { schedule }),
+          ...(shiji === undefined ? {} : { shiji }),
         });
       })
       .catch((error: unknown) => {
@@ -164,7 +182,13 @@ export function DigaoPanel({ api, navigate, preloaded, preloadedRawView }: Digao
       .then(async () => {
         const read = await api.read();
         if (mine !== sequence.current) return;
-        setView({ kind: 'ready', meta: read.meta, markdown: read.markdown });
+        setView({
+          kind: 'ready',
+          meta: read.meta,
+          markdown: read.markdown,
+          ...(read.schedule === undefined ? {} : { schedule: read.schedule }),
+          ...(read.shiji === undefined ? {} : { shiji: read.shiji }),
+        });
       })
       .catch((error: unknown) => {
         if (mine !== sequence.current) return;
@@ -173,6 +197,27 @@ export function DigaoPanel({ api, navigate, preloaded, preloadedRawView }: Digao
       .finally(() => {
         if (mine === sequence.current) setBusy(false);
       });
+  };
+
+  /**
+   * 删除一条事记之后**重读**底稿（`digao.read`）：正文里的那一条由「读面里没有它」而消失
+   * （md 要等下一次刷新才会重写 —— 这正是「删了不再长回来」的可观察边界）。
+   *
+   * 只更新 `ready` 态里的三样（meta / 正文 / 事记读面），保留 `schedule`（它不是这次动作的产物）。
+   */
+  const reloadAfterDelete = async (): Promise<void> => {
+    const mine = sequence.current;
+    const read = await api.read();
+    if (mine !== sequence.current) return;
+    setView((previous) => {
+      if (previous.kind !== 'ready') return previous;
+      return {
+        ...previous,
+        meta: read.meta,
+        markdown: read.markdown,
+        ...(read.shiji === undefined ? {} : { shiji: read.shiji }),
+      };
+    });
   };
 
   const meta = view.kind === 'empty' || view.kind === 'ready' ? view.meta : null;
@@ -256,7 +301,7 @@ export function DigaoPanel({ api, navigate, preloaded, preloadedRawView }: Digao
         <section className="xs-digao__empty" data-xuanshu-view="empty">
           <p>{EMPTY_COPY.digaoNeverRefreshed.why}</p>
           <p className="xs-digao__note">
-            底稿由谱 / 工作区 / 工作流三路来源提炼而成；点一次 [刷新] 就会按三路来源拼出骨架。
+            底稿由谱 / 工作区 / 工作流 / 事记四路来源提炼而成；点一次 [刷新] 就会拼出「最近在做什么」与「曾经做过什么」两段。
           </p>
         </section>
       ) : null}
@@ -273,7 +318,14 @@ export function DigaoPanel({ api, navigate, preloaded, preloadedRawView }: Digao
       ) : null}
 
       {view.kind === 'ready' ? (
-        <DigaoBody markdown={view.markdown} meta={view.meta} raw={raw} />
+        <DigaoBody
+          markdown={view.markdown}
+          meta={view.meta}
+          raw={raw}
+          {...(view.shiji === undefined ? {} : { shijiRead: view.shiji })}
+          {...(shiji === undefined ? {} : { shiji })}
+          reload={reloadAfterDelete}
+        />
       ) : null}
     </main>
   );
@@ -289,9 +341,217 @@ export function digestLine(meta: DigaoMeta | null | undefined): string {
   return '生成方式：骨架＝确定性规则 · 摘要＝未标注（meta 里没有 digest 这一位，按未提炼对待）';
 }
 
-/** 只读正文：生成方式 + 来源分组（形态不符时按原文只读展示）。 */
-function DigaoBody({ markdown, meta, raw }: { markdown: string; meta: DigaoMeta | null; raw: boolean }) {
+/** 一段里的每个段（旧形态的三章与新形态的三路都用同一枚渲染）。 */
+function SegmentList({ segments }: { segments: DigaoSegment[] }) {
+  return (
+    <>
+      {segments.map((segment, index) => (
+        <article key={`${segment.kind}-${String(index)}`} className="xs-digao__segment">
+          <p className="xs-digao__segment-head">
+            <span className="xs-digao__tag" data-xuanshu-source-tag={segment.label}>
+              {`[${segment.label}]`}
+            </span>
+            <span className="xs-digao__segment-name">{segment.name}</span>
+          </p>
+          <p className="xs-digao__segment-body">{segment.body}</p>
+          {segment.origin === undefined ? null : (
+            <p className="xs-digao__origin" data-xuanshu-origin={segment.kind}>
+              {`源自：${segment.origin}`}
+            </p>
+          )}
+        </article>
+      ))}
+    </>
+  );
+}
+
+/**
+ * 事记的一条：来源标记 + 日期区间 + 依据 + 摘要 + [删除]（只有读到 id 才给删除）。
+ *
+ * `entry` 缺席 = 没有事记读面（没有账本）：条目照原文展示，但**不给删除** —— 猜一个 id 去写
+ * 比不做更糟。
+ */
+function ShijiRecord({
+  record,
+  entry,
+  pending,
+  busy,
+  onAskDelete,
+  onCancel,
+  onConfirm,
+}: {
+  record: DigaoSegment;
+  entry?: ShijiEntry;
+  pending: boolean;
+  busy: boolean;
+  onAskDelete: () => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const range = `${record.since ?? ''}～${record.until ?? ''}`;
+  const basis = record.basis ?? { sessions: 0, docs: 0 };
+  return (
+    <article className="xs-digao__record" {...(entry === undefined ? {} : { 'data-xuanshu-shiji': entry.id })}>
+      <p className="xs-digao__segment-head">
+        <span className="xs-digao__tag" data-xuanshu-source-tag={record.label}>
+          {`[${record.label}]`}
+        </span>
+        <span className="xs-digao__segment-name">{record.name}</span>
+      </p>
+      <p className="xs-digao__note" data-xuanshu-shiji-meta={entry?.id ?? record.name}>
+        {`${range} · 依据：会话 ${basis.sessions} 场 · 文档 ${basis.docs} 份`}
+      </p>
+      <p className="xs-digao__segment-body">{record.body}</p>
+      {entry === undefined ? null : pending ? (
+        // 二次确认就地展开（不用 window.confirm：文案要可断言，窄屏也要排得下）。
+        <div className="xs-digao__confirm" role="alertdialog" aria-label="确认删除这条事记" data-xuanshu-confirm="delete-shiji">
+          <p data-xuanshu-confirm-text="delete-shiji">
+            {`删除事记「${record.name}」？删除后下一次刷新不会再出现；可以在设置里恢复。`}
+          </p>
+          <div className="xs-digao__actions">
+            <button type="button" className="xs-btn xs-btn--primary" data-xuanshu-action="delete-shiji-confirm" disabled={busy} onClick={onConfirm}>
+              {busy ? '删除中…' : '确认删除'}
+            </button>
+            <button type="button" data-xuanshu-action="delete-shiji-cancel" disabled={busy} onClick={onCancel}>
+              取消
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" data-xuanshu-action="delete-shiji" data-xuanshu-shiji-id={entry.id} onClick={onAskDelete}>
+          删除
+        </button>
+      )}
+    </article>
+  );
+}
+
+/**
+ * 「曾经做过什么」那一段：事记条目 = 正文解析出来的记录 ↔ `digao.read.shiji.entries` 配对。
+ *
+ * 为什么要在客户端配一次：正文里没有 id（人读的标记不带机器键），而删除要 id；
+ * 两边是同一个 `listShiji()` 的两种投影（同序同数据），配对是确定性的。
+ * 配不上的记录 = 读面里已经没有它（已删除）→ **不渲染**，并明说「可以在设置里恢复」。
+ */
+function PastSection({
+  group,
+  shijiRead,
+  shiji,
+  reload,
+}: {
+  group: DigaoGroup | undefined;
+  shijiRead: DigaoShijiRead | undefined;
+  shiji: ShijiApi | undefined;
+  reload: () => Promise<void>;
+}) {
+  const records = group?.segments ?? [];
+  const matched = matchShijiEntries(records, shijiRead?.entries);
+  // 没有读面（没有账本）：条目照原文展示，但没有 id → 不给删除；也不许说「已删除」。
+  const rows = records.map((record, index) => ({
+    record,
+    entry: shijiRead === undefined ? undefined : matched[index],
+  }));
+  const live = rows.filter((row) => shijiRead === undefined || row.entry !== undefined);
+  const gone = shijiRead === undefined ? 0 : records.length - live.length;
+
+  const [pendingId, setPendingId] = useState<string | undefined>(undefined);
+  const [busyId, setBusyId] = useState<string | undefined>(undefined);
+  const [note, setNote] = useState<string | undefined>(undefined);
+
+  const remove = (entry: ShijiEntry, name: string): void => {
+    if (shiji === undefined) return;
+    setBusyId(entry.id);
+    setNote(undefined);
+    void shiji
+      .remove({ id: entry.id })
+      .then(async () => {
+        setPendingId(undefined);
+        await reload();
+        setNote(`已删除事记「${name}」：下一次刷新后正文里不会再出现；可以在设置里恢复。`);
+      })
+      .catch((error: unknown) => {
+        setNote(`删除失败：${errorText(error)}`);
+      })
+      .finally(() => {
+        setBusyId(undefined);
+      });
+  };
+
+  return (
+    <section className="xs-digao__section" data-xuanshu-section="past">
+      <h2 className="xs-digao__section-head">曾经做过什么</h2>
+      {group === undefined || group.note === '' ? null : (
+        <p className="xs-digao__note" data-xuanshu-group-note="shiji">
+          {group.note}
+        </p>
+      )}
+      <h3 className="xs-digao__group-head">{`来源：事记（${live.length} 条）`}</h3>
+      {live.map(({ record, entry }, index) => (
+        <ShijiRecord
+          key={entry?.id ?? `${record.name}-${String(index)}`}
+          record={record}
+          {...(entry === undefined ? {} : { entry })}
+          pending={entry !== undefined && pendingId === entry.id}
+          busy={entry !== undefined && busyId === entry.id}
+          onAskDelete={() => {
+            if (entry === undefined) return;
+            setPendingId(entry.id);
+            setNote(undefined);
+          }}
+          onCancel={() => {
+            setPendingId(undefined);
+          }}
+          onConfirm={() => {
+            if (entry === undefined) return;
+            remove(entry, record.name);
+          }}
+        />
+      ))}
+      {shijiRead === undefined && records.length > 0 ? (
+        <p className="xs-digao__note" data-xuanshu-note="shiji-unread">
+          {DIGAO_NO_SHIJI_READ_NOTE}
+        </p>
+      ) : null}
+      {gone > 0 ? (
+        <p className="xs-digao__note" data-xuanshu-note="shiji-removed">
+          {`已删除 ${gone} 条事记：下一次刷新后正文里不会再出现；可以在设置里恢复。`}
+        </p>
+      ) : null}
+      {note === undefined ? null : (
+        <p className="xs-digao__alert" role="alert" data-xuanshu-alert="shiji">
+          {note}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * 只读正文：生成方式 + 两段（新形态）或三章（旧文件）。
+ *
+ * 形态不符（既没有两段也没有来源章节）时按原文只读展示 —— 不假装解析出来源分组。
+ */
+function DigaoBody({
+  markdown,
+  meta,
+  raw,
+  shijiRead,
+  shiji,
+  reload,
+}: {
+  markdown: string;
+  meta: DigaoMeta | null;
+  raw: boolean;
+  shijiRead?: DigaoShijiRead;
+  shiji?: ShijiApi;
+  reload: () => Promise<void>;
+}) {
   const groups: DigaoGroup[] = parseDigaoMarkdown(markdown);
+  const recent = groups.filter((group) => group.section === 'recent');
+  const past = groups.find((group) => group.section === 'past');
+  const legacy = groups.filter((group) => group.section === undefined);
+  const twoSections = recent.length > 0 || past !== undefined;
+
   return (
     <>
       <p className="xs-digao__note" data-xuanshu-note="digest">
@@ -307,42 +567,49 @@ function DigaoBody({ markdown, meta, raw }: { markdown: string; meta: DigaoMeta 
       {groups.length === 0 ? (
         <>
           <p className="xs-digao__note" data-xuanshu-note="shape-mismatch">
-            正文形态不符（没有「## 来源：…」章节）：按原文只读展示，界面不假装解析出来源分组。
+            正文形态不符（没有「## 最近在做什么 / ## 曾经做过什么」两段，也没有「## 来源：…」章节）：
+            按原文只读展示，界面不假装解析出来源分组。
           </p>
           <pre className="xs-digao__raw" data-xuanshu-raw="digao-fallback">
             {markdown}
           </pre>
         </>
-      ) : (
-        groups.map((group) => (
-          <section key={`${group.kind}-${group.name}`} className="xs-digao__group" data-xuanshu-group={group.kind}>
-            <h2 className="xs-digao__group-head">
-              {`来源：${group.name}（${group.segments.length} 段）`}
-            </h2>
-            {group.note === '' ? null : (
-              <p className="xs-digao__note" data-xuanshu-group-note={group.kind}>
-                {group.note}
-              </p>
-            )}
-            {group.segments.map((segment, index) => (
-              <article key={`${group.kind}-${String(index)}`} className="xs-digao__segment">
-                <p className="xs-digao__segment-head">
-                  <span className="xs-digao__tag" data-xuanshu-source-tag={segment.label}>
-                    {`[${segment.label}]`}
-                  </span>
-                  <span className="xs-digao__segment-name">{segment.name}</span>
+      ) : null}
+
+      {twoSections ? (
+        <section className="xs-digao__section" data-xuanshu-section="recent">
+          <h2 className="xs-digao__section-head">最近在做什么</h2>
+          {recent.map((group) => (
+            <section key={`${group.kind}-${group.name}`} className="xs-digao__group" data-xuanshu-group={group.kind}>
+              <h3 className="xs-digao__group-head">{`来源：${group.name}（${group.segments.length} 段）`}</h3>
+              {group.note === '' ? null : (
+                <p className="xs-digao__note" data-xuanshu-group-note={group.kind}>
+                  {group.note}
                 </p>
-                <p className="xs-digao__segment-body">{segment.body}</p>
-                {segment.origin === undefined ? null : (
-                  <p className="xs-digao__origin" data-xuanshu-origin={segment.kind}>
-                    {`源自：${segment.origin}`}
-                  </p>
-                )}
-              </article>
-            ))}
-          </section>
-        ))
-      )}
+              )}
+              <SegmentList segments={group.segments} />
+            </section>
+          ))}
+        </section>
+      ) : null}
+
+      {twoSections ? <PastSection group={past} shijiRead={shijiRead} shiji={shiji} reload={reload} /> : null}
+
+      {legacy.length > 0 ? (
+        <>
+          {legacy.map((group) => (
+            <section key={`${group.kind}-${group.name}`} className="xs-digao__group" data-xuanshu-group={group.kind}>
+              <h2 className="xs-digao__group-head">{`来源：${group.name}（${group.segments.length} 段）`}</h2>
+              {group.note === '' ? null : (
+                <p className="xs-digao__note" data-xuanshu-group-note={group.kind}>
+                  {group.note}
+                </p>
+              )}
+              <SegmentList segments={group.segments} />
+            </section>
+          ))}
+        </>
+      ) : null}
     </>
   );
 }
@@ -361,6 +628,8 @@ function DigaoIcon({ size = 20 }: { size?: number }) {
 /** 底稿面板安装所需的依赖（由 `index.tsx` 造好，与底稿卡共用同一份数据面）。 */
 export interface DigaoInstallDeps {
   api: DigaoApi;
+  /** 事记数据面（「曾经做过什么」里每条事记的 [删除] 走它）。 */
+  shiji: ShijiApi;
   navigate: (target: PanelNavTarget) => void;
 }
 

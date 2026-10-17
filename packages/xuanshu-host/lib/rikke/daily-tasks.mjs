@@ -27,7 +27,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { consultAgentCapability, createConsultAgent } from '../consult/agent.mjs'
-import { readShellSettings } from '../notify/settings.mjs'
+import { readTouchTimes } from '../notify/settings.mjs'
 import { installDailyDelivery } from './delivery.mjs'
 import { settleMissedTouches } from './missed.mjs'
 import {
@@ -215,7 +215,7 @@ export async function installDailyTasks({ ctx, dataDir, timeZone = DEFAULT_TIME_
   // 这里只决定「安装期按几点建」；改时刻走 `rikke.setTime` / `wansheng.setTime`（改完立即生效）。
   let settings
   try {
-    settings = readShellSettings(dataDir)
+    settings = readTouchTimes(dataDir)
   } catch {
     // 设置文件坏到读不出来：按缺省建（不让装配因此失败）。
     settings = { rikkeTime: undefined, wanshengTime: undefined }

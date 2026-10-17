@@ -11,6 +11,7 @@
 |---|---|
 | [`../../scripts/verify-isolation.mjs`](../../scripts/verify-isolation.mjs) | **唯一断言实现**（CLI，`--json` 给机器读，退出码 0/1） |
 | `resolve.test.mjs` | I1/I2 + 环境门 `profile-installed` + **端口解析回归（数字形态）** + 启动器 CLI 前提（R2/R3/R12/R17）+ **web 真起冒烟** + 拒绝路径负例 |
+| `home.test.mjs` | 票 22：**玄枢自己的 home**（产品 `~/.xuanshu` / 开发 `<repo>/.dsh-home` 两档默认、覆盖链、R16 忽略、`install-profile` 的默认 home、宿主插件拒绝写真实 `~/.dsh`、验收台 `home-isolated` 的 `defaultHomeIsNotReal`）。**全部不需要 profile**，任何机器上都真跑 |
 | `port-guard.test.mjs` | I3/I4：真起对照组服务端验 web 端口门与 horosa 守卫四态（含 R5 的 probe-failed） |
 | `dual-instance.test.mjs` | I5/I6/I7：两个隔离 home 各真跑一次 `headless`，**哨兵法**（R15）+ 指纹 + 清单 |
 | `lib/verifier.mjs` | 公共夹具：环境门（唯一一份）、`spawnSync` 跑验收台、空闲端口 |
@@ -28,8 +29,11 @@ node scripts/verify-isolation.mjs --json --only home-isolated,cli-version   # �
 node scripts/verify-isolation.mjs --json --horosa-port 8765 --web-port 19388
 ```
 
-默认隔离 home 是 `<repo>/.dsh-home`（已 gitignore；`profiles/xuanshu` 是指向 `<repo>/profile` 的
-junction，所以「代码共享、状态各归各的」）。可用 `--home` / `XUANSHU_DSH_HOME` 覆盖。
+默认隔离 home 是**玄枢自己的 home**（ADR-0014，两档）：开发档 `<repo>/.dsh-home`（已 gitignore；
+`profiles/xuanshu` 是指向 `<repo>/profile` 的 junction，所以「代码共享、状态各归各的」），产品档
+`~/.xuanshu`。档位由「是不是仓库检出」判（`resolveHomeMode()`），`--home` / `XUANSHU_DSH_HOME` 可覆盖。
+**两档都不是真实 `~/.dsh`**：那是 DSH 桌面版的 home，指到它一律用法失败（见 `home.test.mjs` 与
+`home-isolated` 的 `evidence.defaultHomeIsNotReal`）。完整的 home 说明见 `docs/runbook/home.md`。
 
 `--web-port` 只收 `1..65535`（它是要拿去 bind 的）；`--horosa-port` **只要求是数字** ——
 越界值（`defaults.INVALID_PROBE_PORT`）交给守卫判 `probe-failed`（§5.1 R6/R14），非数字才是用法错。
@@ -57,7 +61,7 @@ XUANSHU_REQUIRE_ASSEMBLY=1 pnpm test:isolation          # 交付前验收
 
 | # | 断言 | check id | 主要在哪验 |
 |---|---|---|---|
-| I1 | 7 条派生路径全在 `$DSH_HOME` 下；换 home 后两两不同 | `home-isolated` | 验收台（`runStartup` + `resolveInstance` 纯函数对照）· `resolve.test.mjs` |
+| I1 | 7 条派生路径全在 `$DSH_HOME` 下；换 home 后两两不同；**默认 home 也不是真实 `~/.dsh`** | `home-isolated` | 验收台（`runStartup` + `resolveInstance` 纯函数对照）· `resolve.test.mjs` · `home.test.mjs` |
 | I2 | CLI 来自 profile 树、版本 = `dsh-base` 版本；`--cli-bin` 优先 | `cli-version` | 验收台（`runStartup` 两次：默认 + 显式）· `resolve.test.mjs` |
 | I3 | web 端口被占 → 启动器退出码 3 + detail 点名端口；空闲 → 通过 | `web-port` | 验收台 · `port-guard.test.mjs` |
 | I4 | horosa 守卫四态判对（`free`/`horosa-ready`/`occupied-foreign`/`probe-failed`） | `horosa-guard` | 验收台 · `port-guard.test.mjs`（对照组服务端） |
