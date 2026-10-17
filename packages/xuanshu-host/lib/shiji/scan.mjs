@@ -19,9 +19,8 @@
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
 
-import { fallbackXuanshuHome } from '../home.mjs'
+import { resolveSearchHome } from '../home.mjs'
 import { skillFile } from '../workflow/skill-export.mjs'
 import { listWorkflows } from '../workflow/store.mjs'
 import { collectProjectDocs } from './docs.mjs'
@@ -43,18 +42,17 @@ function text(value) {
 /**
  * DSH home（skill 扫描根 `<dshHome>/skills` 的父目录）。
  *
- * 与 `workflow/service.mjs` 的 `resolveDshHome()` 同一条顺序，但**不能 import 它**（本模块必须是
- * 叶子：`workflow/service.mjs` 会把会话/agent 面拖进扫描链）。顺序：
- * 显式参数 → `profileContext.home` → `dataDir` 的父目录（目录名是 `xuanshu` 时）→ `$DSH_HOME` →
- * **玄枢自己的兜底**（`XUANSHU_DSH_HOME` ＞ `~/.xuanshu`；票 22/#22 起不再是 `~/.dsh`，ADR-0014）。
+ * **薄包装**：顺序、兜底与「真实 ~/.dsh 一律拒绝」的门都在 `home.mjs::resolveSearchHome()` 里
+ * （复核 S1：本模块从前是第 5 份 home 解析，且绕过了那道门）。本模块仍保持**叶子**——
+ * `home.mjs` 只 import node 内置，不会把会话 / agent 面拖进扫描链。
+ *
+ * @param {object} ctx cordis 宿主上下文
+ * @param {string} [dataDir]
+ * @param {string} [explicit]
+ * @param {{env?: Record<string, string|undefined>, homedirPath?: string}} [options] 纯函数接缝
  */
-export function resolveShijiDshHome(ctx, dataDir, explicit) {
-  if (typeof explicit === 'string' && explicit !== '') return explicit
-  const profile = softGet(ctx, 'profileContext')
-  if (typeof profile?.home === 'string' && profile.home !== '') return profile.home
-  if (typeof dataDir === 'string' && dataDir !== '' && basename(dataDir) === 'xuanshu') return dirname(dataDir)
-  if (typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME !== '') return process.env.DSH_HOME
-  return fallbackXuanshuHome({ env: process.env }).home
+export function resolveShijiDshHome(ctx, dataDir, explicit, options = {}) {
+  return resolveSearchHome({ ctx, dataDir, explicit, ...options }).home
 }
 
 /** 人说的那一句（注入的上下文 / 采用稿 / 定时提醒都不算）。 */
@@ -302,15 +300,21 @@ async function collectWorkflowItems({ ctx, dataDir, dshHome, now, notes }) {
 /**
  * 采集本轮扫描的全部依据（**不写盘、不调 LLM**）。
  *
- * @param {{ctx?: object, dataDir: string, dshHome?: string, excludedDirs?: string[], now?: Date}} input
+ * @param {{ctx?: object, dataDir: string, dshHome?: string, excludedDirs?: string[], now?: Date,
+ *          env?: Record<string, string|undefined>, homedirPath?: string}} input
+ *        `env` / `homedirPath` 是 home 解析的纯函数接缝（生产由 `shiji/service.mjs` 显式传 `process.env`）。
  * @returns {Promise<{items: object[], notes: string[], routes: {workspace: boolean, workflow: boolean}}>}
  *          `routes.* === false` = 这一路**核不了**（服务缺席/清单读不出来）：账本据此不冻结已有条目。
  */
-export async function collectShijiEvidence({ ctx, dataDir, dshHome, excludedDirs = [], now = new Date() } = {}) {
+export async function collectShijiEvidence({
+  ctx, dataDir, dshHome, excludedDirs = [], now = new Date(), env, homedirPath,
+} = {}) {
   const notes = []
-  const resolvedHome = resolveShijiDshHome(ctx, dataDir, dshHome)
+  // 解析根与「真实 home 已改判」的原因是同一件事的两半：原因必须进 notes（用户看得到路径为什么不是他给的那个）。
+  const home = resolveSearchHome({ ctx, dataDir, explicit: dshHome, env: env ?? process.env, homedirPath })
+  if (home.note !== undefined) notes.push(home.note)
   const workspace = await collectWorkspaceItems({ ctx, dataDir, excludedDirs, now, notes })
-  const workflow = await collectWorkflowItems({ ctx, dataDir, dshHome: resolvedHome, now, notes })
+  const workflow = await collectWorkflowItems({ ctx, dataDir, dshHome: home.home, now, notes })
   return {
     items: [...workspace.items, ...workflow.items],
     notes,

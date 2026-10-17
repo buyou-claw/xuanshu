@@ -172,6 +172,25 @@ describe('pure view-model · 路由目录与 estimate 文案', () => {
     expect(options.some((option) => option.provider === 'openrouter')).toBe(false)
   })
 
+  it('S7 · 默认路由未知（null）→ isDefault 仍是 unknown（null），不降成 false；选路退回第一路', () => {
+    const unknown = {
+      ...CATALOG,
+      default: null,
+      providers: CATALOG.providers.map((entry) => ({
+        ...entry,
+        isDefault: null,
+        models: entry.models.map((model) => ({ ...model, isDefault: null })),
+      })),
+    }
+    const options = flattenCatalogRoutes(unknown)
+    expect(options.every((option) => option.isDefault === null)).toBe(true)
+    // 未知不等于「都不是默认」：选路仍要有确定结果（默认未知时退回第一路）。
+    expect(defaultRouteSelection(unknown)).toEqual([
+      { provider: 'deepseek', model: 'deepseek-chat' },
+      { provider: 'pi-ai', model: 'pi-chat' },
+    ])
+  })
+
   it('defaultRouteSelection：默认路由在前，优先另一家 provider；去重且上限 4', () => {
     const selected = defaultRouteSelection(CATALOG)
     expect(selected).toEqual([

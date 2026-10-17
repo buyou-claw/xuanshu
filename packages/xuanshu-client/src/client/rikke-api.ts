@@ -72,9 +72,9 @@ export interface RikkeStatus {
   schedule?: RikkeSchedule;
   /** #24：AI 段三态（旧产物没有这个键 → 省略，界面不编一段话）。 */
   ai?: RikkeAiNote;
-  /** #24：未读条数（`delivered && !read`；账本拿不到 → 省略键，不写 0 冒充已读）。 */
+  /** #24：未读条数（**只数 `kind=rikke`** 的 `delivered && !read`；账本拿不到 → 省略键，不写 0 冒充已读）。 */
   unread?: number;
-  /** #24：最近一次触达（拿不到 → 省略键）。 */
+  /** #24：最近一次**日课**触达（晚省那一条不混进来；拿不到 → 省略键）。 */
   notify?: RikkeNotify;
   reason?: string;
 }

@@ -87,6 +87,49 @@ function namedLogger(ctx) {
 }
 
 /**
+ * 「到点 → 生成 → 触达」的**一段共用骨架**（复核 S4：`runRikke` / `runWansheng` 从前是两段
+ * 几乎逐字相同的骨架）。
+ *
+ * 骨架只做两边**必须同一口径**的四件事，业务差异全部由调用方作为 `generate` / `deliver` 传入：
+ *   1. 日期取 **occurrence**（这一次替哪个计划时刻投的）在时区里的那一天 —— 解析不出才退回投递时刻；
+ *   2. 迟到 > 30 分钟判 `missed`（产物与账行都标「补」，且补课不推送由 `deliver` 决定）；
+ *   3. 生成失败 → **不投递**，如实记理由（下一次投递再试）；
+ *   4. 记账失败 / 通知失败各记一笔；任何异常都**不外抛**（定时链不该把那一轮问答弄挂）。
+ *
+ * @param {{label: string, logger: {info: Function, warn: Function}, zone: string, moment: Date,
+ *          occurrence: {at: Date|null}, generate: (input: {date: string, missed: boolean}) => Promise<object>,
+ *          deliver: (input: {date: string, missed: boolean, occurrenceAt: string|null}) => Promise<{
+ *            notify: {status: string, reason: string|null}, ledgerError: string|null}>}} input
+ *        `label` 用于日志（「日课」/「晚省」），不是契约键。
+ * @returns {Promise<void>} **永不抛**
+ */
+export async function runTouchChain({ label, logger, zone, moment, occurrence, generate, deliver }) {
+  try {
+    const reference = occurrence.at ?? moment
+    const date = dateInZone(zone, reference)
+    const missed = isLateDelivery(occurrence.at, moment)
+    const generated = await generate({ date, missed })
+    if (generated.ok !== true) {
+      // 如实记，不假装成了：界面那边看到的是「今天还没有」+ 可重试，下一次投递会再来一遍。
+      logger.warn(`${label}到点没生成（%s）：%s`, generated.date ?? date, generated.reason)
+      return
+    }
+    logger.info('定时任务到点：%s %s 已生成（missed=%s）', label, generated.date, missed)
+    const touch = await deliver({
+      date: generated.date,
+      missed,
+      occurrenceAt: occurrence.at === null ? null : occurrence.at.toISOString(),
+    })
+    if (touch.ledgerError !== null) logger.warn(`${label}已生成，但触达账没记上：%s`, touch.ledgerError)
+    if (touch.notify.status === 'failed') {
+      logger.warn(`${label}已生成，但系统通知没发出去（%s）：%s`, touch.notify.status, touch.notify.reason)
+    }
+  } catch (error) {
+    logger.warn(`${label}到点跑生成链时抛了异常（已兜住，不影响这一轮）：%s`, String(error?.message ?? error))
+  }
+}
+
+/**
  * 把「到点 → 生成链」接到 `agent/pre-step` 边界上（两条 daily 任务共用一条边界）。
  *
  * @param {object} ctx cordis 宿主上下文（需要 `ctx.on`）
@@ -107,15 +150,17 @@ export function installDailyDelivery(ctx, { dataDir, timeZone, now, env } = {}) 
    *
    * #25：日期取 `occurrence` 在底座时区里的那一天（不是投递时刻）；迟到 > 30 分钟判「补」
    * （产物与账行都标 `missed`，且**不推送** —— 开机瞬间不该连弹历史通知）。
+   * 骨架与晚省共用 `runTouchChain()`；这里只给日课特有的两件事：`hour` 与黄历生成入口。
    */
   async function runRikke(moment, occurrence) {
-    try {
-      const zone = zoneFor(dataDir, timeZone)
-      // 解析不出 occurrence → 退回投递时刻（`parseScheduleOccurrence` 的 note 已由调用方记日志）。
-      const reference = occurrence.at ?? moment
-      const date = dateInZone(zone, reference)
-      const missed = isLateDelivery(occurrence.at, moment)
-      const generated = await generateRikke({
+    const zone = zoneFor(dataDir, timeZone)
+    await runTouchChain({
+      label: '日课',
+      logger,
+      zone,
+      moment,
+      occurrence,
+      generate: ({ date, missed }) => generateRikke({
         ctx,
         dataDir,
         date,
@@ -125,61 +170,40 @@ export function installDailyDelivery(ctx, { dataDir, timeZone, now, env } = {}) 
         missed,
         // 补课那份的时辰取**计划时刻**（说的是那一天的事），不是补的时刻。
         ...(occurrence.at === null ? {} : { hour: hourInZone(zone, occurrence.at) }),
-      })
-      if (generated.ok) {
-        logger.info('定时任务到点：日课 %s 已生成（manual=false，missed=%s）', generated.date, missed)
-        // 定时那份才发系统通知（人点那份界面自己会显示）。通知的任何失败都只落账/记日志。
-        const touch = await deliverRikkeTouch({
-          dataDir,
-          date: generated.date,
-          at: moment,
-          manual: false,
-          missed,
-          occurrenceAt: occurrence.at === null ? null : occurrence.at.toISOString(),
-          env,
-        })
-        if (touch.ledgerError !== null) logger.warn('日课已生成，但触达账没记上：%s', touch.ledgerError)
-        if (touch.notify.status === 'failed') {
-          logger.warn('日课已生成，但系统通知没发出去（%s）：%s', touch.notify.status, touch.notify.reason)
-        }
-      } else {
-        // 如实记，不假装成了：界面那边看到的是「今天还没有日课」+ 可重试，下一次投递会再来一遍。
-        logger.warn('日课到点没生成（%s）：%s', generated.date, generated.reason)
-      }
-    } catch (error) {
-      logger.warn('日课到点跑生成链时抛了异常（已兜住，不影响这一轮）：%s', String(error?.message ?? error))
-    }
-  }
-
-  /** #25：晚省那条链（确定性事实 → `<dataDir>/wansheng/<日期>.json` → 系统通知）。 */
-  async function runWansheng(moment, occurrence) {
-    try {
-      const zone = zoneFor(dataDir, timeZone)
-      const reference = occurrence.at ?? moment
-      const date = dateInZone(zone, reference)
-      const missed = isLateDelivery(occurrence.at, moment)
-      const generated = await generateWansheng({ ctx, dataDir, date, zone, at: moment, missed })
-      if (generated.ok !== true) {
-        logger.warn('晚省到点没生成（%s）：%s', date, generated.reason)
-        return
-      }
-      logger.info('定时任务到点：晚省 %s 已生成（missed=%s）', generated.date, missed)
-      const touch = await deliverWanshengTouch({
+      }),
+      deliver: ({ date, missed, occurrenceAt }) => deliverRikkeTouch({
         dataDir,
-        date: generated.date,
+        date,
         at: moment,
         manual: false,
         missed,
-        occurrenceAt: occurrence.at === null ? null : occurrence.at.toISOString(),
+        occurrenceAt,
         env,
-      })
-      if (touch.ledgerError !== null) logger.warn('晚省已生成，但触达账没记上：%s', touch.ledgerError)
-      if (touch.notify.status === 'failed') {
-        logger.warn('晚省已生成，但系统通知没发出去（%s）：%s', touch.notify.status, touch.notify.reason)
-      }
-    } catch (error) {
-      logger.warn('晚省到点跑生成链时抛了异常（已兜住，不影响这一轮）：%s', String(error?.message ?? error))
-    }
+      }),
+    })
+  }
+
+  /** #25：晚省那条链（确定性事实 → `<dataDir>/wansheng/<日期>.json` → 系统通知）。骨架同上。 */
+  async function runWansheng(moment, occurrence) {
+    await runTouchChain({
+      label: '晚省',
+      logger,
+      zone: zoneFor(dataDir, timeZone),
+      moment,
+      occurrence,
+      generate: ({ date, missed }) => generateWansheng({
+        ctx, dataDir, date, zone: zoneFor(dataDir, timeZone), at: moment, missed,
+      }),
+      deliver: ({ date, missed, occurrenceAt }) => deliverWanshengTouch({
+        dataDir,
+        date,
+        at: moment,
+        manual: false,
+        missed,
+        occurrenceAt,
+        env,
+      }),
+    })
   }
 
   /** 底稿那条链（三路来源 + 规则骨架 + 一段 LLM 压缩 → `<dataDir>/digao.{md,json}`）。 */

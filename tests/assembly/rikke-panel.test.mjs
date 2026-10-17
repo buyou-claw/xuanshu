@@ -510,6 +510,35 @@ describe('#24 · 触达数据面（traffic.* / rikke.settings.*）', () => {
     expect(calls[1][1]).toEqual({ ids: ['traffic-1'] })
   })
 
+  it('P3（复核 #24）· 打开日课面板只标 kind=rikke 的已读：晚省那一行不动', async () => {
+    const calls = []
+    const api = createNotifyApi({
+      connection: {
+        rpc: {
+          async call(_channel, method, payload) {
+            calls.push([method, payload])
+            if (method === 'traffic.status') {
+              return {
+                ok: true,
+                value: {
+                  entries: [
+                    { id: 'traffic-wansheng', kind: 'wansheng', notify: { status: 'delivered', reason: null }, read: false },
+                    { id: 'traffic-rikke', kind: 'rikke', notify: { status: 'delivered', reason: null }, read: false },
+                  ],
+                  unread: 2,
+                },
+              }
+            }
+            return { ok: true, value: { ok: true, updated: 1 } }
+          },
+        },
+      },
+    })
+    expect(await api.markDeliveredRead({ kind: 'rikke' })).toEqual({ ok: true, updated: 1 })
+    // 只有 rikke 那条进 markRead：打开日课面板不该把晚省的未读抹掉。
+    expect(calls[1][1]).toEqual({ ids: ['traffic-rikke'] })
+  })
+
   it('没有未读就不发 markRead（打开面板不该白写一次盘）', async () => {
     const calls = []
     const api = createNotifyApi({

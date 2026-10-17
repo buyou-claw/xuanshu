@@ -17,6 +17,7 @@
  * 环境：`renderToStaticMarkup`（无 jsdom），因此本文件只断静态界面事实与纯函数；
  * 真浏览器里的点击链路（确认 → 删除 → 重读）**没有**被本文件覆盖——交付报告里如实标注。
  */
+import { readFileSync } from 'node:fs'
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -619,5 +620,15 @@ describe('票 13 · installDigao（加性注册 / 无 document 安全）', () =>
     expect(DIGAO_LABEL).toBe('底稿')
     expect(DIGAO_ORDER).toBe(60) // S13 §8 定的落位（S15 六行表：库 · 底稿 60）
     expect(Object.keys(registrations[0].inject()).sort()).toEqual(['api', 'navigate', 'shiji'])
+  })
+})
+
+describe('S6（复核）· 术语：用「来源标记」，不用「标签」', () => {
+  it('CONTEXT.md 冻结的术语是「来源标记」；底稿的解析/视图源码里不许出现「来源标签」', () => {
+    for (const file of ['digao-model.ts', 'digao.tsx']) {
+      const source = readFileSync(new URL(`../../packages/xuanshu-client/src/client/${file}`, import.meta.url), 'utf8')
+      expect(source, file).not.toContain('来源标签')
+      expect(source, file).toContain('来源标记')
+    }
   })
 })

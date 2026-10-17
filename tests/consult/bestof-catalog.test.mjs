@@ -127,12 +127,13 @@ describe('routes.list · 形状与三态 keyConfigured', () => {
     expect(value.configurable.every((provider) => provider.keyConfigured === 'unknown')).toBe(true)
   })
 
-  it('默认模型读不到 → default=null（不编一个 provider）', async () => {
+  it('默认模型读不到 → default=null，且 isDefault 是 unknown（null）而不是 false', async () => {
     const { methods } = scene({ defaultSelection: null })
     const value = await catalog(methods)
     expect(value.default).toBeNull()
-    expect(value.providers.every((provider) => provider.isDefault === false)).toBe(true)
-    expect(value.providers.every((provider) => provider.models.every((model) => model.isDefault === false))).toBe(true)
+    // S7（复核）：把「读不到默认路由」写成 false，界面会读成「这些都不是默认的」——那是编的。
+    expect(value.providers.every((provider) => provider.isDefault === null)).toBe(true)
+    expect(value.providers.every((provider) => provider.models.every((model) => model.isDefault === null))).toBe(true)
   })
 
   it('llm 服务不在场 → ok=false + 可读 reason，其余字段是空/未知而不是假数据', async () => {

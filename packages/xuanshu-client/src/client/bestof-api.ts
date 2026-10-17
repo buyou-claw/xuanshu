@@ -71,10 +71,11 @@ export interface RouteCatalogProvider {
   registered: boolean;
   /** 三态：`true` 已配 / `false` 缺 key / `'unknown'` 读不到（服务缺席或登录型）。 */
   keyConfigured: boolean | 'unknown';
-  isDefault: boolean;
+  /** 三态：`true` 默认 / `false` 明确不是 / `null` 默认路由读不到（未知 ≠ 不是）。 */
+  isDefault: boolean | null;
   /** `false` = 这家列模型失败，`models` 为空不代表「没有模型」。 */
   modelsKnown: boolean;
-  models: Array<{ id: string; name: string | null; isDefault: boolean }>;
+  models: Array<{ id: string; name: string | null; isDefault: boolean | null }>;
 }
 
 /** 可配置但**未注册**的一家（只能去 DSH「设置 → 模型」里加；玄枢只读）。 */

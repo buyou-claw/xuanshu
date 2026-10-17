@@ -136,6 +136,14 @@ export function createElectronAdapter({ appName = '玄枢' } = {}) {
     loadHtml(window, html) {
       return window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
     },
+    /**
+     * 页面内改 hash（P2：点通知停到 overview，不重载页面）。
+     * 返回 renderer 的 Promise；窗口没了 / 页面还没加载好会 reject —— 调用方退回带 hash 的 loadURL。
+     */
+    setHash(window, hash) {
+      if (!window || window.isDestroyed()) return Promise.resolve()
+      return window.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(`#${hash}`)}`)
+    },
     onWindowClose(window, callback) {
       window.on('close', callback)
     },

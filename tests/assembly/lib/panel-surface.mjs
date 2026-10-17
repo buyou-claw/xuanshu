@@ -68,6 +68,13 @@ export const EXTRA_REGISTRATIONS = [
     cells: ['settings.section\u0000xuanshu.data'],
   },
   {
+    // P4（复核 #26）：设置 → 「事记」分区（墓碑恢复 + 可排除目录），同样是 `settings.section`
+    // 的纯加性 cell；`installShijiSettings` 紧跟在 `installDataSettings` 之后。
+    after: 'workflow',
+    names: ['settings.section'],
+    cells: ['settings.section\u0000xuanshu.shiji'],
+  },
+  {
     // 票 27（#27）：会话内「存成今天的事记」——**一个** composer 入口条，不新增 main key / 侧栏行。
     // 与 sediment / bestof 一样挂在 `workflow` 那一对之后，排在它们之后（`installShiji` 是最后一个 install）。
     after: 'workflow',

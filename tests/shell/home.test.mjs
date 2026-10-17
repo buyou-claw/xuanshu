@@ -156,9 +156,11 @@ describe('#23 · 真实 home 判定与派生路径', () => {
     expect(paths.dataDir).toBe(join(home, 'xuanshu'))
     expect(paths.runtimeDir).toBe(join(home, 'xuanshu', 'runtime'))
     expect(paths.notifyStateFile).toBe(join(home, 'xuanshu', 'runtime', 'shell-notify.json'))
+    // P1（复核 #23）：壳把自己的实际生效状态写在同一个 runtime 目录的兄弟文件里。
+    expect(paths.statusFile).toBe(join(home, 'xuanshu', 'runtime', 'shell-status.json'))
     expect(paths.settingsFile).toBe(join(home, 'xuanshu', 'shell-settings.json'))
     expect(paths.profileDir).toBe(join(home, 'profiles', 'xuanshu'))
-    for (const key of ['dataDir', 'runtimeDir', 'notifyStateFile', 'settingsFile', 'profileDir']) {
+    for (const key of ['dataDir', 'runtimeDir', 'notifyStateFile', 'statusFile', 'settingsFile', 'profileDir']) {
       expect(paths[key].startsWith(resolve(home)), key).toBe(true)
     }
   })

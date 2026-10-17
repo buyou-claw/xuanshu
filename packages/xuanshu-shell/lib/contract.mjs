@@ -21,6 +21,15 @@ export const NOTIFY_SCHEMA = 'xuanshu/notify@1'
 /** 壳与宿主共享的设置文件 schema（契约 §5）。 */
 export const SHELL_SETTINGS_SCHEMA = 'xuanshu/shell-settings@1'
 
+/**
+ * 壳的**实际生效状态**文件 schema（P1 复核 #23 的加性扩展；与 `shell-settings.json` 是两件事：
+ * 那份是「想要什么」，这份是「这台机器上实际成了什么」）。
+ */
+export const SHELL_STATUS_SCHEMA = 'xuanshu/shell-status@1'
+
+/** 开机自启的实际生效方式（壳写、宿主读；值域封闭）。 */
+export const AUTOSTART_METHODS = Object.freeze(['login-item', 'shortcut', 'unsupported'])
+
 /** 通知 kind 的封闭取值域（契约 §2）。 */
 export const NOTIFY_KINDS = Object.freeze(['rikke', 'wansheng'])
 
@@ -42,6 +51,9 @@ export const SHELL_SETTINGS_FILE = 'shell-settings.json'
 
 /** 运行时状态文件名（`<dataDir>/runtime/shell-notify.json`，契约 §1）。 */
 export const SHELL_NOTIFY_STATE_FILE = 'shell-notify.json'
+
+/** 壳的实际生效状态文件名（`<dataDir>/runtime/shell-status.json`，P1 加性；与上面同目录）。 */
+export const SHELL_STATUS_FILE = 'shell-status.json'
 
 /** 运行时目录名（`<dataDir>/runtime`，契约 §1）。 */
 export const RUNTIME_DIR_NAME = 'runtime'

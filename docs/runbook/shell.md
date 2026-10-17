@@ -63,8 +63,9 @@ pnpm --filter xuanshu-shell exec electron --version   # 会报错：说明只有
 3. **关窗常驻**：第一次点窗口的 × → 弹出「还在后台运行」的一次性说明 → 窗口隐藏。
    检查：壳进程与 DSH 子进程都还在；`Get-NetTCPConnection -LocalPort 19388 -State Listen` 仍有监听；
    托盘「打开」能恢复窗口（第二次关窗不再弹说明）。
-4. **设置里的关窗即退出**：把 `<home>/xuanshu/shell-settings.json` 的 `closeBehavior` 改成 `"quit"`，
-   再关窗：壳直接走「先停子进程再退壳」。
+4. **设置里的关窗即退出**：玄枢首页 →「设置 → 通用」→ 勾上「关窗口行为（关窗即退出）」，
+   再关窗：壳直接走「先停子进程再退壳」。同一行下面是「实际生效」状态（关窗：退出）。
+   *（手改 `<home>/xuanshu/shell-settings.json` 是排障手段，不是正常路径：界面写的就是这份文件。）*
 5. **真退出**：托盘「退出」→ 先看到子进程退出、再退壳；确认没有孤儿：
    ```pwsh
    Get-Process node -ErrorAction SilentlyContinue | Select-Object Id,Path
@@ -76,12 +77,17 @@ pnpm --filter xuanshu-shell exec electron --version   # 会报错：说明只有
    退避后自动重拉并在就绪时换回首页；连续失败到上限会显示「已停止重拉」。
 8. **壳被硬杀**：任务管理器结束 electron 进程 → **不应留下 DSH 子进程**（独立看门狗负责）。
    重复 3 次。若偶发留下，记录机器负载与时间，写进风险表（见下）。
-9. **开机自启**：`shell-settings.json` 里 `autostart:true`，重启壳后检查：
+9. **开机自启**：玄枢首页 →「设置 → 通用」→ 勾上「开机自启」，看一眼行下的「实际生效」：
+   它显示的是**这台机器上实际用了哪条路**（登录项 / 启动文件夹快捷方式 / 不支持），
+   不是设置里勾的值。随后核对：
    - 登录项方式：任务管理器 →「启动」里有玄枢（开发期注册的是 electron.exe，这是**如实**的）；
    - 快捷方式方式：`Win+R` → `shell:startup` 里有「玄枢.lnk」；
    - 托盘/状态页显示的「实际生效方式」要与之一致；两边都不可用时显示「不支持（未生效）」。
+   *（手改 `shell-settings.json` 的 `autostart` 是排障手段，不是正常路径。）*
 10. **通知**：壳运行、玄枢首页加载后，用状态文件里的 url/token 手动发一条（见下）；
-    预期系统通知弹出；点通知 → 窗口被唤到前面并停在首页（**做不到**「点哪条进哪页」，前端无路由）。
+    预期系统通知弹出；点通知 → 窗口被唤到前面并**停在玄枢首页（overview）**。
+    落点靠 hash（`#xuanshu-overview`，前端仍无路由）；`target:'consult'` 也只到 overview ——
+    「点哪条进哪页」仍未做（前端无路由，靠不存在的深链不做假按钮）。
     Windows 上如果通知不弹：先在系统设置里确认「通知」允许；仍不弹则记为未验证项。
 
 ### 手动发一条通知（不跑宿主）
@@ -123,7 +129,8 @@ Invoke-RestMethod -Method Post -Uri "$($state.url)/v1/notify" -ContentType 'appl
   Get-NetTCPConnection -LocalPort 19388 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
   ```
   （先 `Get-Process -Id` 确认那是玄枢的 node，不要误杀别的进程。）
-- 退出后 `<home>/xuanshu/runtime/shell-notify.json` 应被删除；宿主读不到会如实记「没有壳」。
+- 退出后 `<home>/xuanshu/runtime/shell-notify.json` 与同目录的 `shell-status.json` 应被删除；
+  宿主读不到会如实记「没有壳」（设置页显示实际生效方式为「未知」）。
 
 ## 排障一句话表
 
@@ -134,6 +141,8 @@ Invoke-RestMethod -Method Post -Uri "$($state.url)/v1/notify" -ContentType 'appl
 | 通知 401 | 状态文件里的 token 与请求头是否同一份；壳是否重启过（token 每次启动都换） |
 | 通知 400 | 载荷字段：schema/id/kind/title/target/createdAt；`body` ≤ 200 字、`title` ≤ 120 字 |
 | 设置改了没反应 | 壳每次关窗/建托盘菜单前都会重读；`fs.watch` 只是加速，文件写坏会静默回落默认值 |
+| 设置页显示「实际生效方式：未知」 | 壳没在跑（或旧版壳没写 `runtime/shell-status.json`）；设置值本身仍会写进 `shell-settings.json`，下次壳启动生效 |
+| 设置页「实际生效」与勾选值不一致 | 系统把启动项拦下了（看 `shell-status.json` 的 `autostart.method` 与 `enabled`；两条路都不可用时是 `unsupported`） |
 | 自启显示「不支持」 | 平台既没有登录项 API 也没有启动文件夹（如 Linux）；或写快捷方式被拦 |
 | 第二个实例没反应 | 第二个进程只负责唤醒第一个；第一个被托盘隐藏时应弹到前台（看托盘是否还在） |
 
@@ -141,5 +150,7 @@ Invoke-RestMethod -Method Post -Uri "$($state.url)/v1/notify" -ContentType 'appl
 
 - 实现：`packages/xuanshu-shell/lib/*.mjs`（纯模块 + `electron-adapter.mjs` 是唯一 import electron 的文件）
 - 测试：`node ./node_modules/vitest/vitest.mjs run tests/shell`
-- 契约：`.scratch/notes/spec002/contract-shell-notify.md`（§0 子进程/env/URL、§1 状态文件、§2 端点、§5 设置）
+- 契约：`.scratch/notes/spec002/contract-shell-notify.md`（§0 子进程/env/URL、§1 状态文件、§2 端点、§5 设置）；
+  P1 的运行时状态文件 `runtime/shell-status.json`（自启实际生效方式 / 关窗行为）是**加性**扩展，
+  与 `shell-notify.json` 同目录，宿主从 `XUANSHU_SHELL_NOTIFY_STATE` 的同目录兄弟推导，不新增 env。
 - 决策：`docs/adr/0014-own-desktop-shell-and-home.md`

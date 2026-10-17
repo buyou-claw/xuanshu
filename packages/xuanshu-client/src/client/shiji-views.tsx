@@ -19,7 +19,7 @@
  * 注册面照做（与 `sediment-views.tsx` / `digao.tsx` 同法）。
  */
 import type { Context } from '@deepseek-ai/cordis';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { PanelNavTarget } from './panel.js';
 import { isConsultSessionId } from './sediment-model.js';
@@ -174,6 +174,249 @@ export function installShiji(ctx: Context, deps: ShijiInstallDeps): void {
 }
 
 /**
+ * P4（复核 #26）· 事记的设置面（设置 → 事记）。
+ *
+ * 为什么在这里：底稿面板承诺「删除后可以在设置里恢复」，但复核时设置里没有入口 ——
+ * `shiji.restore` / `shiji.settings.get|set` 只到 RPC 面。这个分区把两件事摆到界面上：
+ *   - **已删除的事记**（墓碑，`frozenAt` 非空）逐条列出 + [恢复]；
+ *   - **不参与自动扫描的目录**（相对项目根）逐条列出 + [移除]，输入框 + [添加]。
+ *
+ * 落位：`settings.section`（与票 30「我的数据」同一个 list 槽；纯加性 —— 不新增 main key / 侧栏行）。
+ * 纪律：apply / 静态渲染期不发请求（取数在挂载后的 effect 里）；写失败的理由显示在分区里。
+ */
+export const SHIJI_SETTINGS_ID = 'xuanshu.shiji';
+export const SHIJI_SETTINGS_LABEL = '事记';
+/** 既有分区：account -10 / general 0 / models 10 / plugins 15 / agent-presets 20 / 我的数据 25。 */
+export const SHIJI_SETTINGS_ORDER = 26;
+
+/** 分区的全部状态（纯渲染组件的唯一输入）。 */
+export interface ShijiSettingsState {
+  /** 墓碑（`frozenAt` 非空）。 */
+  tombstones: ShijiEntry[];
+  excludedDirs: string[];
+  /** 输入框里还没提交的目录。 */
+  draftDir: string;
+  busy: boolean;
+  loading?: boolean;
+  error?: string;
+  note?: string;
+}
+
+/** 分区的动作（四个写入口，分别对应 restore / settings.set 的四条调用）。 */
+export interface ShijiSettingsActions {
+  onDraftDirChange(value: string): void;
+  onAddExcludedDir(): void;
+  onRemoveExcludedDir(dir: string): void;
+  onRestore(id: string): void;
+}
+
+/** ISO 时间 → `YYYY-MM-DD`（只显示日期；没值就如实说未回传）。 */
+function dayOf(iso: string | null | undefined): string {
+  return typeof iso === 'string' && iso.length >= 10 ? iso.slice(0, 10) : '日期未回传';
+}
+
+/**
+ * 纯渲染组件（无取数逻辑；SSR 与静态断言可直接渲染）。
+ * @param props - 当前状态与四个动作。
+ */
+export function XsShijiSettingsSection({ state, actions }: { state: ShijiSettingsState; actions: ShijiSettingsActions }) {
+  if (state.loading === true) {
+    return (
+      <div className="xs-shiji__settings" data-xuanshu-section="shiji">
+        <h2>事记</h2>
+        <p className="xs-shiji__note" data-xs-state="loading">正在读事记与排除目录…</p>
+      </div>
+    );
+  }
+  return (
+    <div className="xs-shiji__settings" data-xuanshu-section="shiji">
+      <h2>事记</h2>
+      <p className="xs-shiji__note">
+        这里管理「曾经做过什么」里的事记：删掉的可以恢复；被排除的目录不参与自动扫描。
+      </p>
+
+      <section className="xs-shiji__block" data-xuanshu-block="shiji-restore">
+        <h3>已删除的事记（可恢复）</h3>
+        {state.tombstones.length === 0 ? (
+          <p className="xs-shiji__note" data-xuanshu-empty="tombstones">没有被删除的事记。</p>
+        ) : (
+          <ul className="xs-shiji__list">
+            {state.tombstones.map((entry) => (
+              <li key={entry.id} className="xs-shiji__row" data-xuanshu-shiji={entry.id}>
+                <span>{entry.name}</span>
+                <span className="xs-shiji__note">{`删除于 ${dayOf(entry.frozenAt)}`}</span>
+                <button
+                  type="button"
+                  data-xuanshu-action="restore-shiji"
+                  data-xuanshu-shiji-id={entry.id}
+                  disabled={state.busy}
+                  onClick={() => actions.onRestore(entry.id)}
+                >
+                  {state.busy ? '恢复中…' : '恢复'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="xs-shiji__block" data-xuanshu-block="shiji-excluded">
+        <h3>不参与自动扫描的目录</h3>
+        <p className="xs-shiji__note">相对项目根的路径（如 node_modules、dist）；绝对路径会被拒绝。</p>
+        {state.excludedDirs.length === 0 ? (
+          <p className="xs-shiji__note" data-xuanshu-empty="excluded">没有排除目录。</p>
+        ) : (
+          <ul className="xs-shiji__list">
+            {state.excludedDirs.map((dir) => (
+              <li key={dir} className="xs-shiji__row" data-xuanshu-excluded-dir={dir}>
+                <code>{dir}</code>
+                <button
+                  type="button"
+                  data-xuanshu-action="remove-excluded-dir"
+                  data-xuanshu-dir={dir}
+                  disabled={state.busy}
+                  onClick={() => actions.onRemoveExcludedDir(dir)}
+                >
+                  移除
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="xs-shiji__actions">
+          <label>
+            目录
+            <input
+              type="text"
+              data-xuanshu-field="excluded-dir"
+              value={state.draftDir}
+              placeholder="node_modules"
+              onChange={(event) => actions.onDraftDirChange((event.target as HTMLInputElement).value)}
+            />
+          </label>
+          <button type="button" data-xuanshu-action="add-excluded-dir" disabled={state.busy} onClick={actions.onAddExcludedDir}>
+            添加
+          </button>
+        </div>
+      </section>
+
+      {state.error === undefined ? null : (
+        <p className="xs-shiji__error" role="alert" data-xuanshu-setting-error="shiji">{state.error}</p>
+      )}
+      {state.note === undefined ? null : (
+        <p className="xs-shiji__note" role="status" data-xuanshu-notice="shiji">{state.note}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 分区宿主：挂载后读一次（墓碑 + 排除目录）；四个动作写回并**重读**。
+ *
+ * 写失败 → 分区里显示可读理由，状态保持上一次读到的值（不显示一个没写进去的开关）。
+ */
+export function ShijiSettingsHost({ api }: { api: ShijiApi }) {
+  const [state, setState] = useState<ShijiSettingsState>({
+    tombstones: [], excludedDirs: [], draftDir: '', busy: false, loading: true,
+  });
+
+  const load = (): void => {
+    setState((previous) => ({ ...previous, loading: true, error: undefined }));
+    void Promise.all([api.list({ includeDeleted: true }), api.getSettings()])
+      .then(([list, settings]) => {
+        setState((previous) => ({
+          ...previous,
+          loading: false,
+          tombstones: (Array.isArray(list.entries) ? list.entries : []).filter((entry) => entry.frozenAt !== null && entry.frozenAt !== undefined),
+          excludedDirs: Array.isArray(settings.excludedDirs) ? settings.excludedDirs : [],
+        }));
+      })
+      .catch((reason: unknown) => {
+        setState((previous) => ({ ...previous, loading: false, error: `读不到事记设置：${errorText(reason)}` }));
+      });
+  };
+
+  useEffect(() => {
+    load();
+    // `load` 是每渲染重建的闭包；依赖只留数据面（与日课 / 底稿面板同法）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api]);
+
+  /** 写排除目录：host 侧归一后的列表是唯一权威（失败抛，理由显示在分区里）。 */
+  const writeExcludedDirs = (next: string[], note: string): void => {
+    setState((previous) => ({ ...previous, busy: true, error: undefined, note: undefined }));
+    void api
+      .setSettings({ excludedDirs: next })
+      .then((saved) => {
+        setState((previous) => ({ ...previous, busy: false, excludedDirs: saved.excludedDirs, note }));
+      })
+      .catch((reason: unknown) => {
+        setState((previous) => ({ ...previous, busy: false, error: errorText(reason) }));
+      });
+  };
+
+  return (
+    <XsShijiSettingsSection
+      state={state}
+      actions={{
+        onDraftDirChange: (value) => {
+          setState((previous) => ({ ...previous, draftDir: value, error: undefined }));
+        },
+        onAddExcludedDir: () => {
+          const dir = state.draftDir.trim();
+          if (dir === '') {
+            setState((previous) => ({ ...previous, error: '排除目录不能为空。' }));
+            return;
+          }
+          if (state.excludedDirs.includes(dir)) {
+            setState((previous) => ({ ...previous, error: `「${dir}」已经在列表里了。` }));
+            return;
+          }
+          writeExcludedDirs([...state.excludedDirs, dir], `已排除目录「${dir}」。`);
+        },
+        onRemoveExcludedDir: (dir) => {
+          writeExcludedDirs(state.excludedDirs.filter((entry) => entry !== dir), `已取消排除「${dir}」。`);
+        },
+        onRestore: (id) => {
+          setState((previous) => ({ ...previous, busy: true, error: undefined, note: undefined }));
+          void api
+            .restore({ id })
+            .then(() => {
+              setState((previous) => ({ ...previous, busy: false }));
+              load();
+              setState((previous) => ({ ...previous, note: '已恢复这条事记：下一轮扫描会按在场源头重新出现。' }));
+            })
+            .catch((reason: unknown) => {
+              setState((previous) => ({ ...previous, busy: false, error: errorText(reason) }));
+            });
+        },
+      }}
+    />
+  );
+}
+
+/**
+ * 注册「设置 → 事记」分区（**纯加性**：不新增 main key / 侧栏行，apply 期不发请求）。
+ * @param ctx - 客户端上下文（需 `slots`）。
+ * @param deps - 事记数据面。
+ */
+export function installShijiSettings(ctx: Context, deps: { api: ShijiApi }): void {
+  installShijiStyle();
+  ctx.slots.inject('settings.section', () =>
+    ctx.slots.register(
+      {
+        name: 'settings.section',
+        id: SHIJI_SETTINGS_ID,
+        order: SHIJI_SETTINGS_ORDER,
+        label: SHIJI_SETTINGS_LABEL,
+        inject: () => ({ api: deps.api }),
+      },
+      ShijiSettingsHost as never,
+    ),
+  );
+}
+
+/**
  * 入口条的样式（token 走票 03 覆盖过的 `--xs-*`，不写死配色）。
  * 与 `sediment-views.tsx` 同款守卫：Node 里执行时安静跳过。
  */
@@ -192,6 +435,15 @@ function installShijiStyle(): void {
 .xs-shiji__actions button:disabled{opacity:.5;cursor:not-allowed}
 .xs-btn--primary{background:var(--xs-constraint-human-gate-bg,var(--xs-accent));border-color:var(--xs-accent);color:var(--xs-constraint-human-gate-fg,var(--xs-accent-fg))}
 .xs-shiji__notice,.xs-shiji__error{flex-basis:100%;font-size:.85rem;margin:4px 0;padding:8px 10px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-shiji__settings h2{margin:0 0 6px}
+.xs-shiji__settings h3{margin:14px 0 4px;font-size:.95rem}
+.xs-shiji__block{border-top:1px solid var(--xs-edge-card);margin-top:12px;padding-top:8px}
+.xs-shiji__list{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.xs-shiji__row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.xs-shiji__row button{font:inherit;padding:4px 10px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-shiji__row button:disabled{opacity:.5;cursor:not-allowed}
+.xs-shiji__settings input[type="text"]{font:inherit;margin-left:6px;padding:4px 8px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);background:var(--xs-surface-card);color:inherit}
+.xs-shiji__error{color:var(--xs-text-secondary)}
 `;
   document.head.appendChild(style);
 }

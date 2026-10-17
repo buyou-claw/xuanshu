@@ -86,10 +86,13 @@ export function createRikkeMethods(ctx, config = {}) {
       if (read.state === 'error') out.reason = read.reason
 
       // #24：触达账的加性读面。**拿不到就省略键**（账文件不存在 ≠ 未读 0 —— 界面不该因此显示一个数）。
+      // P3（复核 #24）：只数 `kind === 'rikke'` 的条目 —— 晚省那一条既不是「日课通知」，
+      // 它的失败理由也不该冒到日课面板上（与 `wansheng/service.mjs` 的过滤逐字对称）。
       const ledger = readTraffic(dataDir)
       if (ledger.exists) {
-        out.unread = ledger.unread
-        const latest = ledger.entries[0]
+        const mine = ledger.entries.filter((entry) => entry.kind === 'rikke')
+        out.unread = mine.filter((entry) => entry.notify.status === 'delivered' && entry.read !== true).length
+        const latest = mine[0]
         if (latest !== undefined) {
           out.notify = {
             status: latest.notify.status,

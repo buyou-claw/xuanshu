@@ -141,7 +141,7 @@ function providerLine(entry, defaultProvider) {
     modelsKnown,
     modelCount: models.length,
     models,
-    isDefaultProvider: defaultProvider !== void 0 && defaultProvider === id,
+    isDefaultProvider: defaultProvider === null || defaultProvider === void 0 ? null : defaultProvider === id,
     usable: entry.registered === true && keyConfigured !== false && modelsKnown && models.length > 0
   };
 }
@@ -361,6 +361,11 @@ var BESTOF_MAX_ROUTES = 4;
 function routeKey(route) {
   return `${route.provider}::${route.model ?? ""}`;
 }
+function defaultOfRoute(providerDefault, modelDefault) {
+  if (providerDefault === null || providerDefault === void 0) return null;
+  if (modelDefault === null || modelDefault === void 0) return null;
+  return providerDefault === true && modelDefault === true;
+}
 function flattenCatalogRoutes(catalog) {
   const options = [];
   for (const provider of catalog?.providers ?? []) {
@@ -373,7 +378,7 @@ function flattenCatalogRoutes(catalog) {
         providerName: provider.name ?? null,
         label: `${provider.id} · ${modelName ?? model.id}`,
         keyConfigured: provider.keyConfigured,
-        isDefault: provider.isDefault && model.isDefault
+        isDefault: defaultOfRoute(provider.isDefault, model.isDefault)
       });
     }
   }
@@ -382,7 +387,7 @@ function flattenCatalogRoutes(catalog) {
 function defaultRouteSelection(catalog, { min = BESTOF_MIN_ROUTES, max = BESTOF_MAX_ROUTES } = {}) {
   const options = flattenCatalogRoutes(catalog);
   if (options.length === 0) return [];
-  const preferred = options.find((option) => option.isDefault) ?? options[0];
+  const preferred = options.find((option) => option.isDefault === true) ?? options[0];
   if (preferred === void 0) return [];
   const preferredProvider = preferred.provider;
   const picked = [];
@@ -6457,6 +6462,59 @@ function installOnboarding(ctx, deps) {
   );
 }
 
+// src/client/overview-hash.ts
+var OVERVIEW_HASH = "xuanshu-overview";
+function isOverviewHash(hash) {
+  return hash === `#${OVERVIEW_HASH}`;
+}
+function createOverviewHashBridge({
+  location,
+  selectPanel
+}) {
+  let started = false;
+  const handle = () => {
+    if (!isOverviewHash(location.hash)) return;
+    selectPanel("overview");
+    try {
+      location.hash = "";
+    } catch {
+    }
+  };
+  return {
+    /**
+     * 安装：立即检查一次 + 订阅 hashchange。
+     */
+    start() {
+      if (started) return;
+      started = true;
+      location.addEventListener("hashchange", handle);
+      handle();
+    },
+    /** 卸载（幂等）。 */
+    stop() {
+      if (!started) return;
+      started = false;
+      location.removeEventListener("hashchange", handle);
+    },
+    /** 纯处理（测试可直接点它，不必经过事件）。 */
+    handle
+  };
+}
+function installOverviewHashBridge(ctx, options = {}) {
+  const target = options.window ?? (typeof globalThis.window === "undefined" ? void 0 : globalThis.window);
+  if (target === void 0 || target.location === void 0) return void 0;
+  const bridge = createOverviewHashBridge({
+    location: target.location,
+    selectPanel: (id) => {
+      ctx.layout.selectPanel(id);
+    }
+  });
+  bridge.start();
+  return () => {
+    bridge.stop();
+  };
+}
+
 // src/client/OverviewIcon.tsx
 var import_jsx_runtime18 = require("react/jsx-runtime");
 function OverviewIcon({ size = 20 }) {
@@ -7333,7 +7391,7 @@ function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }) {
   }, [api, seeded]);
   (0, import_react17.useEffect)(() => {
     if (seeded || notify === void 0) return;
-    void notify.markDeliveredRead().catch(() => {
+    void notify.markDeliveredRead({ kind: "rikke" }).catch(() => {
     });
   }, [notify, seeded]);
   const generate = () => {
@@ -7595,8 +7653,48 @@ var import_react19 = require("react");
 
 // src/client/notify.tsx
 var import_react18 = require("react");
+
+// src/client/notify-api.ts
+var NOTIFY_ENDPOINTS = {
+  trafficStatus: "traffic.status",
+  markRead: "traffic.markRead",
+  settingsGet: "traffic.settings.get",
+  settingsSet: "traffic.settings.set"
+};
+var SHELL_SETTINGS_ENDPOINTS = {
+  get: "shell.settings.get",
+  set: "shell.settings.set"
+};
+function createNotifyApi(ctx) {
+  return {
+    status: (payload, signal) => rpcCall(ctx, NOTIFY_ENDPOINTS.trafficStatus, payload ?? {}, signal),
+    markRead: (payload, signal) => rpcCall(ctx, NOTIFY_ENDPOINTS.markRead, payload, signal),
+    async markDeliveredRead(options, signal) {
+      const kind = typeof options?.kind === "string" && options.kind !== "" ? options.kind : void 0;
+      const ledger = await rpcCall(ctx, NOTIFY_ENDPOINTS.trafficStatus, {}, signal);
+      const ids = (Array.isArray(ledger?.entries) ? ledger.entries : []).filter((entry) => (kind === void 0 || entry?.kind === kind) && entry?.notify?.status === "delivered" && entry.read !== true).map((entry) => entry.id);
+      if (ids.length === 0) return { ok: true, updated: 0 };
+      return rpcCall(ctx, NOTIFY_ENDPOINTS.markRead, { ids }, signal);
+    },
+    getSettings: (signal) => rpcCall(ctx, NOTIFY_ENDPOINTS.settingsGet, {}, signal),
+    setSettings: (payload, signal) => rpcCall(ctx, NOTIFY_ENDPOINTS.settingsSet, payload, signal),
+    getShellSettings: (signal) => rpcCall(ctx, SHELL_SETTINGS_ENDPOINTS.get, {}, signal),
+    setShellSettings: (payload, signal) => rpcCall(ctx, SHELL_SETTINGS_ENDPOINTS.set, payload, signal)
+  };
+}
+
+// src/client/notify.tsx
 var import_jsx_runtime22 = require("react/jsx-runtime");
 var TOUCH_SETTINGS_ID = "xuanshu.touch";
+var AUTOSTART_METHOD_TEXT = {
+  "login-item": "登录项",
+  shortcut: "启动文件夹快捷方式",
+  unsupported: "不支持（本平台无法注册）"
+};
+function autostartMethodText(method) {
+  if (method === void 0) return "未知（桌面壳未运行）";
+  return AUTOSTART_METHOD_TEXT[method] ?? "未知（桌面壳未运行）";
+}
 var TRAFFIC_STATUS_TEXT = {
   delivered: "成功",
   failed: "失败",
@@ -7647,7 +7745,26 @@ function DeliveryHistoryHost({ notify, preloaded }) {
   if (status === void 0) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(XsDeliveryHistory, { status });
 }
+function createShellSettingsWriter({
+  api,
+  onChanged,
+  onError
+}) {
+  return async (patch) => {
+    try {
+      const answer = await api.setShellSettings(patch);
+      onChanged?.(answer);
+      return answer;
+    } catch (reason) {
+      onError?.(`设置没写成：${reason instanceof Error ? reason.message : String(reason)}`);
+      return void 0;
+    }
+  };
+}
 function XsTouchSettingsRow({ state, actions }) {
+  const shell = state.shell;
+  const shellKnown = shell !== void 0;
+  const effective = shell?.effective;
   return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "xs-touch__settings", "data-xs-touch": "settings", children: [
     /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "xs-touch__row", "data-xuanshu-setting": "ai", children: [
       /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { children: [
@@ -7682,7 +7799,53 @@ function XsTouchSettingsRow({ state, actions }) {
         ),
         /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-touch__note", children: state.notifySummary ? "开" : "关" })
       ] })
-    ] })
+    ] }),
+    state.shellError === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", role: "alert", "data-xuanshu-setting-error": "shell", children: state.shellError }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "xs-touch__row", "data-xuanshu-setting": "close-behavior", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: "关窗口行为" }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", children: "勾上 = 点 × 直接退出（先停 DSH 子进程再退壳）；不勾 = 收进托盘继续跑，日课与晚省仍会到点。 这个开关写进共享设置，壳下次重读即生效。" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: shellKnown && shell.closeBehavior === "quit",
+            disabled: !shellKnown,
+            onChange: (event) => actions.onToggleCloseBehavior(event.target.checked)
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-touch__note", children: shellKnown ? shell.closeBehavior === "quit" ? "关窗即退出" : "收进托盘" : "未知" })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "xs-touch__row", "data-xuanshu-setting": "autostart", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { children: "开机自启" }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", children: "登录项优先，其次启动文件夹快捷方式；两条路都不可用时如实显示「不支持」。 下面那行显示的是**这台机器上实际生效**的方式，不是这里勾的值。" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("label", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: shellKnown && shell.autostart === true,
+            disabled: !shellKnown,
+            onChange: (event) => actions.onToggleAutostart(event.target.checked)
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-touch__note", children: shellKnown ? shell.autostart ? "开" : "关" : "未知" })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+      "p",
+      {
+        className: "xs-touch__note",
+        "data-xuanshu-effective": "autostart",
+        "data-xuanshu-effective-known": effective === void 0 ? "false" : "true",
+        children: effective === void 0 ? "实际生效方式：未知（桌面壳未运行）—— 这里的开关会写进共享设置，下次桌面壳启动时生效。" : `实际生效：${autostartMethodText(effective.autostart.method)}（${effective.autostart.enabled ? "已开" : "已关"}） · 关窗：${effective.closeBehavior === "quit" ? "退出" : "收进托盘"}${effective.autostart.enabled === shell?.autostart ? "" : "（注意：设置里的开关与实际生效不一致，可能是系统启动项被拦下了）"}`
+      }
+    )
   ] });
 }
 function TouchSettingsHost({ rikke, notify }) {
@@ -7693,6 +7856,20 @@ function TouchSettingsHost({ rikke, notify }) {
     void Promise.all([rikke.getSettings(), notify.getSettings()]).then(([rikkeSettings, notifySettings]) => {
       if (!alive) return;
       setState({ aiEnabled: rikkeSettings.aiEnabled, notifySummary: notifySettings.notifySummary });
+      void notify.getShellSettings().then((answer) => {
+        if (!alive) return;
+        setState((previous) => previous === void 0 ? previous : {
+          ...previous,
+          shell: {
+            closeBehavior: answer.settings.closeBehavior,
+            autostart: answer.settings.autostart === true,
+            ...answer.effective === void 0 ? {} : { effective: answer.effective }
+          }
+        });
+      }).catch((reason) => {
+        if (!alive) return;
+        setState((previous) => previous === void 0 ? previous : { ...previous, shellError: `读不到壳设置：${reason instanceof Error ? reason.message : String(reason)}` });
+      });
     }).catch((reason) => {
       if (!alive) return;
       setError(`读不到设置：${reason instanceof Error ? reason.message : String(reason)}`);
@@ -7704,6 +7881,34 @@ function TouchSettingsHost({ rikke, notify }) {
   if (state === void 0) {
     return error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", role: "alert", "data-xuanshu-setting-error": "read", children: error });
   }
+  const writeShell = (patch) => {
+    const before = state.shell;
+    const optimistic = before === void 0 ? before : {
+      ...before,
+      ...patch.closeBehavior === void 0 ? {} : { closeBehavior: patch.closeBehavior },
+      ...patch.autostart === void 0 ? {} : { autostart: patch.autostart }
+    };
+    setState({ ...state, shell: optimistic, shellError: void 0 });
+    setError(void 0);
+    void createShellSettingsWriter({
+      api: notify,
+      onChanged: (answer) => {
+        setState((previous) => previous === void 0 ? previous : {
+          ...previous,
+          shellError: void 0,
+          shell: {
+            closeBehavior: answer.settings.closeBehavior,
+            autostart: answer.settings.autostart === true,
+            ...answer.effective === void 0 ? {} : { effective: answer.effective }
+          }
+        });
+      },
+      onError: (message) => {
+        setState({ ...state, shell: before, shellError: void 0 });
+        setError(message);
+      }
+    })(patch);
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_jsx_runtime22.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
       XsTouchSettingsRow,
@@ -7725,6 +7930,12 @@ function TouchSettingsHost({ rikke, notify }) {
               setState({ ...state, notifySummary: !enabled });
               setError(`通知摘要开关没写成：${reason instanceof Error ? reason.message : String(reason)}`);
             });
+          },
+          onToggleCloseBehavior: (quit) => {
+            writeShell({ closeBehavior: quit ? "quit" : "hide" });
+          },
+          onToggleAutostart: (enabled) => {
+            writeShell({ autostart: enabled });
           }
         }
       }
@@ -7938,28 +8149,6 @@ function installWansheng(ctx, deps) {
       WanshengIcon
     )
   );
-}
-
-// src/client/notify-api.ts
-var NOTIFY_ENDPOINTS = {
-  trafficStatus: "traffic.status",
-  markRead: "traffic.markRead",
-  settingsGet: "traffic.settings.get",
-  settingsSet: "traffic.settings.set"
-};
-function createNotifyApi(ctx) {
-  return {
-    status: (payload, signal) => rpcCall(ctx, NOTIFY_ENDPOINTS.trafficStatus, payload ?? {}, signal),
-    markRead: (payload, signal) => rpcCall(ctx, NOTIFY_ENDPOINTS.markRead, payload, signal),
-    async markDeliveredRead(signal) {
-      const ledger = await rpcCall(ctx, NOTIFY_ENDPOINTS.trafficStatus, {}, signal);
-      const ids = (Array.isArray(ledger?.entries) ? ledger.entries : []).filter((entry) => entry?.notify?.status === "delivered" && entry.read !== true).map((entry) => entry.id);
-      if (ids.length === 0) return { ok: true, updated: 0 };
-      return rpcCall(ctx, NOTIFY_ENDPOINTS.markRead, { ids }, signal);
-    },
-    getSettings: (signal) => rpcCall(ctx, NOTIFY_ENDPOINTS.settingsGet, {}, signal),
-    setSettings: (payload, signal) => rpcCall(ctx, NOTIFY_ENDPOINTS.settingsSet, payload, signal)
-  };
 }
 
 // src/client/workflow/workflow-api.ts
@@ -8731,7 +8920,10 @@ function installSedimentStyle() {
 var SHIJI_ENDPOINTS = {
   list: "shiji.list",
   remove: "shiji.remove",
-  fromSession: "shiji.fromSession"
+  restore: "shiji.restore",
+  fromSession: "shiji.fromSession",
+  settingsGet: "shiji.settings.get",
+  settingsSet: "shiji.settings.set"
 };
 function unwrapWrite(value) {
   if (value?.ok === false) {
@@ -8743,9 +8935,18 @@ function createShijiApi(ctx) {
   return {
     list: (payload, signal) => rpcCall(ctx, SHIJI_ENDPOINTS.list, payload ?? {}, signal),
     remove: async (payload, signal) => unwrapWrite(await rpcCall(ctx, SHIJI_ENDPOINTS.remove, { id: payload.id, confirmed: true }, signal)),
+    restore: async (payload, signal) => unwrapWrite(await rpcCall(ctx, SHIJI_ENDPOINTS.restore, { id: payload.id, confirmed: true }, signal)),
     fromSession: async (payload, signal) => unwrapWrite(
       await rpcCall(ctx, SHIJI_ENDPOINTS.fromSession, { sessionId: payload.sessionId, confirmed: true }, signal)
-    )
+    ),
+    getSettings: (signal) => rpcCall(ctx, SHIJI_ENDPOINTS.settingsGet, {}, signal),
+    async setSettings(payload, signal) {
+      const answer = await rpcCall(ctx, SHIJI_ENDPOINTS.settingsSet, payload, signal);
+      if (answer?.ok !== true) {
+        throw new Error(answer?.error?.message ?? "事记设置没写成（宿主没有给理由）。");
+      }
+      return { excludedDirs: Array.isArray(answer.excludedDirs) ? answer.excludedDirs : [] };
+    }
   };
 }
 
@@ -8841,6 +9042,163 @@ function installShiji(ctx, deps) {
     )
   );
 }
+var SHIJI_SETTINGS_ID = "xuanshu.shiji";
+var SHIJI_SETTINGS_LABEL = "事记";
+var SHIJI_SETTINGS_ORDER = 26;
+function dayOf(iso) {
+  return typeof iso === "string" && iso.length >= 10 ? iso.slice(0, 10) : "日期未回传";
+}
+function XsShijiSettingsSection({ state, actions }) {
+  if (state.loading === true) {
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { className: "xs-shiji__settings", "data-xuanshu-section": "shiji", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("h2", { children: "事记" }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", "data-xs-state": "loading", children: "正在读事记与排除目录…" })
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { className: "xs-shiji__settings", "data-xuanshu-section": "shiji", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("h2", { children: "事记" }),
+    /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", children: "这里管理「曾经做过什么」里的事记：删掉的可以恢复；被排除的目录不参与自动扫描。" }),
+    /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("section", { className: "xs-shiji__block", "data-xuanshu-block": "shiji-restore", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("h3", { children: "已删除的事记（可恢复）" }),
+      state.tombstones.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", "data-xuanshu-empty": "tombstones", children: "没有被删除的事记。" }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("ul", { className: "xs-shiji__list", children: state.tombstones.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("li", { className: "xs-shiji__row", "data-xuanshu-shiji": entry.id, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { children: entry.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { className: "xs-shiji__note", children: `删除于 ${dayOf(entry.frozenAt)}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+          "button",
+          {
+            type: "button",
+            "data-xuanshu-action": "restore-shiji",
+            "data-xuanshu-shiji-id": entry.id,
+            disabled: state.busy,
+            onClick: () => actions.onRestore(entry.id),
+            children: state.busy ? "恢复中…" : "恢复"
+          }
+        )
+      ] }, entry.id)) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("section", { className: "xs-shiji__block", "data-xuanshu-block": "shiji-excluded", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("h3", { children: "不参与自动扫描的目录" }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", children: "相对项目根的路径（如 node_modules、dist）；绝对路径会被拒绝。" }),
+      state.excludedDirs.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", "data-xuanshu-empty": "excluded", children: "没有排除目录。" }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("ul", { className: "xs-shiji__list", children: state.excludedDirs.map((dir) => /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("li", { className: "xs-shiji__row", "data-xuanshu-excluded-dir": dir, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("code", { children: dir }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+          "button",
+          {
+            type: "button",
+            "data-xuanshu-action": "remove-excluded-dir",
+            "data-xuanshu-dir": dir,
+            disabled: state.busy,
+            onClick: () => actions.onRemoveExcludedDir(dir),
+            children: "移除"
+          }
+        )
+      ] }, dir)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { className: "xs-shiji__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("label", { children: [
+          "目录",
+          /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+            "input",
+            {
+              type: "text",
+              "data-xuanshu-field": "excluded-dir",
+              value: state.draftDir,
+              placeholder: "node_modules",
+              onChange: (event) => actions.onDraftDirChange(event.target.value)
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", "data-xuanshu-action": "add-excluded-dir", disabled: state.busy, onClick: actions.onAddExcludedDir, children: "添加" })
+      ] })
+    ] }),
+    state.error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__error", role: "alert", "data-xuanshu-setting-error": "shiji", children: state.error }),
+    state.note === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", role: "status", "data-xuanshu-notice": "shiji", children: state.note })
+  ] });
+}
+function ShijiSettingsHost({ api }) {
+  const [state, setState] = (0, import_react22.useState)({
+    tombstones: [],
+    excludedDirs: [],
+    draftDir: "",
+    busy: false,
+    loading: true
+  });
+  const load = () => {
+    setState((previous) => ({ ...previous, loading: true, error: void 0 }));
+    void Promise.all([api.list({ includeDeleted: true }), api.getSettings()]).then(([list, settings]) => {
+      setState((previous) => ({
+        ...previous,
+        loading: false,
+        tombstones: (Array.isArray(list.entries) ? list.entries : []).filter((entry) => entry.frozenAt !== null && entry.frozenAt !== void 0),
+        excludedDirs: Array.isArray(settings.excludedDirs) ? settings.excludedDirs : []
+      }));
+    }).catch((reason) => {
+      setState((previous) => ({ ...previous, loading: false, error: `读不到事记设置：${errorText12(reason)}` }));
+    });
+  };
+  (0, import_react22.useEffect)(() => {
+    load();
+  }, [api]);
+  const writeExcludedDirs = (next, note) => {
+    setState((previous) => ({ ...previous, busy: true, error: void 0, note: void 0 }));
+    void api.setSettings({ excludedDirs: next }).then((saved) => {
+      setState((previous) => ({ ...previous, busy: false, excludedDirs: saved.excludedDirs, note }));
+    }).catch((reason) => {
+      setState((previous) => ({ ...previous, busy: false, error: errorText12(reason) }));
+    });
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    XsShijiSettingsSection,
+    {
+      state,
+      actions: {
+        onDraftDirChange: (value) => {
+          setState((previous) => ({ ...previous, draftDir: value, error: void 0 }));
+        },
+        onAddExcludedDir: () => {
+          const dir = state.draftDir.trim();
+          if (dir === "") {
+            setState((previous) => ({ ...previous, error: "排除目录不能为空。" }));
+            return;
+          }
+          if (state.excludedDirs.includes(dir)) {
+            setState((previous) => ({ ...previous, error: `「${dir}」已经在列表里了。` }));
+            return;
+          }
+          writeExcludedDirs([...state.excludedDirs, dir], `已排除目录「${dir}」。`);
+        },
+        onRemoveExcludedDir: (dir) => {
+          writeExcludedDirs(state.excludedDirs.filter((entry) => entry !== dir), `已取消排除「${dir}」。`);
+        },
+        onRestore: (id) => {
+          setState((previous) => ({ ...previous, busy: true, error: void 0, note: void 0 }));
+          void api.restore({ id }).then(() => {
+            setState((previous) => ({ ...previous, busy: false }));
+            load();
+            setState((previous) => ({ ...previous, note: "已恢复这条事记：下一轮扫描会按在场源头重新出现。" }));
+          }).catch((reason) => {
+            setState((previous) => ({ ...previous, busy: false, error: errorText12(reason) }));
+          });
+        }
+      }
+    }
+  );
+}
+function installShijiSettings(ctx, deps) {
+  installShijiStyle();
+  ctx.slots.inject(
+    "settings.section",
+    () => ctx.slots.register(
+      {
+        name: "settings.section",
+        id: SHIJI_SETTINGS_ID,
+        order: SHIJI_SETTINGS_ORDER,
+        label: SHIJI_SETTINGS_LABEL,
+        inject: () => ({ api: deps.api })
+      },
+      ShijiSettingsHost
+    )
+  );
+}
 function installShijiStyle() {
   if (typeof document === "undefined" || document.getElementById("xs-shiji-style") !== null) return;
   const style = document.createElement("style");
@@ -8856,6 +9214,15 @@ function installShijiStyle() {
 .xs-shiji__actions button:disabled{opacity:.5;cursor:not-allowed}
 .xs-btn--primary{background:var(--xs-constraint-human-gate-bg,var(--xs-accent));border-color:var(--xs-accent);color:var(--xs-constraint-human-gate-fg,var(--xs-accent-fg))}
 .xs-shiji__notice,.xs-shiji__error{flex-basis:100%;font-size:.85rem;margin:4px 0;padding:8px 10px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-shiji__settings h2{margin:0 0 6px}
+.xs-shiji__settings h3{margin:14px 0 4px;font-size:.95rem}
+.xs-shiji__block{border-top:1px solid var(--xs-edge-card);margin-top:12px;padding-top:8px}
+.xs-shiji__list{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.xs-shiji__row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.xs-shiji__row button{font:inherit;padding:4px 10px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-shiji__row button:disabled{opacity:.5;cursor:not-allowed}
+.xs-shiji__settings input[type="text"]{font:inherit;margin-left:6px;padding:4px 8px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);background:var(--xs-surface-card);color:inherit}
+.xs-shiji__error{color:var(--xs-text-secondary)}
 `;
   document.head.appendChild(style);
 }
@@ -9813,7 +10180,11 @@ function apply(ctx) {
       OverviewPanel
     );
     ctx.layout.selectPanel(PANEL_ID);
-    return dispose;
+    const disposeHash = installOverviewHashBridge(ctx);
+    return () => {
+      disposeHash?.();
+      dispose();
+    };
   });
   ctx.slots.inject(
     "sidebar.panellist",
@@ -9852,6 +10223,7 @@ function apply(ctx) {
     }
   });
   installDataSettings(rpc, { api: data });
+  installShijiSettings(rpc, { api: shiji });
   installShiji(rpc, { api: shiji, navigate });
   installWansheng(rpc, { api: wansheng, navigate, notify });
 }

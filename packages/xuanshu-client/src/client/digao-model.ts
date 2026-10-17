@@ -62,9 +62,9 @@ export interface DigaoShijiBasis {
   docs: number;
 }
 
-/** 一段：行内来源标签 + 名称 + 正文 + 「源自：」（事记段另有日期与依据）。 */
+/** 一段：行内来源标记 + 名称 + 正文 + 「源自：」（事记段另有日期与依据）。 */
 export interface DigaoSegment {
-  /** 行内来源标签（逐字取自标记：谱 / 工作区 / 工作流 / 事记，或文件里写的其它名）。 */
+  /** 行内来源标记（逐字取自标记：谱 / 工作区 / 工作流 / 事记，或文件里写的其它名）。 */
   label: string;
   kind: DigaoSourceKind | 'other';
   /** 标记里的名称（`【来源：谱 事业与行业】` → `事业与行业`；可能为空串）。 */

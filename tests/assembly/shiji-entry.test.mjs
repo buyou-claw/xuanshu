@@ -60,15 +60,20 @@ const ENTRY = {
 /* ───────────────────────── 1. 事记数据面的方法名与确认位 ───────────────────────── */
 
 describe('票 27 · 事记数据面：方法名逐字对齐宿主，确认位写死在数据面里', () => {
-  it('三个方法名就是宿主 createShijiMethods 的那三个（写动作只有 remove / fromSession）', () => {
+  it('六个方法名逐字对齐宿主（P4 起含 restore / settings.get / settings.set）', () => {
     expect(SHIJI_ENDPOINTS).toEqual({
       list: 'shiji.list',
       remove: 'shiji.remove',
+      restore: 'shiji.restore',
       fromSession: 'shiji.fromSession',
+      settingsGet: 'shiji.settings.get',
+      settingsSet: 'shiji.settings.set',
     })
-    // 「底稿纯派生」的机器判据：没有改事记内容的方法（只有删 / 存）。
+    // 「底稿纯派生」的机器判据：没有改事记内容的方法（只有删 / 恢复 / 存 / 两条设置）。
     const methods = Object.values(SHIJI_ENDPOINTS)
     expect(methods.some((method) => /write|update|save|edit/i.test(method))).toBe(false)
+    // 恢复不是「改内容」：它只清墓碑，下一条用例钉 confirmed 闸门。
+    expect(methods).toContain('shiji.restore')
   })
 
   it('都走 /xuanshu 通道；写动作的请求体带 confirmed:true（界面构造不出别的）', async () => {

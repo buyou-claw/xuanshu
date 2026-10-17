@@ -54,6 +54,7 @@ import { installMingpan } from './MingpanPanel.js';
 import { createMountsApi, createWorkspaceCatalog } from './mounts-api.js';
 import { createMountsController, installMounts, MountsSectionFor } from './mounts.js';
 import { installOnboarding } from './onboarding.js';
+import { installOverviewHashBridge } from './overview-hash.js';
 import { OverviewIcon } from './OverviewIcon.js';
 import { OverviewPanel } from './OverviewPanel.js';
 import { PANEL_ID, PANEL_LABEL, PANEL_ORDER } from './panel.js';
@@ -74,7 +75,7 @@ import { createSedimentApi } from './sediment-api.js';
 import { createSedimentController } from './sediment-model.js';
 import { installSediment } from './sediment-views.js';
 import { createShijiApi } from './shiji-api.js';
-import { installShiji } from './shiji-views.js';
+import { installShiji, installShijiSettings } from './shiji-views.js';
 import { installOverviewStyle } from './style.js';
 import { THEME_SOURCE, THEME_TOKENS } from './tokens.js';
 import { EMPTY_MAIN_PANELS, createMainPanelsWatch } from './watch.js';
@@ -271,7 +272,13 @@ export function apply(ctx: Context): void {
     // ④ 默认面板：注册**成功之后**才切（selectPanel 对未注册 key 会 throw，
     //    见 `dsh-client-ui-layout/lib/client.js:462-466`）。
     ctx.layout.selectPanel(PANEL_ID);
-    return dispose;
+    // ④b（P2 复核 #24）：点通知 → 壳把 hash 改成 `#xuanshu-overview`；这里在加载与 hashchange
+    //    两处认它 → 切回 overview 并清 hash。没有 window 的环境（断言台 / SSR）安全返回 undefined。
+    const disposeHash = installOverviewHashBridge(ctx);
+    return () => {
+      disposeHash?.();
+      dispose();
+    };
   });
 
   // ⑤ 侧栏全局面板行：list 槽，`id` 即上面的 key，`label` 走 resolveSlotLabel。
@@ -351,6 +358,10 @@ export function apply(ctx: Context): void {
   //    体积在分区挂载后读一次；备份只在人点 `[一键备份]` 之后发生。
   //    注册序排在 bestof 之后、票 27 之前 —— `panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 靠数组顺序分先后。
   installDataSettings(rpc, { api: data });
+
+  // ⑫b（P4 复核 #26）：设置 → 「事记」分区（墓碑恢复 + 可排除目录）。
+  //     底稿面板那句「可以在设置里恢复」现在有真实落点；仍是 `settings.section` 的纯加性注册。
+  installShijiSettings(rpc, { api: shiji });
 
   // ⑬ 票 27（#27）：会话内「存成今天的事记」——`conversation.composer.dock` 上的**一个** cell。
   //    只在问事会话里渲染（判据是自铸 id 前缀）；点了并确认之后才调 `shiji.fromSession`。

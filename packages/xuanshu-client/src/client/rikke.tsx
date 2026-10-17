@@ -131,7 +131,8 @@ export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit
    */
   useEffect(() => {
     if (seeded || notify === undefined) return;
-    void notify.markDeliveredRead().catch(() => {
+    // P3（复核 #24）：只标日课那一类 —— 打开日课面板不该把晚省的未读一起抹掉。
+    void notify.markDeliveredRead({ kind: 'rikke' }).catch(() => {
       /* 标已读失败：界面照常显示，不把「打开面板」变成一次报错 */
     });
   }, [notify, seeded]);

@@ -18,6 +18,21 @@ export const TRAFFIC_SCHEMA = 'xuanshu/traffic@1'
 /** 壳与宿主共享的设置文件（契约 §5）。 */
 export const SHELL_SETTINGS_SCHEMA = 'xuanshu/shell-settings@1'
 
+/**
+ * 壳的**实际生效状态**文件（P1 复核 #23 的加性扩展；与设置文件是两件事：
+ * `shell-settings.json` 是「想要什么」，这份是「这台机器上实际成了什么」）。
+ */
+export const SHELL_STATUS_SCHEMA = 'xuanshu/shell-status@1'
+
+/** 开机自启的实际生效方式（壳写、宿主读的封闭取值域）。 */
+export const AUTOSTART_METHODS = Object.freeze(['login-item', 'shortcut', 'unsupported'])
+
+/** 壳的实际生效状态文件名（`<dataDir>/runtime/shell-status.json`；与 `shell-notify.json` 同目录）。 */
+export const SHELL_STATUS_FILE = 'shell-status.json'
+
+/** 壳注入子进程的壳 pid 变量（契约 §0；与壳侧 `contract.mjs::SHELL_PID_ENV` 同名）。 */
+export const SHELL_PID_ENV = 'XUANSHU_SHELL_PID'
+
 /** 通知的 kind 取值域（契约 §2；#25 用 `wansheng`）。 */
 export const NOTIFY_KINDS = Object.freeze(['rikke', 'wansheng'])
 
