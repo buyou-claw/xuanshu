@@ -745,8 +745,8 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 #### 16.3 验证（数字全部抄工具输出）
 
 ```
-# pnpm test:inventory（profile 已装；t33 复核修复轮 + 两轴再复核修复之后）
-[inventory] 用例 1814 条（基线 1814）/ 文件 165 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+# pnpm test:inventory（profile 已装；t33 复核修复轮 + 两轴再复核修复 + 环境加固轮之后）
+[inventory] 用例 1835 条（基线 1835）/ 文件 167 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门）exit 0；清单基线已按最终用例数 `--update`（1814 / 165）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（1835 / 167）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -889,7 +889,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 
 ```
 # pnpm test:inventory
-[inventory] 用例 1814 条（基线 1814）/ 文件 165 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 1835 条（基线 1835）/ 文件 167 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation → 8/8 通过，exit 0
@@ -915,4 +915,23 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 `node_modules` junction，清空了主仓依赖；用 pnpm store 离线恢复（169 包）+ 重装 profile 后 `verify:all` 复绿。
 已新增 `scripts/lib/cleanup-junctions.mjs`（删 worktree 前先摘链接）与 3 条判据用例，并做了一次端到端实测；
 最终用例数因此从 1811/164 变为 **1814/165**。
+
+#### 16.7 环境加固轮（E1–E3，2026-10-17 晚）
+
+来源：t33 之后的 `/retro`——把「实施者每次现场发明」的操作规则与「手抄必然漂」的数字搬成机器可用的形态。
+三张票：**E1 #42**、**E3 #43**、**E2 #44**（阻塞于 E1），全部并入 `feat/spec-002-integration`（最终 tip `691220b`）。
+
+| 票 | 交付 |
+|---|---|
+| E1 | `scripts/worktree-create.mjs`：一条命令建工作树 + 分支 + 根/包级 `node_modules` 链接（**只链不复制**、不装包），`--base/--branch/--repo/--dry-run`，已存在/非法名可读拒绝；7 条临时 git 仓库端到端用例（含「摘链接删树后目标哨兵仍在」）。清理仍只走 `pnpm cleanup:worktrees`（§16.4 第 7 条的护栏） |
+| E3 | `scripts/check-doc-numbers.mjs`：真值 = 清单基线 total/files + 客户端产物 `statSync` 字节；只核对 README 与 §16.3/§16.6 的**当前**验证块（历史旧数字不误报）；漂移 exit 1 逐条点名「文件:行 期望/实际」，不可验证 exit 2；接线 `verify:all` 末步 + CI「doc numbers gate」；14 条判据（一致/单点/多处/真源缺/块缺/历史不误报/注入面） |
+| E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
+
+**验证（数字抄工具输出）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
+`[doc-numbers] OK：1835 条用例 / 167 个文件 / 522070 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+E1/E3 新增 21 条用例后基线 `--update` 为 **1835 条 / 167 文件**，文档数字由新门核对。
+
+**这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
+只能靠判断的（装配面证据、夹具域字段、重复表对拍）写成 reviewer 的按需清单，并用指针挂到 `AGENTS.md`，
+不占实施者的上下文。
 
