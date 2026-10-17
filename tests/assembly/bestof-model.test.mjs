@@ -27,6 +27,44 @@ import {
 
 const SESSION = 'session-xs-consult-9f8e7d6c-0000-4000-8000-000000000000'
 
+/** 票 28：路由目录 + 跑前估算（每一条控制器用例都要经过它们）。 */
+const CATALOG = {
+  schema: 'xuanshu/routes@1',
+  ok: true,
+  default: { provider: 'deepseek', model: 'deepseek-chat' },
+  providers: [
+    {
+      id: 'deepseek',
+      name: 'DeepSeek',
+      registered: true,
+      keyConfigured: true,
+      isDefault: true,
+      modelsKnown: true,
+      models: [{ id: 'deepseek-chat', name: 'DeepSeek Chat', isDefault: true }],
+    },
+    {
+      id: 'pi-ai',
+      name: 'Pi AI',
+      registered: true,
+      keyConfigured: true,
+      isDefault: false,
+      modelsKnown: true,
+      models: [{ id: 'pi-chat', name: 'Pi Chat', isDefault: false }],
+    },
+  ],
+  configurable: [],
+  failures: [],
+}
+
+const ESTIMATE = {
+  routes: [
+    { provider: 'deepseek', model: 'deepseek-chat', modelName: 'DeepSeek Chat' },
+    { provider: 'pi-ai', model: 'pi-chat', modelName: 'Pi Chat' },
+  ],
+  inputTokens: 1234,
+  price: 'unknown',
+}
+
 /** 一份 view 的样例（形状照宿主 `view()` 的响应）。 */
 function view(over = {}) {
   return {
@@ -51,6 +89,16 @@ function fakeApi(handlers = {}) {
   return {
     calls,
     api: {
+      async listRoutes() {
+        calls.push(['listRoutes', {}])
+        if (handlers.listRoutes) return handlers.listRoutes()
+        return CATALOG
+      },
+      async estimate(payload) {
+        calls.push(['estimate', payload])
+        if (handlers.estimate) return handlers.estimate(payload)
+        return ESTIMATE
+      },
       async run(payload) {
         calls.push(['run', payload])
         return handlers.run ? handlers.run(payload) : view({ finished: false, judge: { mode: 'pending', adoptedId: null, ranking: [] } })
@@ -85,18 +133,28 @@ async function settle(controller, predicate, { timeout = 500 } = {}) {
 }
 
 describe('外部可观察的行为：三动作都要人点（C9）', () => {
-  it('ask 只进费用确认框，一个请求都不发；confirm 才调 bestof.run', async () => {
+  it('ask 只做只读的 routes.list + estimate，不发 run；confirm 才带 routes + confirm:true 调 bestof.run', async () => {
     const { api, calls } = fakeApi()
     const controller = createBestofController({ api, pollMs: 1 })
     controller.setEnabled(true)
 
     controller.ask({ question: '这次转岗该不该去', sessionId: SESSION })
     expect(controller.snapshot().phase).toBe('confirm')
-    expect(calls).toEqual([])
+    await settle(controller, (snapshot) => snapshot.estimate !== undefined)
+    expect(calls.map((call) => call[0])).toEqual(['listRoutes', 'estimate'])
+    expect(calls.some((call) => call[0] === 'run')).toBe(false)
 
     await controller.confirm()
-    expect(calls[0][0]).toBe('run')
-    expect(calls[0][1]).toEqual({ sessionId: SESSION, question: '这次转岗该不该去', angles: ['classic', 'cautious'] })
+    const run = calls.find((call) => call[0] === 'run')
+    expect(run[1]).toEqual({
+      sessionId: SESSION,
+      question: '这次转岗该不该去',
+      routes: [
+        { provider: 'deepseek', model: 'deepseek-chat' },
+        { provider: 'pi-ai', model: 'pi-chat' },
+      ],
+      confirm: true,
+    })
   })
 
   it('跑完只剩 ready：adoptedId 仍是 null（判官不会自动采用）', async () => {
@@ -206,7 +264,7 @@ describe('外部可观察的行为：三动作都要人点（C9）', () => {
     expect(calls).toEqual([])
   })
 
-  it('空问题：停在费用确认框并给「写上要合参的问题」，不发送', async () => {
+  it('空问题：停在费用确认框并给「写上要合参的问题」，不发起 run', async () => {
     const { api, calls } = fakeApi()
     const controller = createBestofController({ api, pollMs: 1 })
     controller.setEnabled(true)
@@ -215,7 +273,7 @@ describe('外部可观察的行为：三动作都要人点（C9）', () => {
 
     expect(controller.snapshot().phase).toBe('confirm')
     expect(controller.snapshot().error).toMatch(/写上要合参的问题/u)
-    expect(calls).toEqual([])
+    expect(calls.some((call) => call[0] === 'run')).toBe(false)
   })
 
   it('宿主能力门失败：错误原文原样进 error 阶段（不假装开始）', async () => {

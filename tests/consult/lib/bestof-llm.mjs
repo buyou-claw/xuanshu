@@ -66,18 +66,35 @@ async function* drain(chunks, { delayMs = 0, holdMs = 0 } = {}) {
 }
 
 /**
+ * 缺省的已注册路由目录（票 28 起是**两家**：判官要能在候选之外找到一家）。
+ * 只列已注册路由；「可配置但未注册」由 `listConfigurableProviders()` 单独给（用例自己挂）。
+ */
+export const DEFAULT_FAKE_PROVIDERS = [
+  { id: 'deepseek', name: 'DeepSeek', models: [{ id: 'deepseek-chat', name: 'DeepSeek Chat' }] },
+  { id: 'pi-ai', name: 'Pi AI', models: [{ id: 'pi-chat', name: 'Pi Chat' }] },
+]
+
+/**
  * 造一个假 `ctx.llm`。
  * @param {Array<object|Function>|Function} plans 每次 `stream()` 的剧本（越界时重复最后一份）
+ * @param {{providers?: Array<{id: string, name: string, models: Array<{id: string, name: string}>}>}} [options]
+ *        `providers` 缺省两家（deepseek / pi-ai）：判官取「不在候选里的另一家」才不会每次都降级同源。
  * @returns {{service: object, calls: object[]}}
  */
-export function fakeLlm(plans = [{}]) {
+export function fakeLlm(plans = [{}], { providers = DEFAULT_FAKE_PROVIDERS } = {}) {
   const calls = []
   const list = Array.isArray(plans) ? plans : [plans]
   return {
     calls,
     service: {
-      listProviders: () => [{ id: 'deepseek', name: 'DeepSeek' }],
-      listModels: async (provider) => [{ provider, id: 'deepseek-chat', name: 'DeepSeek Chat' }],
+      listProviders: () => providers.map(({ id, name }) => ({ id, name })),
+      listModels: async (provider) => {
+        const found = providers.find((entry) => entry.id === provider)
+        // 未登记的 provider（如 `profileIds` 用例里的任意名字）也给一个形状正确的模型：
+        // legacy 路径只要求「该路由第一个模型」存在。
+        if (found === undefined) return [{ provider, id: `${provider}-chat`, name: `${provider} Chat` }]
+        return found.models.map((model) => ({ provider, id: model.id, name: model.name }))
+      },
       stream(options) {
         const index = calls.length
         calls.push(options)
