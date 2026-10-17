@@ -24,7 +24,14 @@ export function installDigaoStyle(): void {
 .xs-digao__no-edit{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px}
 .xs-digao__group{margin:18px 0;border-left:3px solid var(--xs-edge-card);padding-left:12px}
 .xs-digao__group-head{margin:0 0 6px}
+/* #27：两段（最近 / 曾经）。段头比组头高一级：段是契约章序，组只是段内的来源路。 */
+.xs-digao__section{margin:20px 0}
+.xs-digao__section-head{font-size:1.05rem;font-weight:600;margin:0 0 10px;padding-bottom:4px;border-bottom:1px solid var(--xs-edge-card)}
 .xs-digao__segment{margin:10px 0;border-left:2px solid var(--xs-edge-card);padding-left:10px}
+/* #27：事记条目（曾经做过什么）—— 与「最近」的段同一套边条，但多一枚 [删除] 与确认条。 */
+.xs-digao__record{margin:14px 0;border-left:2px solid var(--xs-edge-card);padding-left:12px}
+.xs-digao__confirm{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px;margin:8px 0}
+.xs-digao__confirm p{margin:0 0 6px;line-height:1.7}
 .xs-digao__tag{display:inline-block;padding:1px 6px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);font-size:.8rem;color:var(--xs-text-secondary);margin-right:6px}
 .xs-digao__segment-body{white-space:pre-wrap;line-height:1.8;margin:4px 0}
 .xs-digao__raw{white-space:pre-wrap;font-family:var(--font-mono,monospace);font-size:.85rem;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:10px;overflow:auto;max-height:var(--xs-size-scrollregion-max,420px)}
