@@ -180,6 +180,9 @@ export const ACTION_COPY = {
  */
 export const DISABLED_REASON = {
   consult: '问事面板还没装配（属票 10 · 问事闭环）',
+  // #29：AI 没接上时问事入口保持禁用。路径逐字与 `ai-model.ts` 的 AI_SETTINGS_PATH 一致
+  // （界面上的可见原因由快捷入口卡的 `XsAiGate` 给，这里只做 title）。
+  consultAi: '问事还开不了：先接上 AI（去「设置 → 模型」配置 provider 与默认模型）。',
   workflow: '工作流面板还没装配（属票 16 · 工作流创建向导）',
   pus: '谱面板还没装配（属票 09 · 谱管理）',
   digao: '底稿面板还没装配（属票 13 · 底稿与日课）',
