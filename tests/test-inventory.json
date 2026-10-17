@@ -1,6 +1,6 @@
 {
   "note": "用例清单基线：收集到的用例数（含 skip）。--update 刷新；knownRed 之外的失败 = 违规。",
-  "total": 1147,
+  "total": 1150,
   "files": {
     "tests/assembly/assembly-contract.test.mjs": 8,
     "tests/assembly/bestof-api.test.mjs": 7,
@@ -38,7 +38,7 @@
     "tests/bazi/wiring.test.mjs": 4,
     "tests/cang/panel.test.mjs": 3,
     "tests/cang/registry.test.mjs": 6,
-    "tests/cang/service.test.mjs": 1,
+    "tests/cang/service.test.mjs": 3,
     "tests/consult/agent.test.mjs": 10,
     "tests/consult/bestof-adopt.test.mjs": 22,
     "tests/consult/bestof-assembler.test.mjs": 2,
@@ -69,7 +69,7 @@
     "tests/horosa/p0b-surface.test.mjs": 11,
     "tests/horosa/p1-guard-parity.test.mjs": 10,
     "tests/horosa/p10-e2e.test.mjs": 8,
-    "tests/horosa/p2-single-source.test.mjs": 9,
+    "tests/horosa/p2-single-source.test.mjs": 10,
     "tests/horosa/p3-build-payload.test.mjs": 27,
     "tests/horosa/p4-classify-envelope.test.mjs": 23,
     "tests/horosa/p5-static-mount.test.mjs": 6,

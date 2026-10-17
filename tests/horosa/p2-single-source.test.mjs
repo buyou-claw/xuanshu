@@ -216,4 +216,19 @@ describe('P2 · 定值单源（生产代码的定义处唯一 + 8765 / /mcp 三�
     const fixture = join(REPO_ROOT, 'tests', 'horosa', 'fixtures', 'bin', 'fake-mcp-server.mjs')
     expect(scanLiterals([fixture]).length, 'fixture 里连一个定值字面量都没有？那这条反证没意义').toBeGreaterThan(0)
   })
+
+  it('`yaml` 是仓库根的显式依赖（干净 CI 才能解析；丢掉它 = 这个文件整个收集失败）', () => {
+    // 这一条钉的是**复核 CI 实测踩到的形状**：`lib/yaml.mjs` 曾经只从 `profile/package.json`
+    // 解析 `yaml`，而那棵树要跑过 `setup` 才有 ⇒ 干净环境（CI 只跑 `pnpm install --frozen-lockfile`）
+    // 里 `Cannot find module 'yaml'`，**本文件与 p5 整个收集到 0 条用例**（15 条从总数里静默消失，
+    // 清单门报「收集失败」）。修法有两半：`lib/yaml.mjs` 先从仓库根解析，且 `yaml` 必须真的在根
+    // `devDependencies` 里。这条断言钉住后一半 —— 谁把它删了，红在这条用例上，而不是红在一个
+    // 「Cannot find module」的收集错误里（后者在断言台里连用例名都看不到）。
+    const rootPkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'))
+    const declared = { ...rootPkg.dependencies, ...rootPkg.devDependencies }
+    expect(
+      declared.yaml,
+      '`yaml` 不在仓库根 dependencies/devDependencies 里：CI 没装 profile，p2 / p5 会整个收集失败',
+    ).toBeTruthy()
+  })
 })

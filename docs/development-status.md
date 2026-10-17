@@ -518,16 +518,31 @@ remount-failure:     originalAddRecovered=true / withdrawalInLog=true /
 同步后三个探针的结论才可信。**这与 §「三条会让『没验』伪装成『验过』的操作陷阱」第 1 条（merge 之后必须重跑安装器）
 是同一类，但触发条件更宽：不只是 merge，任何改自有包源码之后都要重跑。**
 
+**CI 转绿的收尾（`b6265a0` 之后的同一轮，2026-10-17）**：把 tip 推到 origin 后 CI `verify` 红，
+但它红的三条与 F1–F4 都无关 —— 全是「开发机装了 profile / 装了 uvx，CI 上没装」的环境依赖。
+清单门抓到的正是它自己设计要抓的形状（用例从 1147 静默掉到 1132）：
+
+| 症状 | 根因 | 处置 |
+|---|---|---|
+| `p2-single-source` / `p5-static-mount` **收集到 0 条**（`Cannot find module 'yaml'`），15 条用例从总数里消失 | `tests/horosa/lib/yaml.mjs` 只从 `profile/package.json` 解析 `yaml`，而那棵树要跑过 `setup` 才有 | `yaml` 进仓库根 `devDependencies`（`^2.9.1`）；`lib/yaml.mjs` 改成**先试仓库根再兜底 profile**；`p2` 加一条守卫（根 package.json 必须声明 `yaml`） |
+| `tests/cang/service.test.mjs` 红 | 原生适配器只从 `profile/package.json` 解析 `@deepseek-ai/dsh-native-command` | 同款：进根 `devDependencies`（钉版 `0.2.0-rc.2`）；`nativeAnchors()` 先试仓库根；新增一条「profile 指向不存在目录也能打开」的用例 + 一条依赖声明守卫 |
+| `report-and-gates` 的「取件失败」断言 exit 2 却拿到 exit 3 | 那条用例 `env: {}` ⇒ **继承开发机 PATH**；本机有 uvx 才走到取件步，干净 CI 上更早的 `uvx 环境门` 先失败。**非 hermetic 的断言** | 用契约 §10 的注入口 `XUANSHU_UVX_BIN: FAKE_UVX` 让 gate 确定性通过（假 uvx `--version` 回 `uv 0.12.10`）；断言点因此与机器装没装 uv 无关 |
+
+净增 **3 条**守卫用例（`cang` +2 / `p2` +1），基线 1147 → **1150**，`knownRed` 未改。
+本地复验：`pnpm verify:all` exit 0（1150 / 104 文件 / 2 条已知红 / 0 文件级失败）；
+`pnpm verify:assembly` S2–S5 PASS、S1 FAIL（既有 rc.2 carrier 问题）。**CI 转绿由下一次运行确认。**
+
 **本节改动的用例账**（`tests/test-inventory.json` 已按下面刷新；**这里的数字以追加复核后的工作区为准**）：
 
 ```
-[inventory] 用例 1139 条（基线 1139）/ 文件 104 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 1150 条（基线 1150）/ 文件 104 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 ```
 
-1119 → 1139（**+20 条**，全为回归覆盖，无删除，`knownRed` 未改）：`tests/consult/boundary.test.mjs` 21 → 25（+4）、
+1119 → 1150（**+31 条**，全为回归覆盖，无删除，`knownRed` 未改）：`tests/consult/boundary.test.mjs` 21 → 25（+4）、
 `tests/consult/bestof-store.test.mjs` 6 → 17（+11）、`tests/consult/bestof-history.test.mjs` 10 → 12（+2）、
 `tests/consult/bestof-adopt.test.mjs` 20 → 21（+1）、`tests/lib/inventory-gate.test.mjs` 20 → 22（+2）、
+`tests/cang/service.test.mjs` 1 → 3（+2，CI 解析根守卫）、`tests/horosa/p2-single-source.test.mjs` 9 → 10（+1，`yaml` 根依赖守卫）、
 `tests/consult/history.test.mjs` 21 → 21（0）；
 新增夹具 `tests/lib/fixtures/inventory-hook/after-all.fixture.mjs` 不计入（刻意不叫 `.test.mjs`，只由夹具 config 收）。
 2 条已知红仍是 S1 装配树与连带的 CLI 全绿断言（理由见下）。
@@ -583,17 +598,19 @@ remount-failure:     originalAddRecovered=true / withdrawalInLog=true /
 而同版本官方 web bundle 自带的 `@deepseek-ai/dsh-agent-preset` 是另一种 carrier，报
 `unrecognized Loader tree carrier`。真实 web 与宿主启动正常。测试保留失败，无上游源码改动、无放宽断言。
 
-当前全仓基线（`pnpm verify:all` 中的清单门，2026-10-17 F1–F4 修复之后，整体 exit 0）：
+当前全仓基线（`pnpm verify:all` 中的清单门，2026-10-17 F1–F4 修复 + CI 转绿收尾之后，整体 exit 0）：
 
 ```
-[inventory] 用例 1147 条（基线 1147）/ 文件 104 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 1150 条（基线 1150）/ 文件 104 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 ```
 
 2 条失败 = **S1 装配树** 与由它连带的 **CLI 退出码为 0**（就是基线 `knownRed` 里那两条，理由见上）。
 跳过的 10 条 = `tests/horosa/p0-fixtures` 2 条（`.scratch` 里的 `gt06-*` 原始捕获仍缺）+ `tests/horosa/p10-e2e` 8 条
 （真机前置件不在）。**同一条命令在「没有 profile」的干净环境里也必须给出同样的条数并判过**
-（上一轮实测：0 失败 / 51 跳过 / exit 0 —— 本条本节未重跑，见 §14 的边界）—— 这就是 §11 ② 的机器判据；
+（2026-10-17 实测：`XUANSHU_DSH_HOME` 指向空目录时 1150 条 / 0 失败 / 51 跳过 / exit 0；
+CI 上 profile 本来就不存在，见 §14 的「CI 转绿的收尾」—— 那三条环境依赖就是在这条判据上暴露的）
+—— 这就是 §11 ② 的机器判据；
 
 「干净环境」用 `XUANSHU_DSH_HOME` 指向一个空目录来模拟（CI 上那个目录本来就不存在）。
 **基线之外的红色一律是本轮引入的回归。**
@@ -606,7 +623,8 @@ remount-failure:     originalAddRecovered=true / withdrawalInLog=true /
 （`send` 6 条 / `mounts-inject` 6 条），其覆盖搬到边界用例 —— 所以 `--update` 时那两处「用例变少」
 是**有意的**，理由写在提交信息与本节。二次复核修复轮 + 追加复核修复 **+20 条用例**（1119 → 1139，见 §14 的用例账：
 boundary +4 / bestof-store +11 / bestof-history +2 / bestof-adopt +1 / inventory-gate +2，另有 1 个真 vitest 夹具文件不计入）；
-F1–F4 修复轮 **+8 条**（1139 → 1147，见 §15），文件数和 `knownRed` 不变。）
+F1–F4 修复轮 **+8 条**（1139 → 1147，见 §15）；**CI 转绿收尾 +3 条**（1147 → 1150，见 §14 的「CI 转绿的收尾」：
+cang +2 解析根守卫 / p2 +1 根依赖守卫）。文件数与 `knownRed` 全程不变。）
 
 同一时刻的装配五 seam：**S2 / S3 / S4（185 行基线全命中）/ S5 PASS，S1 FAIL**；`tsc --noEmit` exit 0；
 `build-client --check` in sync（386627 B）。

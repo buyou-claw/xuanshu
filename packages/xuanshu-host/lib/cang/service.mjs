@@ -15,10 +15,26 @@
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createCangRegistry } from './registry.mjs';
 
 function softGet(ctx, name) { try { return ctx.get(name, false); } catch { return undefined; } }
+
+/**
+ * 官方原生适配器（`@deepseek-ai/dsh-native-command`）的解析根，按顺序试。
+ *
+ * 为什么不止一个根（复核 CI 实测的修复）：以前**只**从 `profile/package.json` 解析，
+ * 而那棵树要跑过 `setup` 才有 —— 干净环境（CI 只跑 `pnpm install --frozen-lockfile`）里
+ * `Cannot find module '@deepseek-ai/dsh-native-command'`，`tests/cang/service.test.mjs` 直接红。
+ * 现在它也是仓库根的显式 `devDependencies`，所以**先试仓库根**（不依赖 profile 装没装），
+ * profile 留作兜底（老环境仍能跑）。
+ */
+function nativeAnchors(profile) {
+  return [
+    fileURLToPath(new URL('../../../../package.json', import.meta.url)),
+    join(profile?.dir ?? process.cwd(), 'package.json'),
+  ];
+}
 
 export function createCangMethods(ctx, config = {}) {
   const profile = softGet(ctx, 'profileContext');
@@ -27,8 +43,20 @@ export function createCangMethods(ctx, config = {}) {
   let nativePromise;
   async function native() {
     nativePromise ??= (async () => {
-      const require = createRequire(join(profile?.dir ?? process.cwd(), 'package.json'));
-      return import(pathToFileURL(require.resolve('@deepseek-ai/dsh-native-command')).href);
+      const anchors = nativeAnchors(profile);
+      let lastError;
+      for (const anchor of anchors) {
+        try {
+          const require = createRequire(anchor);
+          return await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-native-command')).href);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw new Error(
+        `解析不到 \`@deepseek-ai/dsh-native-command\`（试过 ${anchors.join(' 与 ')}）：`
+        + `先在仓库根跑一次 \`pnpm install --frozen-lockfile\`。原始错误：${String(lastError?.message ?? lastError)}`,
+      );
     })();
     return nativePromise;
   }

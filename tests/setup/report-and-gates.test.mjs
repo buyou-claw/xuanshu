@@ -21,7 +21,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { PIN_VERSION, PLATFORM_KEY, writeTestPin } from './lib/fixtures.mjs'
-import { STUB_VERIFY_ASSEMBLY } from './lib/paths.mjs'
+import { FAKE_UVX, STUB_VERIFY_ASSEMBLY } from './lib/paths.mjs'
 import { listFiles, makeSandbox } from './lib/sandbox.mjs'
 import { readReport, runSetup, findFreePort } from './lib/setup-run.mjs'
 
@@ -97,9 +97,14 @@ describe('票 05 · A5：失败也写报告（真实 home 被拒仍零写入）'
 
   it('取件失败（`--skip-download` 且缓存缺件）→ 报告里写明失败阶段是「取件 / SHA256 校验」', () => {
     const sandbox = makeSandbox('a5-stage-note')
+    // **必须把 uvx 环境门指到替身**（复核 CI 实测的修复）：这条用例要断言的失败点是**取件**，
+    // 而它前面的 `uvx 环境门` 探的是「本机 PATH 上有没有 uvx」。以前 `env: {}` 会**继承开发机的 PATH**
+    // —— 本机装了 uvx 就走到取件（exit 2），而干净 CI 上没有 uvx ⇒ 更早的 gate 先失败（exit 3），
+    // 断言 `toBe(2)` 于是红。`XUANSHU_UVX_BIN` 是契约 §10 的测试注入口，指到 `fixtures/bin/uvx.mjs`
+    // 让 gate 确定性通过（`--version` 回 `uv 0.12.10`），这一条才与机器装没装 uv 无关。
     const result = runSetup(
       ['--cache', sandbox.cache, '--dsh-home', sandbox.home, '--runtime-root', sandbox.runtimeRoot, '--json', '--no-selfcheck', '--skip-download'],
-      { env: {} },
+      { env: { XUANSHU_UVX_BIN: FAKE_UVX } },
     )
     expect(result.status, result.raw()).toBe(2)
     const { report } = readReport(sandbox.home)
