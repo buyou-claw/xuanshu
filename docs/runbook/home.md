@@ -203,12 +203,14 @@ home 里没有它时 CLS 会直接报 `profile "xuanshu" does not exist`。先�
 装是加法，回滚是删：
 
 ```powershell
-# 只删一个 profile
-Remove-Item -Recurse -Force "$env:USERPROFILE\.xuanshu\profiles\xuanshu"
+# 只删一个 profile —— 用 cmd 的 rmdir，不要用 PowerShell 的 Remove-Item -Recurse：
+# profiles 下的 node_modules 里有 pnpm 的目录联接（junction），Remove-Item 会**跟着联接**
+# 删到全局 store 里的真件（本仓已实际踩过，见 docs/development-status.md 的操作陷阱 3）。
+cmd /c rmdir /s /q "%USERPROFILE%\.xuanshu\profiles\xuanshu"
 # 整个玄枢 home（会话 + 数据 + 凭据全在里面，删前自己确认）
-Remove-Item -Recurse -Force "$env:USERPROFILE\.xuanshu"
-# 仓库里的开发档
-Remove-Item -Recurse -Force <repo>\.dsh-home
+cmd /c rmdir /s /q "%USERPROFILE%\.xuanshu"
+# 仓库里的开发档（同样用 rmdir，profile 里同样有联接）
+cmd /c rmdir /s /q "<repo>\.dsh-home"
 ```
 
 **不要**为了「重来一次」去删 `~/.dsh`：那是 DSH 桌面版的，玄枢从没往里写过（`no-real-home-write`

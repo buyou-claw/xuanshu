@@ -61,11 +61,18 @@ export const EXTRA_REGISTRATIONS = [
   },
   {
     // 票 30（#30）：设置 → 「我的数据」分区（`settings.section`，**不新增 main key / 侧栏行**）。
-    // `after: 'workflow'`：`installDataSettings` 是 `index.tsx` 里最后一个 install（排在票 11 之后）；
+    // `after: 'workflow'`：`installDataSettings` 排在票 11 之后、票 27 之前；
     // 本数组顺序 = 注册序，顺序不符会被 `expectedRegisterNames()` 抓到。
     after: 'workflow',
     names: ['settings.section'],
     cells: ['settings.section\u0000xuanshu.data'],
+  },
+  {
+    // 票 27（#27）：会话内「存成今天的事记」——**一个** composer 入口条，不新增 main key / 侧栏行。
+    // 与 sediment / bestof 一样挂在 `workflow` 那一对之后，排在它们之后（`installShiji` 是最后一个 install）。
+    after: 'workflow',
+    names: ['conversation.composer.dock'],
+    cells: ['conversation.composer.dock\u0000xuanshu.shiji-entry'],
   },
 ]
 

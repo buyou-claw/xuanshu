@@ -16,6 +16,7 @@
 import { basename } from 'node:path'
 
 import { createPuRepository } from '../pu/repository.mjs'
+import { isoDate } from './skeleton.mjs'
 
 /** 单段正文的字符上限（底稿是「精简汇总」，不是全文搬运；超了截断并标注）。 */
 export const SEGMENT_TEXT_LIMIT = 400
@@ -54,9 +55,20 @@ export function collectPuSources(dataDir) {
 
 /**
  * 工作区来源（`ctx.workspaceRegistry.list()`；服务不可得 → 空数组，不抛）。
+ *
+ * #27（契约 §3）：工作区一路要回答「最近在做什么」，所以
+ *   - **按最后活跃倒序**（最新在前）；
+ *   - 段文本补「最近活跃 <日期>」。
+ * 最后活跃**只认事记账本那一份**（`shijiEntries` 里 `source==='workspace'` 的 `lastActiveAt`）：
+ * 它是 `refreshDigao()` 同一次扫描的产物（DSH 侧栏同一条口径 `max(createdAt, lastPromptAt)`），
+ * `Workspace.updatedAt` 是记录变更时刻、**不是**活跃时间。本路**不自己去读会话日志**，否则
+ * 就是「各扫一遍」，而且两处口径必然漂移。
+ *
+ * @param {object} ctx 宿主上下文
+ * @param {object[]} [shijiEntries] 已扫好的事记条目（拿不到 = 不排序、不写日期，行为与 #26 之前一致）
  * @returns {{name: string, text: string}[]}
  */
-export function collectWorkspaceSources(ctx) {
+export function collectWorkspaceSources(ctx, shijiEntries) {
   const registry = ctx?.workspaceRegistry
   if (!registry || typeof registry.list !== 'function') return []
   let workspaces
@@ -66,15 +78,33 @@ export function collectWorkspaceSources(ctx) {
     return []
   }
   if (!Array.isArray(workspaces)) return []
-  return workspaces.map((workspace) => {
+
+  const lastActiveById = new Map()
+  for (const entry of Array.isArray(shijiEntries) ? shijiEntries : []) {
+    if (entry?.source !== 'workspace') continue
+    const refId = text(entry.refId)
+    if (refId === '') continue
+    lastActiveById.set(refId, text(entry.lastActiveAt))
+  }
+
+  const rows = workspaces.map((workspace) => {
     const title = text(workspace?.title) || (text(workspace?.path) !== '' ? basename(text(workspace.path)) : '工作区')
     const path = text(workspace?.path)
     const sessions = Array.isArray(workspace?.sessionIds) ? workspace.sessionIds.length : 0
+    const lastActiveAt = lastActiveById.get(text(workspace?.id)) ?? ''
+    const active = isoDate(lastActiveAt)
     return {
       name: title,
-      text: `工作区「${title}」${path === '' ? '' : ` · 路径 ${path}`} · 会话 ${sessions} 场`,
+      lastActiveAt,
+      text: `工作区「${title}」${path === '' ? '' : ` · 路径 ${path}`} · 会话 ${sessions} 场${active === '' ? '' : ` · 最近活跃 ${active}`}`,
     }
   })
+
+  // 最后活跃倒序；没有活跃时间的排最后（保持原序）。Array#sort 在 V8 上是稳定的，
+  // 所以两条都没有活跃时间时顺序不变 —— 底稿的可复现性依赖这一点。
+  return rows
+    .sort((left, right) => (left.lastActiveAt === right.lastActiveAt ? 0 : left.lastActiveAt < right.lastActiveAt ? 1 : -1))
+    .map((row) => ({ name: row.name, text: row.text }))
 }
 
 /** 工作流来源：票 16 才生产（契约 §1：本票留空路）。 */
@@ -84,16 +114,20 @@ export function collectWorkflowSources() {
 
 /**
  * 采集三路来源（同步：全是本地文件与内存枚举，**不联网、不调 LLM**）。
+ *
+ * `shijiEntries` 是 `refreshDigao()` 同一次扫描的产物（**不在这里再扫一遍**，契约 §1 的
+ * 「事记与底稿走同一条扫描管线」）：工作区一路用它的 `lastActiveAt` 排序与补日期。
+ *
  * @returns {{pu: object[], workspace: object[], workflow: object[], notes: string[]}}
  */
-export function collectSources({ ctx, dataDir } = {}) {
+export function collectSources({ ctx, dataDir, shijiEntries } = {}) {
   const notes = []
   if (!ctx?.workspaceRegistry || typeof ctx.workspaceRegistry.list !== 'function') {
     notes.push('workspaceRegistry 服务不可得：工作区这一路按「无来源」处理（不伪造）。')
   }
   return {
     pu: collectPuSources(dataDir),
-    workspace: collectWorkspaceSources(ctx),
+    workspace: collectWorkspaceSources(ctx, shijiEntries),
     workflow: collectWorkflowSources(),
     notes,
   }

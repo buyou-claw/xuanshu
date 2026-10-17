@@ -29,7 +29,7 @@ __export(index_exports, {
   inject: () => inject
 });
 module.exports = __toCommonJS(index_exports);
-var import_react21 = require("react");
+var import_react22 = require("react");
 
 // src/client/rpc.ts
 async function rpcCall(ctx, method, payload = {}, signal) {
@@ -3712,11 +3712,20 @@ function XsQuickLinks({
 var KIND_BY_NAME = {
   谱: "pu",
   工作区: "workspace",
-  工作流: "workflow"
+  工作流: "workflow",
+  事记: "shiji"
 };
+var SECTION_BY_HEADING = {
+  最近在做什么: "recent",
+  曾经做过什么: "past"
+};
+var SECTION_RE = /^##\s*(最近在做什么|曾经做过什么)\s*$/;
 var HEADING_RE = /^##\s*来源：\s*(.+?)\s*$/;
 var MARKER_RE = /^【来源：\s*(.+?)\s*】\s*(.*)$/;
 var ORIGIN_RE = /^源自：\s*(.*)$/;
+var EMPTY_ROUTE_RE = /^（尚无来源[：:]\s*(.+?)）$/;
+var NO_SHIJI_PREFIX = "（还没有事记";
+var SHIJI_META_RE = /^(\d{4}-\d{2}-\d{2})\s*～\s*(\d{4}-\d{2}-\d{2})\s*·\s*依据：会话\s*(\d+)\s*场\s*·\s*文档\s*(\d+)\s*份$/;
 function kindOf(name) {
   const exact = KIND_BY_NAME[name];
   if (exact !== void 0) return exact;
@@ -3729,43 +3738,131 @@ function splitMarker(inner) {
   const [label = "", ...rest] = inner.split(/\s+/).filter((part) => part !== "");
   return { label, name: rest.join(" ") };
 }
+function parseShijiMeta(trailing) {
+  const matched = SHIJI_META_RE.exec(trailing);
+  if (matched === null) return void 0;
+  return {
+    since: matched[1],
+    until: matched[2],
+    basis: { sessions: Number(matched[3]), docs: Number(matched[4]) }
+  };
+}
 function parseDigaoMarkdown(markdown) {
   const drafts = [];
+  const byKey = /* @__PURE__ */ new Map();
+  let section;
   let group2;
   let segment;
+  const ensureGroup = (kind, name) => {
+    const key = `${section ?? ""}\0${kind}\0${name}`;
+    const existing = byKey.get(key);
+    if (existing !== void 0) return existing;
+    const draft = {
+      ...section === void 0 ? {} : { section },
+      kind,
+      name,
+      noteLines: [],
+      segments: []
+    };
+    drafts.push(draft);
+    byKey.set(key, draft);
+    return draft;
+  };
   const closeSegment = () => {
-    if (group2 === void 0 || segment === void 0) return;
+    if (segment === void 0) return;
     const current = segment;
+    segment = void 0;
     const origins = current.bodyLines.map((line) => ORIGIN_RE.exec(line.trim())).filter((match) => match !== null).map((match) => match[1] ?? "");
     const body = current.bodyLines.filter((line) => ORIGIN_RE.exec(line.trim()) === null).join("\n").trim();
-    group2.segments.push({
+    current.group.segments.push({
       label: current.label,
       kind: current.kind,
       name: current.name,
       body,
-      ...origins.length === 0 ? {} : { origin: origins[origins.length - 1] ?? "" }
+      ...origins.length === 0 ? {} : { origin: origins[origins.length - 1] ?? "" },
+      ...current.since === void 0 ? {} : { since: current.since },
+      ...current.until === void 0 ? {} : { until: current.until },
+      ...current.basis === void 0 ? {} : { basis: current.basis }
     });
-    segment = void 0;
+  };
+  const openSegment = (target, label, name, trailing) => {
+    const draft = {
+      group: target,
+      label,
+      kind: kindOf(label),
+      name,
+      bodyLines: []
+    };
+    const meta = draft.kind === "shiji" && trailing !== "" ? parseShijiMeta(trailing) : void 0;
+    if (meta !== void 0) {
+      draft.since = meta.since;
+      draft.until = meta.until;
+      draft.basis = meta.basis;
+    } else if (trailing !== "") {
+      draft.bodyLines.push(trailing);
+    }
+    segment = draft;
   };
   for (const rawLine of markdown.replace(/\r\n?/g, "\n").split("\n")) {
-    const heading = HEADING_RE.exec(rawLine.trim());
+    const trimmed = rawLine.trim();
+    const sectionHeading = SECTION_RE.exec(trimmed);
+    if (sectionHeading !== null) {
+      closeSegment();
+      section = SECTION_BY_HEADING[sectionHeading[1] ?? ""];
+      group2 = void 0;
+      continue;
+    }
+    const heading = HEADING_RE.exec(trimmed);
     if (heading !== null) {
       closeSegment();
+      section = void 0;
       const name = heading[1] ?? "";
-      const draft = { kind: kindOf(name), name, noteLines: [], segments: [] };
-      group2 = draft;
-      drafts.push(draft);
+      group2 = ensureGroup(kindOf(name), name);
+      continue;
+    }
+    if (section !== void 0) {
+      const marker2 = MARKER_RE.exec(trimmed);
+      if (marker2 !== null) {
+        closeSegment();
+        const { label, name } = splitMarker(marker2[1] ?? "");
+        group2 = ensureGroup(kindOf(label), label);
+        openSegment(group2, label, name, marker2[2] ?? "");
+        continue;
+      }
+      const emptyRoute = EMPTY_ROUTE_RE.exec(trimmed);
+      if (emptyRoute !== null) {
+        closeSegment();
+        const title = emptyRoute[1] ?? "";
+        const draft = ensureGroup(kindOf(title), title);
+        draft.noteLines.push(trimmed);
+        group2 = draft;
+        continue;
+      }
+      if (segment !== void 0) {
+        segment.bodyLines.push(rawLine);
+        continue;
+      }
+      if (trimmed === "") continue;
+      if (trimmed.startsWith(NO_SHIJI_PREFIX)) {
+        const draft = ensureGroup("shiji", "事记");
+        draft.noteLines.push(trimmed);
+        group2 = draft;
+        continue;
+      }
+      if (group2 !== void 0) {
+        group2.noteLines.push(rawLine);
+        continue;
+      }
+      const orphan = ensureGroup("other", section === "past" ? "曾经" : "最近");
+      orphan.noteLines.push(rawLine);
       continue;
     }
     if (group2 === void 0) continue;
-    const marker = MARKER_RE.exec(rawLine.trim());
+    const marker = MARKER_RE.exec(trimmed);
     if (marker !== null) {
       closeSegment();
       const { label, name } = splitMarker(marker[1] ?? "");
-      const draft = { label, kind: kindOf(label), name, bodyLines: [] };
-      segment = draft;
-      const trailing = marker[2] ?? "";
-      if (trailing !== "") draft.bodyLines.push(trailing);
+      openSegment(group2, label, name, marker[2] ?? "");
       continue;
     }
     if (segment === void 0) group2.noteLines.push(rawLine);
@@ -3773,11 +3870,26 @@ function parseDigaoMarkdown(markdown) {
   }
   closeSegment();
   return drafts.map((draft) => ({
+    ...draft.section === void 0 ? {} : { section: draft.section },
     kind: draft.kind,
     name: draft.name,
     note: draft.noteLines.join("\n").trim(),
     segments: draft.segments
   }));
+}
+function matchShijiEntries(records, entries) {
+  const buckets = /* @__PURE__ */ new Map();
+  for (const entry of entries ?? []) {
+    const key = `${entry.name ?? ""}\0${String(entry.lastActiveAt ?? "").slice(0, 10)}`;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(entry);
+    buckets.set(key, bucket);
+  }
+  return records.map((record) => {
+    const key = `${record.name}\0${record.until ?? ""}`;
+    const bucket = buckets.get(key);
+    return bucket === void 0 || bucket.length === 0 ? void 0 : bucket.shift();
+  });
 }
 
 // src/client/digao-style.ts
@@ -3797,7 +3909,14 @@ function installDigaoStyle() {
 .xs-digao__no-edit{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px}
 .xs-digao__group{margin:18px 0;border-left:3px solid var(--xs-edge-card);padding-left:12px}
 .xs-digao__group-head{margin:0 0 6px}
+/* #27：两段（最近 / 曾经）。段头比组头高一级：段是契约章序，组只是段内的来源路。 */
+.xs-digao__section{margin:20px 0}
+.xs-digao__section-head{font-size:1.05rem;font-weight:600;margin:0 0 10px;padding-bottom:4px;border-bottom:1px solid var(--xs-edge-card)}
 .xs-digao__segment{margin:10px 0;border-left:2px solid var(--xs-edge-card);padding-left:10px}
+/* #27：事记条目（曾经做过什么）—— 与「最近」的段同一套边条，但多一枚 [删除] 与确认条。 */
+.xs-digao__record{margin:14px 0;border-left:2px solid var(--xs-edge-card);padding-left:12px}
+.xs-digao__confirm{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px;margin:8px 0}
+.xs-digao__confirm p{margin:0 0 6px;line-height:1.7}
 .xs-digao__tag{display:inline-block;padding:1px 6px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);font-size:.8rem;color:var(--xs-text-secondary);margin-right:6px}
 .xs-digao__segment-body{white-space:pre-wrap;line-height:1.8;margin:4px 0}
 .xs-digao__raw{white-space:pre-wrap;font-family:var(--font-mono,monospace);font-size:.85rem;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:10px;overflow:auto;max-height:var(--xs-size-scrollregion-max,420px)}
@@ -3809,7 +3928,7 @@ function installDigaoStyle() {
 
 // src/client/digao.tsx
 var import_jsx_runtime12 = require("react/jsx-runtime");
-var DIGAO_NO_EDIT_NOTE = "本面板没有编辑框、没有保存按钮：内容由「规则骨架 + AI 摘要」生成；改了源头，刷新即变。";
+var DIGAO_NO_EDIT_NOTE = "本面板没有编辑框、没有保存按钮：内容由「规则骨架 + AI 摘要」生成；改了源头，刷新即变。唯一能删的是「曾经做过什么」里的事记（删的是账本里的那一条，不是改底稿），删完可在设置里恢复。";
 var DIGAO_JUMP_NOTE = "要改就改源头：";
 var DIGAO_JUMPS = [
   { target: "pus", label: "改谱 → S5" },
@@ -3817,6 +3936,7 @@ var DIGAO_JUMPS = [
   { target: "workflow", label: "改工作流 → S12" }
 ];
 var DIGAO_NEXT_REFRESH_NOTE = "下次刷新：由「自动化任务」面板里的底稿 daily 任务决定（播种默认 03:30，可在那里改或停用）。";
+var DIGAO_NO_SHIJI_READ_NOTE = "没有读到事记账本：这一段的条目暂时不能在这里删（正文照原文展示；刷新一次底稿就会写账本）。";
 function initialView(preloaded) {
   if (preloaded === void 0) return { kind: "loading" };
   if ("error" in preloaded) return { kind: "error", message: preloaded.error };
@@ -3829,17 +3949,19 @@ function initialView(preloaded) {
   }
   if (preloaded.read === void 0) return { kind: "error", message: "底稿文件存在但正文没读回来。" };
   const schedule = preloaded.read.schedule ?? preloaded.status.schedule;
+  const shiji = preloaded.read.shiji ?? preloaded.status.shiji;
   return {
     kind: "ready",
     meta: preloaded.read.meta ?? preloaded.status.meta,
     markdown: preloaded.read.markdown,
-    ...schedule === void 0 ? {} : { schedule }
+    ...schedule === void 0 ? {} : { schedule },
+    ...shiji === void 0 ? {} : { shiji }
   };
 }
 function errorText3(error) {
   return error instanceof Error ? error.message : String(error);
 }
-function DigaoPanel({ api, navigate, preloaded, preloadedRawView }) {
+function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }) {
   const seeded = preloaded !== void 0;
   const [view, setView] = (0, import_react9.useState)(() => initialView(preloaded));
   const [busy, setBusy] = (0, import_react9.useState)(false);
@@ -3862,11 +3984,13 @@ function DigaoPanel({ api, navigate, preloaded, preloadedRawView }) {
       const read = await api.read();
       if (mine !== sequence.current) return;
       const schedule2 = read.schedule ?? status.schedule;
+      const shiji2 = read.shiji ?? status.shiji;
       setView({
         kind: "ready",
         meta: read.meta ?? status.meta,
         markdown: read.markdown,
-        ...schedule2 === void 0 ? {} : { schedule: schedule2 }
+        ...schedule2 === void 0 ? {} : { schedule: schedule2 },
+        ...shiji2 === void 0 ? {} : { shiji: shiji2 }
       });
     }).catch((error) => {
       if (mine !== sequence.current) return;
@@ -3884,12 +4008,32 @@ function DigaoPanel({ api, navigate, preloaded, preloadedRawView }) {
     void api.refresh().then(async () => {
       const read = await api.read();
       if (mine !== sequence.current) return;
-      setView({ kind: "ready", meta: read.meta, markdown: read.markdown });
+      setView({
+        kind: "ready",
+        meta: read.meta,
+        markdown: read.markdown,
+        ...read.schedule === void 0 ? {} : { schedule: read.schedule },
+        ...read.shiji === void 0 ? {} : { shiji: read.shiji }
+      });
     }).catch((error) => {
       if (mine !== sequence.current) return;
       setNote(`刷新失败：${errorText3(error)}`);
     }).finally(() => {
       if (mine === sequence.current) setBusy(false);
+    });
+  };
+  const reloadAfterDelete = async () => {
+    const mine = sequence.current;
+    const read = await api.read();
+    if (mine !== sequence.current) return;
+    setView((previous) => {
+      if (previous.kind !== "ready") return previous;
+      return {
+        ...previous,
+        meta: read.meta,
+        markdown: read.markdown,
+        ...read.shiji === void 0 ? {} : { shiji: read.shiji }
+      };
     });
   };
   const meta = view.kind === "empty" || view.kind === "ready" ? view.meta : null;
@@ -3945,13 +4089,23 @@ function DigaoPanel({ api, navigate, preloaded, preloadedRawView }) {
     view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", "data-xuanshu-view": "loading", children: "正在读底稿…" }) : null,
     view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "xs-digao__empty", "data-xuanshu-view": "empty", children: [
       /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { children: EMPTY_COPY.digaoNeverRefreshed.why }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", children: "底稿由谱 / 工作区 / 工作流三路来源提炼而成；点一次 [刷新] 就会按三路来源拼出骨架。" })
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", children: "底稿由谱 / 工作区 / 工作流 / 事记四路来源提炼而成；点一次 [刷新] 就会拼出「最近在做什么」与「曾经做过什么」两段。" })
     ] }) : null,
     view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "xs-digao__alert", "data-xuanshu-view": "error", role: "alert", children: [
       /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { children: view.message }),
       /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "xs-digao__actions", children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", "data-xuanshu-action": "retry", onClick: load, children: "重试" }) })
     ] }) : null,
-    view.kind === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(DigaoBody, { markdown: view.markdown, meta: view.meta, raw }) : null
+    view.kind === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+      DigaoBody,
+      {
+        markdown: view.markdown,
+        meta: view.meta,
+        raw,
+        ...view.shiji === void 0 ? {} : { shijiRead: view.shiji },
+        ...shiji === void 0 ? {} : { shiji },
+        reload: reloadAfterDelete
+      }
+    ) : null
   ] });
 }
 function digestLine(meta) {
@@ -3962,26 +4116,142 @@ function digestLine(meta) {
   if (digest === "llm") return "生成方式：骨架＝确定性规则 · 摘要＝AI 提炼";
   return "生成方式：骨架＝确定性规则 · 摘要＝未标注（meta 里没有 digest 这一位，按未提炼对待）";
 }
-function DigaoBody({ markdown, meta, raw }) {
+function SegmentList({ segments }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(import_jsx_runtime12.Fragment, { children: segments.map((segment, index) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "xs-digao__segment", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { className: "xs-digao__segment-head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-digao__tag", "data-xuanshu-source-tag": segment.label, children: `[${segment.label}]` }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-digao__segment-name", children: segment.name })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__segment-body", children: segment.body }),
+    segment.origin === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__origin", "data-xuanshu-origin": segment.kind, children: `源自：${segment.origin}` })
+  ] }, `${segment.kind}-${String(index)}`)) });
+}
+function ShijiRecord({
+  record,
+  entry,
+  pending,
+  busy,
+  onAskDelete,
+  onCancel,
+  onConfirm
+}) {
+  const range = `${record.since ?? ""}～${record.until ?? ""}`;
+  const basis = record.basis ?? { sessions: 0, docs: 0 };
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "xs-digao__record", ...entry === void 0 ? {} : { "data-xuanshu-shiji": entry.id }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { className: "xs-digao__segment-head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-digao__tag", "data-xuanshu-source-tag": record.label, children: `[${record.label}]` }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-digao__segment-name", children: record.name })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", "data-xuanshu-shiji-meta": entry?.id ?? record.name, children: `${range} · 依据：会话 ${basis.sessions} 场 · 文档 ${basis.docs} 份` }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__segment-body", children: record.body }),
+    entry === void 0 ? null : pending ? (
+      // 二次确认就地展开（不用 window.confirm：文案要可断言，窄屏也要排得下）。
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "xs-digao__confirm", role: "alertdialog", "aria-label": "确认删除这条事记", "data-xuanshu-confirm": "delete-shiji", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { "data-xuanshu-confirm-text": "delete-shiji", children: `删除事记「${record.name}」？删除后下一次刷新不会再出现；可以在设置里恢复。` }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "xs-digao__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", className: "xs-btn xs-btn--primary", "data-xuanshu-action": "delete-shiji-confirm", disabled: busy, onClick: onConfirm, children: busy ? "删除中…" : "确认删除" }),
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", "data-xuanshu-action": "delete-shiji-cancel", disabled: busy, onClick: onCancel, children: "取消" })
+        ] })
+      ] })
+    ) : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", "data-xuanshu-action": "delete-shiji", "data-xuanshu-shiji-id": entry.id, onClick: onAskDelete, children: "删除" })
+  ] });
+}
+function PastSection({
+  group: group2,
+  shijiRead,
+  shiji,
+  reload
+}) {
+  const records = group2?.segments ?? [];
+  const matched = matchShijiEntries(records, shijiRead?.entries);
+  const rows = records.map((record, index) => ({
+    record,
+    entry: shijiRead === void 0 ? void 0 : matched[index]
+  }));
+  const live = rows.filter((row) => shijiRead === void 0 || row.entry !== void 0);
+  const gone = shijiRead === void 0 ? 0 : records.length - live.length;
+  const [pendingId, setPendingId] = (0, import_react9.useState)(void 0);
+  const [busyId, setBusyId] = (0, import_react9.useState)(void 0);
+  const [note, setNote] = (0, import_react9.useState)(void 0);
+  const remove = (entry, name) => {
+    if (shiji === void 0) return;
+    setBusyId(entry.id);
+    setNote(void 0);
+    void shiji.remove({ id: entry.id }).then(async () => {
+      setPendingId(void 0);
+      await reload();
+      setNote(`已删除事记「${name}」：下一次刷新后正文里不会再出现；可以在设置里恢复。`);
+    }).catch((error) => {
+      setNote(`删除失败：${errorText3(error)}`);
+    }).finally(() => {
+      setBusyId(void 0);
+    });
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "xs-digao__section", "data-xuanshu-section": "past", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h2", { className: "xs-digao__section-head", children: "曾经做过什么" }),
+    group2 === void 0 || group2.note === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", "data-xuanshu-group-note": "shiji", children: group2.note }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h3", { className: "xs-digao__group-head", children: `来源：事记（${live.length} 条）` }),
+    live.map(({ record, entry }, index) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+      ShijiRecord,
+      {
+        record,
+        ...entry === void 0 ? {} : { entry },
+        pending: entry !== void 0 && pendingId === entry.id,
+        busy: entry !== void 0 && busyId === entry.id,
+        onAskDelete: () => {
+          if (entry === void 0) return;
+          setPendingId(entry.id);
+          setNote(void 0);
+        },
+        onCancel: () => {
+          setPendingId(void 0);
+        },
+        onConfirm: () => {
+          if (entry === void 0) return;
+          remove(entry, record.name);
+        }
+      },
+      entry?.id ?? `${record.name}-${String(index)}`
+    )),
+    shijiRead === void 0 && records.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "shiji-unread", children: DIGAO_NO_SHIJI_READ_NOTE }) : null,
+    gone > 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "shiji-removed", children: `已删除 ${gone} 条事记：下一次刷新后正文里不会再出现；可以在设置里恢复。` }) : null,
+    note === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__alert", role: "alert", "data-xuanshu-alert": "shiji", children: note })
+  ] });
+}
+function DigaoBody({
+  markdown,
+  meta,
+  raw,
+  shijiRead,
+  shiji,
+  reload
+}) {
   const groups = parseDigaoMarkdown(markdown);
+  const recent = groups.filter((group2) => group2.section === "recent");
+  const past = groups.find((group2) => group2.section === "past");
+  const legacy = groups.filter((group2) => group2.section === void 0);
+  const twoSections = recent.length > 0 || past !== void 0;
   return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(import_jsx_runtime12.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "digest", children: digestLine(meta) }),
     raw ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("pre", { className: "xs-digao__raw", "data-xuanshu-raw": "digao", children: markdown }) : null,
     groups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(import_jsx_runtime12.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "shape-mismatch", children: "正文形态不符（没有「## 来源：…」章节）：按原文只读展示，界面不假装解析出来源分组。" }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "shape-mismatch", children: "正文形态不符（没有「## 最近在做什么 / ## 曾经做过什么」两段，也没有「## 来源：…」章节）： 按原文只读展示，界面不假装解析出来源分组。" }),
       /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("pre", { className: "xs-digao__raw", "data-xuanshu-raw": "digao-fallback", children: markdown })
-    ] }) : groups.map((group2) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "xs-digao__group", "data-xuanshu-group": group2.kind, children: [
+    ] }) : null,
+    twoSections ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "xs-digao__section", "data-xuanshu-section": "recent", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h2", { className: "xs-digao__section-head", children: "最近在做什么" }),
+      recent.map((group2) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "xs-digao__group", "data-xuanshu-group": group2.kind, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h3", { className: "xs-digao__group-head", children: `来源：${group2.name}（${group2.segments.length} 段）` }),
+        group2.note === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", "data-xuanshu-group-note": group2.kind, children: group2.note }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(SegmentList, { segments: group2.segments })
+      ] }, `${group2.kind}-${group2.name}`))
+    ] }) : null,
+    twoSections ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(PastSection, { group: past, shijiRead, shiji, reload }) : null,
+    legacy.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(import_jsx_runtime12.Fragment, { children: legacy.map((group2) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "xs-digao__group", "data-xuanshu-group": group2.kind, children: [
       /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h2", { className: "xs-digao__group-head", children: `来源：${group2.name}（${group2.segments.length} 段）` }),
       group2.note === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__note", "data-xuanshu-group-note": group2.kind, children: group2.note }),
-      group2.segments.map((segment, index) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("article", { className: "xs-digao__segment", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { className: "xs-digao__segment-head", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-digao__tag", "data-xuanshu-source-tag": segment.label, children: `[${segment.label}]` }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-digao__segment-name", children: segment.name })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__segment-body", children: segment.body }),
-        segment.origin === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "xs-digao__origin", "data-xuanshu-origin": segment.kind, children: `源自：${segment.origin}` })
-      ] }, `${group2.kind}-${String(index)}`))
-    ] }, `${group2.kind}-${group2.name}`))
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(SegmentList, { segments: group2.segments })
+    ] }, `${group2.kind}-${group2.name}`)) }) : null
   ] });
 }
 function DigaoIcon({ size = 20 }) {
@@ -7871,6 +8141,139 @@ function installSedimentStyle() {
   document.head.appendChild(style);
 }
 
+// src/client/shiji-api.ts
+var SHIJI_ENDPOINTS = {
+  list: "shiji.list",
+  remove: "shiji.remove",
+  fromSession: "shiji.fromSession"
+};
+function unwrapWrite(value) {
+  if (value?.ok === false) {
+    throw new Error(value.error?.message ?? "事记操作失败（宿主没有给理由）。");
+  }
+  return value;
+}
+function createShijiApi(ctx) {
+  return {
+    list: (payload, signal) => rpcCall(ctx, SHIJI_ENDPOINTS.list, payload ?? {}, signal),
+    remove: async (payload, signal) => unwrapWrite(await rpcCall(ctx, SHIJI_ENDPOINTS.remove, { id: payload.id, confirmed: true }, signal)),
+    fromSession: async (payload, signal) => unwrapWrite(
+      await rpcCall(ctx, SHIJI_ENDPOINTS.fromSession, { sessionId: payload.sessionId, confirmed: true }, signal)
+    )
+  };
+}
+
+// src/client/shiji-views.tsx
+var import_react21 = require("react");
+var import_jsx_runtime25 = require("react/jsx-runtime");
+var SHIJI_ENTRY_ID = "xuanshu.shiji-entry";
+var SHIJI_SAVE_NOTE = "这一场的要点可以在你点了并确认之后，存成今天的一条事记。";
+var SHIJI_SAVE_CONFIRM = "存成今天的事记？会把这场的要点写成一条事记，存下后可以在底稿里看到，也可以删掉。";
+function errorText10(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function XsShijiSaveEntry({ sessionId, api, navigate }) {
+  const consult = isConsultSessionId(sessionId);
+  const [open, setOpen] = (0, import_react21.useState)(false);
+  const [busy, setBusy] = (0, import_react21.useState)(false);
+  const [result, setResult] = (0, import_react21.useState)(void 0);
+  if (!consult || api === void 0 || sessionId === void 0) return null;
+  const save = () => {
+    setBusy(true);
+    setResult(void 0);
+    void api.fromSession({ sessionId }).then((answer) => {
+      if (answer.ok !== true) {
+        setResult({ kind: "error", message: answer.error?.message ?? "没有写入任何事记（宿主没有给理由）。" });
+        return;
+      }
+      setOpen(false);
+      setResult({ kind: "ok", entry: answer.entry });
+    }).catch((error) => {
+      setResult({ kind: "error", message: errorText10(error) });
+    }).finally(() => {
+      setBusy(false);
+    });
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "xs-shiji__entry", "data-xuanshu-block": "shiji-entry", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+      "button",
+      {
+        type: "button",
+        className: "xs-btn",
+        "data-xuanshu-action": "shiji-save-session",
+        disabled: busy,
+        onClick: () => {
+          setOpen(true);
+          setResult(void 0);
+        },
+        children: "存成今天的事记"
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { className: "xs-shiji__note", children: SHIJI_SAVE_NOTE }),
+    open ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "xs-shiji__confirm", "data-xuanshu-confirm": "save-shiji", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { "data-xuanshu-confirm-text": "save-shiji", children: SHIJI_SAVE_CONFIRM }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "xs-shiji__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "xs-btn xs-btn--primary", "data-xuanshu-action": "shiji-save-confirm", disabled: busy, onClick: save, children: busy ? "存下中…" : "确认存下" }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+          "button",
+          {
+            type: "button",
+            "data-xuanshu-action": "shiji-save-cancel",
+            disabled: busy,
+            onClick: () => {
+              setOpen(false);
+            },
+            children: "取消"
+          }
+        )
+      ] })
+    ] }) : null,
+    result === void 0 ? null : result.kind === "ok" ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("p", { className: "xs-shiji__notice", role: "status", "data-xuanshu-notice": "shiji", children: [
+      `已存成今天的事记：「${result.entry.name}」（${result.entry.lastActiveAt.slice(0, 10)}）`,
+      navigate === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "xs-btn",
+          "data-xuanshu-nav": "digao",
+          onClick: () => {
+            navigate("digao");
+          },
+          children: "打开底稿 →"
+        }
+      )
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-shiji__error", role: "alert", "data-xuanshu-alert": "shiji", children: `没有存成：${result.message}` })
+  ] });
+}
+function installShiji(ctx, deps) {
+  installShijiStyle();
+  ctx.slots.inject(
+    "conversation.composer.dock",
+    () => ctx.slots.register(
+      { name: "conversation.composer.dock", id: SHIJI_ENTRY_ID, inject: () => ({ ...deps }) },
+      XsShijiSaveEntry
+    )
+  );
+}
+function installShijiStyle() {
+  if (typeof document === "undefined" || document.getElementById("xs-shiji-style") !== null) return;
+  const style = document.createElement("style");
+  style.id = "xs-shiji-style";
+  style.textContent = `
+.xs-shiji__entry{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0}
+.xs-shiji__entry button{font:inherit}
+.xs-shiji__note{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6}
+.xs-shiji__confirm{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px;margin:6px 0;flex-basis:100%}
+.xs-shiji__confirm p{margin:0 0 6px}
+.xs-shiji__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.xs-shiji__actions button{font:inherit;padding:6px 12px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-shiji__actions button:disabled{opacity:.5;cursor:not-allowed}
+.xs-btn--primary{background:var(--xs-constraint-human-gate-bg,var(--xs-accent));border-color:var(--xs-accent);color:var(--xs-constraint-human-gate-fg,var(--xs-accent-fg))}
+.xs-shiji__notice,.xs-shiji__error{flex-basis:100%;font-size:.85rem;margin:4px 0;padding:8px 10px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+`;
+  document.head.appendChild(style);
+}
+
 // src/client/style.ts
 var STYLE_TAG_ID = "xuanshu-client/overview.css";
 var OVERVIEW_CSS = `
@@ -8780,6 +9183,7 @@ function apply(ctx) {
   const notify = createNotifyApi(rpc);
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
+  const shiji = createShijiApi(rpc);
   const workflow = createWorkflowApi(rpc);
   const sediment = createSedimentApi(rpc);
   const sedimentController = createSedimentController(sediment);
@@ -8836,10 +9240,10 @@ function apply(ctx) {
     navigate,
     openSession,
     refreshSessions,
-    mountSlot: (session) => (0, import_react21.createElement)(MountsSectionFor, { controller: mountsController, session })
+    mountSlot: (session) => (0, import_react22.createElement)(MountsSectionFor, { controller: mountsController, session })
   });
   installMounts(rpc, { api: mountsApi, workspaces: () => workspaceCatalog.list(), workspaceAvailable: workspaceCatalog.available });
-  installDigao(rpc, { api: digao, navigate });
+  installDigao(rpc, { api: digao, shiji, navigate });
   installRikke(rpc, { api: rikke, navigate, notify });
   installTouchSettings(rpc, { rikke, notify });
   installWorkflowPanel(rpc, { api: workflow, navigate });
@@ -8857,6 +9261,7 @@ function apply(ctx) {
     }
   });
   installDataSettings(rpc, { api: data });
+  installShiji(rpc, { api: shiji, navigate });
 }
 		// 包体中途执行过 module.exports = __toCommonJS(...)，上面的 exports 已过期；
 		// 必须重新读取 module.exports，逐个补拷会漏掉将来的新导出。

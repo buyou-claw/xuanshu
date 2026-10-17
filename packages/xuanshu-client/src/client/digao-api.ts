@@ -9,6 +9,7 @@
  */
 import { rpcCall } from './rpc.js';
 import type { RpcContext } from './rpc.js';
+import type { ShijiEntry } from './shiji-api.js';
 
 /**
  * `digao.json` 的元数据（契约 §1 的 `xuanshu/digao@1`；缺项一律可选，读不到就不假装有）。
@@ -21,18 +22,36 @@ export interface DigaoMeta {
   generatedAt?: string;
   /** 段数（契约的骨架规则算出；界面直接展示，不自算）。 */
   segments?: number;
-  /** 来源路数（谱 / 工作区 / 工作流里有内容的几路）。 */
+  /** 来源路数（谱 / 工作区 / 工作流 / 事记里有内容的几路）。 */
   sources?: number;
-  bySource?: { pu?: number; workspace?: number; workflow?: number };
+  bySource?: { pu?: number; workspace?: number; workflow?: number; shiji?: number };
   digest?: 'llm' | 'skeleton';
+  /**
+   * #27 的加性字段：两段各多少段（`{recent, past}`）。
+   * 客户端用它识别「这份 md 是两段结构」；老文件没有它，按三章形态渲染。
+   */
+  sections?: { recent?: number; past?: number };
 }
 
-/** `digao.status`：`{ exists, meta: DigaoMeta|null, schedule? }`（契约 §2 + 2026-10-15 批准的加性扩容）。 */
+/**
+ * `digao.read|status` 的**加性**事记读面（#27 契约 §3）：UI 的 [删除] 要 id。
+ *
+ * 为什么由底稿的读面带：正文里有事记条目（人读标记），但**没有 id**；而删除动作需要 id。
+ * 这份读面与正文「曾经做过什么」同源（同一个 `listShiji()`），不是第二个渲染权威。
+ * **没有事记账本时整个键缺席**（拿不到就省略，不写 null）。
+ */
+export interface DigaoShijiRead {
+  entries: ShijiEntry[];
+}
+
+/** `digao.status`：`{ exists, meta: DigaoMeta|null, shiji?, schedule? }`（契约 §2 + 两处加性扩容）。 */
 export interface DigaoStatus {
   exists: boolean;
   meta: DigaoMeta | null;
   /** 底稿 daily 任务的计划时刻（**可选**：宿主不回传时省略键，界面不编一个时刻）。 */
   schedule?: DigaoSchedule;
+  /** 事记条目（**可选**：还没有事记账本时省略键）。 */
+  shiji?: DigaoShijiRead;
   reason?: string;
 }
 
@@ -41,6 +60,7 @@ export interface DigaoRead {
   markdown: string;
   meta: DigaoMeta | null;
   schedule?: DigaoSchedule;
+  shiji?: DigaoShijiRead;
 }
 
 /** 底稿 daily 任务的计划时刻投影（只读展示用；改它去 DSH 的「自动化任务」面板）。 */

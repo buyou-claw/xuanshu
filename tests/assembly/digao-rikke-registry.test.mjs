@@ -178,13 +178,14 @@ describe('票 13 · 产物注册面（digao / rikke 两个 cell）', () => {
     expect(provided.onRefresh, 'onRefresh 不该由注入面提供（会变成第二条写路径）').toBeUndefined()
   })
 
-  it('两块面板各自带自己的 inject（api + navigate；#24 起日课多一个触达数据面），且不含 layout 面', () => {
+  it('两块面板各自带自己的 inject（api + navigate；#24 起日课多触达面、#27 起底稿多事记面），且不含 layout 面', () => {
     const { calls, ctx } = recordingCtx()
     plugin.apply(ctx)
     const registers = calls.filter((call) => call.kind === 'register')
     // #24：日课面板打开时要把「推到了但没看」的条目标已读，所以多注入一个 `notify` 数据面。
-    // 底稿面板不碰触达账，仍是 api + navigate（不为了对称而多塞一个用不上的面）。
-    const expected = { [DIGAO_ID]: ['api', 'navigate'], [RIKKE_ID]: ['api', 'navigate', 'notify'] }
+    // #27：底稿面板的「曾经做过什么」每条事记有 [删除]（走 `shiji.remove`），所以多注入 `shiji`；
+    //      两个面板都不碰 `layout`（跳转由 `navigate` 回调给，面板不自己切）。
+    const expected = { [DIGAO_ID]: ['api', 'navigate', 'shiji'], [RIKKE_ID]: ['api', 'navigate', 'notify'] }
     for (const key of [DIGAO_ID, RIKKE_ID]) {
       const main = registers.find((row) => row.name === 'main' && row.options.key === key)
       expect(main, `缺 main cell ${key}`).toBeDefined()
