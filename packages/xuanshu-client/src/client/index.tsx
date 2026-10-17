@@ -45,6 +45,8 @@ import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
 import { createConsultApi } from './consult-api.js';
 import { installConsult } from './consult.js';
+import { createDataApi } from './data-api.js';
+import { installDataSettings } from './data.js';
 import { createDigaoApi } from './digao-api.js';
 import { createDigaoUiController } from './digao-controller.js';
 import { installDigao } from './digao.js';
@@ -225,6 +227,10 @@ export function apply(ctx: Context): void {
   const bestof = createBestofApi(rpc);
   const bestofController = createBestofController({ api: bestof });
 
+  // 票 30（#30）：设置 → 我的数据。数据面只做两件事（读体积 / 一键备份），apply 期不发请求；
+  // 选目录复用藏库的 `cang.pickDirectory`（同一台机器上唯一一条原生目录选择器路径）。
+  const data = createDataApi(rpc);
+
   const injected = (): OverviewInjected => ({
     navigate,
     mainPanels,
@@ -332,9 +338,14 @@ export function apply(ctx: Context): void {
     },
   });
 
-  // ⑫ 票 27（#27）：会话内「存成今天的事记」——`conversation.composer.dock` 上的**一个** cell。
+  // ⑫ 票 30：设置 → 「我的数据」分区（`settings.section`，纯加性：不新增 main key / 侧栏行）。
+  //    体积在分区挂载后读一次；备份只在人点 `[一键备份]` 之后发生。
+  //    注册序排在 bestof 之后、票 27 之前 —— `panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 靠数组顺序分先后。
+  installDataSettings(rpc, { api: data });
+
+  // ⑬ 票 27（#27）：会话内「存成今天的事记」——`conversation.composer.dock` 上的**一个** cell。
   //    只在问事会话里渲染（判据是自铸 id 前缀）；点了并确认之后才调 `shiji.fromSession`。
-  //    注册序：`panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 里它排在 sediment / bestof 之后
-  //    （三者都挂在 `workflow` 那一对之后，靠数组顺序分先后 —— 这里谁在后，那边谁就在后）。
+  //    注册序：`panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 里它排在 sediment / bestof / 数据 之后
+  //    （都挂在 `workflow` 那一对之后，靠数组顺序分先后 —— 这里谁在后，那边谁就在后）。
   installShiji(rpc, { api: shiji, navigate });
 }
