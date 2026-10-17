@@ -414,13 +414,17 @@ describe('#24 · 日课卡：骨架三行 + AI 段三态 + 未读 / 失败行', 
     expect(html).toContain('祭祀、出行')
   })
 
-  it('未读 > 0 → 卡头未读徽标；最近一次推送失败 → 卡内 role=alert 行（原因逐字）', () => {
+  it('未读 > 0 → 卡头未读徽标；最近一次推送失败 → 卡内 role=alert 行（权限缺失说人话）', () => {
     const html = card({ unread: 2, notify: { status: 'failed', reason: 'permission-denied', at: '2026-10-15T03:00:00.000Z' } })
     expect(html).toContain('data-xuanshu-badge="unread"')
     expect(html).toContain('未读 2')
     expect(html).toContain('data-xuanshu-notify="failed"')
     expect(html).toMatch(/role="alert"/u)
-    expect(html).toContain('permission-denied')
+    // #40：不再是壳侧英文原串 —— 说清权限缺失、指路去哪开；机器码仍可查。
+    expect(html).toContain('权限缺失')
+    expect(html).toContain('系统设置 → 通知 → 玄枢')
+    expect(html).not.toContain('通知没发出去：permission-denied')
+    expect(html).toContain('data-xuanshu-reason-code="permission-denied"')
   })
 
   it('未读 0 / 最近一次推成功 → 不出徽标、不出失败行（不把「推成了」显示成「没推」）', () => {
@@ -447,7 +451,7 @@ describe('#24 · 日课面板：两段式 + 未读 / 失败原因', () => {
     expect(failed).toContain('AI 建议生成失败：provider down')
   })
 
-  it('未读 / 最近一次通知失败：面板给未读行 + 原因（逐字），不静默', () => {
+  it('未读 / 最近一次通知失败：面板给未读行 + 原因（权限缺失说人话，不静默）', () => {
     const html = panel({
       ...STATUS_READY,
       unread: 1,
@@ -456,7 +460,9 @@ describe('#24 · 日课面板：两段式 + 未读 / 失败原因', () => {
     expect(html).toContain('data-xuanshu-note="unread"')
     expect(html).toContain('未读 1')
     expect(html).toContain('data-xuanshu-notify="failed"')
-    expect(html).toContain('permission-denied')
+    expect(html).toContain('权限缺失')
+    expect(html).toContain('系统设置 → 通知 → 玄枢')
+    expect(html).toContain('data-xuanshu-reason-code="permission-denied"')
   })
 })
 

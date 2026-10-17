@@ -20,6 +20,7 @@ import { EMPTY_COPY, clockOf } from './panel.js';
 import { RIKKE_ID, RIKKE_LABEL, RIKKE_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
 import type { NotifyApi } from './notify-api.js';
+import { notifyFailureText, notifyReasonCode } from './notify.js';
 import type { RikkeAiNote, RikkeApi, RikkeStatus } from './rikke-api.js';
 import { rikkeAiView } from './rikke-model.js';
 import { installRikkeStyle } from './rikke-style.js';
@@ -291,8 +292,13 @@ export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit
         </p>
       ) : null}
       {status?.notify?.status === 'failed' ? (
-        <p className="xs-rikke__alert" role="alert" data-xuanshu-notify="failed">
-          {`上一次通知没发出去：${status.notify.reason ?? '（没有给理由）'}`}
+        <p
+          className="xs-rikke__alert"
+          role="alert"
+          data-xuanshu-notify="failed"
+          data-xuanshu-reason-code={notifyReasonCode(status.notify)}
+        >
+          {`上一次通知没发出去：${notifyFailureText(status.notify)}`}
         </p>
       ) : null}
 

@@ -98,6 +98,8 @@ export function createRikkeMethods(ctx, config = {}) {
             status: latest.notify.status,
             at: latest.at,
             ...(latest.notify.reason === null ? {} : { reason: latest.notify.reason }),
+            // #40：权限缺失等已知失败带机器码，界面据此给人话（老账行没有这个键，界面按 reason 兜底）。
+            ...(typeof latest.notify.reasonCode === 'string' ? { reasonCode: latest.notify.reasonCode } : {}),
           }
         }
       }

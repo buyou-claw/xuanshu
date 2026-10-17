@@ -22,7 +22,15 @@ export interface TrafficEntry {
   occurrenceAt?: string;
   /** #25：产物相对路径（`rikke/<date>.json` / `wansheng/<date>.json`）。 */
   artifactPath?: string | null;
-  notify: { status: 'delivered' | 'failed' | 'skipped'; reason?: string | null };
+  notify: {
+    status: 'delivered' | 'failed' | 'skipped';
+    reason?: string | null;
+    /**
+     * #40：已知的壳侧失败原因机器码（`permission-denied` / `unsupported` / `failed`）。
+     * `reason` 已经是人话；这个键让「权限缺失」在账里**可区分**、原始 token 仍可查。
+     */
+    reasonCode?: string;
+  };
   read?: boolean;
   /** #25：这一次是补生成（界面标「补」）。 */
   missed?: boolean;
@@ -37,7 +45,7 @@ export interface TrafficEntry {
 export interface TrafficStatus {
   entries: TrafficEntry[];
   unread?: number;
-  lastFailure?: { at: string; kind: string; reason: string | null };
+  lastFailure?: { at: string; kind: string; reason: string | null; reasonCode?: string };
 }
 
 /** 共享设置里与通知有关的那一项（`shell-settings.json`）。 */

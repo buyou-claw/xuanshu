@@ -115,7 +115,10 @@ describe('#25 · wansheng.status / read（拿不到就省略键）', () => {
     }))
     const status = await methods['wansheng.status']({})
     expect(status.unread).toBe(0) // 晚省这条是 failed，不算未读
-    expect(status.notify).toEqual({ status: 'failed', at: '2026-10-15T13:31:00.000Z', reason: 'permission-denied' })
+    // #40：权限缺失在账里可区分 —— 人话原因（含去哪开）+ `reasonCode` 机器码，不再只落英文原串。
+    expect(status.notify).toMatchObject({ status: 'failed', at: '2026-10-15T13:31:00.000Z', reasonCode: 'permission-denied' })
+    expect(status.notify.reason).toMatch(/权限缺失/u)
+    expect(status.notify.reason).toMatch(/通知权限/u)
   })
 })
 
