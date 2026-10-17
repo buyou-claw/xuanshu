@@ -16,11 +16,19 @@
  * 契约修订（Lead 2026-10-15，纯加性）：`rikke.status` 回传 `generatedAt` / `zone` /
  * `huangli:{ok,version,tool}` / `schedule:{time,timeZone,id}`，**拿不到就省略该键**（不写 null、不写空串）——
  * 与票 08 快照的 `place` 同款：「空值比没有值更容易被界面当成填过了」。
+ *
+ * #24 再加两处（同样纯加性）：
+ *   - `rikke.status` 回 `ai`（三态，见 `ai-note.mjs`）与 `unread` / `notify`（触达账读面）；
+ *   - `rikke.settings.get/set`：AI 段开关（`<dataDir>/rikke-settings.json`）。
  */
 
+import { normalizeAiNote } from './ai-note.mjs'
 import { DEFAULT_TIME_ZONE, RIKKE_TASK_TITLE, findDailyTask, scheduleSummary, updateDailyTime } from './daily-tasks.mjs'
 import { generateRikke, zoneFor } from './generate.mjs'
+import { readRikkeSettings, writeRikkeSettings } from './settings.mjs'
 import { dateInZone, isDate, readRikke } from './store.mjs'
+import { deliverRikkeTouch } from './touch.mjs'
+import { readTraffic } from '../notify/traffic.mjs'
 import { resolveDataDir } from '../bazi/service.mjs'
 
 /** 请求对象兜底（非对象一律当空请求）。 */
@@ -46,6 +54,9 @@ export function baseZone(dataDir) {
 export function createRikkeMethods(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
   const now = typeof config.now === 'function' ? config.now : () => new Date()
+  // #24：壳的运行时状态文件从哪读。缺省 = `{}`（= 没有壳）——断言台不被机器 env 污染；
+  // 生产由 `lib/index.js` 显式传 `process.env`。
+  const env = config.env
 
   /** 目标日期：请求给了就用（校验格式），没给就是时区里的今天；`at` 只为「一次生成只读一次钟」。 */
   const pickDate = (source, zone, at = now()) => (isDate(source.date) ? source.date : dateInZone(zone, at))
@@ -67,8 +78,25 @@ export function createRikkeMethods(ctx, config = {}) {
         if (typeof read.record.generatedAt === 'string') out.generatedAt = read.record.generatedAt
         if (typeof read.record.zone === 'string') out.zone = read.record.zone
         if (read.record.huangli && typeof read.record.huangli === 'object') out.huangli = read.record.huangli
+        // #24：AI 段三态（坏形状不冒充成功；旧产物没有这个键就整键省略）。
+        const ai = normalizeAiNote(read.record.ai)
+        if (ai !== undefined) out.ai = ai
       }
       if (read.state === 'error') out.reason = read.reason
+
+      // #24：触达账的加性读面。**拿不到就省略键**（账文件不存在 ≠ 未读 0 —— 界面不该因此显示一个数）。
+      const ledger = readTraffic(dataDir)
+      if (ledger.exists) {
+        out.unread = ledger.unread
+        const latest = ledger.entries[0]
+        if (latest !== undefined) {
+          out.notify = {
+            status: latest.notify.status,
+            at: latest.at,
+            ...(latest.notify.reason === null ? {} : { reason: latest.notify.reason }),
+          }
+        }
+      }
 
       const summary = scheduleSummary(await findDailyTask(ctx, RIKKE_TASK_TITLE))
       if (summary !== null) out.schedule = summary
@@ -88,7 +116,14 @@ export function createRikkeMethods(ctx, config = {}) {
       const zone = baseZone(dataDir)
       const date = pickDate(source, zone, at)
       // `manual` 区分「人点出来的这一份」与「定时产出的那一份」：本方法只被人点调用，所以缺省 true。
-      return await generateRikke({ ctx, dataDir, zone, date, manual: source.manual !== false, at })
+      const manual = source.manual !== false
+      const generated = await generateRikke({ ctx, dataDir, zone, date, manual, at })
+      if (generated.ok) {
+        // #24：人点生成**不发系统通知**（界面自己会显示结果），但账里要留一行 skipped ——
+        // 「今天有没有触达过」是 #25 补课判据的一部分，人点那份也得在账上。
+        await deliverRikkeTouch({ dataDir, date: generated.date, at, manual, env })
+      }
+      return generated
     },
 
     /**
@@ -100,6 +135,19 @@ export function createRikkeMethods(ctx, config = {}) {
       const updated = await updateDailyTime({ ctx, title: RIKKE_TASK_TITLE, time: source.time })
       if (!updated.ok) throw new Error(updated.reason)
       return { schedule: { time: updated.schedule.time, timeZone: updated.schedule.timeZone } }
+    },
+
+    /** #24：AI 段开关（`rikke-settings.json`；缺失 = 默认开）。 */
+    'rikke.settings.get': async () => readRikkeSettings(dataDir),
+
+    /**
+     * #24：改 AI 段开关。缺键 / 非 boolean → **抛**（写操作不许静默）。
+     * 只影响**下一次**生成：今天已经写好的那份产物不会被人点一下就改写（改产物必须有明确的生成动作）。
+     */
+    'rikke.settings.set': async (request) => {
+      const source = requestOf(request)
+      if (!Object.hasOwn(source, 'aiEnabled')) throw new Error('rikke.settings.set 要 aiEnabled（#24 的设置面只有这一项）')
+      return writeRikkeSettings(dataDir, { aiEnabled: source.aiEnabled })
     },
   }
 }

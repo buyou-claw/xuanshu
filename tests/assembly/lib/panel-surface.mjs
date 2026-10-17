@@ -27,6 +27,14 @@ export const EXTRA_REGISTRATIONS = [
   // 票 12：挂载账本抽屉（S8）——挂在 `consult` 那一对之后（票 12 的 install 排在票 10 之后）。
   { after: 'consult', names: ['shell.overlay'], cells: ['shell.overlay\u0000xuanshu-mounts-drawer'] },
   {
+    // #24（早间触达）：设置里的一行两项开关（AI 建议段 / 通知摘要），**不新增 main key / 侧栏行**。
+    // `after: 'rikke'`：`installTouchSettings` 紧跟 `installRikke`（读同一个「今天要不要 AI 段」的产物），
+    // 而票 16 的 workflow 那一对插在它之后 —— 顺序不符会被 `expectedRegisterNames()` 抓到。
+    after: 'rikke',
+    names: ['settings.general.item'],
+    cells: ['settings.general.item\u0000xuanshu.touch'],
+  },
+  {
     // 票 15（沉淀闭环）：**会话内区块**，不新增 main key / 侧栏行（S10 §1 D5 / F1）。
     // 入口在收尾条、草稿卡在 `turnTail`、通知落框架浮层 —— 三处都是加性 cell。
     // `after: 'workflow'`（不是 `rikke`）：`installSediment` 排在最后，而票 16 的 workflow 那一对

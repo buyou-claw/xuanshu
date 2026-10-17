@@ -201,10 +201,11 @@ export async function updateDailyTime({ ctx, title, time }) {
  * 装不上（没有 `ctx.on`）**不进 `notes`**：`notes` 的语义是「任务为什么没建」，而这条由本函数
  * 自己记一条 warn —— 而且此时任务照建，界面上的空态与 [改时间] 都还在。
  *
- * @param {{ctx: object, dataDir: string, timeZone?: string, now?: () => Date}} input `now` 只为断言台留
+ * @param {{ctx: object, dataDir: string, timeZone?: string, now?: () => Date, env?: Record<string, string|undefined>}} input
+ *        `now` 只为断言台留；`env` 是壳的运行时状态文件来源（生产 `process.env`，断言台注入）
  * @returns {Promise<{rikke: object, digao: object, timeZone: string, notes: string[], delivery: {ok: boolean, reason: string|null}}>}
  */
-export async function installDailyTasks({ ctx, dataDir, timeZone = DEFAULT_TIME_ZONE, now }) {
+export async function installDailyTasks({ ctx, dataDir, timeZone = DEFAULT_TIME_ZONE, now, env }) {
   const notes = []
   const rikke = await ensureDailyTask({
     ctx, dataDir, kind: 'rikke', title: RIKKE_TASK_TITLE, prompt: RIKKE_PROMPT, time: RIKKE_DEFAULT_TIME, timeZone,
@@ -219,7 +220,7 @@ export async function installDailyTasks({ ctx, dataDir, timeZone = DEFAULT_TIME_
   if (!digao.ok) notes.push(`底稿刷新定时未建：${digao.reason}`)
   if (digao.ok && digao.agent?.reason) notes.push(`底稿刷新定时会话降级：${digao.agent.reason}`)
 
-  const delivery = installDailyDelivery(ctx, { dataDir, timeZone, now })
+  const delivery = installDailyDelivery(ctx, { dataDir, timeZone, now, env })
   if (!delivery.ok) softLogger(ctx).warn('票13 定时到点的生成链没装上：%s', delivery.reason)
 
   return { rikke, digao, timeZone, notes, delivery: { ok: delivery.ok, reason: delivery.reason } }
