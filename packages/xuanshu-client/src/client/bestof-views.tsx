@@ -7,18 +7,25 @@
  *
  * 形状全部自研 `Xs*`（README §6.4 D9 / F4：不 import 任何 Harness Client 包）。
  */
-import type { BestofCandidate, BestofView } from './bestof-api.js';
+import type { BestofCandidate, BestofRoute, BestofView } from './bestof-api.js';
 import {
-  BESTOF_ANGLE_OPTIONS,
   canAdopt,
   canMerge,
   candidateStatusLabel,
   costLabel,
   deliveryNotice,
+  estimateInputLabel,
+  estimatePriceLabel,
   fallbackNotice,
+  flattenCatalogRoutes,
+  judgeSameSource,
+  judgeSourceNotice,
   judgeUnavailable,
+  keyConfiguredLabel,
   rankTag,
   rankedCandidates,
+  routeKey,
+  routeSelectionProblem,
   usableCandidates,
 } from './bestof-model.js';
 import type { BestofUiState } from './bestof-model.js';
@@ -33,6 +40,8 @@ export interface BestofOverlayActions {
   onMerge(): void;
   onReject(): void;
   onRetry(): void;
+  /** 票 28：确认屏上增删一路路由（2–4 路）。 */
+  onToggleRoute?(route: BestofRoute): void;
   onOpenSettings?(): void;
 }
 
@@ -56,27 +65,82 @@ export function XsBestofOverlay({ state, actions }: { state: BestofUiState; acti
   );
 }
 
-/** 触发说明行（常驻两句：首版 2 路；候选不带工具）。 */
+/** 触发说明行（常驻：2–4 路不同 provider；候选不带工具）。 */
 function XsBestofTriggerNote() {
   return (
     <p className="xs-bestof__note">
-      首版 2 路：{BESTOF_ANGLE_OPTIONS.map((option) => option.name).join(' + ')}（同一模型两视角）。
+      2–4 路不同 provider 并列（缺省两家；同一模型也可以按两个视角各跑一路）。
       候选只回答、不执行任何动作（不带工具、不读写你的文件）。
     </p>
   );
 }
 
-/** 费用确认框（S9 §2.1 ②：没有价表也要确认，且写明费用未知）。 */
+/**
+ * 跑前确认（票 28）：N 路 × 每家 provider/model × 输入规模（**估算**）+ 金额未知，
+ * 外加只读路由选择器（providers → models → key 三态）。人点「开始合参」才发 run。
+ */
 export function XsBestofCostConfirm({ state, actions }: { state: BestofUiState; actions: BestofOverlayActions }) {
-  const confirmed = state.view;
+  const estimate = state.estimate;
+  const selected = state.routes ?? [];
+  const selectedKeys = new Set(selected.map(routeKey));
+  const problem = selected.length > 0 ? routeSelectionProblem(selected) : undefined;
+  const options = flattenCatalogRoutes(state.catalog);
+  const catalog = state.catalog;
+  const routeLines = estimate?.routes ?? selected.map((route) => ({ ...route, modelName: null }));
+  const count = selected.length > 0 ? selected.length : routeLines.length;
   return (
     <div data-xs-bestof="confirm">
       <div className="xs-bestof__head">
         <h3>多 AI 合参 · 预估费用确认</h3>
-        <span className="xs-bestof__tag">候选 {BESTOF_ANGLE_OPTIONS.length} 路</span>
+        <span className="xs-bestof__tag">候选 {count > 0 ? count : 2} 路</span>
       </div>
       <XsBestofTriggerNote />
-      <p className="xs-bestof__note">预估费用：{costLabel(confirmed)}（模型与密钥复用 DSH 的 provider 配置，玄枢不另配密钥）</p>
+      <div className="xs-bestof__routes" data-xs-bestof="routes">
+        <p className="xs-bestof__note">本次并列的路由：</p>
+        <ul>
+          {routeLines.map((route) => (
+            <li key={routeKey(route)} data-xs-route={routeKey(route)}>
+              {route.provider} · {route.modelName ?? route.model}
+            </li>
+          ))}
+        </ul>
+        <p className="xs-bestof__note">
+          输入规模：{estimate !== undefined ? estimateInputLabel(estimate) : state.estimateError !== undefined ? estimateInputLabel(undefined) : '估算中…'}
+        </p>
+        <p className="xs-bestof__note">预估金额：{estimatePriceLabel(estimate)}（钉版没有价表；玄枢不编金额）</p>
+        {options.length > 0 && (
+          <div className="xs-bestof__route-picker">
+            <p className="xs-bestof__note">换几家/几个 model（2–4 路；配置与密钥在 DSH「设置 → 模型」里改，玄枢只读）：</p>
+            {options.map((option) => {
+              const key = routeKey(option);
+              return (
+                <label key={key} data-xs-route-option={key}>
+                  <input
+                    type="checkbox"
+                    checked={selectedKeys.has(key)}
+                    onChange={() => actions.onToggleRoute?.({ provider: option.provider, model: option.model })}
+                  />
+                  <span className="xs-bestof__note">
+                    {option.label}（{option.providerName ?? option.provider}）· {keyConfiguredLabel(option.keyConfigured)}
+                  </span>
+                </label>
+              );
+            })}
+            {(catalog?.configurable.length ?? 0) > 0 && (
+              <p className="xs-bestof__note">
+                可配置但未注册：{catalog?.configurable.map((entry) => `${entry.name ?? entry.id}（${keyConfiguredLabel(entry.keyConfigured)}）`).join('、')}
+                —— 去 DSH「设置 → 模型」里添加；玄枢不写配置与密钥。
+              </p>
+            )}
+            {(catalog?.failures.length ?? 0) > 0 && (
+              <p className="xs-bestof__note">有路由列不出模型：{catalog?.failures.map((entry) => `${entry.provider}（${entry.reason}）`).join('、')}</p>
+            )}
+          </div>
+        )}
+        {state.estimateError !== undefined && <p className="xs-bestof__note">估算不可用（{state.estimateError}）：将按老路径开跑。</p>}
+        {problem !== undefined && <p className="xs-bestof__error" role="alert">{problem}</p>}
+      </div>
+      <p className="xs-bestof__note">模型与密钥复用 DSH 的 provider 配置，玄枢不另配密钥。</p>
       <label>
         <span className="xs-bestof__note">这一轮要合参的问题是？</span>
         <textarea
@@ -87,7 +151,7 @@ export function XsBestofCostConfirm({ state, actions }: { state: BestofUiState; 
       </label>
       {state.error !== undefined && <p className="xs-bestof__error" role="alert">{state.error}</p>}
       <div className="xs-bestof__actions">
-        <button type="button" className="xs-btn--primary" onClick={actions.onStart}>开始合参</button>
+        <button type="button" className="xs-btn--primary" onClick={actions.onStart} disabled={problem !== undefined}>开始合参</button>
         <button type="button" onClick={actions.onCancel}>取消</button>
       </div>
     </div>
@@ -236,6 +300,8 @@ export function XsBestofCandidateCard({
         {rank !== undefined && <span className={`xs-bestof__tag${rankIsFallback === true ? '' : ' xs-bestof__tag--rank'}`}>{rank}</span>}
         {adopted === true && <span className="xs-bestof__tag">已采用</span>}
         <span className="xs-bestof__tag">{candidateStatusLabel(candidate)}</span>
+        {/* 票 28：多家并列后必须显示 provider（两家可能有同名 model）。 */}
+        <span className="xs-bestof__tag">{candidate.provider}</span>
         <span className="xs-bestof__tag">{candidate.model}</span>
       </header>
       <div className="xs-bestof__body">{candidate.text}</div>
@@ -244,12 +310,15 @@ export function XsBestofCandidateCard({
   );
 }
 
-/** 判官区（C9：标题固定「只排序，不替你做决定」；H4：不读谱与挂载）。 */
+/** 判官区（C9：标题固定「只排序，不替你做决定」；H4：不读谱与挂载；票 28：同源如实标）。 */
 export function XsBestofJudgePanel({ view }: { view: BestofView }) {
   const unavailable = judgeUnavailable(view);
+  const sameSource = judgeSameSource(view);
+  const sourceNotice = judgeSourceNotice(view);
   return (
     <section className="xs-bestof__judge" data-xs-bestof="judge">
-      <h4>{unavailable ? '判官（本次未给出有效排序）' : '判官（只排序，不替你做决定）'}</h4>
+      <h4>{sameSource ? '判官（同源：候选里没有另一家可选）' : unavailable ? '判官（本次未给出有效排序）' : '判官（只排序，不替你做决定）'}</h4>
+      {sourceNotice !== undefined && <p className="xs-bestof__note" data-xs-bestof="judge-source">{sourceNotice}</p>}
       {rankedCandidates(view).map((candidate) => (
         <div className="xs-bestof__judge-row" key={candidate.id}>
           <strong>{candidate.id}</strong>

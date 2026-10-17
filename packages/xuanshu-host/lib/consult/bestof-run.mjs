@@ -198,6 +198,21 @@ export function failureOf(finish) {
 }
 
 /**
+ * 候选的 user 消息文本：**材料 + 历史 + 问题**合成一条。
+ *
+ * 单独导出是因为 `bestof.estimate` 必须与 `bestof.run` 用**同一个构造点**：
+ * 确认页上看到的输入规模如果和真跑时喂进去的文本不同源，那句「≈ N tokens」就是编的。
+ *
+ * @param {{question: string, context?: string, history?: string|null}} input
+ */
+export function buildCandidatePrompt({ question, context, history }) {
+  // 候选流没有会话历史，分开成连续多条 user 消息在部分 provider 上会被拒（同角色连发），
+  // 而它们本来就是「材料 + 历史 + 一个问题」。
+  const blocks = [context, history].filter((block) => typeof block === 'string' && block.trim() !== '').map((block) => block.trimEnd())
+  return blocks.length === 0 ? question : `${blocks.join('\n\n')}\n\n【本次合参的问题】\n${question}`
+}
+
+/**
  * 跑一路候选（一次 `stream()` + 采集）。异常一律折算成 `{ok:false, error}`，
  * 让「某一路失败」不拖垮整次合参（S9 §6 的部分失败态）。
  *
@@ -217,10 +232,8 @@ export function failureOf(finish) {
  */
 export async function runCandidate(ctx, { route, angle, question, context, history, signal, onText, now = Date.now }) {
   const started = now()
-  // 材料 / 历史 / 问题合成**一条** user 消息：候选流没有会话历史，分开成连续多条 user 消息
-  // 在部分 provider 上会被拒（同角色连发），而它们本来就是「材料 + 历史 + 一个问题」。
-  const blocks = [context, history].filter((block) => typeof block === 'string' && block.trim() !== '').map((block) => block.trimEnd())
-  const prompt = blocks.length === 0 ? question : `${blocks.join('\n\n')}\n\n【本次合参的问题】\n${question}`
+  // 材料 / 历史 / 问题合成**一条** user 消息（唯一构造点 `buildCandidatePrompt()`，estimate 共用）。
+  const prompt = buildCandidatePrompt({ question, context, history })
   try {
     const result = await collectStream(
       requireLlm(ctx).stream({

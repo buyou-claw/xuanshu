@@ -83,7 +83,9 @@ export function mountLedgerKey(entry) {
  * 建一个「这场问事的上下文」装配器（同一份实现给 consult / bestof / 发问边界用）。
  *
  * @param {object} ctx cordis 宿主上下文
- * @param {{dataDir?: string, mountBudget?: number}} [config]
+ * @param {{dataDir?: string, dshHome?: string, mountBudget?: number}} [config]
+ *        `dshHome` 会一路透传到 `readMountLayer()`（票 31：工作流挂载读它导出的
+ *        `<dshHome>/skills/<name>/SKILL.md`）。
  * @returns {{dataDir: string, buildInjection: Function, buildMountDelta: Function, buildHistory: Function}}
  */
 export function createContextAssembly(ctx, config = {}) {

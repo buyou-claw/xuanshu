@@ -10,7 +10,16 @@
  *      不许假装停了（Lead 2026-10-15 把它钉成产品承诺）。
  *   3. **费用未知就说未知**：宿主不给 `costUsd` 时显示「费用未知」，不许拿 0 糊过去。
  */
-import type { BestofApi, BestofCandidate, BestofDecision, BestofDelivery, BestofView } from './bestof-api.js';
+import type {
+  BestofApi,
+  BestofCandidate,
+  BestofDecision,
+  BestofDelivery,
+  BestofEstimate,
+  BestofRoute,
+  BestofView,
+  RouteCatalog,
+} from './bestof-api.js';
 
 /** 主命令名（S9 §1：`/多模型` 逐字照抄上游）。 */
 export const BESTOF_COMMAND_NAME = '多模型';
@@ -24,6 +33,120 @@ export const BESTOF_ANGLE_OPTIONS = [
   { id: 'classic', name: '经典派' },
   { id: 'cautious', name: '审慎派' },
 ];
+
+/** 选路数量闸（票 28：2–4 路）。 */
+export const BESTOF_MIN_ROUTES = 2;
+export const BESTOF_MAX_ROUTES = 4;
+
+/** 路由去重键：`provider::model`（与宿主的判据逐字相同）。 */
+export function routeKey(route: BestofRoute): string {
+  return `${route.provider}::${route.model ?? ''}`;
+}
+
+/** 路由目录里一条**可选**的候选路由（provider 下每个 model 一条）。 */
+export interface CatalogRouteOption {
+  provider: string;
+  model: string;
+  modelName: string | null;
+  providerName: string | null;
+  label: string;
+  keyConfigured: boolean | 'unknown';
+  isDefault: boolean;
+}
+
+/** 把路由目录摊平成「可选路由」列表；可配置但未注册的家没有 model，不能当候选。 */
+export function flattenCatalogRoutes(catalog: RouteCatalog | undefined): CatalogRouteOption[] {
+  const options: CatalogRouteOption[] = [];
+  for (const provider of catalog?.providers ?? []) {
+    for (const model of provider.models ?? []) {
+      const modelName = model.name ?? null;
+      options.push({
+        provider: provider.id,
+        model: model.id,
+        modelName,
+        providerName: provider.name ?? null,
+        label: `${provider.id} · ${modelName ?? model.id}`,
+        keyConfigured: provider.keyConfigured,
+        isDefault: provider.isDefault && model.isDefault,
+      });
+    }
+  }
+  return options;
+}
+
+/**
+ * 默认选路（票 28）：默认路由在前，第二路优先**另一家 provider**（这才叫多家并列）；
+ * 家数不够时才用同一家的第二个 model。去重、最多 4 路。
+ */
+export function defaultRouteSelection(catalog: RouteCatalog | undefined, { min = BESTOF_MIN_ROUTES, max = BESTOF_MAX_ROUTES } = {}): BestofRoute[] {
+  const options = flattenCatalogRoutes(catalog);
+  if (options.length === 0) return [];
+  const preferred = options.find((option) => option.isDefault) ?? options[0];
+  if (preferred === undefined) return [];
+  const preferredProvider = preferred.provider;
+  const picked: CatalogRouteOption[] = [];
+  const push = (option: CatalogRouteOption | undefined): void => {
+    if (option === undefined) return;
+    if (picked.some((entry) => routeKey(entry) === routeKey(option))) return;
+    picked.push(option);
+  };
+  push(preferred);
+  push(options.find((option) => option.provider !== preferredProvider));
+  for (const option of options) {
+    // 默认只选到下限（2 路）；剩下的由人在确认屏上自己加（最多 4 路）。
+    if (picked.length >= Math.min(min, max, options.length)) break;
+    push(option);
+  }
+  return picked.slice(0, max).map((option) => ({ provider: option.provider, model: option.model }));
+}
+
+/** 选中的路由能不能开跑：2–4 路、按 `provider::model` 不重复。返回一句人话或 undefined。 */
+export function routeSelectionProblem(routes: BestofRoute[] | undefined): string | undefined {
+  const list = Array.isArray(routes) ? routes : [];
+  if (list.length < BESTOF_MIN_ROUTES) return `合参至少两路（现在 ${list.length} 路）：再选一家 provider 或 model。`;
+  if (list.length > BESTOF_MAX_ROUTES) return `合参最多四路（现在 ${list.length} 路）：去掉几路再跑。`;
+  if (new Set(list.map(routeKey)).size !== list.length) return '有重复路由（同一个 provider::model 只能算一路）。';
+  return undefined;
+}
+
+/** key 配置三态的人话：读不到就说「未知」，不许写成「缺 key」。 */
+export function keyConfiguredLabel(value: boolean | 'unknown' | undefined): string {
+  if (value === true) return '已配 key';
+  if (value === false) return '缺 key';
+  return '未知';
+}
+
+/** 输入规模（**估算**）；拿不到 estimate 时也如实说未知。 */
+export function estimateInputLabel(estimate: BestofEstimate | undefined): string {
+  if (estimate === undefined || !Number.isFinite(estimate.inputTokens)) return '输入规模未知（估算不可用）';
+  return `≈ ${estimate.inputTokens} tokens/路（估算）`;
+}
+
+/** 金额文案（票 28）：钉版没有价表，`price` 恒为 `'unknown'` —— 永远显示「金额未知」。 */
+export function estimatePriceLabel(estimate: BestofEstimate | undefined): string {
+  // 保留参数是为了让调用点形状稳定；`price === 'unknown'` 是规格，不是「没读到」。
+  return estimate?.price === 'unknown' || estimate === undefined ? '金额未知' : '金额未知';
+}
+
+/** 这一轮的判官是不是同源（与候选同一家 provider）。 */
+export function judgeSameSource(view: BestofView | undefined): boolean {
+  return view?.judge?.mode === 'same-source' || view?.judge?.source === 'same-source';
+}
+
+/**
+ * 判官来源说明（票 28）：异源就写清是谁判的；同源就如实说「没有异源判官」——
+ * 绝不说成「异源判官已给出」。
+ */
+export function judgeSourceNotice(view: BestofView | undefined): string | undefined {
+  if (view === undefined) return undefined;
+  if (judgeSameSource(view)) {
+    return `判官与候选同源：${view.judge.error ?? '没有不在候选里的另一家 provider'}（暂按完成顺序排前）`;
+  }
+  const provider = view.judge?.provider;
+  if (typeof provider !== 'string' || provider === '') return undefined;
+  const model = typeof view.judge?.model === 'string' ? view.judge.model : '未知模型';
+  return `判官来自 ${provider} · ${model}（不在候选 provider 集合里）。`;
+}
 
 /**
  * 解析一行斜杠命令（S9 §2.1 / §5 步骤 1：命令名到第一个空白为界；`//` 开头不算命令）。
@@ -88,16 +211,20 @@ export function rankTag(view: BestofView, candidateId: string): string | undefin
   return judgeUnavailable(view) ? `完成顺序第 ${index + 1}` : `排序 ${index + 1}`;
 }
 
-/** 判官有没有给出**有效**排序（回落 / 没跑 / 失败都算「不可用」）。 */
+/** 判官有没有给出**有效**排序（回落 / 没跑 / 失败 / 同源都算「不可用」）。 */
 export function judgeUnavailable(view: BestofView): boolean {
   const mode = view.judge?.mode;
-  if (mode === 'skipped' || mode === 'failed') return true;
+  // `same-source`（票 28）的 ranking 是**完成顺序**，不是异源判官的排序：展示口径也必须改。
+  if (mode === 'skipped' || mode === 'failed' || mode === 'same-source') return true;
   return typeof view.judge?.error === 'string' && view.judge.error !== '';
 }
 
 /** 判官不可用时的解释行（S9 §2.3 ①：一句人话 + 效力边界）。 */
 export function fallbackNotice(view: BestofView): string | undefined {
   if (!judgeUnavailable(view)) return undefined;
+  if (judgeSameSource(view)) {
+    return `没有不在候选里的另一家 provider：这一轮没有异源判官，暂按先完成的一份排前（${view.judge?.error ?? '判官与候选同源'}）。这只影响排序展示，采用与否仍然由你点。`;
+  }
   if (view.judge?.mode === 'skipped') {
     return view.judge.error ?? '只有一份可用候选，这一轮不跑判官（照样由你点采用）。';
   }
@@ -152,6 +279,17 @@ export interface BestofUiState {
   /** 一句提示（停不下来的降级、禁用态等）。 */
   notice?: string;
   /**
+   * 同一轮合参的候选路由（票 28）：2–4 路，`provider::model` 去重。
+   * 由路由目录的默认选路初始化，人可以在确认屏上增删；每次改动重算 estimate。
+   */
+  routes?: BestofRoute[];
+  /** 只读路由目录（providers → models → keyConfigured、默认路由、可配置未注册）。 */
+  catalog?: RouteCatalog;
+  /** 跑前估算（`price` 恒为 `'unknown'`）。 */
+  estimate?: BestofEstimate;
+  /** 老宿主没有 `routes.list` / `bestof.estimate` 时的可读降级原因（不挡人跑 legacy 路径）。 */
+  estimateError?: string;
+  /**
    * 「采用稿到底有没有写进会话」的回执（task-15）。
    * 字段缺席 = 还没拍板，或宿主是老版本（没有投递面）→ 界面按成功态渲染。
    */
@@ -179,7 +317,11 @@ export interface BestofController {
   ask(input: { question: string; sessionId: string }): void;
   /** 改问题（按钮触发时的那一行输入）。 */
   editQuestion(question: string): void;
-  /** 费用确认框的 `[开始合参]`（**唯一**会发起请求的入口）。 */
+  /** 重新读路由目录 + 重算 estimate（纯只读；确认屏打开时自动调一次）。 */
+  refreshEstimate(signal?: AbortSignal): Promise<void>;
+  /** 在确认屏上增删一路路由（上限 4 路；每次改动重算 estimate）。 */
+  toggleRoute(route: BestofRoute): Promise<void>;
+  /** 费用确认框的 `[开始合参]`（**唯一**会发起 run 的入口；带 `confirm:true`）。 */
   confirm(signal?: AbortSignal): Promise<void>;
   /** 费用确认框的 `[取消]`。 */
   dismiss(): void;
@@ -213,6 +355,45 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
     timer = undefined;
   };
   const message = (error: unknown): string => String((error as Error)?.message ?? error);
+  /** 估算请求的代次：改问题 / 改路由之后，旧回包一律丢弃（与轮询的换轮丢弃同一口径）。 */
+  let estimateToken = 0;
+  /** estimate 是对哪一版问题算的：问题改了它就作废（不在每次按键都发请求）。 */
+  let estimateFor: string | undefined;
+
+  /**
+   * 读路由目录 + 算 estimate（**纯只读**）。老宿主没有这两个方法时如实记 `estimateError`，
+   * 由 `confirm()` 退回 legacy 载荷 —— 不因为读不到估计就挡住人。
+   */
+  async function loadEstimate(signal?: AbortSignal): Promise<void> {
+    const token = estimateToken + 1;
+    estimateToken = token;
+    const question = state.question.trim();
+    const sessionId = state.sessionId;
+    if (sessionId === undefined || sessionId === '') return;
+    if (question === '') return;
+    try {
+      let catalog = state.catalog;
+      if (catalog === undefined && typeof api.listRoutes === 'function') {
+        try {
+          catalog = await api.listRoutes(signal);
+        } catch {
+          // 路由目录读不到不挡路：estimate 仍可按默认路由算（或老宿主直接降级）。
+          catalog = undefined;
+        }
+      }
+      if (token !== estimateToken) return;
+      const routes = state.routes ?? (catalog === undefined ? undefined : defaultRouteSelection(catalog));
+      if (typeof api.estimate !== 'function') throw new Error('这个宿主没有 bestof.estimate（老版本）：无法给出跑前估算。');
+      const estimate = await api.estimate({ sessionId, question, ...(routes === undefined || routes.length === 0 ? {} : { routes }) }, signal);
+      if (token !== estimateToken) return;
+      estimateFor = question;
+      const selected = state.routes ?? estimate.routes.map(({ provider, model }) => ({ provider, model }));
+      set({ ...(catalog === undefined ? {} : { catalog }), estimate, estimateError: undefined, routes: selected });
+    } catch (error) {
+      if (token !== estimateToken) return;
+      set({ estimate: undefined, estimateError: message(error) });
+    }
+  }
 
   /** 轮询到这一轮结束（`finished`）；失败也停（界面显示可读错误）。 */
   async function poll(runId: string): Promise<void> {
@@ -254,10 +435,41 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
         set({ phase: 'disabled', question, sessionId, view: undefined, error: undefined, notice: '多 AI 合参当前是关的：去 设置 · 通用 里打开它。' });
         return;
       }
-      set({ phase: 'confirm', question, sessionId, view: undefined, error: undefined, notice: undefined });
+      // 确认屏先开，**只读**的 estimate 在后台补上（不调 run；人点「开始合参」才跑）。
+      set({
+        phase: 'confirm',
+        question,
+        sessionId,
+        view: undefined,
+        error: undefined,
+        notice: undefined,
+        catalog: undefined,
+        estimate: undefined,
+        estimateError: undefined,
+        routes: undefined,
+      });
+      estimateFor = undefined;
+      void loadEstimate();
     },
     editQuestion(question) {
-      set({ question });
+      // 问题一变，「≈ N tokens」就作废；但**不在每次按键都发请求**（下一次 confirm 会补算）。
+      const stale = estimateFor !== undefined && estimateFor !== question.trim();
+      set({ question, ...(stale ? { estimate: undefined, estimateError: undefined } : {}) });
+    },
+    async refreshEstimate(signal) {
+      await loadEstimate(signal);
+    },
+    async toggleRoute(route) {
+      const current = state.routes ?? [];
+      const key = routeKey(route);
+      const exists = current.some((entry) => routeKey(entry) === key);
+      let next = exists
+        ? current.filter((entry) => routeKey(entry) !== key)
+        : [...current, { provider: route.provider, ...(route.model === undefined ? {} : { model: route.model }) }];
+      // 超过 4 路的点击直接不生效（界面上的 checkbox 也会因此保持未选中）。
+      if (next.length > BESTOF_MAX_ROUTES) next = current;
+      set({ routes: next, estimate: undefined, estimateError: undefined });
+      await loadEstimate();
     },
     async confirm(signal) {
       const question = state.question.trim();
@@ -270,8 +482,33 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
         set({ phase: 'confirm', error: '还没有问事会话：先去「问事」开一次会话。' });
         return;
       }
+      // 人点的时候 estimate 可能还在路上：等它一次（只读，不花钱），再决定走哪条载荷。
+      if (state.estimate === undefined && state.estimateError === undefined) await loadEstimate(signal);
+      const routes = state.routes;
+      if (routes !== undefined && routes.length > 0) {
+        // 人已经选了路由，但 estimate 读不到：**不许**静默退回 legacy（那会换掉他选的路由）。
+        if (state.estimate === undefined) {
+          set({ phase: 'confirm', error: `跑前估算不可用（${state.estimateError ?? '未知原因'}）：不能带着显式路由开跑，稍后重试或换回默认两路。` });
+          return;
+        }
+        const problem = routeSelectionProblem(routes);
+        if (problem !== undefined) {
+          set({ phase: 'confirm', error: problem });
+          return;
+        }
+      }
+      // estimate 可用 → 走票 28 的显式路由 + `confirm:true`；老宿主/估算失败 → 退回票 11 的 legacy 载荷。
+      const explicit = state.estimate !== undefined && routes !== undefined && routes.length >= BESTOF_MIN_ROUTES;
+      const payload = explicit
+        ? {
+          sessionId: state.sessionId,
+          question,
+          routes: routes.map((route) => ({ provider: route.provider, model: route.model })),
+          confirm: true,
+        }
+        : { sessionId: state.sessionId, question, angles: BESTOF_ANGLE_OPTIONS.map((option) => option.id) };
       try {
-        const view = await api.run({ sessionId: state.sessionId, question, angles: BESTOF_ANGLE_OPTIONS.map((option) => option.id) }, signal);
+        const view = await api.run(payload, signal);
         stoppedByUser = false;
         set({ phase: bestofPhase(view), view, error: undefined, notice: undefined });
         if (view.finished !== true) {
@@ -286,7 +523,18 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
     },
     dismiss() {
       clearTimer();
-      set({ phase: 'idle', view: undefined, question: '', error: undefined, notice: undefined });
+      estimateToken += 1; // 丢掉在途 estimate
+      set({
+        phase: 'idle',
+        view: undefined,
+        question: '',
+        error: undefined,
+        notice: undefined,
+        catalog: undefined,
+        estimate: undefined,
+        estimateError: undefined,
+        routes: undefined,
+      });
     },
     async stop() {
       const view = state.view;

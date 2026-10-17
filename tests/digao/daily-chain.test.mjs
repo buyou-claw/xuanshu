@@ -14,6 +14,11 @@
  *   - 两条链各认各的会话（日课的提醒不许去刷底稿，反之亦然）；
  *   - 失败路径（LLM 报错 / 写盘失败）**不许把那一轮弄挂**：钩子永不抛、原因进日志。
  *
+ * 票 05（#26）修订：事记扫描挂进同一条 `refreshDigao()`（先写 `shiji.jsonl`，再写底稿两件），
+ * 所以一次刷新里会出现**两种** `llm.stream` 调用。原来的「`llm.stream` 恰好 1 次」断言改成
+ * 「底稿压缩恰好 1 次（按 `DIGEST_SYSTEM` 认）+ 事记摘要按需 0..N 次（按 `SHIJI_SUMMARY_SYSTEM` 认）」，
+ * 并保留一条反向用例「依据没变 → 事记摘要 0 次」。**这不是放宽断言，而是把两种调用分开计数。**
+ *
  * 断言只打外部可观察物：`ctx.schedule` / `ctx.agents` / `ctx.llm` 收到了什么、沙箱里落了哪些文件、
  * 以及记到的日志行。零网络、零真实会话、零真实 LLM。
  */
@@ -22,7 +27,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { installDailyTasks } from '../../packages/xuanshu-host/lib/rikke/daily-tasks.mjs'
 import { createDigaoMethods } from '../../packages/xuanshu-host/lib/digao/service.mjs'
+import { DIGEST_SYSTEM } from '../../packages/xuanshu-host/lib/digao/llm.mjs'
 import { createPuRepository } from '../../packages/xuanshu-host/lib/pu/repository.mjs'
+import { SHIJI_SUMMARY_SYSTEM } from '../../packages/xuanshu-host/lib/shiji/summary.mjs'
 import { fakeAgentDefaultModel, fakeAgentPresets } from '../consult/lib/sandbox.mjs'
 import { fakeAgents, fakeLlm, fakeSchedule, makeCtx, makeSandbox } from './lib/sandbox.mjs'
 
@@ -34,6 +41,17 @@ const NOW = () => new Date('2026-10-15T19:30:00.000Z')
 const TZ = 'Asia/Shanghai'
 /** 假 LLM 压出来的那一句（与 `tests/digao/service.test.mjs` 同款现场）。 */
 const DIGEST_TEXT = '一句话：写工具链的开发者，八字丙寅日主。'
+
+/**
+ * 数某一套提示词的 `llm.stream` 调用次数。
+ *
+ * 票 05（#26）把事记扫描挂进了同一条 `refreshDigao()`：一次刷新里会出现**两种** LLM 调用 ——
+ * 底稿压缩（`DIGEST_SYSTEM`）与事记摘要（`SHIJI_SUMMARY_SYSTEM`）。用例因此按 system 提示分开计数，
+ * 而不是把「恰好 1 次」放宽成「1..N 次」：底稿那一路的条数仍然钉死。
+ */
+function streamCalls(llm, system) {
+  return llm.calls.filter((call) => call.method === 'stream' && call.options?.system === system).length
+}
 
 /**
  * 宿主到点投进来的那条消息（形状照 `dsh-schedule` 的 `renderReminderFraming` + `createUserMessage`）。
@@ -92,7 +110,9 @@ function scene(parts = {}) {
 
   const ctx = makeCtx({
     services,
-    workspaceRegistry: { list: () => [{ id: 'w1', path: 'E:\\ai_project\\XuanShu', title: 'XuanShu', sessionIds: ['a', 'b', 'c'] }] },
+    // 票 05 起 `refreshDigao()` 会先扫事记（会读工作区的说明文档）：这里指到一次性沙箱，
+    // 免得测试去读真实仓库的文档（保持 hermetic；底稿断言与这个路径无关）。
+    workspaceRegistry: { list: () => [{ id: 'w1', path: sandbox.root, title: 'XuanShu', sessionIds: ['a', 'b', 'c'] }] },
   })
   // 断言台补上 `ctx.on`（真宿主是 cordis ctx）与记日志的 logger（失败原因要可读）。
   const listeners = []
@@ -193,14 +213,36 @@ describe('票13 · 底稿到点 → 跑 `digao.refresh` 那一份生成链', () 
     // ② 到点那一轮跑一次。
     await deliver(target, { sessionId, messages: [scheduleReminder()] })
     const afterFirst = target.sandbox.read('digao.md')
-    const digestCalls = target.llm.calls.filter((call) => call.method === 'stream').length
+    // 票 05（#26）：同一条刷新里还会跑事记扫描/摘要，所以**按 system 提示分开计数**。
+    // 这条断言原文是「`llm.stream` 恰好 1 次」；改它不是放宽，而是把两种调用分开认：
+    // 底稿压缩（`DIGEST_SYSTEM`）恰好 1 次，事记摘要（`SHIJI_SUMMARY_SYSTEM`）另行计数。
+    const digestCalls = streamCalls(target.llm, DIGEST_SYSTEM)
     expect(digestCalls).toBe(1)
 
     // ③ 同一轮的第二步（工具循环）：不重复跑。
     await deliver(target, { sessionId, messages: [scheduleReminder('msg-d3')], step: 2 })
     expect(target.sandbox.read('digao.md')).toBe(afterFirst)
-    expect(target.llm.calls.filter((call) => call.method === 'stream').length).toBe(digestCalls)
+    expect(streamCalls(target.llm, DIGEST_SYSTEM)).toBe(digestCalls)
     expect(digaoFiles(target.sandbox)).toEqual(['digao.json', 'digao.md'])
+  })
+
+  it('依据没变再刷新：事记摘要 0 次（底稿压缩仍恰好 1 次）——「不重算」的反向用例', async () => {
+    const target = scene({ llm: 'ok' })
+    await install(target)
+    await deliver(target, { sessionId: sessionIdOf(target, 'digao'), messages: [scheduleReminder()] })
+
+    const shijiAfterTimer = streamCalls(target.llm, SHIJI_SUMMARY_SYSTEM)
+    const digestAfterTimer = streamCalls(target.llm, DIGEST_SYSTEM)
+    expect(digestAfterTimer).toBe(1)
+
+    // 人点 [刷新]：同一条生成链再跑一遍。工作区没有文档/会话服务 → 依据集合没变，
+    // 事记指纹不变 → **0 次事记摘要调用**；底稿压缩照旧一次。
+    const methods = createDigaoMethods(target.ctx, { dataDir: target.sandbox.dataDir })
+    await methods['digao.refresh']({})
+    expect(streamCalls(target.llm, SHIJI_SUMMARY_SYSTEM)).toBe(shijiAfterTimer)
+    expect(streamCalls(target.llm, DIGEST_SYSTEM)).toBe(digestAfterTimer + 1)
+    // 账本还在、同一条（没有因为再扫一遍多出一行）。
+    expect(target.sandbox.read('shiji.jsonl').split('\n').filter((line) => line !== '')).toHaveLength(1)
   })
 
   it('与 `digao.refresh` 产出形状一致（只差生成时间那一行）', async () => {

@@ -27,13 +27,15 @@ function fakeCtx(value = { ok: true }) {
   }
 }
 
-describe('票 11 · 方法名逐字对齐契约 §1', () => {
-  it('四个方法名就是契约表格那一列的原文（cancel 是批准过的 additive 方法）', () => {
+describe('票 11 / 票 28 · 方法名逐字对齐契约', () => {
+  it('六个方法名就是契约表格那一列的原文（cancel 是批准过的 additive 方法；estimate / routes.list 是票 28 的加性面）', () => {
     expect(BESTOF_ENDPOINTS).toEqual({
       run: 'bestof.run',
       state: 'bestof.state',
       adopt: 'bestof.adopt',
       cancel: 'bestof.cancel',
+      estimate: 'bestof.estimate',
+      routes: 'routes.list',
     })
   })
 
@@ -45,15 +47,21 @@ describe('票 11 · 方法名逐字对齐契约 §1', () => {
     await api.state({ runId: 'bestof-1' })
     await api.adopt({ runId: 'bestof-1', decision: 'adopt', adoptedId: 'c2' })
     await api.cancel({ runId: 'bestof-1' })
+    await api.estimate({ sessionId: 'session-xs-consult-x', question: '问一句', routes: [{ provider: 'deepseek' }] })
+    await api.listRoutes()
 
     expect(calls.map((call) => [call[0], call[1]])).toEqual([
       ['/xuanshu', 'bestof.run'],
       ['/xuanshu', 'bestof.state'],
       ['/xuanshu', 'bestof.adopt'],
       ['/xuanshu', 'bestof.cancel'],
+      ['/xuanshu', 'bestof.estimate'],
+      ['/xuanshu', 'routes.list'],
     ])
     expect(calls[0][2]).toEqual({ sessionId: 'session-xs-consult-x', question: '问一句', angles: ['classic', 'cautious'] })
     expect(calls[2][2]).toEqual({ runId: 'bestof-1', decision: 'adopt', adoptedId: 'c2' })
+    expect(calls[4][2]).toEqual({ sessionId: 'session-xs-consult-x', question: '问一句', routes: [{ provider: 'deepseek' }] })
+    expect(calls[5][2]).toEqual({})
   })
 
   it('取消信号透传（轮询过期回包靠它）', async () => {

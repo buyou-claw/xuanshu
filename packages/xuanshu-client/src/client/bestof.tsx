@@ -68,6 +68,10 @@ export function bestofActions(deps: Pick<BestofInstallDeps, 'controller' | 'open
       const { question, sessionId } = controller.snapshot();
       controller.ask({ question, sessionId: sessionId ?? '' });
     },
+    // 票 28：确认屏上增删一路（控制器负责 2–4 路上限与重算 estimate）。
+    onToggleRoute: (route) => {
+      void controller.toggleRoute(route);
+    },
     ...(deps.openSettings === undefined ? {} : { onOpenSettings: deps.openSettings }),
   };
 }

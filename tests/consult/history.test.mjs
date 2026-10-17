@@ -17,6 +17,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
+import { BESTOF_SCHEMA, createBestofStore } from '../../packages/xuanshu-host/lib/consult/bestof-store.mjs'
 import { buildCandidateHistory, projectConsultMessages } from '../../packages/xuanshu-host/lib/consult/history.mjs'
 import {
   assistantEvent,
@@ -145,6 +146,82 @@ describe('consult.read · 正文走 ctx.sessionQuery.readSession', () => {
   it('没有旁挂清单的会话：拒绝（先 consult.list 看有没有）', async () => {
     const { api } = await scene()
     await expect(api['consult.read']({ sessionId: 'session-xs-consult-不存在' })).rejects.toThrow(/问事记录|不存在/u)
+  })
+})
+
+/**
+ * 回看按轮标出当前采用稿（票 31；Spec 002 §补两处已知缺陷）。
+ *
+ * 服务端已经有「当前采用稿」的集合语义（`currentAdoptedMessageIds`），但它只说得出
+ * **哪几份算数**，说不出「这份属于第几轮」—— 客户端要按轮分组，就得由 `consult.read`
+ * 把轮次表（含每轮当前稿）与消息 id 一并交出去，否则客户端只能自己再实现一遍按轮语义。
+ *
+ * 加性口径：没有合参记录的会话**一个键都不多**（老响应的 `{session, messages}` 逐字不变）。
+ */
+describe('consult.read · 回看按轮标出当前采用稿（票 31）', () => {
+  /** 一条采用稿消息（`source.kind = xuanshu-bestof-adopted`）；`messageId` 与账本里那条对得上。 */
+  const adoptedEvent = (seq, id, text, time = T5) => userEvent(seq, {
+    id,
+    role: 'user',
+    source: { kind: 'xuanshu-bestof-adopted' },
+    content: [{ type: 'text', text }],
+  }, time)
+
+  /** 落一份带上账本的合参记录（旁挂文件的真形状；`schema` 认不出就当没有）。 */
+  const writeBestof = (sandbox, sessionId, draftLedger) => createBestofStore(sandbox.dataDir).write({
+    schema: BESTOF_SCHEMA,
+    sessionId,
+    runId: 'bestof-current-run',
+    draftLedger,
+  })
+
+  it('多轮各采用一份：带出每轮的当前采用稿（客户端据此按轮分组）', async () => {
+    const { api, query, session, sandbox } = await scene()
+    writeBestof(sandbox, session.sessionId, [
+      { kind: 'adopted', messageId: 'm-r1', candidateId: 'c1', runId: 'bestof-r1', at: '2026-10-15T00:41:00.000Z' },
+      { kind: 'adopted', messageId: 'm-r2', candidateId: 'c2', runId: 'bestof-r2', at: '2026-10-15T00:42:00.000Z' },
+    ])
+    query.events[session.sessionId] = [
+      userEvent(1, { id: 'm-q', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: QUESTION }] }, T1),
+      adoptedEvent(2, 'm-r1', '方案 A：先按 3000/月 试算。'),
+      adoptedEvent(3, 'm-r2', '方案 B：先核对前提。'),
+    ]
+    const answer = await api['consult.read']({ sessionId: session.sessionId })
+
+    expect(answer.drafts.rounds).toEqual([
+      { runId: 'bestof-r1', round: 1, messageIds: ['m-r1'], currentId: 'm-r1', rejected: false },
+      { runId: 'bestof-r2', round: 2, messageIds: ['m-r2'], currentId: 'm-r2', rejected: false },
+    ])
+    expect(answer.drafts.currentIds.sort()).toEqual(['m-r1', 'm-r2'])
+    // 消息自带 messageId：客户端才能把「这一条」对到「哪一轮」，正文一字不改。
+    expect(answer.messages.filter((message) => message.source === 'xuanshu-bestof-adopted').map((message) => message.messageId))
+      .toEqual(['m-r1', 'm-r2'])
+  })
+
+  it('被否决的轮：回看里仍看得到那份稿，但它**不是**当前（currentId 为空、当前集合为空）', async () => {
+    const { api, query, session, sandbox } = await scene()
+    writeBestof(sandbox, session.sessionId, [
+      { kind: 'adopted', messageId: 'm-old', candidateId: 'c1', runId: 'bestof-r1', at: '2026-10-15T00:41:00.000Z' },
+      { kind: 'rejected', runId: 'bestof-r1' },
+    ])
+    query.events[session.sessionId] = [
+      userEvent(1, { id: 'm-q', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: QUESTION }] }, T1),
+      adoptedEvent(2, 'm-old', '方案 A：先按 3000/月 试算。'),
+    ]
+    const answer = await api['consult.read']({ sessionId: session.sessionId })
+
+    expect(answer.drafts.rounds).toEqual([
+      { runId: 'bestof-r1', round: 1, messageIds: ['m-old'], currentId: undefined, rejected: true },
+    ])
+    expect(answer.drafts.currentIds).toEqual([])
+    // 「不列为当前」不是「从回看里删掉」：正文仍要看得到（历史是只读的）。
+    expect(answer.messages.some((message) => message.messageId === 'm-old')).toBe(true)
+  })
+
+  it('没有合参记录：不加 drafts 键（老响应逐字不变，老客户端照常工作）', async () => {
+    const { api, session } = await scene()
+    const answer = await api['consult.read']({ sessionId: session.sessionId })
+    expect(Object.keys(answer).sort()).toEqual(['messages', 'session'])
   })
 })
 
