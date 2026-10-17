@@ -316,20 +316,24 @@ describe('票 07 · 槽位遮蔽不 fail-loud（加性注册）', () => {
   })
 })
 
-/* ───────────────────────── 3. 四卡渲染（冷启动） ───────────────────────── */
+/* ───────────────────────── 3. 五卡渲染（冷启动） ───────────────────────── */
 
-describe('票 07 · 四卡渲染（冷启动空态）', () => {
-  const html = render(h(OverviewPanel, { ...injected(), today: '2026-10-13' }))
+describe('票 07 · 五卡渲染（冷启动空态；#25 加第 5 张晚省）', () => {
+  // R3：页眉那行路径的来源是**宿主回传的 dataDir**。这里按生产形状给一个真值，
+  // 不再把中性占位（「玄枢数据目录/」）当成产品文案断言 —— 占位是「宿主没回传」时的降级。
+  const HOST_DATA_DIR = 'D:\\xuanshu-home\\xuanshu'
+  const html = render(h(OverviewPanel, { ...injected(), dataDir: HOST_DATA_DIR, today: '2026-10-13' }))
 
-  it('面板壳与页头：overview 根、家 · 自我总览、本地数据路径（C11）', () => {
+  it('面板壳与页头：overview 根、家 · 自我总览、宿主回传的本地数据路径（C11）', () => {
     expect(html).toContain('data-xuanshu-panel="overview"')
     expect(html).toContain('自我总览')
     expect(html).toContain('家')
-    expect(html).toContain('数据都在本地 ~/.dsh/xuanshu/')
+    expect(html).toContain(`数据都在本地 ${HOST_DATA_DIR}\\`)
+    expect(html).not.toContain('数据都在本地（玄枢数据目录/）')
   })
 
-  it('四卡齐备且 DOM 顺序 = D3 读序（命盘 → 日课 → 底稿 → 快捷入口）', () => {
-    const order = ['mingpan', 'rike', 'digao', 'quicklinks'].map((name) => html.indexOf(`data-xuanshu-card="${name}"`))
+  it('五卡齐备且 DOM 顺序 = D3 读序（命盘 → 日课 → 底稿 → 快捷入口 → 晚省）', () => {
+    const order = ['mingpan', 'rike', 'digao', 'quicklinks', 'wansheng'].map((name) => html.indexOf(`data-xuanshu-card="${name}"`))
     expect(order.every((index) => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
   })
@@ -391,6 +395,19 @@ describe('票 07 · 四卡渲染（冷启动空态）', () => {
     const workspaceStart = card.indexOf('data-xuanshu-nav="conversation"')
     const workspaceTag = card.slice(workspaceStart, card.indexOf('>', workspaceStart))
     expect(workspaceTag).not.toContain('disabled')
+  })
+
+  it('⑤ 晚省卡（#25）：默认 21:30 的空态文案、[立即生成] 与 [改时间]；点开进问事（卡上给出口）', () => {
+    const card = cardOf(html, 'wansheng')
+    expect(card).toContain('data-xs-state="empty"')
+    expect(card).toContain('晚省 · 今天 2026-10-13')
+    expect(card).toContain('今天还没有晚省。晚省默认每天 21:30 生成。')
+    expect(card).toContain('（它只摆事实、不替你下结论；点开进问事）')
+    expect(card).toContain('data-xuanshu-action="generate-wansheng"')
+    expect(card).toContain('晚省生成还没接上（属票 04 · 晚间触达）')
+    expect(card).toContain('data-xuanshu-nav="schedules"')
+    // 「补」徽标是 ready 态的事实，不在空态出现（不冒充生成过）。
+    expect(card).not.toContain('data-xuanshu-badge="missed"')
   })
 
   it('fail-soft 是结构性的：目标装配后（快照含 consult/workflow）两格自动点亮', () => {
@@ -493,3 +510,131 @@ describe('票 07 · ready 结构（后续票接线，本票只证结构）', () 
     expect(card).toContain('流水线')
   })
 })
+
+/* ───────────────────────── 5. R3 注入面：装配期接上宿主 data.overview ───────────────────────── */
+
+/**
+ * 复核发现（F1）：文案层早已收口，但**生产装配点从不传值** —— 六处里只有藏库页脚
+ * （`cang.list.registryPath`）拿到真路径，其余五处永远显示中性占位。
+ *
+ * 这一组不直传 props：它物化**已提交的产物**（`lib/client.js`）、用假 ctx 跑 `apply`，
+ * 从 `register` 的 `inject` 面取注入值，再把它渲染成 SSR —— 走的就是生产装配的那条路径。
+ */
+const HOST_HOME = 'D:\\xuanshu-home'
+const HOST_DATA_DIR = `${HOST_HOME}\\xuanshu`
+
+/** 让 apply 期发起的 `data.overview` 走完（Promise 链 + React 无关）。 */
+function flushAsync() {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
+/**
+ * 造一个**带 connection** 的假 ctx：apply 期唯一会发生的 RPC 是 `data.overview`，
+ * 它由宿主回传产品 / 开发档的 home / dataDir（形状照 `lib/data/service.mjs`）。
+ */
+function wiredCtx(answer = { home: HOST_HOME, dataDir: HOST_DATA_DIR }) {
+  const rpcCalls = []
+  const registers = []
+  const ctx = {
+    effect(callback) {
+      const disposer = callback()
+      return typeof disposer === 'function' ? disposer : () => {}
+    },
+    theme: { overrideTokens: () => () => {} },
+    layout: { selectPanel: () => {} },
+    connection: {
+      rpc: {
+        async call(channel, endpoint, payload) {
+          rpcCalls.push({ channel, endpoint, payload })
+          return {
+            ok: true,
+            value: {
+              schema: 'xuanshu/data@1',
+              ...answer,
+              groups: [],
+              total: { bytes: 0, files: 0 },
+              excluded: [],
+              notes: [],
+            },
+          }
+        },
+      },
+    },
+    slots: {
+      inject(_name, callback) {
+        callback()
+        return () => {}
+      },
+      register(options) {
+        registers.push(options)
+        return () => {}
+      },
+      entries: () => [],
+      subscribe: () => () => {},
+    },
+  }
+  return { ctx, rpcCalls, registers }
+}
+
+/** 按 main key / cell id 找那一次注册，取它的注入面（= 生产里组件收到的 props）。 */
+function injectOf(registers, key) {
+  const found = registers.find((options) => options.key === key || options.id === key)
+  expect(found, `产物里没有注册 ${key}`).toBeDefined()
+  expect(typeof found.inject, `${key} 的注册必须给 inject 面`).toBe('function')
+  return found.inject()
+}
+
+describe('票 07 · R3 注入面：装配期取一次宿主 data.overview 的 home / dataDir', () => {
+  it('apply 期只读一次 data.overview（一份共享，不是每个面板各读一次）', async () => {
+    const { ctx, rpcCalls } = wiredCtx()
+    const { plugin } = materializeArtifact()
+    plugin.apply(ctx)
+    await flushAsync()
+    expect(rpcCalls.map((call) => call.endpoint)).toEqual(['data.overview'])
+    expect(rpcCalls[0].channel).toBe('/xuanshu')
+  })
+
+  it('总览页眉走注入的真值：SSR 出来的不是「玄枢数据目录」占位', async () => {
+    const { ctx, registers } = wiredCtx()
+    const { plugin } = materializeArtifact()
+    plugin.apply(ctx)
+    await flushAsync()
+
+    const provided = injectOf(registers, 'overview')
+    expect(provided.homePaths.getSnapshot()).toEqual({ home: HOST_HOME, dataDir: HOST_DATA_DIR })
+
+    // 安装后的组件树在 SSR 里拿到注入值 —— 这是本组的核心断言（不是 props 直传）。
+    const html = render(h(OverviewPanel, { ...provided, today: '2026-10-13' }))
+    expect(html).toContain(`数据都在本地 ${HOST_DATA_DIR}\\`)
+    expect(html).not.toContain('数据都在本地（玄枢数据目录/）')
+  })
+
+  it('其余四个文案点拿到同一份注入面：问事历史 / 命盘确认 / 沉淀草稿卡 / 沉淀确认弹窗', async () => {
+    const { ctx, registers } = wiredCtx({ home: HOST_HOME, dataDir: HOST_DATA_DIR })
+    const { plugin } = materializeArtifact()
+    plugin.apply(ctx)
+    await flushAsync()
+
+    for (const key of ['consult', 'mingpan', 'xuanshu.sediment-entry', 'xuanshu.sediment-draft', 'xuanshu.sediment-notice']) {
+      const provided = injectOf(registers, key)
+      expect(provided.homePaths, `${key} 没拿到 home/dataDir 注入面`).toBeDefined()
+      expect(provided.homePaths.getSnapshot(), `${key} 的注入面不是宿主回传值`).toEqual({
+        home: HOST_HOME,
+        dataDir: HOST_DATA_DIR,
+      })
+    }
+  })
+
+  it('宿主读不到（RPC 拒绝 / 没连接）：装配不抛，注入面回空中性占位', async () => {
+    const { ctx, registers } = wiredCtx()
+    // 让 data.overview 拒绝：装配层必须 fail-soft，不能把异常丢给 apply。
+    ctx.connection.rpc.call = async () => ({ ok: false, error: { message: '宿主还没解析 home' } })
+    const { plugin } = materializeArtifact()
+    expect(() => plugin.apply(ctx)).not.toThrow()
+    await flushAsync()
+
+    const provided = injectOf(registers, 'overview')
+    expect(provided.homePaths.getSnapshot()).toEqual({})
+  })
+})
+

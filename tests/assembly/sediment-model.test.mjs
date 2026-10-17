@@ -145,12 +145,22 @@ describe('票 15 · 草稿预览与写入路径的只读展示', () => {
     expect(previewText('  甲  ', 20)).toBe('甲')
   })
 
-  it('写入路径只读展示：pus/<slug>/ 下的三份文件（默认数据目录口径，与 S5 同源）', () => {
+  it('写入路径只读展示：pus/<slug>/ 下的三份文件（默认给中性占位，不写死任何一档的数据目录）', () => {
     expect(puPaths('事业与行业')).toEqual({
-      content: '~/.dsh/xuanshu/pus/事业与行业/content.md',
-      summary: '~/.dsh/xuanshu/pus/事业与行业/summary.md',
-      manifest: '~/.dsh/xuanshu/pus/事业与行业/manifest.md',
+      content: '玄枢数据目录/pus/事业与行业/content.md',
+      summary: '玄枢数据目录/pus/事业与行业/summary.md',
+      manifest: '玄枢数据目录/pus/事业与行业/manifest.md',
     })
+  })
+
+  it('注入宿主回传的 dataDir → 写入路径跟着变成真实数据目录（产品 / 开发两档同一条规则）', () => {
+    expect(puPaths('事业与行业', 'C:\\Users\\me\\.xuanshu\\xuanshu')).toEqual({
+      content: 'C:\\Users\\me\\.xuanshu\\xuanshu\\pus\\事业与行业\\content.md',
+      summary: 'C:\\Users\\me\\.xuanshu\\xuanshu\\pus\\事业与行业\\summary.md',
+      manifest: 'C:\\Users\\me\\.xuanshu\\xuanshu\\pus\\事业与行业\\manifest.md',
+    })
+    expect(puPaths('事业与行业', 'E:\\ai_project\\XuanShu\\.dsh-home\\xuanshu').content)
+      .toBe('E:\\ai_project\\XuanShu\\.dsh-home\\xuanshu\\pus\\事业与行业\\content.md')
   })
 })
 

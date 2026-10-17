@@ -36,6 +36,8 @@ import { createElement as h } from 'react';
 
 import { createBaziApi } from './bazi-api.js';
 import { createBaziUiController } from './bazi-controller.js';
+import { createAiApi } from './ai-api.js';
+import { createAiReadinessController } from './ai-model.js';
 import { createBestofApi } from './bestof-api.js';
 import { createBestofController } from './bestof-model.js';
 import { installBestOf } from './bestof.js';
@@ -43,13 +45,17 @@ import { installCangClient } from './cang.js';
 import type { OverviewInjected } from './cards.js';
 import { createConsultApi } from './consult-api.js';
 import { installConsult } from './consult.js';
+import { createDataApi } from './data-api.js';
+import { installDataSettings } from './data.js';
 import { createDigaoApi } from './digao-api.js';
 import { createDigaoUiController } from './digao-controller.js';
 import { installDigao } from './digao.js';
+import { createHomePathsWatch, primeHomePaths } from './home-paths.js';
 import { installMingpan } from './MingpanPanel.js';
 import { createMountsApi, createWorkspaceCatalog } from './mounts-api.js';
 import { createMountsController, installMounts, MountsSectionFor } from './mounts.js';
 import { installOnboarding } from './onboarding.js';
+import { installOverviewHashBridge } from './overview-hash.js';
 import { OverviewIcon } from './OverviewIcon.js';
 import { OverviewPanel } from './OverviewPanel.js';
 import { PANEL_ID, PANEL_LABEL, PANEL_ORDER } from './panel.js';
@@ -58,12 +64,19 @@ import { installPuPanel } from './PuPanel.js';
 import { createRikkeApi } from './rikke-api.js';
 import { createRikkeUiController } from './rikke-controller.js';
 import { installRikke } from './rikke.js';
+import { createWanshengApi } from './wansheng-api.js';
+import { createWanshengUiController } from './wansheng-controller.js';
+import { installWansheng } from './wansheng.js';
+import { createNotifyApi } from './notify-api.js';
+import { installTouchSettings } from './notify.js';
 import { createWorkflowApi } from './workflow/workflow-api.js';
 import { installWorkflowPanel } from './workflow/WorkflowPanel.js';
 import type { RpcContext } from './rpc.js';
 import { createSedimentApi } from './sediment-api.js';
 import { createSedimentController } from './sediment-model.js';
 import { installSediment } from './sediment-views.js';
+import { createShijiApi } from './shiji-api.js';
+import { installShiji, installShijiSettings } from './shiji-views.js';
 import { installOverviewStyle } from './style.js';
 import { THEME_SOURCE, THEME_TOKENS } from './tokens.js';
 import { EMPTY_MAIN_PANELS, createMainPanelsWatch } from './watch.js';
@@ -144,7 +157,16 @@ export function apply(ctx: Context): void {
   const rpc = ctx as Context & RpcContext;
   const bazi = createBaziApi(rpc);
   const baziController = createBaziUiController();
-  const baziDeps = { api: bazi, controller: baziController, navigate };
+
+  // #29「接上 AI」：**一份**只读控制器，概览（问事入口门禁）与向导第 6 步共用。
+  // 它只调 `routes.list`（票 28 那份只读清单）：配好后自己停轮询；窗口聚焦 / 手动重试可再问一次。
+  //
+  // `onOpenAiSettings` 今天**刻意不给**：DSH 0.2.0-rc.2 没有公开的「打开设置」客户端 API
+  // （`openSection` 只经 `settings.onboarding` 的 owner props 下发，`settings.launcher` 是 single 槽
+  // 且已被占用；见票 28 侦察 §5.3）。给不出就不渲染按钮，界面显示逐字路径「设置 → 模型」——
+  // 绝不做一个点了没反应的按钮（那正是本票要修的 bug）。将来宿主给了公开入口，这里换一行即可。
+  const aiReadiness = createAiReadinessController({ api: createAiApi(rpc) });
+  const baziDeps = { api: bazi, controller: baziController, navigate, aiStatus: aiReadiness };
 
   // 票 10：问事门厅的数据面 + 「进入正式对话」的导航面。
   // `openSession` 只**导航**（`dsh-api-facts.md` §6.2：它不创建）；拿不到 `uiWorkspace` 时给
@@ -187,8 +209,17 @@ export function apply(ctx: Context): void {
   // 生成 / 刷新只由按钮的 onClick 触发，apply 期一个请求都不发）。
   const rikke = createRikkeApi(rpc);
   const rikkeController = createRikkeUiController(rikke);
+  // #25：晚省的卡与面板共用一份数据面与控制器（生成只由按钮触发；apply 期不发请求）。
+  const wansheng = createWanshengApi(rpc);
+  const wanshengController = createWanshengUiController(wansheng);
+  // #24：触达数据面（账本读面 / 标已读 / 通知摘要开关）。造它不发请求；
+  // 只有「打开日课面板」与「人点设置开关」两条人点路径会用到它。
+  const notify = createNotifyApi(rpc);
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
+  // 票 27（#27）：事记数据面（底稿面板的 [删除] + 会话里的「存成今天的事记」共用一份）。
+  // 造它不发请求：两个写动作都只由人点触发，`confirmed: true` 写死在 `shiji-api.ts` 里。
+  const shiji = createShijiApi(rpc);
 
   // 票 16：工作流门厅的数据面（创建 / 列表 / 导出三件事都**只由人点**触发，apply 期不发请求）。
   const workflow = createWorkflowApi(rpc);
@@ -203,6 +234,20 @@ export function apply(ctx: Context): void {
   // 「开始合参」是人点出来的唯一入口）。
   const bestof = createBestofApi(rpc);
   const bestofController = createBestofController({ api: bestof });
+
+  // 票 30（#30）：设置 → 我的数据。数据面只做两件事（读体积 / 一键备份），apply 期不发请求；
+  // 选目录复用藏库的 `cang.pickDirectory`（同一台机器上唯一一条原生目录选择器路径）。
+  const data = createDataApi(rpc);
+
+  // R3（#35）· AC1：用户可见文案里的 home / dataDir **必须**来自宿主回传值。
+  // 宿主已把两个真值放在 `data.overview`（唯一一个同时回传 home 与 dataDir 的方法，见
+  // `packages/xuanshu-host/lib/data/service.mjs`），所以装配期读**一次**、写进这份订阅式注入面：
+  //   - 五个文案点（总览页眉 / 问事历史 / 命盘重录确认 / 沉淀草稿落点 / 沉淀写路径）共用同一份；
+  //   - 读不到（RPC 拒绝 / 没连接 / 形状不对）时是一份空快照 → 渲染层回中性占位，绝不猜路径；
+  //   - `void`：它不参与 apply 的同步语义，失败也不会把装配拖挂（`resolveHomePathsFromApi` 自己吞错）。
+  // 唯一代价：装配后会多一次只读的 `data.overview`（体积统计），换来的是六处文案里的真路径。
+  const homePaths = createHomePathsWatch();
+  void primeHomePaths(homePaths, data);
 
   const injected = (): OverviewInjected => ({
     navigate,
@@ -221,6 +266,13 @@ export function apply(ctx: Context): void {
     rikkeController,
     digao,
     digaoController,
+    // #25：晚省（第 5 张卡）。
+    wansheng,
+    wanshengController,
+    // #29：问事入口的门禁读这一份只读状态（与向导第 6 步同一个控制器）。
+    aiStatus: aiReadiness,
+    // R3：宿主回传的 home / dataDir（概览页眉「数据都在本地 …」用它，不是占位）。
+    homePaths,
   });
 
   // ③ 主面板：keyed 槽按 key 分派；key 必须与侧栏行 id 相同。
@@ -233,7 +285,13 @@ export function apply(ctx: Context): void {
     // ④ 默认面板：注册**成功之后**才切（selectPanel 对未注册 key 会 throw，
     //    见 `dsh-client-ui-layout/lib/client.js:462-466`）。
     ctx.layout.selectPanel(PANEL_ID);
-    return dispose;
+    // ④b（P2 复核 #24）：点通知 → 壳把 hash 改成 `#xuanshu-overview`；这里在加载与 hashchange
+    //    两处认它 → 切回 overview 并清 hash。没有 window 的环境（断言台 / SSR）安全返回 undefined。
+    const disposeHash = installOverviewHashBridge(ctx);
+    return () => {
+      disposeHash?.();
+      dispose();
+    };
   });
 
   // ⑤ 侧栏全局面板行：list 槽，`id` 即上面的 key，`label` 走 resolveSlotLabel。
@@ -257,7 +315,8 @@ export function apply(ctx: Context): void {
   installPuPanel(rpc);
   installCangClient(rpc);
   installOnboarding(rpc, baziDeps);
-  installMingpan(rpc, baziDeps);
+  // R3：命盘详情的「重录确认」也显示底座谱路径 —— 与概览同一份注入面（不另读一次）。
+  installMingpan(rpc, { ...baziDeps, homePaths });
   // ⑦ 票 10：问事门厅（`consult`，order 30 = S15 给「书房」预约的那一档）。
   //    票 12 的挂载区作为**插槽**进这门厅（S8 §1：门厅的挂载入口开同一个抽屉），
   //    所以门厅那边一行注册都不用改（`mountSlot` 缺席时退回票 10 的占位说明）。
@@ -266,6 +325,8 @@ export function apply(ctx: Context): void {
     navigate,
     openSession,
     refreshSessions,
+    // R3：历史页错误行那句「数据在本地 <home>/sessions/」读同一份注入面。
+    homePaths,
     mountSlot: (session) => h(MountsSectionFor, { controller: mountsController, session }),
   });
   // ⑨ 票 12：挂载账本抽屉（S8）——`shell.overlay` 上的**一个** cell（没有面板、没有侧栏行）。
@@ -274,8 +335,12 @@ export function apply(ctx: Context): void {
   installMounts(rpc, { api: mountsApi, workspaces: () => workspaceCatalog.list(), workspaceAvailable: workspaceCatalog.available });
 
   // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
-  installDigao(rpc, { api: digao, navigate });
-  installRikke(rpc, { api: rikke, navigate });
+  // #27：底稿面板多了「曾经做过什么」的事记 [删除]（走 `shiji.remove`，删的是账本那一条），
+  // 所以面板也要事记数据面。
+  installDigao(rpc, { api: digao, shiji, navigate });
+  installRikke(rpc, { api: rikke, navigate, notify });
+  // #24：设置里的一行两项开关（AI 建议段 / 通知摘要）。纯加性，不新增面板、不新增侧栏行。
+  installTouchSettings(rpc, { rikke, notify });
 
   // ⑨ 票 16：工作流门厅（`workflow`，order 70）—— 创建工作流 → 会话；导出 skill 的落点表单在这里。
   installWorkflowPanel(rpc, { api: workflow, navigate });
@@ -283,7 +348,7 @@ export function apply(ctx: Context): void {
   // ⑩ 票 15：沉淀三处贡献（`conversation.composer.dock` 入口 / `conversation.chat.turnTail` 草稿卡 /
   // `shell.overlay` 通知）。**不新增 main key、不新增侧栏行** —— 沉淀是会话内区块，
   // 只在 DSH 原生 `conversation` 面板在屏时渲染（S10 §1 D5 / F1）。放在最后，纯加性。
-  installSediment(rpc, { api: sediment, controller: sedimentController, navigate });
+  installSediment(rpc, { api: sediment, controller: sedimentController, navigate, homePaths });
 
   // ⑪ 票 11：多 AI 合参（`shell.overlay` 浮层 + `settings.general.item` 开关行 + `/多模型` 命令
   //    与别名 `/合参` · `bestof` + 会话 composer 旁的触发按钮）。四条注册都是纯加性；
@@ -304,4 +369,24 @@ export function apply(ctx: Context): void {
       }
     },
   });
+
+  // ⑫ 票 30：设置 → 「我的数据」分区（`settings.section`，纯加性：不新增 main key / 侧栏行）。
+  //    体积在分区挂载后读一次；备份只在人点 `[一键备份]` 之后发生。
+  //    注册序排在 bestof 之后、票 27 之前 —— `panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 靠数组顺序分先后。
+  installDataSettings(rpc, { api: data });
+
+  // ⑫b（P4 复核 #26）：设置 → 「事记」分区（墓碑恢复 + 可排除目录）。
+  //     底稿面板那句「可以在设置里恢复」现在有真实落点；仍是 `settings.section` 的纯加性注册。
+  installShijiSettings(rpc, { api: shiji });
+
+  // ⑬ 票 27（#27）：会话内「存成今天的事记」——`conversation.composer.dock` 上的**一个** cell。
+  //    只在问事会话里渲染（判据是自铸 id 前缀）；点了并确认之后才调 `shiji.fromSession`。
+  //    注册序：`panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 里它排在 sediment / bestof / 数据 之后
+  //    （都挂在 `workflow` 那一对之后，靠数组顺序分先后 —— 这里谁在后，那边谁就在后）。
+  installShiji(rpc, { api: shiji, navigate });
+
+  // ⑬ 票 04（#25）：晚省面板（main key `wansheng`，order 110）—— 当天事实 + [立即生成] + 投递历史。
+  //    **最后 install**：`tests/assembly/lib/panel-surface.mjs` 的 `PANEL_KEYS` 末尾就是它，
+  //    注册序 = 本文件 install 序（顺序不符会被 `expectedRegisterNames()` 抓到）。
+  installWansheng(rpc, { api: wansheng, navigate, notify });
 }

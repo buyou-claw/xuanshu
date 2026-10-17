@@ -133,6 +133,10 @@ withProfileGate('玄枢隔离验收 · I1/I2（home-isolated / cli-version / pro
     // 验收台绝不能给用户真实 home 背书。
     expect(evidence.realHome).toBe(REAL_HOME)
     expect(evidence.home).not.toBe(REAL_HOME)
+    // 票 22：home 的来源可追溯，且**默认** home 也必须不是真实 home（只看显式 --home 会漏掉默认值回归）。
+    expect(evidence.homeSource, 'evidence 没写 home 来源').toBe('--home')
+    expect(evidence.defaultHome, 'evidence 没给默认 home').toBeTruthy()
+    expect(evidence.defaultHomeIsNotReal, `默认 home ${evidence.defaultHome} 撞上真实 ~/.dsh`).toBe(true)
   })
 
   it('I2 CLI 来自 profile 树、版本 = dsh-base 版本，且 --cli-bin 优先', () => {

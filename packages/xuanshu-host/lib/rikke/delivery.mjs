@@ -31,14 +31,22 @@
  *
  * 纪律：**永不抛**（catch 住只记日志）—— 生成失败不该把那一轮问答弄挂，下一次投递再试。
  *
+ * #24：日课生成成功之后，经壳的回环端点发**一条系统通知**，并把这次投递记进触达账
+ * （`touch.mjs`）。通知失败只记日志 + 账里落 `failed`，**不改产物、不挡生成**（契约 §3 原文）。
+ *
  * 解环相关（task-3）：本文件 import `../digao/generate.mjs`，因此 `digao/generate.mjs`
  * **不许**反过来 import `rikke/**`（那会成环）。完整说明写在 `../digao/tasks.mjs` 的文件头。
  */
 
 import { refreshDigao } from '../digao/generate.mjs'
-import { DIGAO_SESSION_PREFIX, RIKKE_SESSION_PREFIX } from '../digao/tasks.mjs'
+import { DIGAO_SESSION_PREFIX, RIKKE_SESSION_PREFIX, WANSHENG_SESSION_PREFIX } from '../digao/tasks.mjs'
+import { generateWansheng } from '../wansheng/generate.mjs'
+import { deliverWanshengTouch } from '../wansheng/touch.mjs'
 import { generateRikke, zoneFor } from './generate.mjs'
-import { dateInZone } from './store.mjs'
+import { settleMissedTouches } from './missed.mjs'
+import { isLateDelivery, parseScheduleOccurrence } from './occurrence.mjs'
+import { dateInZone, hourInZone } from './store.mjs'
+import { deliverRikkeTouch } from './touch.mjs'
 
 /** 注册的事件名（DSH 的 pre-step waterfall；随包 `dsh-time-context` 同款）。 */
 export const PRE_STEP_EVENT = 'agent/pre-step'
@@ -50,6 +58,11 @@ export function isRikkeDailySession(sessionId) {
 
 export function isDigaoDailySession(sessionId) {
   return typeof sessionId === 'string' && sessionId.startsWith(DIGAO_SESSION_PREFIX)
+}
+
+/** #25：晚省的定时会话（`session-xs-wansheng-`）。 */
+export function isWanshengDailySession(sessionId) {
+  return typeof sessionId === 'string' && sessionId.startsWith(WANSHENG_SESSION_PREFIX)
 }
 
 /**
@@ -74,41 +87,123 @@ function namedLogger(ctx) {
 }
 
 /**
+ * 「到点 → 生成 → 触达」的**一段共用骨架**（复核 S4：`runRikke` / `runWansheng` 从前是两段
+ * 几乎逐字相同的骨架）。
+ *
+ * 骨架只做两边**必须同一口径**的四件事，业务差异全部由调用方作为 `generate` / `deliver` 传入：
+ *   1. 日期取 **occurrence**（这一次替哪个计划时刻投的）在时区里的那一天 —— 解析不出才退回投递时刻；
+ *   2. 迟到 > 30 分钟判 `missed`（产物与账行都标「补」，且补课不推送由 `deliver` 决定）；
+ *   3. 生成失败 → **不投递**，如实记理由（下一次投递再试）；
+ *   4. 记账失败 / 通知失败各记一笔；任何异常都**不外抛**（定时链不该把那一轮问答弄挂）。
+ *
+ * @param {{label: string, logger: {info: Function, warn: Function}, zone: string, moment: Date,
+ *          occurrence: {at: Date|null}, generate: (input: {date: string, missed: boolean}) => Promise<object>,
+ *          deliver: (input: {date: string, missed: boolean, occurrenceAt: string|null}) => Promise<{
+ *            notify: {status: string, reason: string|null}, ledgerError: string|null}>}} input
+ *        `label` 用于日志（「日课」/「晚省」），不是契约键。
+ * @returns {Promise<void>} **永不抛**
+ */
+export async function runTouchChain({ label, logger, zone, moment, occurrence, generate, deliver }) {
+  try {
+    const reference = occurrence.at ?? moment
+    const date = dateInZone(zone, reference)
+    const missed = isLateDelivery(occurrence.at, moment)
+    const generated = await generate({ date, missed })
+    if (generated.ok !== true) {
+      // 如实记，不假装成了：界面那边看到的是「今天还没有」+ 可重试，下一次投递会再来一遍。
+      logger.warn(`${label}到点没生成（%s）：%s`, generated.date ?? date, generated.reason)
+      return
+    }
+    logger.info('定时任务到点：%s %s 已生成（missed=%s）', label, generated.date, missed)
+    const touch = await deliver({
+      date: generated.date,
+      missed,
+      occurrenceAt: occurrence.at === null ? null : occurrence.at.toISOString(),
+    })
+    if (touch.ledgerError !== null) logger.warn(`${label}已生成，但触达账没记上：%s`, touch.ledgerError)
+    if (touch.notify.status === 'failed') {
+      logger.warn(`${label}已生成，但系统通知没发出去（%s）：%s`, touch.notify.status, touch.notify.reason)
+    }
+  } catch (error) {
+    logger.warn(`${label}到点跑生成链时抛了异常（已兜住，不影响这一轮）：%s`, String(error?.message ?? error))
+  }
+}
+
+/**
  * 把「到点 → 生成链」接到 `agent/pre-step` 边界上（两条 daily 任务共用一条边界）。
  *
  * @param {object} ctx cordis 宿主上下文（需要 `ctx.on`）
- * @param {{dataDir: string, timeZone?: string, now?: () => Date}} config
- *        `timeZone`：底座快照不可得时的兜底（装配期那一份）；`now` 只为断言台留
+ * @param {{dataDir: string, timeZone?: string, now?: () => Date, env?: Record<string, string|undefined>}} config
+ *        `timeZone`：底座快照不可得时的兜底（装配期那一份）；`now` 只为断言台留；
+ *        `env`：壳的运行时状态文件从哪读（生产传 `process.env`；断言台注入假壳端点）
  * @returns {{ok: boolean, reason: string|null, dispose: Function}} **永不抛**
  */
-export function installDailyDelivery(ctx, { dataDir, timeZone, now } = {}) {
+export function installDailyDelivery(ctx, { dataDir, timeZone, now, env } = {}) {
   if (typeof ctx?.on !== 'function') {
     return { ok: false, reason: 'ctx.on 不可得：装不上 `agent/pre-step` 边界，定时到点不会跑生成链。', dispose: () => {} }
   }
   const logger = namedLogger(ctx)
   const at = () => (typeof now === 'function' ? now() : new Date())
 
-  /** 日课那条链（底座快照 + 本地黄历 → `<dataDir>/rikke/<日期>.json`）。 */
-  async function runRikke(moment) {
-    try {
-      const zone = zoneFor(dataDir, timeZone)
-      const generated = await generateRikke({
+  /**
+   * 日课那条链（底座快照 + 本地黄历 → `<dataDir>/rikke/<日期>.json` → 系统通知）。
+   *
+   * #25：日期取 `occurrence` 在底座时区里的那一天（不是投递时刻）；迟到 > 30 分钟判「补」
+   * （产物与账行都标 `missed`，且**不推送** —— 开机瞬间不该连弹历史通知）。
+   * 骨架与晚省共用 `runTouchChain()`；这里只给日课特有的两件事：`hour` 与黄历生成入口。
+   */
+  async function runRikke(moment, occurrence) {
+    const zone = zoneFor(dataDir, timeZone)
+    await runTouchChain({
+      label: '日课',
+      logger,
+      zone,
+      moment,
+      occurrence,
+      generate: ({ date, missed }) => generateRikke({
         ctx,
         dataDir,
-        date: dateInZone(zone, moment),
+        date,
         zone,
         manual: false, // 「定时产出的那一份」（人点那条是 true）
         at: moment,
-      })
-      if (generated.ok) {
-        logger.info('定时任务到点：日课 %s 已生成（manual=false）', generated.date)
-      } else {
-        // 如实记，不假装成了：界面那边看到的是「今天还没有日课」+ 可重试，下一次投递会再来一遍。
-        logger.warn('日课到点没生成（%s）：%s', generated.date, generated.reason)
-      }
-    } catch (error) {
-      logger.warn('日课到点跑生成链时抛了异常（已兜住，不影响这一轮）：%s', String(error?.message ?? error))
-    }
+        missed,
+        // 补课那份的时辰取**计划时刻**（说的是那一天的事），不是补的时刻。
+        ...(occurrence.at === null ? {} : { hour: hourInZone(zone, occurrence.at) }),
+      }),
+      deliver: ({ date, missed, occurrenceAt }) => deliverRikkeTouch({
+        dataDir,
+        date,
+        at: moment,
+        manual: false,
+        missed,
+        occurrenceAt,
+        env,
+      }),
+    })
+  }
+
+  /** #25：晚省那条链（确定性事实 → `<dataDir>/wansheng/<日期>.json` → 系统通知）。骨架同上。 */
+  async function runWansheng(moment, occurrence) {
+    await runTouchChain({
+      label: '晚省',
+      logger,
+      zone: zoneFor(dataDir, timeZone),
+      moment,
+      occurrence,
+      generate: ({ date, missed }) => generateWansheng({
+        ctx, dataDir, date, zone: zoneFor(dataDir, timeZone), at: moment, missed,
+      }),
+      deliver: ({ date, missed, occurrenceAt }) => deliverWanshengTouch({
+        dataDir,
+        date,
+        at: moment,
+        manual: false,
+        missed,
+        occurrenceAt,
+        env,
+      }),
+    })
   }
 
   /** 底稿那条链（三路来源 + 规则骨架 + 一段 LLM 压缩 → `<dataDir>/digao.{md,json}`）。 */
@@ -138,8 +233,18 @@ export function installDailyDelivery(ctx, { dataDir, timeZone, now } = {}) {
       if (!hasScheduleReminder(payload?.messages)) return decision
       const sessionId = payload?.agent?.session?.id
       const moment = at()
-      if (isRikkeDailySession(sessionId)) await runRikke(moment)
+      // #25：这一次是替哪个计划时刻投的（解析不出 → 退回投递时刻，理由记一笔）。
+      const occurrence = parseScheduleOccurrence(payload?.messages)
+      if (occurrence.note !== null) logger.warn(occurrence.note)
+      if (isRikkeDailySession(sessionId)) await runRikke(moment, occurrence)
+      else if (isWanshengDailySession(sessionId)) await runWansheng(moment, occurrence)
       else if (isDigaoDailySession(sessionId)) await runDigao(moment)
+      else return decision
+
+      // #25：每次到点之后结算「缺的触达」（schedule 只补最近一次 occurrence，剩下的靠这里补齐）。
+      const settled = await settleMissedTouches({ ctx, dataDir, zone: zoneFor(dataDir, timeZone), now: () => moment, env })
+      for (const note of settled.notes) logger.warn('补课：%s', note)
+      for (const failure of settled.errors) logger.warn('补课：%s', failure)
     } catch (error) {
       logger.warn('定时任务到点跑生成链时抛了异常（已兜住，不影响这一轮）：%s', String(error?.message ?? error))
     }

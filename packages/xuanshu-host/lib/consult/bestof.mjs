@@ -19,6 +19,8 @@ import { defaultModelSelection, resumeConsultAgent } from './agent.mjs'
 import { BESTOF_SCHEMA, createBestofStore, migrateLegacyDecisions, newRunId } from './bestof-store.mjs'
 import { createContextAssembly } from './inject.mjs'
 import {
+  BESTOF_ANGLES,
+  buildCandidatePrompt,
   collectStream,
   costUsdOf,
   failureOf,
@@ -33,7 +35,28 @@ import {
 import { BESTOF_ADOPTED_SOURCE_KIND, createBestofAdoptedMessage } from './message.mjs'
 import { createConsultStore, isConsultSessionId } from './store.mjs'
 
-/** 非严格读一个 cordis service（拿不到就 undefined，绝不抛）。 */
+/** 合参可以夹带几路：2–4（票 28 票面；超过 4 路时界面也放不下）。 */
+export const MIN_ROUTES = 2
+export const MAX_ROUTES = 4
+
+/**
+ * 每路默认超时（毫秒）。`config.routeTimeoutMs` 可覆盖；0 / null 关闭。
+ *
+ * 为什么要有它：裸 `ctx.llm.stream()` **不重试**（`dsh-llm-retry` 只监听 `agent/request-error`），
+ * 一路卡住时整轮合参会永远跑不完。pi-ai 自己的 `streamIdleTimeoutMs` 默认 300000ms 只管空闲，
+ * 所以这里给整轮一个比它短的上限；数值可注入（断言台用 25ms 证明它真的生效）。
+ */
+const DEFAULT_ROUTE_TIMEOUT_MS = 180_000
+
+/** 同时在飞的路数上限（票面：最多 4 路）。 */
+const DEFAULT_MAX_CONCURRENCY = 4
+
+/** 字数 → token 的保守换算（与 `mounts/budget.mjs` 的 `MOUNT_BUDGET_CHARS_PER_TOKEN` 同口径）。 */
+export const ESTIMATE_CHARS_PER_TOKEN = 1.5
+
+/**
+ * 非严格读一个 cordis service（拿不到就 undefined，绝不抛）。
+ */
 function softGet(ctx, name) {
   try {
     return typeof ctx?.get === 'function' ? ctx.get(name, false) : undefined
@@ -73,36 +96,111 @@ function requireSessionId(value) {
   return value
 }
 
+/** 取某家有哪几个模型（失败 → undefined；调用方决定这是不是致命的）。 */
+async function listModelsOf(ctx, provider) {
+  const llm = softGet(ctx, 'llm')
+  if (typeof llm?.listModels !== 'function') return undefined
+  try {
+    const models = await llm.listModels(provider)
+    return Array.isArray(models) ? models.filter((model) => typeof model?.id === 'string' && model.id !== '') : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** 一路候选的显示名（catalog 查得到就用它；查不到 → null，**不拿 model id 冒充名字**）。 */
+function modelNameOf(models, model) {
+  const found = Array.isArray(models) ? models.find((entry) => entry.id === model) : undefined
+  return typeof found?.name === 'string' && found.name !== '' ? found.name : null
+}
+
 /**
- * 解析这一轮的 provider 路由。
+ * 解析这一轮的 provider 路由（票 28 的 `routes` 入参优先）。
  *
- * 缺省 = **同一路由两路**（S9 §2.1「首版 2 路 = 经典派 + 审慎派（同一模型两视角）」），
- * 路由取 `ctx.agentDefaultModel.currentSelection()`（与票 10 建会话时同一个来源）。
- * 给了 `profileIds` 就按 id 各取该路由的**第一个模型**（`listModels()`）—— 首版不做模型选择 UI。
+ * 三种来源，优先级从高到低：
+ *   ① `routes: {provider, model?}[]` —— 2–4 路，按 `provider::model` 去重；
+ *      **只有缺 model 时才回落该家 `listModels()[0]`**（显式 model 原样使用：catalog 是 advisory，
+ *      不在请求前替用户改写 —— 写错了应该由这一路的失败如实显示）；
+ *   ② `profileIds: string[]` —— legacy：每个 id 取该家第一个模型；
+ *   ③ 都没有 —— 会话默认 `{provider, model}` 复制 `count` 份（首版同模型两视角；保留兼容）。
+ *
+ * @returns {Promise<Array<{provider: string, model: string, modelName: string|null}>>}
  */
-export async function resolveRoutes(ctx, { profileIds, count }) {
+export async function resolveRoutePlan(ctx, { routes, profileIds, count } = {}) {
+  if (routes !== undefined && routes !== null) return resolveExplicitRoutePlan(ctx, routes)
   if (profileIds === undefined || profileIds === null) {
     const selection = defaultModelSelection(ctx)
     if (selection === undefined) throw new Error('拿不到当前 provider / model：先在设置里选好模型再合参。')
-    return Array.from({ length: count }, () => ({ provider: selection.provider, model: selection.model }))
+    return Array.from({ length: count }, () => ({ provider: selection.provider, model: selection.model, modelName: null }))
   }
   if (!Array.isArray(profileIds) || profileIds.length === 0) throw new Error('profileIds 必须是非空字符串数组。')
-  const llm = softGet(ctx, 'llm')
-  const routes = []
+  const plan = []
   for (const id of profileIds) {
     const provider = typeof id === 'string' ? id.trim() : ''
     if (provider === '') throw new Error('profileIds 里有空 id。')
-    let models
-    try {
-      models = await llm.listModels(provider)
-    } catch (error) {
-      throw new Error(`取不到 provider ${provider} 的模型列表：${String(error?.message ?? error)}。`)
-    }
-    const model = Array.isArray(models) && models.length > 0 ? models[0]?.id : undefined
+    const models = await listModelsOf(ctx, provider)
+    if (models === undefined) throw new Error(`取不到 provider ${provider} 的模型列表：provider 未注册或没有可用模型。`)
+    const model = models[0]?.id
     if (typeof model !== 'string' || model === '') throw new Error(`provider ${provider} 没有可用模型。`)
-    routes.push({ provider, model })
+    plan.push({ provider, model, modelName: modelNameOf(models, model) })
   }
-  return routes
+  return plan
+}
+
+/** `routes` 入参的具体校验 + 去重 + 缺 model 回落（唯一实现）。 */
+async function resolveExplicitRoutePlan(ctx, routes) {
+  if (!Array.isArray(routes)) throw new Error(`routes 必须是 {provider, model} 数组（现在收到 ${typeof routes}）。`)
+  if (routes.length < MIN_ROUTES) throw new Error(`合参至少两路（现在 ${routes.length} 路）：选 2–4 个不同 provider 或 model。`)
+  if (routes.length > MAX_ROUTES) throw new Error(`合参最多四路（现在 ${routes.length} 路）：同时调用太多家既不便宜也难以比较。`)
+
+  const seen = new Set()
+  const plan = []
+  for (const entry of routes) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`routes 里有不是 {provider, model} 对象的条目：${JSON.stringify(entry)}。`)
+    }
+    const provider = typeof entry.provider === 'string' ? entry.provider.trim() : ''
+    if (provider === '') throw new Error('routes 里有空 provider。')
+    const requested = typeof entry.model === 'string' ? entry.model.trim() : ''
+    const models = await listModelsOf(ctx, provider)
+    let model = requested
+    if (model === '') {
+      if (models === undefined) throw new Error(`取不到 provider ${provider} 的模型列表：provider 未注册或没有可用模型。`)
+      model = models[0]?.id ?? ''
+      if (model === '') throw new Error(`provider ${provider} 没有可用模型。`)
+    }
+    // 按 `provider::model` 去重：同一个组合不给它跑两遍（也避免「两路其实是同一路」的假多源）。
+    const key = `${provider}::${model}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    plan.push({ provider, model, modelName: modelNameOf(models, model) })
+  }
+  if (plan.length < MIN_ROUTES) {
+    throw new Error(`按 provider::model 去重后只剩 ${plan.length} 路：合参至少需要两路不同的路由。`)
+  }
+  return plan
+}
+
+/**
+ * 兼容导出（票 11 时代的名字）：只要 `{provider, model}` 的调用方继续可用。
+ * @returns {Promise<Array<{provider: string, model: string}>>}
+ */
+export async function resolveRoutes(ctx, options = {}) {
+  const plan = await resolveRoutePlan(ctx, options)
+  return plan.map(({ provider, model }) => ({ provider, model }))
+}
+
+/** `angles` 与候选数的口径：routes 路径下候选数由 routes 决定，视角只当标签用。 */
+function anglesForCount(angles, routeCount) {
+  if (angles === undefined || angles === null) {
+    // 2 路 = 经典 + 审慎；3–4 路时视角标签循环使用（视角不是「第几路」的语义载体，provider 才是）。
+    return Array.from({ length: routeCount }, (_, index) => BESTOF_ANGLES[index % BESTOF_ANGLES.length])
+  }
+  const resolved = resolveAngles(angles)
+  if (resolved.length !== routeCount) {
+    throw new Error(`angles 数量（${resolved.length}）与 routes 数量（${routeCount}）不一致：候选数由 routes 决定，视角只当标签。`)
+  }
+  return resolved
 }
 
 /** 可用候选：跑完的，或**被人停下来但已经产出了文字**的（S9 §6「已停止」中间态照样能采用）。 */
@@ -185,6 +283,11 @@ export function createBestOfMethods(ctx, config = {}) {
   const prices = config.prices
   // 候选耗时的时钟：缺省真钟；断言台注入计数时钟，好让 `elapsedMs` 能被证否（见 bestof-run.mjs）。
   const now = typeof config.now === 'function' ? config.now : Date.now
+  // 票 28：每路超时与并发上限都可注入（缺省 180s / 4 路）。0 / null = 关闭超时。
+  const routeTimeoutMs = config.routeTimeoutMs === undefined ? DEFAULT_ROUTE_TIMEOUT_MS : config.routeTimeoutMs
+  const maxConcurrency = Number.isInteger(config.maxConcurrency) && config.maxConcurrency > 0
+    ? config.maxConcurrency
+    : DEFAULT_MAX_CONCURRENCY
   const consultStore = createConsultStore(dataDir)
   const store = createBestofStore(dataDir)
   /** 候选看到的上下文 = 这场问事的上下文（与 `consult.send` 的**同一份装配**，见 inject.mjs）。 */
@@ -316,50 +419,164 @@ export function createBestOfMethods(ctx, config = {}) {
   }
 
   /**
-   * 后台跑一次合参：N 路并行 → judge → 落记录。任何一路失败都只标那一张卡（S9 §6 部分失败态），
-   * 整次失败（全部候选都没文本）也照样落记录，界面看得见「为什么没成」。
+   * 解析一轮的候选路由 + 视角标签（**唯一实现**，run 与 estimate 共用）。
+   *
+   * 候选数口径：
+   *   - `routes` 给出 → 候选数 = 去重后的 routes.length（视角循环当标签）；
+   *   - `profileIds` 给出（legacy）→ 候选数 = 去重后的 profileIds.length（**修掉**旧实现里
+   *     「给了 5 家却只跑 2 路、多出来的静默丢弃」的错位）；
+   *   - 都没给 → 候选数 = 视角数、默认模型复制 N 份（票 11 的兼容路径）。
+   */
+  async function resolveRound({ angles, routes, profileIds }) {
+    const explicitRoutes = routes !== undefined && routes !== null
+    const explicitProfiles = !explicitRoutes && profileIds !== undefined && profileIds !== null
+    if (explicitRoutes) {
+      const plan = await resolveRoutePlan(ctx, { routes })
+      return { plan, angles: anglesForCount(angles, plan.length) }
+    }
+    if (explicitProfiles) {
+      const plan = await resolveRoutePlan(ctx, { profileIds })
+      return { plan, angles: anglesForCount(angles, plan.length) }
+    }
+    const resolved = resolveAngles(angles)
+    const plan = await resolveRoutePlan(ctx, { count: resolved.length })
+    return { plan, angles: resolved }
+  }
+
+  /**
+   * 每路一个**独立**的中断开关（票 28）：父信号（本轮 `cancel`）abort 时它也 abort；
+   * 自己超时（`routeTimeoutMs`）时只 abort 这一路。
+   *
+   * 为什么不能把本轮 signal 直接当每路 signal：`execute()` 里 `signal.aborted` 判的是「本轮被停」，
+   * 一路超时若复用同一个信号，会把**全部**候选错标成 `stopped`（侦察笔记「陷阱 1」）。
+   * 这里用 `AbortController` + 可清除的定时器（不是 `AbortSignal.timeout`：后者的定时器无法取消，
+   * 快的那一路结束后仍会在 N 毫秒后 abort，测试里就会看到「明明跑完了 signal 却说 aborted」）。
+   *
+   * @returns {{signal: AbortSignal, timedOut(): boolean, dispose(): void}}
+   */
+  function createRouteSignal(parent, timeoutMs) {
+    const controller = new AbortController()
+    let timedOut = false
+    const onParentAbort = () => controller.abort(parent.reason)
+    if (parent.aborted) controller.abort(parent.reason)
+    else parent.addEventListener('abort', onParentAbort, { once: true })
+    const timer = typeof timeoutMs === 'number' && timeoutMs > 0
+      ? setTimeout(() => {
+        timedOut = true
+        controller.abort(new Error('route-timeout'))
+      }, timeoutMs)
+      : undefined
+    // 不因为一路的超时定时器把宿主进程挂住（Node 的 timer 默认会 ref）。
+    if (timer !== undefined && typeof timer.unref === 'function') timer.unref()
+    return {
+      signal: controller.signal,
+      timedOut: () => timedOut,
+      dispose() {
+        if (timer !== undefined) clearTimeout(timer)
+        parent.removeEventListener('abort', onParentAbort)
+      },
+    }
+  }
+
+  /** 等 promise，但信号一 abort 就立刻收敛（不依赖底层 stream 是否响应 abort）。 */
+  function raceAbort(promise, signal) {
+    if (signal.aborted) return Promise.resolve({ aborted: true })
+    return new Promise((resolve) => {
+      let settled = false
+      const onAbort = () => {
+        if (settled) return
+        settled = true
+        resolve({ aborted: true })
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      promise.then(
+        (value) => {
+          if (settled) return
+          settled = true
+          signal.removeEventListener('abort', onAbort)
+          resolve({ value })
+        },
+        (error) => {
+          if (settled) return
+          settled = true
+          signal.removeEventListener('abort', onAbort)
+          resolve({ error })
+        },
+      )
+    })
+  }
+
+  /** 有界并发池：同时最多 `limit` 个 worker；候选数再多也不一次性全开。 */
+  async function runPool(items, limit, worker) {
+    let cursor = 0
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      for (;;) {
+        const index = cursor
+        cursor += 1
+        if (index >= items.length) return
+        await worker(items[index])
+      }
+    })
+    await Promise.all(workers)
+  }
+
+  /**
+   * 后台跑一次合参：N 路并行（≤4 在飞）→ judge → 落记录。任何一路失败 / 超时都只标那一张卡
+   * （S9 §6 部分失败态），整次失败（全部候选都没文本）也照样落记录，界面看得见「为什么没成」。
    */
   async function execute(record, { question, context, history, routes, signal }) {
     const completionOrder = []
-    await Promise.all(
-      record.candidates.map(async (candidate, index) => {
-        const route = routes[index]
-        const result = await runCandidate(ctx, {
+    await runPool(record.candidates.map((candidate, index) => ({ candidate, index })), maxConcurrency, async ({ candidate, index }) => {
+      const route = routes[index]
+      const routeSignal = createRouteSignal(signal, routeTimeoutMs)
+      const angle = BESTOF_ANGLES.find((entry) => entry.id === candidate.angle) ?? BESTOF_ANGLES[0]
+      const raced = await raceAbort(
+        runCandidate(ctx, {
           route,
-          angle: resolveAngles([candidate.angle])[0],
+          angle,
           question,
           context,
           history,
-          signal,
+          signal: routeSignal.signal,
           now,
           // 流式回填：界面轮询 `bestof.state` 就能看到半成品（写盘节流在下面）。
+          // 超时 / 停止之后到达的增量一律丢弃：那一张卡已经不再「生成中」。
           onText: (text) => {
+            if (routeSignal.signal.aborted) return
             candidate.text = text
-            const now = Date.now()
-            if (now - (record.lastFlush ?? 0) > 120) {
-              record.lastFlush = now
+            const at = Date.now()
+            if (at - (record.lastFlush ?? 0) > 120) {
+              record.lastFlush = at
               persist(record)
             }
           },
-        })
-        if (signal.aborted) {
-          // 人点了「停止全部」：已产出的文字**保留**并标「已停止」（S9 §5 步骤 10）。
-          candidate.status = 'stopped'
-          delete candidate.error
-        } else if (result.ok === true) {
-          candidate.status = 'done'
-          candidate.text = result.text
-        } else {
-          candidate.status = 'error'
-          candidate.error = result.error
-        }
-        candidate.elapsedMs = result.elapsedMs
-        candidate.usage = result.usage
-        candidate.costUsd = account(record, { route, usage: result.usage })
-        completionOrder.push(candidate.id)
-        persist(record)
-      }),
-    )
+        }),
+        routeSignal.signal,
+      )
+      routeSignal.dispose()
+      const result = raced.value
+      if (signal.aborted) {
+        // 人点了「停止全部」：已产出的文字**保留**并标「已停止」（S9 §5 步骤 10）。
+        candidate.status = 'stopped'
+        delete candidate.error
+      } else if (routeSignal.timedOut()) {
+        // 只有这一路超时（票 28）：其余路继续，各自收敛。
+        candidate.status = 'error'
+        candidate.error = `这一路超时（${routeTimeoutMs}ms）：已单独中止这一路，其余路继续。`
+      } else if (result?.ok === true) {
+        candidate.status = 'done'
+        candidate.text = result.text
+      } else {
+        candidate.status = 'error'
+        candidate.error = result?.error ?? '这一路没有返回结果。'
+      }
+      // 超时那一份拿不到 `runCandidate` 的耗时（它被 race 掉了），用配置的上限当耗时的下界。
+      candidate.elapsedMs = routeSignal.timedOut() ? routeTimeoutMs : (result?.elapsedMs ?? 0)
+      candidate.usage = result?.usage
+      candidate.costUsd = account(record, { route, usage: result?.usage })
+      completionOrder.push(candidate.id)
+      persist(record)
+    })
 
     if (signal.aborted) {
       // 不跑判官、不自动采用任何一份：停下来的那一轮等人自己点（S9 §5 步骤 10）。
@@ -386,26 +603,87 @@ export function createBestOfMethods(ctx, config = {}) {
     persist(record)
   }
 
+  /**
+   * 判官路由：必须是一个**不在候选 provider 集合**里的另一家（票 28）。
+   *
+   * 优先级：会话默认模型（若它不在候选里）→ 已注册 provider 里第一家不在候选里的（取首个模型）。
+   * 找不到 → `undefined`（调用方如实降级 `same-source`，**不拿同源模型假装异源**）。
+   */
+  async function resolveJudgeRoute(record) {
+    const candidateProviders = new Set(record.candidates.map((candidate) => candidate.provider))
+    const fallback = defaultModelSelection(ctx)
+    if (fallback !== undefined && !candidateProviders.has(fallback.provider)) {
+      return { provider: fallback.provider, model: fallback.model, source: 'cross-source' }
+    }
+    const llm = softGet(ctx, 'llm')
+    if (typeof llm?.listProviders !== 'function') return undefined
+    let providers
+    try {
+      providers = llm.listProviders()
+    } catch {
+      return undefined
+    }
+    for (const provider of Array.isArray(providers) ? providers : []) {
+      const id = typeof provider?.id === 'string' ? provider.id : typeof provider === 'string' ? provider : ''
+      if (id === '' || candidateProviders.has(id)) continue
+      const models = await listModelsOf(ctx, id)
+      const model = models?.[0]?.id
+      if (typeof model === 'string' && model !== '') return { provider: id, model, source: 'cross-source' }
+    }
+    return undefined
+  }
+
   /** judge 槽：一次带单字段工具的调用；失败回落完成顺序第一份（ADR-0010）。 */
   async function runJudge(record, usable, completionOfUsable) {
-    const selection = defaultModelSelection(ctx) ?? { provider: usable[0].provider, model: usable[0].model }
-    const route = { provider: selection.provider, model: selection.model }
+    const route = await resolveJudgeRoute(record)
+    if (route === undefined) {
+      // 如实降级：候选已经覆盖了所有已注册 provider（或本机只注册了一家）。
+      // 这一轮**没有**异源判官 —— 不发起同源判官调用，也不用完成顺序冒充「排序」。
+      return {
+        mode: 'same-source',
+        source: 'same-source',
+        adoptedId: completionOfUsable[0] ?? null,
+        ranking: completionOfUsable,
+        error: '没有不在候选里的另一家 provider：这一轮没有异源判官，按完成顺序排前。这只影响排序展示，采用与否仍然由你点。',
+      }
+    }
     const body = usable.map((candidate) => `【候选 ${candidate.id} · ${candidate.angle}】\n${candidate.text}`).join('\n\n')
     let result
     try {
       result = await collectJudge({ route, question: record.question, body })
     } catch (error) {
-      return { mode: 'tool', adoptedId: completionOfUsable[0] ?? null, ranking: completionOfUsable, error: `判官调用失败：${String(error?.message ?? error)}` }
+      // 调用本身抛错：这次判定**没有来源**。`mode` 记的是「判定是怎么来的」，
+      // 写成 'tool' 等于说一件没发生的事（ADR-0010 / spec 002:152 的 `failed` 档）。
+      return {
+        mode: 'failed',
+        source: route.source,
+        provider: route.provider,
+        model: route.model,
+        adoptedId: completionOfUsable[0] ?? null,
+        ranking: completionOfUsable,
+        error: `判官调用失败：${String(error?.message ?? error)}`,
+      }
     }
     account(record, { route, usage: result.usage })
     // judge 那一路自己的失败 finish（超时 / 限流 / 无 adapter）也是「判官不可用」，不是「模型没调工具」。
+    // 同样记 `failed`：这次判定没有来源，说成 `tool` 就是记录一件没发生的事（spec 002:152）。
     const failure = failureOf(result.finish)
     if (failure !== undefined) {
-      return { mode: 'tool', adoptedId: completionOfUsable[0] ?? null, ranking: completionOfUsable, error: `判官调用失败：${failure}`, ...(result.usage === undefined ? {} : { usage: result.usage }) }
+      return {
+        mode: 'failed',
+        source: route.source,
+        provider: route.provider,
+        model: route.model,
+        adoptedId: completionOfUsable[0] ?? null,
+        ranking: completionOfUsable,
+        error: `判官调用失败：${failure}`,
+        ...(result.usage === undefined ? {} : { usage: result.usage }),
+      }
     }
     const judged = judgeFrom(result, completionOfUsable)
     return {
       mode: judged.mode,
+      source: route.source,
       ...(judged.error === undefined ? {} : { error: judged.error }),
       adoptedId: judged.adoptedId,
       ranking: judged.ranking,
@@ -431,7 +709,57 @@ export function createBestOfMethods(ctx, config = {}) {
     )
   }
 
+  /**
+   * 一份跑前估算（`bestof.estimate` 与 `needs-confirmation` 错误共用**唯一实现**）。
+   *
+   * `inputTokens` 是**估算**：`buildCandidatePrompt()` 的字数 ÷ 1.5 向上取整
+   * （与 `mounts/budget.mjs` 的 `MOUNT_BUDGET_CHARS_PER_TOKEN` 同一个保守口径）。
+   * 钉版 rc.2 全链没有 tokenizer、也没有货币价表（`dsh-llm-pi-ai` 把 cost 显式丢掉），
+   * 所以 `price` 恒为 `'unknown'`：界面显示「金额未知」，绝不编一个金额。
+   */
+  function estimateOf({ plan, question, context, history }) {
+    const prompt = buildCandidatePrompt({ question, context, history })
+    return {
+      routes: plan.map((route) => ({ provider: route.provider, model: route.model, modelName: route.modelName ?? null })),
+      inputTokens: Math.ceil(prompt.length / ESTIMATE_CHARS_PER_TOKEN),
+      price: 'unknown',
+    }
+  }
+
+  /** `bestof.run(routes)` 未确认时的可读错误（错误码由 `rpc.mjs` 原样带回）。 */
+  function needsConfirmationError(estimate) {
+    const error = new Error(
+      `needs-confirmation：这次合参要先确认（${estimate.routes.length} 路，金额未知；`
+      + `输入规模约 ${estimate.inputTokens} tokens/路）。确认后再以 confirm:true 调 bestof.run。`,
+    )
+    error.xuanshuCode = 'needs-confirmation'
+    error.details = { estimate }
+    return error
+  }
+
   return {
+    /**
+     * 跑前估算（票 28 的 additive 方法）：N 路 × 每家 model × 本次输入规模 + `price:'unknown'`。
+     *
+     * **纯只读**：读旁挂清单 / 装配上下文 / 历史，解析路由（`listModels()` 可能被调用），
+     * 但**不**写盘、**不**发任何 `llm.stream()` —— 确认页不能触发一次试跑。
+     * 输入规模与真跑共用 `buildCandidatePrompt()`，所以「确认时看到的」与「真跑时的输入」同源。
+     */
+    'bestof.estimate': async (request) => {
+      const source = request && typeof request === 'object' && !Array.isArray(request) ? request : {}
+      const sessionId = requireSessionId(source.sessionId)
+      const question = requireText(source.question, '问题')
+      const manifest = consultStore.read(sessionId)
+      if (manifest === null) {
+        throw new Error(`问事记录不存在：${sessionId}（合参挂在问事会话上，先 consult.create）。`)
+      }
+      const { text: context } = await assembly.buildInjection(manifest)
+      const history = await assembly.buildHistory(sessionId)
+      const { plan } = await resolveRound({ angles: source.angles, routes: source.routes, profileIds: source.profileIds })
+      if (plan.length < 2) throw new Error(`合参至少要两路（现在 ${plan.length} 路）：选 2–4 个不同 provider 或 model。`)
+      return estimateOf({ plan, question, context, history })
+    },
+
     /**
      * 开一次合参（契约 §1）：**受理即回**（`{runId, candidates, judge}` 里候选先是 `running`），
      * 后台并发跑 N 路；界面按 `bestof.state` 轮询。
@@ -458,9 +786,20 @@ export function createBestOfMethods(ctx, config = {}) {
         // 继续遵守各自的边界（H4：判官只看问题与候选）。读不到历史就是 `null`（不编一段假的）。
         const history = await assembly.buildHistory(sessionId)
 
-        const angles = resolveAngles(source.angles)
-        const routes = await resolveRoutes(ctx, { profileIds: source.profileIds, count: angles.length })
+        // 票 28：`routes` 路径的候选数由 **routes.length** 决定；视角降级成标签（2 路时仍是经典/审慎）。
+        // legacy 路径（不传 routes）保持票 11 的口径：候选数 = 视角数、默认模型复制 N 份。
+        const explicitRoutes = source.routes !== undefined && source.routes !== null
+        const { plan, angles } = await resolveRound({
+          angles: source.angles,
+          routes: source.routes,
+          profileIds: source.profileIds,
+        })
+        const routes = plan
         if (routes.length < 2) throw new Error(`合参至少要两路（现在 ${routes.length} 路）：去设置加一个视角或换一个 provider。`)
+
+        // **跑前确认闸**（票 28）：`routes` 是显式选择的路由，必须先给人看 estimate（N 家 × model ×
+        // 输入规模 + 金额未知）并拿到 `confirm === true` 才开跑。legacy 路径不经过这道闸（兼容票 11）。
+        if (explicitRoutes && source.confirm !== true) throw needsConfirmationError(estimateOf({ plan, question, context, history }))
 
         // **采用稿账本**（复核 N4 / 32216d9 的 R2–R4）：一层会话只留最后一份记录（覆盖写），而
         // 「谁还是当前采用稿」要跨轮才说得清 —— 新记录**继承**上一份的账本，此后每次采用 / 否决各追加一条。

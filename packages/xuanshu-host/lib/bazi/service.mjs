@@ -13,34 +13,20 @@
  *     `resolveDataDir` 同一口径，避免「报告写在 A、底座谱落在 B」。
  */
 
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-
+import { resolveDataDir } from '../home.mjs'
 import { readBasePu } from './base-pu.mjs'
 import { castBazi } from './cast.mjs'
 import { createCityLibrary } from './cities.mjs'
 import { readSnapshot } from './snapshot.mjs'
 import { resolveTimezone } from './timezone.mjs'
 
-/** 非严格读一个 cordis service（拿不到就 undefined，绝不抛）。 */
-function softGet(ctx, name) {
-  try {
-    return typeof ctx?.get === 'function' ? ctx.get(name, false) : undefined
-  } catch {
-    return undefined
-  }
-}
-
 /**
- * 数据目录：`config.dataDir` 优先（`lib/index.js` 与测试都显式给），
- * 否则按 `profileContext.home` → `$DSH_HOME` → `~/.dsh` 回退到 `<home>/xuanshu`。
+ * 数据目录：**唯一实现在 `lib/home.mjs`**（复核 S2：本模块从前独立重算 home，没有 realDsh 门）。
+ *
+ * 这里只保留再导出，`shiji / wansheng / notify / rikke / data / digao / consult / sediment / workflow`
+ * 这些既有的 importer 因此不用改行；新增代码请直接从 `../home.mjs` 取。
  */
-export function resolveDataDir(ctx, config) {
-  if (typeof config?.dataDir === 'string' && config.dataDir !== '') return config.dataDir
-  const profile = softGet(ctx, 'profileContext')
-  const home = typeof profile?.home === 'string' && profile.home !== '' ? profile.home : process.env.DSH_HOME || join(homedir(), '.dsh')
-  return join(home, 'xuanshu')
-}
+export { resolveDataDir }
 
 /**
  * 建 `bazi.*` 方法组。

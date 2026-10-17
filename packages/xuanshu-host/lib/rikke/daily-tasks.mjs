@@ -27,10 +27,13 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { consultAgentCapability, createConsultAgent } from '../consult/agent.mjs'
+import { readTouchTimes } from '../notify/settings.mjs'
 import { installDailyDelivery } from './delivery.mjs'
+import { settleMissedTouches } from './missed.mjs'
 import {
   DEFAULT_TIME_ZONE, DIGAO_DEFAULT_TIME, DIGAO_PROMPT, DIGAO_TASK_TITLE,
   RIKKE_DEFAULT_TIME, RIKKE_PROMPT, RIKKE_TASK_TITLE,
+  WANSHENG_DEFAULT_TIME, WANSHENG_PROMPT, WANSHENG_TASK_TITLE,
   findDailyTask, newSessionId, normalizeDailyTime, scheduleService, scheduleSummary,
 } from '../digao/tasks.mjs'
 
@@ -40,6 +43,7 @@ import {
 export {
   DEFAULT_TIME_ZONE, DIGAO_DEFAULT_TIME, DIGAO_PROMPT, DIGAO_SESSION_PREFIX, DIGAO_TASK_TITLE,
   RIKKE_DEFAULT_TIME, RIKKE_PROMPT, RIKKE_SESSION_PREFIX, RIKKE_TASK_TITLE,
+  WANSHENG_DEFAULT_TIME, WANSHENG_PROMPT, WANSHENG_SESSION_PREFIX, WANSHENG_TASK_TITLE,
   displayTime, findDailyTask, newSessionId, normalizeDailyTime, scheduleService, scheduleSummary,
 } from '../digao/tasks.mjs'
 
@@ -201,13 +205,26 @@ export async function updateDailyTime({ ctx, title, time }) {
  * 装不上（没有 `ctx.on`）**不进 `notes`**：`notes` 的语义是「任务为什么没建」，而这条由本函数
  * 自己记一条 warn —— 而且此时任务照建，界面上的空态与 [改时间] 都还在。
  *
- * @param {{ctx: object, dataDir: string, timeZone?: string, now?: () => Date}} input `now` 只为断言台留
+ * @param {{ctx: object, dataDir: string, timeZone?: string, now?: () => Date, env?: Record<string, string|undefined>}} input
+ *        `now` 只为断言台留；`env` 是壳的运行时状态文件来源（生产 `process.env`，断言台注入）
  * @returns {Promise<{rikke: object, digao: object, timeZone: string, notes: string[], delivery: {ok: boolean, reason: string|null}}>}
  */
-export async function installDailyTasks({ ctx, dataDir, timeZone = DEFAULT_TIME_ZONE, now }) {
+export async function installDailyTasks({ ctx, dataDir, timeZone = DEFAULT_TIME_ZONE, now, env }) {
   const notes = []
+  // #25：时刻的期望值在共享设置文件里（缺失 / 坏值回落缺省）。schedule 才是实际生效的权威 ——
+  // 这里只决定「安装期按几点建」；改时刻走 `rikke.setTime` / `wansheng.setTime`（改完立即生效）。
+  let settings
+  try {
+    settings = readTouchTimes(dataDir)
+  } catch {
+    // 设置文件坏到读不出来：按缺省建（不让装配因此失败）。
+    settings = { rikkeTime: undefined, wanshengTime: undefined }
+  }
+  const rikkeTime = normalizeDailyTime(settings.rikkeTime) ?? RIKKE_DEFAULT_TIME
+  const wanshengTime = normalizeDailyTime(settings.wanshengTime) ?? WANSHENG_DEFAULT_TIME
+
   const rikke = await ensureDailyTask({
-    ctx, dataDir, kind: 'rikke', title: RIKKE_TASK_TITLE, prompt: RIKKE_PROMPT, time: RIKKE_DEFAULT_TIME, timeZone,
+    ctx, dataDir, kind: 'rikke', title: RIKKE_TASK_TITLE, prompt: RIKKE_PROMPT, time: rikkeTime, timeZone,
   })
   if (!rikke.ok) notes.push(`日课定时未建：${rikke.reason}`)
   // 组合失败是非致命的（会话已退回裸建、任务照建），但**不静默**：它是「到点那一轮说不出话」的根因。
@@ -219,8 +236,29 @@ export async function installDailyTasks({ ctx, dataDir, timeZone = DEFAULT_TIME_
   if (!digao.ok) notes.push(`底稿刷新定时未建：${digao.reason}`)
   if (digao.ok && digao.agent?.reason) notes.push(`底稿刷新定时会话降级：${digao.agent.reason}`)
 
-  const delivery = installDailyDelivery(ctx, { dataDir, timeZone, now })
+  // #25：第三条 daily —— 晚省（21:30，可调）。
+  const wansheng = await ensureDailyTask({
+    ctx, dataDir, kind: 'wansheng', title: WANSHENG_TASK_TITLE, prompt: WANSHENG_PROMPT, time: wanshengTime, timeZone,
+  })
+  if (!wansheng.ok) notes.push(`晚省定时未建：${wansheng.reason}`)
+  if (wansheng.ok && wansheng.agent?.reason) notes.push(`晚省定时会话降级：${wansheng.agent.reason}`)
+
+  const delivery = installDailyDelivery(ctx, { dataDir, timeZone, now, env })
   if (!delivery.ok) softLogger(ctx).warn('票13 定时到点的生成链没装上：%s', delivery.reason)
 
-  return { rikke, digao, timeZone, notes, delivery: { ok: delivery.ok, reason: delivery.reason } }
+  // #25：启动时结算「错过的触达」（关机 / 没打开漏掉的那些）。幂等；失败只记日志。
+  // 这一步在 `ctx.inject(['schedule'], …)` 的回调里跑（装配已经返回，不阻塞 apply）。
+  const missed = await settleMissedTouches({ ctx, dataDir, timeZone, now, env })
+  for (const note of missed.notes) softLogger(ctx).warn('补课：%s', note)
+  for (const failure of missed.errors) softLogger(ctx).warn('补课：%s', failure)
+
+  return {
+    rikke,
+    digao,
+    wansheng,
+    timeZone,
+    notes,
+    delivery: { ok: delivery.ok, reason: delivery.reason },
+    missed: { ok: missed.ok, days: missed.days },
+  }
 }

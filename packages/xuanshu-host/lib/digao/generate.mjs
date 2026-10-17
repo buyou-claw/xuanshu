@@ -21,10 +21,20 @@
  *
  * 写盘顺序：**先正文后元数据**。`digao.json` 是「这份 md 已经完整写好」的凭据（`digao.status` 用它
  * 报 meta），反过来写会留下一份「有元数据、没正文」的底稿。
+ *
+ * 票 05（#26）追加：**事记扫描挂在这里**（`scanAndUpdateShiji()`，契约 §1 的唯一挂点）。
+ * 顺序是「先写 `shiji.jsonl`，再写 digao 两件」——事记是底稿「曾经做过什么」的前提（#27 渲染），
+ * 且定时 03:30 与手动刷新因此共用**同一次**扫描（不各扫一遍）。
+ * 票 27（#27）：扫描完之后读同一份账本（`listShiji()`：已按 `lastActiveAt` 倒序、已滤墓碑），
+ * 一部分进「最近」的工作区排序/日期，剩下的进「曾经」。**没有第二条扫描路径**：
+ * 这里只读扫描的产物，不重新枚举工作区/工作流。
+ * 注意：`shiji/ledger.mjs` 是叶子（不 import `digao/service.mjs`、不 import `rikke/**`），
+ * 所以这条依赖不会成环。
  */
 
+import { listShiji, scanAndUpdateShiji } from '../shiji/ledger.mjs'
 import { condenseWithLlm } from './llm.mjs'
-import { buildDigaoMeta, buildSegments, renderDigaoMarkdown } from './skeleton.mjs'
+import { buildDigaoMeta, buildPastSegments, buildSegments, renderDigaoMarkdown } from './skeleton.mjs'
 import { collectSources } from './sources.mjs'
 import { digaoMarkdownFile, digaoMetaFile, writeAtomic } from './store.mjs'
 
@@ -35,8 +45,19 @@ import { digaoMarkdownFile, digaoMetaFile, writeAtomic } from './store.mjs'
  * @returns {Promise<{meta: object, notes: string[]}>}
  */
 export async function refreshDigao({ ctx, dataDir, now = new Date() } = {}) {
-  const sources = collectSources({ ctx, dataDir })
-  const segments = buildSegments({ pu: sources.pu, workspace: sources.workspace, workflow: sources.workflow })
+  // ① 事记扫描：写 `<dataDir>/shiji.jsonl`（**先于**底稿两件；「曾经做过什么」读它）。
+  //    失败照抛（与写盘同口径）：定时那条折成日志、RPC 那条折成 {ok:false,error}，不静默。
+  const shiji = await scanAndUpdateShiji({ ctx, dataDir, now })
+
+  // ② 读回同一份账本作为「曾经」的投影（`shiji.list` 与它同一个读面：倒序、不含墓碑）。
+  //    这里**不再扫一遍**，只是把刚写好的那份按读面形状取出来。
+  const pastEntries = listShiji(dataDir).entries
+
+  const sources = collectSources({ ctx, dataDir, shijiEntries: shiji.entries })
+  const segments = [
+    ...buildSegments({ pu: sources.pu, workspace: sources.workspace, workflow: sources.workflow }),
+    ...buildPastSegments(pastEntries),
+  ]
 
   // LLM 只做「压成一段」这一步（契约 §1）：失败不阻断刷新，只把 digest 标成 skeleton。
   const condensed = await condenseWithLlm(ctx, { segments })
@@ -49,7 +70,7 @@ export async function refreshDigao({ ctx, dataDir, now = new Date() } = {}) {
   writeAtomic(digaoMarkdownFile(dataDir), markdown)
   writeAtomic(digaoMetaFile(dataDir), `${JSON.stringify(meta, null, 2)}\n`)
 
-  const notes = [...sources.notes]
+  const notes = [...sources.notes, ...shiji.notes]
   if (!condensed.ok) notes.push(`LLM 未提炼（digest=skeleton）：${condensed.reason}`)
   return { meta, notes }
 }

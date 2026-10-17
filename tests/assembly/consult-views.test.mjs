@@ -308,7 +308,7 @@ describe('票 10 · 历史列表（S7 §2.1 / §2.3 / §6）', () => {
     const block = blockOf(html, 'data-xuanshu-error="list"')
     expect(block).toContain('会话清单读不到')
     expect(html).toContain('data-xuanshu-action="retry-list"')
-    expect(html).toContain('~/.dsh/sessions/')
+    expect(html).toContain('玄枢 home/sessions/')
   })
 })
 
@@ -353,6 +353,45 @@ describe('票 10 · 历史阅读器（S7 §2.2 / §6 只读态）', () => {
       ),
     )
     expect(html).toContain('data-xuanshu-source="xuanshu-consult"')
+  })
+
+  it('票 31：合参采用稿按轮分组，标出每轮当前采用稿；被否决的轮不显示为当前', () => {
+    const html = render(
+      h(
+        XsConsultHistoryReader,
+        readerProps({
+          messages: [
+            { role: 'user', text: '帮我看这次转岗的时机' },
+            { role: 'user', text: '方案 A：先按 3000/月 试算。', source: 'xuanshu-bestof-adopted', messageId: 'm-r1' },
+            { role: 'assistant', text: '好，按 A 记下。' },
+            { role: 'user', text: '方案 B：先核对前提。', source: 'xuanshu-bestof-adopted', messageId: 'm-r2' },
+          ],
+          drafts: {
+            rounds: [
+              { runId: 'bestof-r1', round: 1, messageIds: ['m-r1'], currentId: 'm-r1', rejected: false },
+              { runId: 'bestof-r2', round: 2, messageIds: ['m-r2'], currentId: undefined, rejected: true },
+            ],
+            resolved: true,
+            currentIds: ['m-r1'],
+          },
+        }),
+      ),
+    )
+    const round1 = blockOf(html, 'data-xuanshu-round="1"')
+    expect(round1).toContain('第 1 轮合参 · 当前采用稿')
+    expect(round1).toContain('data-xuanshu-draft="current"')
+    expect(round1).toContain('方案 A：先按 3000/月 试算。')
+
+    const round2 = blockOf(html, 'data-xuanshu-round="2"')
+    expect(round2).toContain('第 2 轮合参 · 已否决（不列为当前）')
+    expect(round2).toContain('data-xuanshu-draft="rejected"')
+    expect(round2).toContain('方案 B：先核对前提。')
+    // 被否决的轮不许在任何地方被说成「当前采用稿」
+    expect(round2).not.toContain('当前采用稿')
+
+    // 分组只包采用稿：普通消息照旧单独成条
+    expect(html).toContain('好，按 A 记下。')
+    expect(html.match(/data-xuanshu-round="/gu)).toHaveLength(2)
   })
 
   it('阅读器不显示工作区归属（C6），只给 [继续这次问事 ▸] 跨面板入口', () => {

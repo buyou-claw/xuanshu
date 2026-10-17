@@ -20,6 +20,8 @@
  */
 
 import { resolveDataDir } from '../bazi/service.mjs'
+import { listShiji } from '../shiji/ledger.mjs'
+import { shijiExists } from '../shiji/store.mjs'
 import { refreshDigao } from './generate.mjs'
 import { digaoExists, readDigaoMarkdown, readDigaoMeta } from './store.mjs'
 import { DIGAO_TASK_TITLE, findDailyTask, scheduleSummary } from './tasks.mjs'
@@ -40,6 +42,34 @@ export function createDigaoMethods(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
 
   /**
+   * 加性读面（#27 契约 §3）：`digao.read|status` 带一份**事记条目**，供底稿面板的 [删除] 用。
+   *
+   * 为什么由这两个方法带：底稿正文（md）里只有人读的标记，没有 id；而删除动作需要 id。
+   * 只给 UI 需要的那六位（`id/name/summary/firstSeenAt/lastActiveAt/basis`），不把账本内部字段
+   * （指纹 / 冻结 / 墓碑）漏给界面。**没有事记账本就省略整个键** —— 不写 null、不写空数组：
+   * 「还没有账本」和「账本里一条都没有」是两件事。
+   *
+   * 读面与「曾经做过什么」同源（都是 `listShiji()`：倒序、不含墓碑），所以界面上看到的事记
+   * 与正文那一段永远是同一批（不另立第二个渲染权威）。
+   */
+  function shijiField() {
+    if (!shijiExists(dataDir)) return {}
+    const { entries } = listShiji(dataDir)
+    return {
+      shiji: {
+        entries: entries.map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          summary: entry.summary,
+          firstSeenAt: entry.firstSeenAt,
+          lastActiveAt: entry.lastActiveAt,
+          basis: { sessions: entry.basis.sessions, docs: entry.basis.docs },
+        })),
+      },
+    }
+  }
+
+  /**
    * 底稿那条 daily 任务的摘要（契约修订 2026-10-15：`digao.status` 与 `digao.read` 各多一个可选
    * `schedule`，界面用它显示「下次刷新」）。**拿不到就省略该键** —— 不写 null、不写空串。
    */
@@ -50,7 +80,7 @@ export function createDigaoMethods(ctx, config = {}) {
   return {
     /** 底稿在不在 + 元数据（票 07 的底稿卡用它给 state 与 summary）。 */
     'digao.status': async () => {
-      const out = { exists: digaoExists(dataDir), meta: readDigaoMeta(dataDir) }
+      const out = { exists: digaoExists(dataDir), meta: readDigaoMeta(dataDir), ...shijiField() }
       const schedule = await scheduleField()
       if (schedule !== null) out.schedule = schedule
       return out
@@ -58,7 +88,7 @@ export function createDigaoMethods(ctx, config = {}) {
 
     /** 只读全文（只读面板用）。 */
     'digao.read': async () => {
-      const out = { markdown: readDigaoMarkdown(dataDir), meta: readDigaoMeta(dataDir) }
+      const out = { markdown: readDigaoMarkdown(dataDir), meta: readDigaoMeta(dataDir), ...shijiField() }
       const schedule = await scheduleField()
       if (schedule !== null) out.schedule = schedule
       return out

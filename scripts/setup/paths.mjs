@@ -130,7 +130,8 @@ export function resolveHorosaHost({ env = process.env } = {}) {
  * 一次性算全这次运行用到的每条路径（报告的 pin/runtime/profile 段直接引用它）。
  *
  * `home` 走票 04 的 `resolveHomeWithSource`：显式 `--dsh-home` ＞ `XUANSHU_DSH_HOME` ＞ `$DSH_HOME`
- * （**仅当不指向真实 `~/.dsh`**）＞ `<repo>/.dsh-home`。返回里带 `ignored`，调用方要把它写进 notes。
+ * （**仅当不指向真实 `~/.dsh`**）＞ 默认两档（ADR-0014）：dev `<repo>/.dsh-home` / product `~/.xuanshu`。
+ * 返回里带 `ignored`，调用方要把它写进 notes。
  */
 export function resolveSetupPaths({
   home, profile, cache, runtimeRoot, horosaPort, env = process.env, repoRoot, platform = process.platform,
@@ -223,6 +224,8 @@ export function checkRealHomePolicy({ home, install, realHome = realDshHome() } 
     hint: [
       `# 推荐（隔离装配，完全不动真实 home）:`,
       `#   node scripts/setup.mjs --dsh-home <repo>\\.dsh-home`,
+      `# 产品安装（玄枢自己的 home）:`,
+      `#   node scripts/setup.mjs --dsh-home "%USERPROFILE%\\.xuanshu"   # 或设 $env:XUANSHU_DSH_HOME`,
       `# 确实要装进真实 home 才加 --install:`,
       `#   node scripts/setup.mjs --install --dsh-home "${realHome}"`,
     ].join('\n'),

@@ -4,5 +4,8 @@ packages:
 # 与上游 dsh 官方 profile 同款的构建脚本白名单：缺了它们 pnpm 会以
 # ERR_PNPM_IGNORED_BUILDS 退出 1（本机实测）。esbuild 的 postinstall 负责摆放
 # 平台二进制，不放行会让客户端构建管线起不来。
+# electron 的 postinstall（install.js）负责下载 / 摆放 Electron 运行时（约 125MB）：
+# 只给壳包用；不放行时 `electron --version` 会报「Electron failed to install correctly」。
 allowBuilds:
   esbuild: true
+  electron: true

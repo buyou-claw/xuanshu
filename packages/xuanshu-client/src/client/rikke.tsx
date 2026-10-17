@@ -19,7 +19,10 @@ import type { Context } from '@deepseek-ai/cordis';
 import { EMPTY_COPY, clockOf } from './panel.js';
 import { RIKKE_ID, RIKKE_LABEL, RIKKE_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
-import type { RikkeApi, RikkeStatus } from './rikke-api.js';
+import type { NotifyApi } from './notify-api.js';
+import { notifyFailureText, notifyReasonCode } from './notify.js';
+import type { RikkeAiNote, RikkeApi, RikkeStatus } from './rikke-api.js';
+import { rikkeAiView } from './rikke-model.js';
 import { installRikkeStyle } from './rikke-style.js';
 import type { RpcContext } from './rpc.js';
 
@@ -44,10 +47,24 @@ export interface RikkePanelProps {
   api: RikkeApi;
   /** 面板导航（`[打开自动化任务面板]` → DSH 的 `schedules`）。 */
   navigate: (target: PanelNavTarget) => void;
+  /** #24：触达数据面（打开面板时把「推到了但没看」的条目标已读；缺 = 不做这件事）。 */
+  notify?: NotifyApi;
   /** 静态预置（测试 / SSR：给了就不发 `rikke.status`）。 */
   preloaded?: RikkePreloaded;
   /** 静态预置「改时刻」编辑器已展开（静态渲染点不了按钮）。 */
   preloadedTimeEdit?: boolean;
+}
+
+/** AI 段（#24 两段式的第二段；三态文案的唯一来源是 `rikke-model.ts`）。 */
+function RikkeAiSection({ ai }: { ai?: RikkeAiNote }) {
+  const view = rikkeAiView(ai);
+  if (view.kind === 'none') return null;
+  return (
+    <section className="xs-rikke__ai" data-xuanshu-ai={view.kind}>
+      <h2 className="xs-rikke__ai-title">今天注意什么</h2>
+      <p className="xs-rikke__ai-body">{view.text}</p>
+    </section>
+  );
 }
 
 /** 错误摘要（RPC 拒绝的 message 原样展示，不吞掉）。 */
@@ -72,7 +89,7 @@ function initialView(preloaded: RikkePreloaded | undefined): RikkeView {
  * @param props - 数据面、导航与静态预置。
  * @returns 日课面板节点。
  */
-export function RikkePanel({ api, navigate, preloaded, preloadedTimeEdit }: RikkePanelProps) {
+export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }: RikkePanelProps) {
   const seeded = preloaded !== undefined;
   const [view, setView] = useState<RikkeView>(() => initialView(preloaded));
   const [busy, setBusy] = useState(false);
@@ -106,6 +123,20 @@ export function RikkePanel({ api, navigate, preloaded, preloadedTimeEdit }: Rikk
     // `load` 是每渲染重建的闭包；依赖只留数据面与预置标记（与 MingpanPanel / DigaoPanel 同法）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, seeded]);
+
+  /**
+   * #24：人打开日课面板 = 看过今天的触达 → 把 delivered 且未读的条目标已读。
+   *
+   * 只标「推到了但没看」的那一类（failed / skipped 留着，它们是「推没推成」的证据）。
+   * 这是本面板**唯一**的写动作，且与生成无关；失败不弹错（标已读失败不该打扰看内容）。
+   */
+  useEffect(() => {
+    if (seeded || notify === undefined) return;
+    // P3（复核 #24）：只标日课那一类 —— 打开日课面板不该把晚省的未读一起抹掉。
+    void notify.markDeliveredRead({ kind: 'rikke' }).catch(() => {
+      /* 标已读失败：界面照常显示，不把「打开面板」变成一次报错 */
+    });
+  }, [notify, seeded]);
 
   /**
    * 人点 `[继续生成]`：**唯一**调用 `rikke.generate` 的地方。
@@ -251,6 +282,26 @@ export function RikkePanel({ api, navigate, preloaded, preloadedTimeEdit }: Rikk
         </div>
       )}
 
+      {/* #24 第二段：AI 段（三态；关闭 / 失败都有逐字文案，骨架三键永远在上面）。 */}
+      <RikkeAiSection ai={status?.ai} />
+
+      {/* #24 触达状态：未读条数 + 最近一次推送失败的原因（失败不影响上面内容）。 */}
+      {status?.unread !== undefined && status.unread > 0 ? (
+        <p className="xs-rikke__note" data-xuanshu-note="unread">
+          {`未读 ${status.unread} 条日课通知`}
+        </p>
+      ) : null}
+      {status?.notify?.status === 'failed' ? (
+        <p
+          className="xs-rikke__alert"
+          role="alert"
+          data-xuanshu-notify="failed"
+          data-xuanshu-reason-code={notifyReasonCode(status.notify)}
+        >
+          {`上一次通知没发出去：${notifyFailureText(status.notify)}`}
+        </p>
+      ) : null}
+
       {/* ④ 动作：重新生成（人点 + 轻确认）/ 改时刻 / 打开自动化任务面板。 */}
       <div className="xs-rikke__actions">
         <button
@@ -350,6 +401,8 @@ function RikkeIcon({ size = 20 }: { size?: number }) {
 export interface RikkeInstallDeps {
   api: RikkeApi;
   navigate: (target: PanelNavTarget) => void;
+  /** #24：触达数据面（打开面板时标已读；缺 = 不做）。 */
+  notify?: NotifyApi;
 }
 
 /**

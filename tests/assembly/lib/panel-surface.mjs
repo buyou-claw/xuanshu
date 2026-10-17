@@ -16,7 +16,7 @@
  */
 
 /** 玄枢面板的 main key，**顺序 = `index.tsx` 里 install 的调用顺序**（`overview` 恒第一）。 */
-export const PANEL_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', 'consult', 'digao', 'rikke', 'workflow']
+export const PANEL_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', 'consult', 'digao', 'rikke', 'workflow', 'wansheng']
 
 /**
  * 不是「main + sidebar 一对」的额外注册。
@@ -26,6 +26,14 @@ export const EXTRA_REGISTRATIONS = [
   { after: 'cang', names: ['shell.overlay'], cells: ['shell.overlay\u0000xuanshu-cang-drawer'] },
   // 票 12：挂载账本抽屉（S8）——挂在 `consult` 那一对之后（票 12 的 install 排在票 10 之后）。
   { after: 'consult', names: ['shell.overlay'], cells: ['shell.overlay\u0000xuanshu-mounts-drawer'] },
+  {
+    // #24（早间触达）：设置里的一行两项开关（AI 建议段 / 通知摘要），**不新增 main key / 侧栏行**。
+    // `after: 'rikke'`：`installTouchSettings` 紧跟 `installRikke`（读同一个「今天要不要 AI 段」的产物），
+    // 而票 16 的 workflow 那一对插在它之后 —— 顺序不符会被 `expectedRegisterNames()` 抓到。
+    after: 'rikke',
+    names: ['settings.general.item'],
+    cells: ['settings.general.item\u0000xuanshu.touch'],
+  },
   {
     // 票 15（沉淀闭环）：**会话内区块**，不新增 main key / 侧栏行（S10 §1 D5 / F1）。
     // 入口在收尾条、草稿卡在 `turnTail`、通知落框架浮层 —— 三处都是加性 cell。
@@ -50,6 +58,28 @@ export const EXTRA_REGISTRATIONS = [
       'settings.general.item\u0000xuanshu.bestof',
       'conversation.composer.dock\u0000xuanshu-bestof-trigger',
     ],
+  },
+  {
+    // 票 30（#30）：设置 → 「我的数据」分区（`settings.section`，**不新增 main key / 侧栏行**）。
+    // `after: 'workflow'`：`installDataSettings` 排在票 11 之后、票 27 之前；
+    // 本数组顺序 = 注册序，顺序不符会被 `expectedRegisterNames()` 抓到。
+    after: 'workflow',
+    names: ['settings.section'],
+    cells: ['settings.section\u0000xuanshu.data'],
+  },
+  {
+    // P4（复核 #26）：设置 → 「事记」分区（墓碑恢复 + 可排除目录），同样是 `settings.section`
+    // 的纯加性 cell；`installShijiSettings` 紧跟在 `installDataSettings` 之后。
+    after: 'workflow',
+    names: ['settings.section'],
+    cells: ['settings.section\u0000xuanshu.shiji'],
+  },
+  {
+    // 票 27（#27）：会话内「存成今天的事记」——**一个** composer 入口条，不新增 main key / 侧栏行。
+    // 与 sediment / bestof 一样挂在 `workflow` 那一对之后，排在它们之后（`installShiji` 是最后一个 install）。
+    after: 'workflow',
+    names: ['conversation.composer.dock'],
+    cells: ['conversation.composer.dock\u0000xuanshu.shiji-entry'],
   },
 ]
 

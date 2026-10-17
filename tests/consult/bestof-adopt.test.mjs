@@ -296,7 +296,11 @@ describe('bestof.cancel · 停止全部（S9 §5 步骤 10；契约 §1 的 addi
 
 describe('费用：有价表才算，没价表就是「未知」（ADR-0010 Consequences）', () => {
   it('有价表：按 input/output 单价逐项累计（打桩 usage × 样例价表）', async () => {
-    const price = { 'deepseek/deepseek-chat': { inputPerMTok: 1, outputPerMTok: 2 } }
+    // 票 28 起判官取「不在候选里的另一家」= pi-ai，所以价表里两家都要有价。
+    const price = {
+      'deepseek/deepseek-chat': { inputPerMTok: 1, outputPerMTok: 2 },
+      'pi-ai/pi-chat': { inputPerMTok: 1, outputPerMTok: 2 },
+    }
     const { bestof, session } = await scene({ price })
     const { state } = await runToEnd(bestof, session.sessionId)
 

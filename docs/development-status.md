@@ -1,6 +1,6 @@
-# Spec 001 开发进度
+# 开发进度（Spec 001 装配基座 / Spec 002 住进去）
 
-核对日期：2026-10-15。集成分支：`codex/spec-001-integration`（**已推 origin**）。
+核对日期：2026-10-15（Spec 001）/ 2026-10-17（Spec 002，见 §16）。集成分支：Spec 001 = `codex/spec-001-integration`（**已推 origin**）；Spec 002 = `feat/spec-002-integration`（票 #22–#31，见 §16）。
 
 GitHub issue/PR 的 open 状态不等于未实现，反之亦然：票 01–06 的代码在本地提交并由 stacked PR 承载（#2/#3/#4/#6/#7/#9 已**全部关闭且未合并**，其改动**全部已包含在集成分支**里、由 PR #20 覆盖取代）；票 07–16 已实现，其 issue 已在 GitHub 上关闭（#11–#19；票 04/06/07 的 #5/#8/#10 于 2026-10-15 晚补关闭，见 §10）。
 
@@ -687,3 +687,253 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 - **收尾两条命令**：`pnpm verify:all`（类型 + 产物同步 + 用例清单门）、`pnpm cleanup:worktrees`（先证明分支已并入，再存档，再删）。
 - **数字只从工具输出里抄**：用例计数抄 `pnpm test:inventory` 那一行，五 seam 抄 `pnpm verify:assembly` 的输出。README、台账、PR body 三处手抄过一次（992 vs 1020）——手抄的必然漂。
 - **合并方向的最后一棒**：分支并进集成分支之后，如果那条分支又提交、又并回一次集成分支，就必须**再并一次回去** —— 票 13 客户端两笔就是这么丢的（`cleanup:worktrees` 的「必须是 HEAD 祖先」正是拦这个的）。
+
+### 16. Spec 002「住进去」：10 张票全部实现（2026-10-17）
+
+规格 `docs/specs/002-reside-and-use.md`，父 issue [#21](https://github.com/buyou-claw/xuanshu/issues/21)，
+集成分支 **`feat/spec-002-integration`**（从 `main` 09951eb 起，10 张票各自 worktree/分支 → Lead 合并），
+草稿 PR [#32](https://github.com/buyou-claw/xuanshu/pull/32) 承载（Closes #21 + #22–#31）。
+形态决策：ADR-0013（事记 = 底稿第四来源）、ADR-0014（玄枢自己的桌面壳与 home，与 DSH 桌面版零交集）。
+
+实现完成后按 `code-review` 技能跑了两轴（**Standards** / **Spec**，各自独立上下文、不合并排序），
+共 12 条发现（3 硬违规 + 4 判断项 + 5 规格项），全部在 **t32 复核修复轮**落成代码与用例：
+宿主 home/dataDir 收成**一份实现**（`lib/home.mjs`，含 real-`~/.dsh` 拒绝与扫描根）、壳的入口判断抽到
+有测试的 `main-flow.mjs`、`runTouchChain` 去重、`routes.list` 把未知默认路由改成 `null`、
+`设置 → 事记`（恢复墓碑 / 排除目录）与 `设置` 里的关窗行为/开机自启（显示**实际生效方式**）、
+点通知落 overview 的 `#xuanshu-overview` 通道、`rikke.status` 未读只数日课。修复后用例 1676 → 1761。
+
+#### 16.1 票 → issue → 交付面
+
+| 票 | issue | 交付面（宿主 / 客户端 / 其他） |
+|---|---|---|
+| 01 独立 home 与隔离体检 | #22 | 解析唯一来源 `scripts/isolation/resolve.mjs`（产品 `~/.xuanshu` / 开发 `<repo>/.dsh-home`，`XUANSHU_DSH_HOME` 覆盖）；宿主新增 `lib/home.mjs` 收口 7 处 `~/.dsh` 兜底并**拒绝**写真实 home；`verify:isolation` 的 `home-isolated` 加「两档默认 home 都不是 `~/.dsh`」；新 runbook `docs/runbook/home.md` |
+| 02 桌面壳 | #23 | 新包 `packages/xuanshu-shell`（窗口 / 托盘 / 关窗隐藏 / 真退 / 单实例 / 子进程看护与重启 / 自启 / 通知端点 / 看门狗），14 个纯模块 + 唯一 `electron-adapter.mjs`；`docs/runbook/shell.md` |
+| 03 早间触达 | #24 | 日课 AI 段三态（`ai:{mode:'ok'\|'off'\|'failed'}`，确定性三键永不受影响）；`lib/notify/**` 回环通知 + `traffic.jsonl` 触达账；`rikke.status` 加性 `ai/unread/notify`；卡/面板两段式 + 设置两项开关 |
+| 04 晚间触达 | #25 | 晚省 `<dataDir>/wansheng/<date>.json`（**零模型调用**的确定性事实）+ 第三条 daily 21:30；补课（产物缺失 + 账缺失、回看 ≤7 天、启动与到点结算、`missed:true`、**不补推送**）；**修 `delivery.mjs` 用投递时刻算日期的 bug**（改取 `occurrence_at`，迟到 >30min 标补）；时刻可调（`rikkeTime`/`wanshengTime`）；晚省卡/面板（order 110）+ 投递历史 |
+| 05 事记账本 | #26 | `lib/shiji/**`：`shiji.jsonl`（`xuanshu/shiji@1`，一项目一条 / 依据指纹才重算摘要 / 源头消失冻结 / 删除墓碑永不再生）；扫描挂进 `refreshDigao()` 同一条管线；`shiji.*` 独立方法组（含 `fromSession` 人工确认） |
+| 06 底稿两段 | #27 | 底稿两段「最近在做什么 / 曾经做过什么」+ 四路来源标记（谱/工作区/工作流/事记）；`digao.read/status` 加性 `shiji.entries`（供删除动作）；客户端两段渲染 + 事记删除 + 会话内「存成今天的事记」 |
+| 07 多家合参 | #28 | 只读 `routes.list`（providers→models→keyConfigured，`'unknown'` 不冒充 false）；`bestof.run` 入参 `routes:[{provider,model}]`（2–4、`provider::model` 去重）+ `confirm:true`；`bestof.estimate`（金额恒 `'unknown'`）；异源判官（无则 `same-source` 如实降级）；有界并发 + 每路 AbortSignal/超时；单路失败不拖累 |
+| 08 接上 AI | #29 | 冷启动第 6 步「接上 AI」+ 问事入口只读门禁（三态：已接上 / 未接上带原因与去向 / 未知）；配置后 5s 轮询自动解除、无需重启；**零 provider 配置写入** |
+| 09 我的数据 | #30 | `data.overview()`（8 品类体积，`.credentials.yaml` 永不计入）；`data.backup()`（用户自选目录 + 每文件 sha256 清单，含会话/不含密钥）；设置 →「我的数据」页（`settings.section`，order 25）；runbook 备份/恢复/密钥迁移 |
+| 10 两处遗留缺陷 | #31 | 问事回看按轮标出**当前采用稿**（`consult.read` 加性 `drafts`，否决轮不当当前）；工作流挂载注入已导出的 `SKILL.md` 正文（未导出如实说明；预算/披露/交付账零改动） |
+
+#### 16.2 冻结契约（跨票并行前先落，`.scratch/notes/spec002/`，未入库）
+
+`contract-shell-notify.md`（壳↔宿主唯一 IPC：回环 JSON + 运行时状态文件 + 共享设置文件 + 触达账）、
+`contract-shiji-digao.md`（事记 schema / 扫描范围 / 摘要成本 / 底稿两段）、
+`contract-wansheng-missed.md`（晚省事实 / 补课判据 / occurrence 日期）、
+`contract-data-backup.md`（8 品类 / 清单 / 排除项）。四份契约都是「先定形状 → 两半边各自实现 → 契约夹测」。
+
+**复核修复轮（t32，2026-10-17）之后新增/收紧的形状**（都写进了代码注释与用例；外部读者按此对账）：
+
+- 新增 `<home>/xuanshu/runtime/shell-status.json`，schema `xuanshu/shell-status@1`：
+  `{schema,pid,updatedAt,autostart:{enabled,method:'login-item'|'shortcut'|'unsupported'},closeBehavior}`，
+  与 `shell-notify.json` 同级；`pid` 必须与 `XUANSHU_SHELL_PID` 对上（对不上 = 旧壳残留，宿主不用），干净退出删文件。
+- **`shell.settings.get()` 改成 `{settings, effective?}`**（之前是平铺三键，属于不兼容改形；`effective` 缺席 =
+  壳没在跑或状态读不到）；`shell.settings.set()` → `{settings}`。
+- `routes.list`：默认路由未知时 `isDefault = null`（之前写成 `false`，把「不知道」冒充成「不是」）；providers 与 models 两处都改。
+- `rikke.status` 的 `unread` / `notify` **只数 `kind==='rikke'`** 的账行（晚省不再蹭日课未读）；打开日课面板只标日课账已读。
+- 客户端新增 `#xuanshu-overview` hash 通道（壳点通知后 `show()` + 让页面回 overview；前端无路由，这是它能做到的上限）。
+- 宿主 home/dataDir 解析**只剩一份实现**（`lib/home.mjs`）：`bazi/service.mjs` 只是同一函数对象的再导出；
+  `cang/service.mjs` 的 dataDir 走 `resolveDataDir()`，`horosa/{service,paths}.mjs` 的 home 走
+  `resolveHostHome()` 与 `pointsAtRealDshHome`（复核 C2 之前这两处各有一份无门的解析）。真实 `~/.dsh` 的拒绝
+  在同一道门上：horosa 把原因写进 `paths.note`（进 `installHorosa` 的装配 notes 与 `snapshot().paths`），
+  cang 由同一判据改判玄枢自己的 home（该组没有装配报告通道，是如实的**行为**结果，不带 note 字段）；
+  事记/工作流的 skill 扫描根也走 `resolveSearchHome()`，`DSH_HOME=~/.dsh` 时**拒绝**取真实 home 并记 note。
+  生产落**点**门（`lib/index.js` 的 `planWriteTarget`）语义未改。
+
+#### 16.3 验证（数字全部抄工具输出）
+
+```
+# pnpm test:inventory（profile 已装；t33 复核修复轮 + 两轴再复核修复 + 环境加固轮之后）
+[inventory] 用例 1839 条（基线 1839）/ 文件 167 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
+
+# pnpm verify:isolation
+结果：8/8 通过，exit 0（7527ms）
+启动器[home] PASS  隔离 home <repo>/.dsh-home（来源 --home）；真实 home ~/.dsh 不会被碰
+…（home 两档默认都不是真实 home；换 home 后两条派生路径两两不同）
+
+# pnpm verify:assembly
+[S2] PASS 192 行挂载；xuanshu-host/client state=2
+[S3] PASS 客户端产物 522070B；物化/注册/槽位自检全过
+[S4] PASS 基线 185 行全部命中
+[S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
+[S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
+结果：失败，exit 1（仅因 S1 及其连带的那条已知红）
+```
+
+2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（1839 / 167）。
+
+#### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
+
+1. **`dsh --profile xuanshu --help` 这条无 LLM 检查路径会在树 mount 完之前请求退出**：玄枢插件行排在树
+   最后，于是 `apply()` 可能在 dispose 已开始之后才跑（实测 root `fiber.state=UNLOADING=5`，
+   `profileContext` 已随树拆除）。表现：S5 与隔离台 headless 探针从绿变红，**`report.ok=false` 但两包/两行都在**。
+   处置：`lib/index.js` 的 `buildReport` 增加关闭现场判据（`isShuttingDown`，root fiber ≥ UNLOADING）：
+   关闭期间如实写 `profile.teardown=true` 并把 home 来源退回 `DSH_HOME`，`ok` 仍要求两包解析 + 两行在树里；
+   **非关闭现场缺 `profileContext` 仍然判失败**（不收宽）。判据的会红对照在
+   `tests/assembly/assembly-report-teardown.test.mjs`（恒 false / 恒 true 各打红一条）。这是被
+   `#25` 的导入图变重后暴露出来的 race（**导入顺序/图深度会决定它落在关闭前还是关闭后**）。
+2. **隔离台的临时 home 在红的时候不会被清**：先红一次、再修好后重跑，会因上一次的
+   `tests/isolation/.tmp/dual-*` 残留而红在「现场回收干净」。处置：重跑前 `cmd /c rmdir /s /q tests\isolation\.tmp`
+   （**不要**用 `Remove-Item -Recurse`，本机有 pnpm junction）。
+3. **electron 二进制下载**：本机 `pnpm install` 在 postinstall 取 125MB 二进制时 `ECONNRESET`；
+   用 `ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install` 完成安装（模块层测试全绿），
+   真窗口/托盘/toast/自启**未真机验收**，手测清单在 `docs/runbook/shell.md`。
+4. **`profileContext` / settings 槽位这类「看起来在场」的东西要真机核**：`settings.section` 在钉版 rc.2
+   是**实装在**（`dsh-client-ui-settings/lib/types/client/contract/slots.d.ts:73`，declarer
+   `dsh-client-ui-settings-general`），本轮「我的数据」据此落成设置页而不是新面板。
+5. **改完自有包必须重跑 `node scripts/install-profile.mjs --home .dsh-home`**（旧陷阱，本轮又踩）：
+   S3 会红在「profile 里装的 client 与仓库不一致」；同步后恢复。
+6. **`tests/setup/setup-cli.test.mjs` 的「连跑两次全绿」在满载时偶发红**：本轮两次全量 `verify:all` 里
+   有一次红在这一条（第一次真下载 + 第二次零下载 + 新报告），单跑该文件 14/14 绿、复跑全量也绿。
+   判为环境/时序抖动（它真起本地 HTTP fixture 并真跑两遍 setup），**不是**本轮改动引入（本轮只动了
+   setup 的 home 默认与文档串）；遇上了先单跑该文件再判，别放宽清单门。同族：`tests/setup/selfcheck-branches.test.mjs`
+   的「两处都有信封」用例在 2026-10-17 环境加固轮的全量 `verify:all` 里红过一次（单跑 3/3 绿、复跑全量绿）——
+   同一类本地 HTTP fixture 时序抖动，处置同上。
+7. **`git worktree remove` 会跟穿 `node_modules` junction，清空主仓依赖**（2026-10-17 t33 实测事故）：
+   实现者为了在 worktree 里能 build/跑测试，会 `mklink /J node_modules <主仓>/node_modules`（也可能在
+   `packages/*/node_modules`）。`scripts/cleanup-worktrees.mjs` 先跑 `git worktree remove` —— git for Windows
+   递归删除时**跟穿 junction**，把主仓根 `node_modules` 清空（`vitest`/`tsc` 起不来；`.dsh-home` 里 profile
+   的 `node_modules` 也空了）。**恢复**：`ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile --offline`
+   （pnpm store 还在，169 包 3.7s）→ `node scripts/install-profile.mjs --home .dsh-home`；恢复后 `verify:all` 复绿。
+   **处置**：新增 `scripts/lib/cleanup-junctions.mjs`，清理脚本在 `git worktree remove` **之前**先摘掉 worktree
+   内所有 junction/symlink（只删链接本身，绝不进目标）；判据台 `tests/lib/cleanup-junctions.test.mjs`（3 条，
+   含「目标哨兵文件必须活着」），并做了一次端到端实测（worktree + junction → 清理 → 哨兵仍在、worktree 已删）。
+   **教训**：「`rmdir /s` 不跟随 reparse point」只保护最后那一步，**先删目录的是 git**；有 junction 的工作树，
+   必须先把链接摘掉再交给任何递归删除。
+
+#### 16.5 已知边界（如实登记）
+
+- **桌面壳只到模块层**：窗口 / 托盘 / 关窗隐藏 / 自启 / Windows toast / 点击唤出 / 硬杀看门狗的回收率
+  全部**未在真 Electron 窗口上验收**（二进制没装上）；`tests/shell` 134 条是纯模块 + 假适配层证据。
+  真机手测清单 10 步在 `docs/runbook/shell.md`。
+- **真多家 provider 未跑真机**：本机没有第二家 key，`routes.list` / 异源判官 / 并发超时的证据是
+  打桩 `ctx.llm` + 真 `installRpc`；真机 `listProviders/settings.describe/credentials.describe` 形状待核。
+- **真浏览器点击链 / 真 LLM 端到端**：客户端只有 `renderToStaticMarkup` 与纯函数断言（无 jsdom）；
+  日课 AI 段、事记摘要、晚省都只用 fake LLM 验过「调没调、三态对不对」。
+- **补课的时间语义**：`occurrence_at` 的正文形状按钉版实装（`reminders_json`）解析，真机正文未逐字抓；
+  `ctx.schedule` 停机后只补「最近一次」occurrence 的事实仍成立 —— 玄枢用「产物 + 自己的账」补齐中间日期。
+- **事记日期**：投影缓存缺席时回落到日志；缓存落后会让 `lastActiveAt` 偏旧（已如实写进代码注释）。
+- **事记的「会话摘要」没有现成 API**（#38 复核 A1）：钉版只有 `session/title`、`titleInput`（首问聚合，
+  是 projection **state** 而非 wire row，`cachedSnapshot()` 取不到）与日志正文，**没有**任何会话摘要读面。
+  摘要素材因此由我们自己合成：`shiji/scan.mjs` 的 `questionsOf()` 从日志投影里取人问过的句子
+  （复用 `consult/history.mjs`），`summaryPrompt()` 把它作为「会话内容」与标题、文档一起交给 LLM。
+  三条边界如实登记：① 有界是刻意的——每场至多 3 句、每句至多 200 字、每条事记至多带 3 场（按最后活跃倒序），
+  素材不够多时**不补、不编**；② 会话正文读不出来（`ctx.sessionQuery` 缺席 / 日志读不动）或会话里没有人问的
+  文本时，素材降级为**标题 + 文档**，并在扫描 `notes` 里写明原因；③ 助手回话不进素材（只取人问的句子），
+  避免把会话里的代码 / 执行复盘带进摘要——「不读代码正文」的口径仍然成立。
+- **壳的 `DSH_HOME` 义务**：任何起 `dsh` 子进程的入口都必须同时传 `DSH_HOME` 与 `XUANSHU_DSH_HOME`
+  （DSH 本体只认前者）；壳与启动器都已这么传，runbook 写明。
+- **`install-profile --home ~/.dsh` 仍是显式逃生舱**（等价 setup 的 `--install`）：显式要求才写真实 home；
+  默认路径已不会再落到 `~/.dsh`。
+- **#29「一键指路 设置 → 模型」只到「逐字路径 + 有真 handler 才渲染按钮」**：钉版 rc.2 没有公开的
+  `openSettings` API（`openSection` 只在 `settings.onboarding` owner props 内，空会话会弹窗且完成态是内存态）。
+  让它变成真一键需要在 `settings.onboarding` 注册一个 step（新增 cell + 空会话弹窗，属产品取舍），本轮不做；
+  界面不造死按钮，写清路径。
+- **#22 装配报告的 `profile.teardown` 是一处刻意的窄放宽**：只在「root fiber 已 UNLOADING/DISPOSED」的关闭现场
+  才允许 `profileContext` 缺失并仍判 `ok`（证据见 §16.4 第 1 条）；非关闭现场缺 `profileContext` 仍然判失败，
+  `tests/assembly/assembly-report-teardown.test.mjs` 两个方向都钉着。
+- **设置页的「点击链」没有 jsdom 证据**：本仓无 jsdom，设置页只用 `renderToStaticMarkup` + 纯函数/数据面断言；
+  壳的真窗口行为（状态文件写入、`fs.watch` 回流、隐藏窗口点通知后回 overview）只有 runbook 手测清单。
+- **硬杀壳会留下过期 `shell-status.json`**：宿主按 `pid` 不匹配拒用（有测试），但 pid 复用在理论上可能误认。
+- **票 01「setup 默认档 + 干净临时 home 一条命令 → `dsh --profile xuanshu --help` 可启动」没有端到端证据（R9 / #41 如实登记，状态 = 未验证）**：
+  来源是第二轮规格轴审查 A2（`docs/reviews/spec002-ae78c53-spec.md:44-49`）。缺口有两半：
+  ① **setup 的默认档没有用例** —— `tests/setup/**` 的 `runSetup()` 一律显式给 `--dsh-home <sandbox>`
+  （`tests/setup/setup-cli.test.mjs:51-53` 的 `baseArgs()`），默认档（dev `<repo>/.dsh-home` / product `~/.xuanshu`）
+  只靠它委托的 `resolveHomeWithSource()` 被 isolation 用例间接覆盖，`resolveSetupPaths` 零测试调用点
+  （`scripts/setup/paths.mjs:136` / `scripts/setup.mjs:98`）；
+  ② **「setup 装完 → 直接 `dsh --help`」这条链没真跑过** —— setup 断言台用
+  `XUANSHU_INSTALL_PROFILE_BIN` / `XUANSHU_VERIFY_ASSEMBLY_BIN` 两个替身把 profile 装配与 DSH 启动整段跳过
+  （`tests/setup/setup-cli.test.mjs:10-11,61-62`），所以 10 条 e2e 面证明的是「编排对」，不是「装完能起」。
+  **为什么本轮不补**：真跑这条链需要 `install-profile` 的 `pnpm install` 装出 `@deepseek-ai/dsh`
+  （干净检出 / 本 worktree 的 `profile/node_modules` 不存在；主检出那份是**机器私有安装**，测试不得依赖），
+  而 R9 复核修复轮的硬约束是「不跑 pnpm install / install-profile、不联网」；默认档又会指向仓库 `.dsh-home`
+  或产品 `~/.xuanshu`，用例真走默认档就必须碰这些真实目录（违反「测试不依赖机器私有文件」）。**不造半条假链。**
+  **已有的替代证据（不等于本条）**：启动器路径的真启动是 `--mode headless` 真 boot + exit 0
+  （`tests/isolation/dual-instance.test.mjs:69-81`，每档一个隔离 home），**不是** `--help`、也不是 setup 装出来的 profile。
+  **要关掉它**：一台允许 `pnpm install` 且能联网的 CI 机（`windows-latest`）跑
+  `node scripts/setup.mjs --json`（默认档 + 干净临时用户）→ 再 spawn
+  `<home>/profiles/xuanshu/node_modules/@deepseek-ai/dsh/lib/bin.js --profile xuanshu --help` 断言 exit 0；
+  或加一个测试专用注入口（预置已完成装配的 profile 树）再补这条链。
+
+#### 16.6 第二轮两轴审查（`ae78c53`）与 t33 修复轮（2026-10-17）
+
+**审查**：固定点 `main` `09951eb`，审查对象 `ae78c53`；两个独立上下文（Standards / Spec，不合并排序），
+报告入库 `docs/reviews/spec002-ae78c53-standards.md` / `-spec.md`。共 15 条发现
+（Standards 9 = 1 硬违规 + 5 判断项 + 3 气味；Spec 6 = 3 缺失 + 3 做错）。
+
+**票据与工作方式**：拆成 9 张票 **#33–#41（R1–R9）**，7 张并行、2 张按依赖（R7←R2、R9←R4）；
+每票独立 worktree + 分支 + TDD（先红后绿留证据），完成后由合并者串行 `--no-ff` 并回
+`feat/spec-002-integration`（9 个合并提交，最终 tip `f7caa9a`）。
+
+| 发现（轴） | 票 | 落地 |
+|---|---|---|
+| C1 事记「已删除」筛 `frozenAt`（Spec·高） | #33 | 客户端按 `excludedAt` 判墓碑、删除日期取墓碑时间（缺失「日期未知」）、冻结不进列表；夹具同时含墓碑/冻结（旧实现必红） |
+| H1 触达账读失败报 `unread:0`（Standards·硬） | #34 | `readTraffic` 三态 `missing/unreadable/ok`；`traffic.status` 读失败省略 `unread`；界面「未读数未知」；EISDIR 注入用例 |
+| J2 6 处用户可见 `~/.dsh` 旧路径（Standards·P1） | #35 | 文案收口到 `home-paths`、由宿主 `data.overview` 注入；源码扫描用例禁 `~/.dsh`（注释白名单） |
+| C2 「home 只剩一份实现」只做一半（Spec·中） | #36 | cang→`resolveDataDir`、horosa→`resolveHostHome` + `pointsAtRealDshHome` 拒绝并回 note；`home-single-source` 覆盖全部服务组；§16.2 与代码一致 |
+| C3 判官失败记 `mode:'tool'`（Spec·低-中） | #37 | 两条失败路径改 `failed` 并带原因；`tool`/`same-source` 不变；用例断言 `mode` |
+| A1 事记摘要缺「会话内容」（Spec·中） | #38 | `sessionTexts`（只取人问句，有界 3 场×3 句×200 字）+ prompt 带上；读不到如实降级；§16.5 登记 |
+| A3 权限缺失只显示英文串（Spec·低） | #40 | 写账前 token→人话 + 加性 `reasonCode` 贯通 status/账/界面；其他 reason 逐字保留 |
+| J1/J3 契约副本与 `OVERVIEW_HASH` 各一份（Standards·P2） | #39 | 两侧 import 直接对拍（改任一侧即红）+ 握手闭环；壳契约副本登记为 §0 显式例外 |
+| J4/J5/A2 runbook 绝对路径、入口格式、setup 默认档证据（Standards·P3 + Spec·低） | #41 | runbook 改 `<repo>` 占位 + `rmdir` 写法；入口断行；setup 默认档**如实登记**为未验证（理由与关闭方式进 §16.5） |
+
+**修复后的第二轮 code-review**（固定点 `ae78c53`、对象 `397b4f0`）：Standards **通过**（3 判断项），
+Spec **不通过**（R3·AC1「按实际 home 渲染」只有组件层绿，装配点不传值）。同一轮 `ce64a13` 一次修掉 5 项：
+F1 生产接线（apply 期读一次 `data.overview` 注入 5 处路径；`overview-contract` 把占位当产品文案的断言一并纠正）、
+F2 host/client 失败文案表对拍 + 删两个零消费者导出、F3 恒真夹具补 `frozenAt`（证红后还原）、
+F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合并为 `f7caa9a`。
+
+**验证（数字抄工具输出，最终 tip `7e63e30`（t33 收尾提交，数字在那一笔刷新））**
+
+```
+# pnpm test:inventory
+[inventory] 用例 1811 条（基线 1811）/ 文件 164 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
+
+# pnpm verify:isolation → 8/8 通过，exit 0
+# pnpm verify:assembly → S2/S3/S4/S5 PASS；S1 FAIL（钉版上游缺陷，Spec 001 起既有已知红）
+# tsc --noEmit exit 0；build-client --check in sync（522070B）
+```
+
+**这一轮的教训**
+
+1. **「按实际 X 渲染」必须在装配点验**：R3 两次出现同一形状——组件层直传 props 的绿与
+   「把占位当产品文案」的断言都不算数；AC 写「渲染」就要在 apply/装配面断言一次。
+2. **测试替身与实现同错会第二次发生**：R1 的旧夹具把冻结当墓碑（与 C1 同形），
+   修复必须先改夹具证红，再改实现。
+3. **复制表与死导出要每轮复核**：R7 的人话表两端各一份 + 两个零消费者导出；
+   现在有逐键/正则/样例对拍，且新增复制必须登记例外。
+4. **`--update` 的键序噪声**：基线文件按 vitest 报告序写会产生纯搬移 diff；已在写出处按 key 排序。
+
+**遗留边界（如实）**：setup 默认档端到端仍无证据（§16.5 登记，关闭方式写在那里）；`cang` 的拒绝是
+静默改判（无装配 notes 通道，§16.2 已登记）；R7 人话表仍两份（有对拍，跨包无共享运行时模块）；
+`apply` 期多一次只读 `data.overview`（含体积统计；失败降级为占位，代价写在代码注释里）。
+
+**同日清理事故与护栏（详见 §16.4 第 7 条）**：收 worktree 时 `git worktree remove` 跟穿实现者的
+`node_modules` junction，清空了主仓依赖；用 pnpm store 离线恢复（169 包）+ 重装 profile 后 `verify:all` 复绿。
+已新增 `scripts/lib/cleanup-junctions.mjs`（删 worktree 前先摘链接）与 3 条判据用例，并做了一次端到端实测；
+最终用例数因此从 1811/164 变为 **1814/165**。
+
+#### 16.7 环境加固轮（E1–E3，2026-10-17 晚）
+
+来源：t33 之后的 `/retro`——把「实施者每次现场发明」的操作规则与「手抄必然漂」的数字搬成机器可用的形态。
+三张票：**E1 #42**、**E3 #43**、**E2 #44**（阻塞于 E1），全部并入 `feat/spec-002-integration`（最终 tip `6d76394`，含两轴复核修复）。
+
+| 票 | 交付 |
+|---|---|
+| E1 | `scripts/worktree-create.mjs`：一条命令建工作树 + 分支 + 根/包级 `node_modules` 链接（**只链不复制**、不装包），`--base/--branch/--repo/--dry-run`，已存在/非法名可读拒绝；7 条临时 git 仓库端到端用例（含「摘链接删树后目标哨兵仍在」）。清理仍只走 `pnpm cleanup:worktrees`（§16.4 第 7 条的护栏） |
+| E3 | `scripts/check-doc-numbers.mjs`：真值 = 清单基线 total/files + 客户端产物 `statSync` 字节；只核对 README 与 §16.3/§16.7 的**当前**验证块（历史旧数字不误报）；漂移 exit 1 逐条点名「文件:行 期望/实际」，不可验证 exit 2；接线 `verify:all` 末步 + CI「doc numbers gate」；17 条判据（一致/单点/多处/真源缺/块缺/历史不误报/注入面） |
+| E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
+
+**验证（数字抄工具输出）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
+`[doc-numbers] OK：1839 条用例 / 167 个文件 / 522070 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+E1/E3 与两轴复核修复新增 25 条用例后基线 `--update` 为 **1839 条 / 167 文件**，文档数字由新门核对。
+
+**这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
+只能靠判断的（装配面证据、夹具域字段、重复表对拍）写成 reviewer 的按需清单，并用指针挂到 `AGENTS.md`，
+不占实施者的上下文。
+

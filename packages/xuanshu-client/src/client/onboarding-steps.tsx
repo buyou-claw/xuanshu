@@ -19,6 +19,8 @@ import type { ReactNode } from 'react';
 
 import type { City, CityQueryState } from './cities.js';
 import type { CastGate, ZoneResult } from './bazi-api.js';
+import type { AiReadiness } from './ai-model.js';
+import { XsAiReadiness } from './ai-views.js';
 import {
   CAST_BLOCK_REASON,
   CAST_MISSING_REASON,
@@ -38,23 +40,32 @@ import {
 } from './onboarding-model.js';
 import type { NudgeGrain, OnboardingDraft } from './onboarding-model.js';
 
-/** 五步的步名（步骤条与页头共用；顺序即线框顺序）。 */
+/** 各步的步名（步骤条与页头共用；顺序即线框顺序）。 */
 export const STEP_TITLES = [
   '出生日期与钟表时间',
   '出生地（必填：缺经纬度不能出盘）',
   '时区（随出生地自动推导，含 DST）',
   '起盘口径',
   '确认你的出生信息',
+  // #29：冷启动从「八字 → 就绪」变成「八字 → 接上 AI → 就绪」。
+  // 放在最后一步而不是新开一块面板：不新增 main key / 侧栏行，注册面零变化。
+  '接上 AI',
 ] as const;
 
-/** 五步的短名（窄屏步骤条折成一行用它）。 */
-export const STEP_SHORT = ['时间', '出生地', '时区', '口径', '确认'] as const;
+/** 各步的短名（窄屏步骤条折成一行用它）。 */
+export const STEP_SHORT = ['时间', '出生地', '时区', '口径', '确认', '接 AI'] as const;
 
-/** 步骤条：五格 + 当前格高亮 + `第 n / 5 步` 文案。 */
+/** 步数（步骤条的「第 n / N 步」与所有越界夹取都读它，只有一处真相）。 */
+export const STEP_COUNT = STEP_TITLES.length;
+
+/** 「接上 AI」是最后一步（出盘成功后落到这里；也可从第 5 步按 [下一步] 进来）。 */
+export const AI_STEP = STEP_COUNT;
+
+/** 步骤条：N 格 + 当前格高亮 + `第 n / N 步` 文案。 */
 export function XsStepBar({ step }: { step: number }) {
   return (
     <nav className="xs-wizard__steps" aria-label="向导步骤" data-xuanshu-stepbar={String(step)}>
-      <p className="xs-wizard__progress">{`第 ${String(step)} / 5 步`}</p>
+      <p className="xs-wizard__progress">{`第 ${String(step)} / ${String(STEP_COUNT)} 步`}</p>
       <ol className="xs-wizard__step-list">
         {STEP_TITLES.map((title, index) => {
           const number = index + 1;
@@ -82,7 +93,7 @@ function StepShell({ step, title, hint, children }: { step: number; title: strin
   return (
     <section className="xs-wizard__step-body" data-xs-step={String(step)}>
       <header className="xs-wizard__step-head">
-        <h2>{`第 ${String(step)} / 5 步 · ${title}`}</h2>
+        <h2>{`第 ${String(step)} / ${String(STEP_COUNT)} 步 · ${title}`}</h2>
       </header>
       <div className="xs-wizard__cols">
         <div className="xs-wizard__form">{children}</div>
@@ -631,6 +642,58 @@ export function XsConfirmStep({
             </p>
           ))}
         </div>
+      )}
+    </StepShell>
+  );
+}
+
+/** 第 6 步：接上 AI（#29；「八字 → 接上 AI → 就绪」的中间那一步）。 */
+export interface XsAiStepProps {
+  readiness?: AiReadiness;
+  checking?: boolean;
+  /** 控制器缺席（SSR / 旧装配）时不给：界面只显示状态，不渲染点了没反应的重试。 */
+  onRetry?: () => void;
+  /** 能真的打开设置时才给（没有就只显示路径文本，绝不渲染死按钮）。 */
+  onOpenSettings?: () => void;
+  /** 已接上才出现（未接上时「完成」是假的）。 */
+  onFinish: () => void;
+  /** 任何状态都能跳过；跳过后入口仍禁用（说明在下面那行）。 */
+  onSkip: () => void;
+}
+
+export function XsAiStep({
+  readiness,
+  checking,
+  onRetry,
+  onOpenSettings,
+  onFinish,
+  onSkip,
+}: XsAiStepProps) {
+  const configured = readiness?.configured === true;
+  return (
+    <StepShell
+      step={AI_STEP}
+      title={STEP_TITLES[5]}
+      hint={
+        <>
+          <p>▸ 问事要一家已注册的 provider + 一个默认模型；玄枢只读检测，不替你写配置与密钥。</p>
+          <p>▸ 去 DSH「设置 → 模型」配置；配完点「重试」即可，不用重启玄枢。</p>
+          <p>▸ 跳过不会让问事入口变可用：未接上时入口仍禁用，并指向「设置 → 模型」。</p>
+        </>
+      }
+    >
+      <XsAiReadiness
+        {...(readiness === undefined ? {} : { readiness })}
+        checking={checking === true}
+        onRetry={onRetry}
+        {...(onOpenSettings === undefined ? {} : { onOpenSettings })}
+        onFinish={onFinish}
+        onSkip={onSkip}
+      />
+      {configured ? null : (
+        <p className="xs-ai__note" data-xuanshu-ai-skip="missing">
+          跳过后问事入口仍禁用，并指向「设置 → 模型」——随时可以在总览或向导里重新检测。
+        </p>
       )}
     </StepShell>
   );

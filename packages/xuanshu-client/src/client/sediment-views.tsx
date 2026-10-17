@@ -30,6 +30,8 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { SedimentApi, SedimentDraft, SedimentPuView, SedimentTarget, SedimentTargetOption } from './sediment-api.js';
 import type { SedimentController, SedimentState } from './sediment-model.js';
 import { confirmGate, countWords, diffParagraphs, isConsultSessionId, previewText, puPaths, wordDeltaText } from './sediment-model.js';
+import { dataDirPath, useHomePaths } from './home-paths.js';
+import type { HomePathsWatch } from './home-paths.js';
 import type { PanelNavTarget } from './panel.js';
 
 /** 入口条 cell id（`conversation.composer.dock` 是 list 槽，新 id 是**加**不是替换）。 */
@@ -48,6 +50,17 @@ export interface SedimentInstallDeps {
   controller: SedimentController;
   /** 面板导航（[查看谱] → S5 谱管理；不新开 main key）。 */
   navigate: (target: PanelNavTarget) => void;
+  /**
+   * 宿主回传的数据目录（`data.overview.dataDir`，产品 `~/.xuanshu/xuanshu` /
+   * 开发 `<repo>/.dsh-home/xuanshu`）：草稿落点 / 写入路径据此渲染。
+   * 缺席时显示中性占位「玄枢数据目录/…」（不写死任何一档，见 `home-paths.ts`）。
+   */
+  dataDir?: string;
+  /**
+   * R3（#35）· 装配期注入的 home/dataDir 注入面（与概览 / 问事 / 命盘同一份）。
+   * 草稿落点与写入路径两处文案读它；显式 `dataDir` 优先，都没有才回中性占位。
+   */
+  homePaths?: HomePathsWatch;
 }
 
 /** 槽位标准座位：会话作用域槽会带 `sessionId`（其余键我们用不到）。 */
@@ -174,8 +187,11 @@ function stateLabel(kind: SedimentState['kind']): string {
  * 首行固定披露「N 字 · 尚未写进任何谱」；预览只读；三个动作全部由人点。
  * 「更新到谱…」**只开弹窗、不写**（省略号就是这个意思）；真正的写入是弹窗里的第二道确认。
  */
-export function XsSedimentDraftCard({ sessionId, api, controller, navigate, initialConfirmOpen, preloadedTargetView }: SedimentDraftCardProps) {
+export function XsSedimentDraftCard({ sessionId, api, controller, navigate, dataDir, homePaths, initialConfirmOpen, preloadedTargetView }: SedimentDraftCardProps) {
   const consult = isConsultSessionId(sessionId);
+  // R3：草稿落点 / 写入路径读注入面（宿主回传的 dataDir）；显式 props 优先。
+  const injectedHomePaths = useHomePaths(homePaths);
+  const localDataDir = dataDir ?? injectedHomePaths.dataDir;
   const state = useSedimentState(controller, sessionId);
   const [open, setOpen] = useState(initialConfirmOpen === true);
   const [targetView, setTargetView] = useState<SedimentPuView | undefined>(preloadedTargetView);
@@ -276,7 +292,7 @@ export function XsSedimentDraftCard({ sessionId, api, controller, navigate, init
             {`目标谱：${target.name}（${target.slug}）`}
           </p>
           <pre className="xs-sediment__preview" data-xuanshu-preview="sediment">{previewText(draft.body)}</pre>
-          <p className="xs-sediment__path">{`草稿落点（只读）：~/.dsh/xuanshu/sediment/${state.answer?.draftId ?? ''}.json`}</p>
+          <p className="xs-sediment__path">{`草稿落点（只读）：${dataDirPath(localDataDir, 'sediment', `${state.answer?.draftId ?? ''}.json`)}`}</p>
           {state.reason === undefined ? null : <p className="xs-sediment__error" role="alert">{state.reason}</p>}
           {actionError === '' ? null : <p className="xs-sediment__error" role="alert">{actionError}</p>}
           <div className="xs-sediment__actions">
@@ -288,6 +304,7 @@ export function XsSedimentDraftCard({ sessionId, api, controller, navigate, init
               draft={draft}
               target={target}
               base={targetView}
+              dataDir={localDataDir}
               stale={stale}
               busy={busy}
               error={actionError === '' ? undefined : actionError}
@@ -302,7 +319,7 @@ export function XsSedimentDraftCard({ sessionId, api, controller, navigate, init
       {state.kind === 'done' && state.pu !== undefined ? (
         <div className="xs-sediment__done">
           <p data-xuanshu-state="committed">{`已更新到谱「${state.pu.name}」。`}</p>
-          <p className="xs-sediment__note">{`写入路径：${puPaths(state.pu.slug).content}`}</p>
+          <p className="xs-sediment__note">{`写入路径：${puPaths(state.pu.slug, localDataDir).content}`}</p>
           <div className="xs-sediment__actions">
             <button type="button" data-xuanshu-nav="pus" onClick={() => { navigate('pus'); }}>查看谱 -&gt;</button>
           </div>
@@ -319,6 +336,8 @@ export interface SedimentConfirmDialogProps {
   target?: SedimentTarget;
   /** 目标谱当前态；`undefined` = 还在读（不编一份现状出来）。 */
   base?: SedimentPuView;
+  /** 宿主回传的数据目录（`data.overview.dataDir`）：写入路径只读展示据此渲染；缺席用中性占位。 */
+  dataDir?: string;
   /** 目标谱在预览之后被改动过：必须先重新预览。 */
   stale: boolean;
   busy: boolean;
@@ -335,9 +354,9 @@ export interface SedimentConfirmDialogProps {
  * ① 目标谱（必选）② 逐段 diff 预览 ③ 字数变化 ④ 只读写入路径。
  * `[确认更新]` 是第二道确认；不可用时**理由渲染在按钮下面**（置灰而不说为什么 = 把闸门藏起来）。
  */
-export function XsSedimentConfirmDialog({ draft, target, base, stale, busy, error, onConfirm, onCancel, onReopen }: SedimentConfirmDialogProps) {
+export function XsSedimentConfirmDialog({ draft, target, base, dataDir, stale, busy, error, onConfirm, onCancel, onReopen }: SedimentConfirmDialogProps) {
   const gate = confirmGate({ hasDraft: draft !== undefined, targetSlug: target?.slug ?? '', stale, busy });
-  const paths = target === undefined ? undefined : puPaths(target.slug);
+  const paths = target === undefined ? undefined : puPaths(target.slug, dataDir);
   const diff = draft === undefined || base === undefined ? undefined : diffParagraphs(base.body, draft.body);
   const words = draft === undefined || base === undefined ? undefined : wordDeltaText(countWords(base.body), countWords(draft.body));
 

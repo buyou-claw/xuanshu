@@ -35,6 +35,32 @@ export interface RikkeHuangli {
   tool?: string;
 }
 
+/**
+ * #24 · 日课 AI 段的三态（`ai-note.mjs` 写进产物、`rikke.status` 原样回传）。
+ *
+ * 三态**必须分得开**：`off` = 人在设置里关掉了（不是故障）；`failed` = 试过但没成（理由可读）；
+ * `ok` = 有一段话。界面文案因此也不同（见 `rikke-model.ts` 的 `rikkeAiView`）。
+ */
+export interface RikkeAiNote {
+  mode: 'ok' | 'off' | 'failed';
+  text?: string;
+  reason?: string;
+}
+
+/** #24 · 最近一次触达的投影（来自 `traffic.jsonl` 的最新一行；`reason` 只在失败时出现）。 */
+export interface RikkeNotify {
+  status: 'delivered' | 'failed' | 'skipped';
+  at?: string;
+  reason?: string;
+  /** #40：已知壳侧失败原因的机器码（`reason` 已是人话；原始 token 留在这里可查）。 */
+  reasonCode?: string;
+}
+
+/** #24 · AI 段开关（`rikke-settings.json`）。 */
+export interface RikkeSettings {
+  aiEnabled: boolean;
+}
+
 /** `rikke.status`：今天的日课在不在 + 内容 + 时间基准 + 计划时刻。 */
 export interface RikkeStatus {
   date: string;
@@ -46,6 +72,12 @@ export interface RikkeStatus {
   zone?: string;
   huangli?: RikkeHuangli;
   schedule?: RikkeSchedule;
+  /** #24：AI 段三态（旧产物没有这个键 → 省略，界面不编一段话）。 */
+  ai?: RikkeAiNote;
+  /** #24：未读条数（**只数 `kind=rikke`** 的 `delivered && !read`；账本拿不到 → 省略键，不写 0 冒充已读）。 */
+  unread?: number;
+  /** #24：最近一次**日课**触达（晚省那一条不混进来；拿不到 → 省略键）。 */
+  notify?: RikkeNotify;
   reason?: string;
 }
 
@@ -68,6 +100,8 @@ export const RIKKE_ENDPOINTS = {
   status: 'rikke.status',
   generate: 'rikke.generate',
   setTime: 'rikke.setTime',
+  settingsGet: 'rikke.settings.get',
+  settingsSet: 'rikke.settings.set',
 } as const;
 
 /** 日课数据面的形状（日课卡与日课面板共用一份）。 */
@@ -78,17 +112,23 @@ export interface RikkeApi {
   generate(payload?: { date?: string }, signal?: AbortSignal): Promise<RikkeGenerateResult>;
   /** **人点才调**：改日课任务的时刻（`HH:mm`）。 */
   setTime(payload: { time: string }, signal?: AbortSignal): Promise<RikkeSetTimeResult>;
+  /** #24：读 AI 段开关（缺失 = 默认开，由宿主决定）。 */
+  getSettings(signal?: AbortSignal): Promise<RikkeSettings>;
+  /** #24：**人点才调**：改 AI 段开关（只影响下一次生成；今天已写好的产物不就地改写）。 */
+  setSettings(payload: { aiEnabled?: boolean }, signal?: AbortSignal): Promise<RikkeSettings>;
 }
 
 /**
  * 用连接上下文造一个日课数据面。
  * @param ctx - 需要 `connection.rpc`（`dsh-client-connection` 提供）。
- * @returns 三个方法都指向 `rikke.*` 的客户端面。
+ * @returns 五个方法都指向 `rikke.*` 的客户端面。
  */
 export function createRikkeApi(ctx: RpcContext): RikkeApi {
   return {
     status: (payload, signal) => rpcCall<RikkeStatus>(ctx, RIKKE_ENDPOINTS.status, payload ?? {}, signal),
     generate: (payload, signal) => rpcCall<RikkeGenerateResult>(ctx, RIKKE_ENDPOINTS.generate, payload ?? {}, signal),
     setTime: (payload, signal) => rpcCall<RikkeSetTimeResult>(ctx, RIKKE_ENDPOINTS.setTime, payload, signal),
+    getSettings: (signal) => rpcCall<RikkeSettings>(ctx, RIKKE_ENDPOINTS.settingsGet, {}, signal),
+    setSettings: (payload, signal) => rpcCall<RikkeSettings>(ctx, RIKKE_ENDPOINTS.settingsSet, payload, signal),
   };
 }

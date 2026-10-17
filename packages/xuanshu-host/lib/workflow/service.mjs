@@ -22,12 +22,11 @@
  */
 
 import { mkdirSync, rmSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
 
-import { resolveDataDir } from '../bazi/service.mjs'
+import { resolveDataDir } from '../home.mjs'
 import { consultAgentCapability, createConsultAgent } from '../consult/agent.mjs'
 import { loadCreateUserMessage } from '../consult/message.mjs'
+import { resolveSearchHome } from '../home.mjs'
 import { exportSkillFile, skillDir, verifySkillRegistered } from './skill-export.mjs'
 import {
   WORKFLOW_SCHEMA, isWorkflowSessionId, listWorkflows, nameFromSeed, newWorkflowSessionId,
@@ -58,20 +57,24 @@ function softGet(ctx, name) {
 
 /**
  * DSH home（skill 扫描根 `<dshHome>/skills` 的父目录）。
- * 顺序：`config.dshHome` → `profileContext.home` → `$DSH_HOME` → `~/.dsh`；
- * 显式给了 `config.dataDir` 时用它的父目录（`<dshHome>/xuanshu` 是票 01 起的同一套布局）。
+ *
+ * **薄包装**：顺序（`config.dshHome` → `profileContext.home` → `dataDir` 父目录 → `$DSH_HOME` → 兜底）
+ * 与「真实 `~/.dsh` 一律拒绝」的门都在 `home.mjs::resolveSearchHome()` 里 —— 复核 S1 之后本模块
+ * 不再自己写一份顺序（从前它和 `shiji/scan.mjs` 各有一份，且后者没有那道门）。
+ *
+ * @param {object} ctx
+ * @param {{dshHome?: string}} [config]
+ * @param {string} [dataDir]
+ * @param {{env?: Record<string, string|undefined>, homedirPath?: string}} [options] 纯函数接缝
  */
-export function resolveDshHome(ctx, config, dataDir) {
-  if (typeof config?.dshHome === 'string' && config.dshHome !== '') return config.dshHome
-  const profile = softGet(ctx, 'profileContext')
-  if (typeof profile?.home === 'string' && profile.home !== '') return profile.home
-  // dataDir 的缺省就是 `<dshHome>/xuanshu`（票 01 的 `resolveDataDir`）：目录名对上就反过来取父目录。
-  // **排在 `$DSH_HOME` 之前**是有意的：skill 的落地根必须与数据目录同源 —— 显式给了 dataDir
-  // （断言台、隔离实例）却让一个不相干的 `$DSH_HOME` 把 skill 写到别处去，是最难查的一类错位。
-  // 目录名对不上时不瞎猜（用户可能把 dataDir 指到别处），继续往后看环境变量。
-  if (typeof dataDir === 'string' && dataDir !== '' && basename(dataDir) === 'xuanshu') return dirname(dataDir)
-  if (typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME !== '') return process.env.DSH_HOME
-  return join(homedir(), '.dsh')
+export function resolveDshHome(ctx, config, dataDir, options = {}) {
+  return resolveSearchHome({
+    ctx,
+    dataDir,
+    explicit: typeof config?.dshHome === 'string' ? config.dshHome : undefined,
+    env: options.env ?? process.env,
+    ...(options.homedirPath === undefined ? {} : { homedirPath: options.homedirPath }),
+  }).home
 }
 
 /**

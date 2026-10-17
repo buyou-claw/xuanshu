@@ -18,6 +18,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createRikkeMethods } from '../../packages/xuanshu-host/lib/rikke/service.mjs'
+import { appendTraffic, buildTrafficEntry } from '../../packages/xuanshu-host/lib/notify/traffic.mjs'
 import { fakeAgents, fakeHorosa, fakeSchedule, makeCtx, makeSandbox } from './lib/sandbox.mjs'
 import { BIRTH, huangliFixture, writeBaseSnapshot } from './lib/sandbox.mjs'
 
@@ -96,6 +97,29 @@ describe('票13 · rikke.status（只读取数 + 加性字段缺失即省略）'
     expect(status.reason).toMatch(/JSON/u)
     expect(Object.prototype.hasOwnProperty.call(status, 'content')).toBe(false)
   })
+
+  it('P3（复核 #24）· 触达账只数 kind=rikke：晚省的未读与最近一条都不混进日课状态', async () => {
+    const { sandbox, methods } = scene()
+    // 早一条是日课的 delivered 未读，晚一条是晚省的 delivered 未读 —— 后者都不该出现在 rikke.status。
+    appendTraffic(sandbox.dataDir, buildTrafficEntry({
+      kind: 'rikke',
+      date: '2026-10-15',
+      at: '2026-10-15T00:00:00.000Z',
+      notify: { status: 'delivered', reason: null },
+    }))
+    appendTraffic(sandbox.dataDir, buildTrafficEntry({
+      kind: 'wansheng',
+      date: '2026-10-15',
+      at: '2026-10-15T01:00:00.000Z',
+      notify: { status: 'failed', reason: '权限被拒' },
+    }))
+
+    const status = await methods['rikke.status']({})
+    // 全账口径下这里是 1（rikke）而不是 2：晚省那一条不是「日课通知」。
+    expect(status.unread).toBe(1)
+    // 最近一条日课触达（不是「最近一条任意触达」）：晚省那条 failed 的理由不许冒到日课面板上。
+    expect(status.notify).toEqual({ status: 'delivered', at: '2026-10-15T00:00:00.000Z' })
+  })
 })
 
 describe('票13 · rikke.generate（人点 [立即生成]）', () => {
@@ -111,6 +135,9 @@ describe('票13 · rikke.generate（人点 [立即生成]）', () => {
         ji: '伐木、行丧、破土、嫁娶、安葬、开渠',
         liuri: '壬戌日 · 土',
       },
+      // #24：人点生成也带 AI 段；这个现场没有 `ctx.llm` → 三态里的 failed（可读理由），
+      // 骨架（上面三键）照旧 —— 「AI 不可得也照样出日课」。
+      ai: { mode: 'failed', reason: 'ctx.llm 不可得（宿主没装 LLM 服务）' },
     })
 
     expect(horosa.calls).toHaveLength(1)

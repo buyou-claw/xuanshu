@@ -10,7 +10,7 @@
 ## 1. 先做一次体检
 
 ```powershell
-cd E:\ai_project\XuanShu
+cd <repo>
 node scripts/isolation/startup.mjs                 # 人读摘要；= --mode doctor
 node scripts/isolation/startup.mjs --json          # 机器读（stdout 只有一份 JSON）
 ```
@@ -59,7 +59,7 @@ node scripts/isolation/startup.mjs --mode env -- --trusted-host xuanshu.test
 
 | 旋钮 | 默认 | 命令行 | 环境变量（按优先级） |
 |---|---|---|---|
-| 隔离 home | `<repo>/.dsh-home` | `--home <dir>` | `XUANSHU_DSH_HOME` → `DSH_HOME` → 默认 |
+| 隔离 home | 开发档 `<repo>/.dsh-home`（产品档是玄枢自己的 `~/.xuanshu`，ADR-0014） | `--home <dir>` | `XUANSHU_DSH_HOME` → `DSH_HOME`（仅当不指向真实 home）→ 默认 |
 | xuanshu web 端口 | `19388` | `--web-port <n>` | `XUANSHU_WEB_PORT` → 默认 |
 | horosa 端口 | `8765` | `--horosa-port <n>` | `XUANSHU_HOROSA_PORT` → `HOROSA_SKILL_PORT` → 默认 |
 | profile 名 | `xuanshu` | `--profile <name>` | `XUANSHU_PROFILE` → 默认 |
@@ -68,6 +68,7 @@ node scripts/isolation/startup.mjs --mode env -- --trusted-host xuanshu.test
 优先级一律：**显式命令行 > `XUANSHU_*` > 上游自身变量（如 `HOROSA_SKILL_PORT`）> 定值**。
 
 `DSH_HOME` 有个坑要知道：**它指向真实 `~/.dsh` 时会被忽略**（在 DSH 会话里跑本脚本时，环境天然带着 desktop 的 `DSH_HOME`），忽略这件事会记进报告的 `notes`；要覆盖就用 `--home` 或 `XUANSHU_DSH_HOME`。
+玄枢自己的 home（产品 `~/.xuanshu` / 开发 `<repo>/.dsh-home`）、怎么换、怎么迁移，见 [home.md](home.md)。
 
 **horosa 端口要换就得两边一起换**（`HOROSA_SKILL_PORT` 给 `serve`，`--horosa-port`/`XUANSHU_HOROSA_PORT` 给守卫）：只改一边，守卫会看到"端口空着"而放行、实例却连到另一个端口。
 
@@ -131,7 +132,7 @@ CI / 交付前用 `XUANSHU_REQUIRE_ASSEMBLY=1` 把"profile 没装"从 skip 变�
 隔离是**加法**，回滚就是删掉那个 home：
 
 ```powershell
-Remove-Item -Recurse -Force E:\ai_project\XuanShu\.dsh-home    # 只删隔离 home，desktop 与 ~/.dsh 不受影响
+cmd /c rmdir /s /q "<repo>\.dsh-home"    # 只删隔离 home，desktop 与 ~/.dsh 不受影响（用 rmdir 不跟随联接，见 AGENTS.md）
 ```
 
 三件东西**不在**回滚范围内（它们本来就不归本票管）：desktop 的 `~/.dsh`、horosa 自己的 runtime 与记忆（`HOROSA_RUNTIME_ROOT` / `HOROSA_SKILL_DATA_DIR`）、以及仓库里 `profile/node_modules`（`pnpm install` 的产物，`.gitignore` 已忽略）。
@@ -142,7 +143,7 @@ Remove-Item -Recurse -Force E:\ai_project\XuanShu\.dsh-home    # 只删隔离 ho
 
 | 你会看到的文案（`[门] FAIL 详情`） | 含义 | 处置 |
 |---|---|---|
-| `拒绝在用户真实 DSH home 上运行：C:\Users\…\.dsh` | `--home` 或 `XUANSHU_DSH_HOME` 指到了真实 home（**用法错误，退出码 1**） | 用默认 `.dsh-home`，或显式给一个隔离目录 |
+| `拒绝在用户真实 DSH home 上运行：<你的用户目录>\.dsh` | `--home` 或 `XUANSHU_DSH_HOME` 指到了真实 home（**用法错误，退出码 1**） | 用默认 `.dsh-home`，或显式给一个隔离目录 |
 | `隔离 home 不存在：<dir>` | home 目录还没建 | `node scripts/install-profile.mjs --home "<dir>"`，或给启动器加 `--install` |
 | `127.0.0.1:19388 已被占用：xuanshu 需要独立端口才能与 desktop 同跑` | 已经有一个实例在跑（或别的进程占了） | 先关掉那个实例；确认是别人占的就换 `--web-port` |
 | `web 端口 19387 就是 desktop 的端口：xuanshu 必须用独立端口（默认 19388）` | 你把 `--web-port` 指到了 desktop 的端口 | 换端口 |
@@ -165,7 +166,7 @@ Remove-Item -Recurse -Force E:\ai_project\XuanShu\.dsh-home    # 只删隔离 ho
 xuanshu 的 profile 现在自带一支版本相符的 CLI（票 04 补的，理由见 ADR-0006）：
 
 ```powershell
-E:\ai_project\XuanShu\profile\node_modules\.bin\dsh.CMD --profile xuanshu --help
+<repo>\profile\node_modules\.bin\dsh.CMD --profile xuanshu --help
 # 等价于（且与本仓库其它脚本同源）：
 node scripts/isolation/startup.mjs --mode env --json   # 看 plan.command
 ```

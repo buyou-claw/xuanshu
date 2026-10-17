@@ -21,7 +21,7 @@
  *   --recheck                 强制重算缓存大文件的 SHA256（默认只比 sidecar）   缺省关
  *   --cache <dir>             工件缓存目录                                       缺省 $XUANSHU_CACHE ＞ win32 %LOCALAPPDATA%\xuanshu\cache ＞ ~/.cache/xuanshu
  *   --runtime-root <dir>      HOROSA_RUNTIME_ROOT（Windows 必须纯 ASCII）        缺省 win32 C:\horosa；posix ~/.horosa/runtime
- *   --dsh-home <dir>          DSH home（profile 装配目标 + 数据目录根）          缺省 $XUANSHU_DSH_HOME ＞ $DSH_HOME ＞ <repo>/.dsh-home
+ *   --dsh-home <dir>          DSH home（profile 装配目标 + 数据目录根）          缺省 $XUANSHU_DSH_HOME ＞ $DSH_HOME ＞ dev <repo>/.dsh-home / product ~/.xuanshu（ADR-0014）
  *   --install                 显式允许写**真实** ~/.dsh（不给则拒绝，exit 3）     缺省关
  *   --profile <name>          profile 名                                         缺省 xuanshu
  *   --profile-mode link|copy  装配形态（透传 install-profile.mjs）               缺省 link

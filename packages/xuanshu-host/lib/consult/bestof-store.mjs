@@ -89,6 +89,43 @@ export function migrateLegacyDecisions(record) {
 }
 
 /**
+ * 账本 → 每轮的最后结论（组内**按出现顺序**保留投递过的采用稿消息 id）。
+ *
+ * 这是「按轮语义」的**唯一实现**：`currentAdoptedMessageIds()`（候选历史过滤）与
+ * `adoptedDraftRounds()`（回看按轮分组，票 31）都从它推导 —— 两处各写一遍分组必然漂移，
+ * 而漂移的后果是「历史里算当前、回看里不算」这种互相打脸的界面。
+ *
+ * 分组键：`runId`；没有 `runId` 的条目（外来 / 手工记录）**各自成轮**（SP-3），
+ * 合成键 `\u0000keyless-<n>` 不参与展示（返回的 `runId` 去掉那个哨兵前缀）。
+ *
+ * @param {Array<object>|undefined} ledger `record.draftLedger`
+ * @returns {Array<{runId: string, last: {kind: string, messageId?: string}, adoptedIds: string[]}>|null}
+ *   `null` = 账本长度为零 / 不是数组（调用方退回老字段的当次决策）
+ */
+function roundDecisions(ledger) {
+  if (!Array.isArray(ledger) || ledger.length === 0) return null
+  const order = []
+  const byKey = new Map()
+  let keyless = 0
+  for (const entry of ledger) {
+    if (entry === null || typeof entry !== 'object') continue
+    if (entry.kind !== 'adopted' && entry.kind !== 'rejected') continue
+    const key = typeof entry.runId === 'string' && entry.runId !== '' ? entry.runId : `\u0000keyless-${keyless++}`
+    let group = byKey.get(key)
+    if (group === undefined) {
+      group = { runId: key.startsWith('\u0000') ? key.slice(1) : key, adoptedIds: [], last: entry }
+      byKey.set(key, group)
+      order.push(group)
+    }
+    group.last = entry
+    if (entry.kind === 'adopted' && typeof entry.messageId === 'string' && entry.messageId !== '') {
+      group.adoptedIds.push(entry.messageId)
+    }
+  }
+  return order
+}
+
+/**
  * 这一层会话**当前**还算数的采用稿消息 id 集合（复核 48e0e0a 的 N4；跨轮语义按 32216d9 的 R2/R3 改写）。
  *
  * 为什么不能只看消息的 `source.kind`：会话日志是**追加式**的，而采用可以**改选**、整轮也可以**否决** ——
@@ -112,24 +149,15 @@ export function migrateLegacyDecisions(record) {
  */
 export function currentAdoptedMessageIds(record) {
   if (record === null || record === undefined) return null
-  const ledger = Array.isArray(record.draftLedger) ? record.draftLedger : []
-  if (ledger.length > 0) {
-    /** @type {Map<string, {kind: string, messageId?: string}>} 每轮**最后**一个决定。 */
-    const lastDecisionOfRun = new Map()
-    let keyless = 0
-    for (const entry of ledger) {
-      if (entry === null || typeof entry !== 'object') continue
-      if (entry.kind !== 'adopted' && entry.kind !== 'rejected') continue
-      // 没有 runId 的条目（外来 / 手工记录；本仓写账一律带 `record.runId`）**各自成轮**：
-      // 一律并进同一组会让后一条把前一条顶掉，等于静默丢一份采用稿 —— 正是 R2 要修的方向（SP-3）。
-      const key = typeof entry.runId === 'string' && entry.runId !== '' ? entry.runId : `\u0000keyless-${keyless++}`
-      lastDecisionOfRun.set(key, entry)
-    }
+  const rounds = roundDecisions(record.draftLedger)
+  if (rounds !== null) {
     const kept = new Set()
-    for (const entry of lastDecisionOfRun.values()) {
-      if (entry.kind !== 'adopted') continue
-      if (typeof entry.messageId !== 'string' || entry.messageId === '') continue
-      kept.add(entry.messageId)
+    for (const round of rounds) {
+      // 「曾经被否决」不等于「这轮不作数」：只认这一轮**最后**那个决定（R3）。
+      if (round.last.kind !== 'adopted') continue
+      const messageId = round.last.messageId
+      if (typeof messageId !== 'string' || messageId === '') continue
+      kept.add(messageId)
     }
     return kept
   }
@@ -143,6 +171,38 @@ export function currentAdoptedMessageIds(record) {
   const deliveries = Array.isArray(record.deliveries) ? record.deliveries : []
   const last = [...deliveries].reverse().find((entry) => entry?.candidateId === record.adoptedId)
   return typeof last?.messageId === 'string' && last.messageId !== '' ? new Set([last.messageId]) : null
+}
+
+/**
+ * 回看要的**轮次表**（票 31；Spec 002 §补两处已知缺陷）。
+ *
+ * 客户端要「按轮分组 + 标出每轮当前采用稿」，而 `currentAdoptedMessageIds()` 只给集合、
+ * 说不出「这份属于第几轮」。这里把同一份账本摊成轮次表，**当前性也由同一个函数判**
+ * （`current instanceof Set` 才谈得上「当前 / 非当前」；判不出来时不声称任何一份被取代）。
+ *
+ * 老记录（没有账本）走 `migrateLegacyDecisions()` 合成「旧轮」—— 与覆盖写时继承的**同一条规则**，
+ * 不另算一套（否则升级后第一次回看会与候选历史各说各话）。
+ *
+ * @param {object|null|undefined} record `store.read()` 的原样产物
+ * @returns {Array<{runId: string, round: number, messageIds: string[], currentId?: string, rejected: boolean}>}
+ *   按轮次（账本顺序，1 起）；`round` 是给人看的序号，`runId` 是稳定标识（没有时是 `keyless-<n>`）。
+ */
+export function adoptedDraftRounds(record) {
+  if (record === null || record === undefined || typeof record !== 'object') return []
+  const current = currentAdoptedMessageIds(record)
+  const rounds = roundDecisions(record.draftLedger) ?? roundDecisions(migrateLegacyDecisions(record))
+  if (rounds === null) return []
+  return rounds.map((round, index) => {
+    const messageId = round.last.kind === 'adopted' ? round.last.messageId : undefined
+    const currentId = current instanceof Set && typeof messageId === 'string' && current.has(messageId) ? messageId : undefined
+    return {
+      runId: round.runId,
+      round: index + 1,
+      messageIds: round.adoptedIds,
+      ...(currentId === undefined ? {} : { currentId }),
+      rejected: round.last.kind === 'rejected',
+    }
+  })
 }
 
 export function createBestofStore(dataDir) {

@@ -13,18 +13,22 @@
  */
 import { useState } from 'react';
 
-import type { ConsultMessage, ConsultSummary, MountRef, OptionalSource, RequiredSource } from './consult-api.js';
+import type { ConsultDrafts, ConsultMessage, ConsultSummary, MountRef, OptionalSource, RequiredSource } from './consult-api.js';
 import {
   contextSummary,
+  draftBadgeLabel,
+  draftRoundLabel,
   filterHistory,
   formatHistoryMeta,
   groupHistory,
   groupOptional,
   historyEmptyCopy,
+  reviewTimeline,
   roleLabel,
   shortConsultId,
 } from './consult-model.js';
-import type { HistoryRange } from './consult-model.js';
+import type { DraftRoundState, HistoryRange } from './consult-model.js';
+import { homePath, withTrailingSeparator } from './home-paths.js';
 
 /**
  * 锁定行说明卡里的因果（点行才展开；S6 §3 表 `:102` 逐字口径）。
@@ -308,6 +312,11 @@ export interface XsConsultHistoryListProps {
   query: string;
   range: HistoryRange;
   now: Date;
+  /**
+   * 宿主回传的 home（`data.overview.home`）：会话落在 `<home>/sessions/`。
+   * 缺席时错误行显示中性占位「玄枢 home/sessions/」（不猜、不写死两档中的任何一档）。
+   */
+  home?: string;
   onQuery: (value: string) => void;
   onRange: (range: HistoryRange) => void;
   onOpen: (sessionId: string) => void;
@@ -324,6 +333,7 @@ export function XsConsultHistoryList({
   query,
   range,
   now,
+  home,
   onQuery,
   onRange,
   onOpen,
@@ -382,7 +392,7 @@ export function XsConsultHistoryList({
       {error === undefined ? null : (
         <div className="xs-consult__error" data-xuanshu-error="list" role="alert">
           <p>{error}</p>
-          <p className="xs-consult__note">数据在本地：~/.dsh/sessions/（只读展示）</p>
+          <p className="xs-consult__note">{`数据在本地：${withTrailingSeparator(homePath(home, 'sessions'))}（只读展示）`}</p>
           <div className="xs-consult__actions">
             <button type="button" data-xuanshu-action="retry-list" onClick={onRetry}>重试</button>
           </div>
@@ -453,10 +463,15 @@ export function XsConsultHistoryList({
   );
 }
 
-/** ⑥ 历史阅读器（S7 §2.2 / §6 只读态）。 */
+/** ⑥ 历史阅读器（S7 §2.2 / §6 只读态；票 31 的按轮分组）。 */
 export interface XsConsultHistoryReaderProps {
   session: ConsultSummary;
   messages: readonly ConsultMessage[];
+  /**
+   * 合参轮次表（`consult.read` 的加性字段；老宿主 / 没有合参记录时缺席）。
+   * 缺席时阅读器与票 10 逐字相同 —— 不显示任何轮次分组。
+   */
+  drafts?: ConsultDrafts;
   loading?: boolean;
   error?: string;
   onBack: () => void;
@@ -464,15 +479,43 @@ export interface XsConsultHistoryReaderProps {
   onRetry: () => void;
 }
 
+/** 一条消息行（普通消息与采用稿共用；采用稿多一枚处境徽标）。 */
+function XsConsultMessageRow({ message, draft }: { message: ConsultMessage; draft?: DraftRoundState }) {
+  return (
+    <article
+      className={`xs-consult__message xs-consult__message--${message.role}`}
+      data-xuanshu-message={message.role}
+      {...(draft === undefined ? {} : { 'data-xuanshu-draft': draft })}
+    >
+      <span className="xs-consult__role">{roleLabel(message.role)}</span>
+      {draft === undefined ? null : (
+        <span className="xs-consult__badge" data-xuanshu-draft-badge={draft}>
+          {draftBadgeLabel(draft)}
+        </span>
+      )}
+      {message.source === undefined ? null : (
+        <small className="xs-consult__note" data-xuanshu-source={message.source}>
+          {`注入 · ${message.source}`}
+        </small>
+      )}
+      <p className="xs-consult__text">{message.text}</p>
+    </article>
+  );
+}
+
 export function XsConsultHistoryReader({
   session,
   messages,
+  drafts,
   loading = false,
   error,
   onBack,
   onContinue,
   onRetry,
 }: XsConsultHistoryReaderProps) {
+  // 票 31：采用稿按轮收组（普通消息照旧平铺）。没有 `drafts` 时 `reviewTimeline` 原样返回消息 ——
+  // 于是老宿主下的回看与票 10 逐字相同。
+  const items = reviewTimeline(messages, drafts);
   return (
     <section className="xs-consult__reader" data-xuanshu-view="reader">
       <div className="xs-consult__toolbar">
@@ -499,21 +542,28 @@ export function XsConsultHistoryReader({
       )}
 
       <div className="xs-consult__messages">
-        {messages.map((message, index) => (
-          <article
-            key={`${String(index)}-${message.role}`}
-            className={`xs-consult__message xs-consult__message--${message.role}`}
-            data-xuanshu-message={message.role}
+        {items.map((item) => (item.kind === 'message' ? (
+          <XsConsultMessageRow key={item.key} message={item.message} />
+        ) : (
+          <section
+            className="xs-consult__round"
+            key={item.key}
+            data-xuanshu-round={String(item.round)}
+            data-xuanshu-round-state={item.state}
           >
-            <span className="xs-consult__role">{roleLabel(message.role)}</span>
-            {message.source === undefined ? null : (
-              <small className="xs-consult__note" data-xuanshu-source={message.source}>
-                {`注入 · ${message.source}`}
-              </small>
-            )}
-            <p className="xs-consult__text">{message.text}</p>
-          </article>
-        ))}
+            {/* 票 31：每轮一行组头，写清这一轮的处境（当前 / 已否决 / 已被取代）。 */}
+            <h4 className="xs-consult__round-head" data-xuanshu-round-head={String(item.round)}>
+              {draftRoundLabel(item)}
+            </h4>
+            {item.items.map((row, index) => (
+              <XsConsultMessageRow
+                key={`${item.key}-${String(index)}`}
+                message={row.message}
+                draft={row.state}
+              />
+            ))}
+          </section>
+        )))}
       </div>
       <p className="xs-consult__note" data-xuanshu-note="reader-readonly">
         回看是只读的：不改会话记录、不进会话、不追加任何事件。

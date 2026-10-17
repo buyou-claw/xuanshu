@@ -22,7 +22,11 @@ import { describe, expect, it } from 'vitest'
 
 import { RIKKE_ENDPOINTS, createRikkeApi } from '../../packages/xuanshu-client/src/client/rikke-api.ts'
 import { createRikkeUiController } from '../../packages/xuanshu-client/src/client/rikke-controller.ts'
+import { RIKKE_AI_OFF_TEXT, rikkeAiView } from '../../packages/xuanshu-client/src/client/rikke-model.ts'
 import { RikkePanel, installRikke } from '../../packages/xuanshu-client/src/client/rikke.tsx'
+import { XsRikkeCard } from '../../packages/xuanshu-client/src/client/cards.tsx'
+import { NOTIFY_ENDPOINTS, createNotifyApi } from '../../packages/xuanshu-client/src/client/notify-api.ts'
+import { XsTouchSettingsRow, installTouchSettings } from '../../packages/xuanshu-client/src/client/notify.tsx'
 import { RIKKE_ID, RIKKE_LABEL, RIKKE_ORDER } from '../../packages/xuanshu-client/src/client/panel.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -72,11 +76,13 @@ function spyApi(over = {}) {
 /* ───────────────────────── 1. 三个 RPC 方法名（契约 §2） ───────────────────────── */
 
 describe('票 13 · 日课数据面的方法名逐字对齐契约 §2', () => {
-  it('三个方法名是契约表格那一列的原文', () => {
+  it('三个方法名是契约表格那一列的原文（#24 再加两个纯加性的设置方法）', () => {
     expect(RIKKE_ENDPOINTS).toEqual({
       status: 'rikke.status',
       generate: 'rikke.generate',
       setTime: 'rikke.setTime',
+      settingsGet: 'rikke.settings.get',
+      settingsSet: 'rikke.settings.set',
     })
   })
 
@@ -349,5 +355,260 @@ describe('票 13 · installRikke（加性注册 / 无 document 安全）', () =>
     expect(RIKKE_LABEL).toBe('日课')
     // 20/30/40/50/60/70 已被 S15 六行表预约，80/90 被票 08 占用 → 取 100。
     expect(RIKKE_ORDER).toBe(100)
+  })
+})
+
+/* ───────────────────────── 5. #24 · 日课两段式（AI 段三态） ───────────────────────── */
+
+/** 稳定 watch（`useSyncExternalStore` 要求快照 `Object.is` 稳定）。 */
+function stableWatch(keys = ['conversation', 'overview', 'schedules', 'rikke']) {
+  const snapshot = [...keys].sort()
+  return { subscribe: () => () => {}, getSnapshot: () => snapshot }
+}
+
+const CARD_BASE = { navigate: () => {}, mainPanels: stableWatch() }
+
+describe('#24 · AI 段三态文案（纯映射，可无 DOM 测）', () => {
+  it('ok → 原文；off → 「已关闭」；failed → 「失败：<reason>」；缺失 → 不编一段话', () => {
+    expect(rikkeAiView({ mode: 'ok', text: '今天先收口。' })).toEqual({ kind: 'ok', text: '今天先收口。' })
+    expect(rikkeAiView({ mode: 'off' })).toEqual({ kind: 'off', text: RIKKE_AI_OFF_TEXT })
+    expect(RIKKE_AI_OFF_TEXT).toBe('今天没有 AI 建议（已关闭）')
+    expect(rikkeAiView({ mode: 'failed', reason: 'provider down' })).toEqual({
+      kind: 'failed',
+      text: 'AI 建议生成失败：provider down',
+    })
+    // 旧产物没有 ai 键：整段不渲染（不写「AI 建议：无」这种像是生成过的句子）。
+    expect(rikkeAiView(undefined)).toEqual({ kind: 'none' })
+  })
+})
+
+describe('#24 · 日课卡：骨架三行 + AI 段三态 + 未读 / 失败行', () => {
+  const card = (over = {}) => render(h(XsRikkeCard, {
+    ...CARD_BASE,
+    state: 'ready',
+    today: '2026-10-15',
+    content: CONTENT,
+    ...over,
+  }))
+
+  it('AI ok：骨架三行照旧 + AI 原文（两段都在）', () => {
+    const html = card({ ai: { mode: 'ok', text: '今天先收口，再安排走动。' } })
+    expect(html).toContain('祭祀、出行')
+    expect(html).toContain('动土')
+    expect(html).toContain('甲子日 · 水')
+    expect(html).toContain('data-xuanshu-ai="ok"')
+    expect(html).toContain('今天先收口，再安排走动。')
+  })
+
+  it('AI off：写明「今天没有 AI 建议（已关闭）」，骨架照旧', () => {
+    const html = card({ ai: { mode: 'off' } })
+    expect(html).toContain('data-xuanshu-ai="off"')
+    expect(html).toContain(RIKKE_AI_OFF_TEXT)
+    expect(html).toContain('祭祀、出行')
+  })
+
+  it('AI failed：写明失败原因，不编内容；骨架照旧', () => {
+    const html = card({ ai: { mode: 'failed', reason: 'ctx.llm 不可得' } })
+    expect(html).toContain('data-xuanshu-ai="failed"')
+    expect(html).toContain('AI 建议生成失败：ctx.llm 不可得')
+    expect(html).toContain('祭祀、出行')
+  })
+
+  it('未读 > 0 → 卡头未读徽标；最近一次推送失败 → 卡内 role=alert 行（权限缺失说人话）', () => {
+    const html = card({ unread: 2, notify: { status: 'failed', reason: 'permission-denied', at: '2026-10-15T03:00:00.000Z' } })
+    expect(html).toContain('data-xuanshu-badge="unread"')
+    expect(html).toContain('未读 2')
+    expect(html).toContain('data-xuanshu-notify="failed"')
+    expect(html).toMatch(/role="alert"/u)
+    // #40：不再是壳侧英文原串 —— 说清权限缺失、指路去哪开；机器码仍可查。
+    expect(html).toContain('权限缺失')
+    expect(html).toContain('系统设置 → 通知 → 玄枢')
+    expect(html).not.toContain('通知没发出去：permission-denied')
+    expect(html).toContain('data-xuanshu-reason-code="permission-denied"')
+  })
+
+  it('未读 0 / 最近一次推成功 → 不出徽标、不出失败行（不把「推成了」显示成「没推」）', () => {
+    const html = card({ unread: 0, notify: { status: 'delivered', at: '2026-10-15T03:00:00.000Z' } })
+    expect(html).not.toContain('data-xuanshu-badge="unread"')
+    expect(html).not.toContain('data-xuanshu-notify="failed"')
+  })
+})
+
+describe('#24 · 日课面板：两段式 + 未读 / 失败原因', () => {
+  const panel = (status) => render(h(RikkePanel, { api: spyApi().api, navigate: () => {}, preloaded: status }))
+
+  it('ready：骨架三键 + AI 段三态（这里的现场是 ok）', () => {
+    const html = panel({ ...STATUS_READY, ai: { mode: 'ok', text: '今天先收口。' } })
+    expect(html).toContain('data-xuanshu-ai="ok"')
+    expect(html).toContain('今天先收口。')
+    expect(html).toContain('祭祀、出行')
+  })
+
+  it('ready：已关闭 / 失败两支各有逐字文案', () => {
+    expect(panel({ ...STATUS_READY, ai: { mode: 'off' } })).toContain(RIKKE_AI_OFF_TEXT)
+    const failed = panel({ ...STATUS_READY, ai: { mode: 'failed', reason: 'provider down' } })
+    expect(failed).toContain('data-xuanshu-ai="failed"')
+    expect(failed).toContain('AI 建议生成失败：provider down')
+  })
+
+  it('未读 / 最近一次通知失败：面板给未读行 + 原因（权限缺失说人话，不静默）', () => {
+    const html = panel({
+      ...STATUS_READY,
+      unread: 1,
+      notify: { status: 'failed', reason: 'permission-denied', at: '2026-10-15T03:00:00.000Z' },
+    })
+    expect(html).toContain('data-xuanshu-note="unread"')
+    expect(html).toContain('未读 1')
+    expect(html).toContain('data-xuanshu-notify="failed"')
+    expect(html).toContain('权限缺失')
+    expect(html).toContain('系统设置 → 通知 → 玄枢')
+    expect(html).toContain('data-xuanshu-reason-code="permission-denied"')
+  })
+})
+
+/* ───────────────────────── 6. #24 · 触达数据面 / 设置行 ───────────────────────── */
+
+describe('#24 · 触达数据面（traffic.* / rikke.settings.*）', () => {
+  it('方法名逐字对齐 RPC 面', () => {
+    expect(NOTIFY_ENDPOINTS).toEqual({
+      trafficStatus: 'traffic.status',
+      markRead: 'traffic.markRead',
+      settingsGet: 'traffic.settings.get',
+      settingsSet: 'traffic.settings.set',
+    })
+    expect(RIKKE_ENDPOINTS).toEqual({
+      status: 'rikke.status',
+      generate: 'rikke.generate',
+      setTime: 'rikke.setTime',
+      settingsGet: 'rikke.settings.get',
+      settingsSet: 'rikke.settings.set',
+    })
+  })
+
+  it('markDeliveredRead：只把 delivered 且未读的 id 交给 traffic.markRead（failed / skipped / 已读都不动）', async () => {
+    const calls = []
+    const api = createNotifyApi({
+      connection: {
+        rpc: {
+          async call(_channel, method, payload) {
+            calls.push([method, payload])
+            if (method === 'traffic.status') {
+              return {
+                ok: true,
+                value: {
+                  entries: [
+                    { id: 'traffic-1', notify: { status: 'delivered', reason: null }, read: false },
+                    { id: 'traffic-2', notify: { status: 'failed', reason: 'permission-denied' }, read: false },
+                    { id: 'traffic-3', notify: { status: 'delivered', reason: null }, read: true },
+                    { id: 'traffic-4', notify: { status: 'skipped', reason: '人点生成' }, read: false },
+                  ],
+                  unread: 1,
+                },
+              }
+            }
+            return { ok: true, value: { ok: true, updated: 1 } }
+          },
+        },
+      },
+    })
+    expect(await api.markDeliveredRead()).toEqual({ ok: true, updated: 1 })
+    expect(calls.map((call) => call[0])).toEqual(['traffic.status', 'traffic.markRead'])
+    expect(calls[1][1]).toEqual({ ids: ['traffic-1'] })
+  })
+
+  it('P3（复核 #24）· 打开日课面板只标 kind=rikke 的已读：晚省那一行不动', async () => {
+    const calls = []
+    const api = createNotifyApi({
+      connection: {
+        rpc: {
+          async call(_channel, method, payload) {
+            calls.push([method, payload])
+            if (method === 'traffic.status') {
+              return {
+                ok: true,
+                value: {
+                  entries: [
+                    { id: 'traffic-wansheng', kind: 'wansheng', notify: { status: 'delivered', reason: null }, read: false },
+                    { id: 'traffic-rikke', kind: 'rikke', notify: { status: 'delivered', reason: null }, read: false },
+                  ],
+                  unread: 2,
+                },
+              }
+            }
+            return { ok: true, value: { ok: true, updated: 1 } }
+          },
+        },
+      },
+    })
+    expect(await api.markDeliveredRead({ kind: 'rikke' })).toEqual({ ok: true, updated: 1 })
+    // 只有 rikke 那条进 markRead：打开日课面板不该把晚省的未读抹掉。
+    expect(calls[1][1]).toEqual({ ids: ['traffic-rikke'] })
+  })
+
+  it('没有未读就不发 markRead（打开面板不该白写一次盘）', async () => {
+    const calls = []
+    const api = createNotifyApi({
+      connection: {
+        rpc: {
+          async call(_channel, method) {
+            calls.push(method)
+            return { ok: true, value: { entries: [], unread: 0 } }
+          },
+        },
+      },
+    })
+    expect(await api.markDeliveredRead()).toEqual({ ok: true, updated: 0 })
+    expect(calls).toEqual(['traffic.status'])
+  })
+
+  it('rikke.settings.get / set 走同一通道（AI 段开关）', async () => {
+    const calls = []
+    const api = createRikkeApi({
+      connection: {
+        rpc: {
+          async call(_channel, method, payload) {
+            calls.push([method, payload])
+            if (method === 'rikke.settings.get') return { ok: true, value: { aiEnabled: true } }
+            return { ok: true, value: { aiEnabled: false } }
+          },
+        },
+      },
+    })
+    expect(await api.getSettings()).toEqual({ aiEnabled: true })
+    expect(await api.setSettings({ aiEnabled: false })).toEqual({ aiEnabled: false })
+    expect(calls.map((call) => call[0])).toEqual(['rikke.settings.get', 'rikke.settings.set'])
+  })
+})
+
+describe('#24 · 设置行：AI 段开关 + 通知摘要开关（settings.general.item）', () => {
+  it('静态渲染：两个开关、文案说明、当前值都对', () => {
+    const html = render(h(XsTouchSettingsRow, {
+      state: { aiEnabled: true, notifySummary: false },
+      actions: { onToggleAi: () => {}, onToggleSummary: () => {} },
+    }))
+    expect(html).toContain('data-xuanshu-setting="ai"')
+    expect(html).toContain('data-xuanshu-setting="notify-summary"')
+    expect(html).toContain('AI 建议段')
+    expect(html).toContain('通知摘要')
+    expect(html).toMatch(/AI 建议段[\s\S]*checked/u)
+    expect(html).not.toMatch(/通知摘要[\s\S]*checked/u)
+  })
+
+  it('installTouchSettings 注册 settings.general.item 一行（id/order 稳定），apply 期不取数', () => {
+    const registrations = []
+    const ctx = {
+      slots: {
+        inject: (key, effect) => effect(),
+        register: (options) => {
+          registrations.push({ key: options.name, options })
+          return () => {}
+        },
+        entries: () => [],
+        subscribe: () => () => {},
+      },
+    }
+    expect(() => installTouchSettings(ctx, { rikke: spyApi().api, notify: createNotifyApi({}) })).not.toThrow()
+    expect(registrations).toHaveLength(1)
+    expect(registrations[0].options).toMatchObject({ name: 'settings.general.item', id: 'xuanshu.touch', order: 70 })
   })
 })

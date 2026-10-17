@@ -30,11 +30,20 @@ import {
 } from './onboarding-model.js';
 import { ERROR_COPY, MINGPAN_ID, MINGPAN_LABEL, MINGPAN_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
+import { dataDirPath, useHomePaths } from './home-paths.js';
+import type { HomePathsWatch } from './home-paths.js';
 import type { RpcContext } from './rpc.js';
 
-/** 重新录制的二次确认文案（S2 §5.4 逐字：写明会原子替换底座谱、底稿需手动刷新）。 */
-export const RERECORD_CONFIRM =
-  '将重新录制出生信息并重新出盘。当前底座谱（~/.dsh/xuanshu/pus/_base/bazi.md）会被新结果原子替换；底稿会在下次刷新时随之更新，需要你手动点刷新。';
+/**
+ * 重新录制的二次确认文案（S2 §5.4 逐字：写明会原子替换底座谱、底稿需手动刷新）。
+ *
+ * 底座谱路径由宿主回传的 dataDir 拼出（产品 `~/.xuanshu/xuanshu` / 开发 `<repo>/.dsh-home/xuanshu`）；
+ * 拿不到时给中性占位「玄枢数据目录/pus/_base/bazi.md」，不写死任何一档。
+ * @param dataDir - 宿主回传的数据目录；缺席时显示中性占位。
+ */
+export function rerecordConfirm(dataDir?: string): string {
+  return `将重新录制出生信息并重新出盘。当前底座谱（${dataDirPath(dataDir, 'pus', '_base', 'bazi.md')}）会被新结果原子替换；底稿会在下次刷新时随之更新，需要你手动点刷新。`;
+}
 
 /** 本屏视图状态（S2 §6：四态 + 部分字段读不出来）。 */
 type MingpanView =
@@ -65,6 +74,16 @@ export interface MingpanPanelProps {
   preloadedSnapshot?: BaziSnapshot | null;
   /** 静态预置错误（测试与 SSR 断言用）。 */
   preloadedError?: string;
+  /**
+   * 宿主回传的数据目录（`data.overview.dataDir`）：二次确认文案里的底座谱路径据此渲染；
+   * 缺席时显示中性占位「玄枢数据目录/pus/_base/bazi.md」。
+   */
+  dataDir?: string;
+  /**
+   * R3（#35）· 装配期注入的 home/dataDir 注入面（与概览 / 问事 / 沉淀同一份）；
+   * 显式 `dataDir` 优先，其次读注入面，都没有才回中性占位。
+   */
+  homePaths?: HomePathsWatch;
 }
 
 /**
@@ -78,7 +97,12 @@ export function MingpanPanel({
   navigate,
   preloadedSnapshot,
   preloadedError,
+  dataDir,
+  homePaths,
 }: MingpanPanelProps) {
+  // R3：二次确认里的底座谱路径读注入面（宿主回传的 dataDir）；显式 props 优先。
+  const injectedHomePaths = useHomePaths(homePaths);
+  const localDataDir = dataDir ?? injectedHomePaths.dataDir;
   const revision = useSyncExternalStore(controller.subscribe, controller.getRevision, controller.getRevision);
   const seeded = preloadedError !== undefined || preloadedSnapshot !== undefined;
   const [view, setView] = useState<MingpanView>(() => {
@@ -168,6 +192,7 @@ export function MingpanPanel({
       {view.kind === 'ready' ? (
         <MingpanBody
           snapshot={view.snapshot}
+          dataDir={localDataDir}
           confirming={confirming}
           onAskRerecord={() => { setConfirming(true); }}
           onCancelRerecord={() => { setConfirming(false); }}
@@ -181,12 +206,14 @@ export function MingpanPanel({
 /** 只读正文：出生摘要 + 四柱 + 口径行 + 快照来源 + 唯一写操作。 */
 function MingpanBody({
   snapshot,
+  dataDir,
   confirming,
   onAskRerecord,
   onCancelRerecord,
   onConfirmRerecord,
 }: {
   snapshot: BaziSnapshot;
+  dataDir?: string;
   confirming: boolean;
   onAskRerecord: () => void;
   onCancelRerecord: () => void;
@@ -261,7 +288,7 @@ function MingpanBody({
         未确认时整块 `hidden` —— 节点在、动作不在：C10 要求「写操作必过人工确认」。
       */}
       <div className="xs-mingpan__confirm" data-xuanshu-confirm="rerecord" hidden={!confirming}>
-        <p data-xuanshu-confirm-text="rerecord">{RERECORD_CONFIRM}</p>
+        <p data-xuanshu-confirm-text="rerecord">{rerecordConfirm(dataDir)}</p>
         <div className="xs-mingpan__actions">
           <button type="button" data-xuanshu-action="rerecord-cancel" onClick={onCancelRerecord}>取消</button>
           <button type="button" data-xuanshu-action="rerecord-go" onClick={onConfirmRerecord}>
@@ -297,6 +324,8 @@ export function installMingpan(ctx: Context & RpcContext, deps: {
   api: BaziApi;
   controller: BaziUiController;
   navigate: (target: PanelNavTarget) => void;
+  /** R3：宿主回传的 home/dataDir 注入面（与概览 / 问事 / 沉淀同一份）。 */
+  homePaths?: HomePathsWatch;
 }): void {
   installBaziStyle();
   ctx.slots.inject('main', () =>

@@ -38,8 +38,12 @@ import {
 const roots = []
 afterEach(() => roots.splice(0).forEach((sandbox) => sandbox.cleanup()))
 
-/** 固定「现在」：2026-10-15 11:00 Asia/Shanghai（= 03:00Z）——与 `service.test.mjs` 同一口径。 */
-const NOW = () => new Date('2026-10-15T03:00:00.000Z')
+/**
+ * 固定「现在」：2026-10-15 07:40 Asia/Shanghai（= 2026-10-14T23:40Z）——与 `service.test.mjs` 同一口径。
+ * #25 起「日期取 occurrence」：提醒里的 `occurrence_at` 是**本地 07:30 的计划时刻**（真机就是这个形状），
+ * 投递只晚 10 分钟，所以既不是「补」也不影响 `TODAY`。
+ */
+const NOW = () => new Date('2026-10-14T23:40:00.000Z')
 const TODAY = '2026-10-15'
 const TZ = 'Asia/Shanghai'
 
@@ -54,7 +58,7 @@ function scheduleReminder(id = 'msg-1') {
     source: { kind: 'schedule' },
     content: [{
       type: 'text',
-      text: '[SCHEDULE REMINDER]\nschedule_id_json: "sched-1"\noccurrence_at: 2026-10-15T07:30:00.000Z\nreminder_prompt_json: "现在做日课：…"',
+      text: '[SCHEDULE REMINDER]\nschedule_id_json: "sched-1"\noccurrence_at: 2026-10-14T23:30:00.000Z\nreminder_prompt_json: "现在做日课：…"',
     }],
   }
 }
@@ -164,7 +168,8 @@ describe('票13 · 到点 → 跑 `rikke.generate` 那一份生成链（复核 S
     expect(target.horosa.calls).toHaveLength(1)
     expect(target.horosa.calls[0].name).toBe('horosa_cn_huangli')
     expect(target.horosa.calls[0].args.date).toBe(TODAY)
-    expect(target.horosa.calls[0].args.hour).toBe(11) // 03:00Z 的 Asia/Shanghai 小时数
+    // 黄历的小时取**计划时刻**（本地 07:30），不是投递时刻（#25 契约 §3）。
+    expect(target.horosa.calls[0].args.hour).toBe(7)
     // 原子写：只此一份产物，不留 .tmp。
     expect(rikkeFiles(target.sandbox)).toEqual([`rikke/${TODAY}.json`])
   })

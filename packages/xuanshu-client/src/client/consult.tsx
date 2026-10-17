@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 
-import type { ConsultApi, ConsultDefaults, ConsultMessage, ConsultSummary, MountRef } from './consult-api.js';
+import type { ConsultApi, ConsultDefaults, ConsultDrafts, ConsultMessage, ConsultSummary, MountRef } from './consult-api.js';
 import { contextSummary, initialSelection, nudgeNeeded, openConsultSession, shortConsultId, toggleSelection } from './consult-model.js';
 import type { HistoryRange } from './consult-model.js';
 import {
@@ -30,6 +30,8 @@ import {
 } from './consult-views.js';
 import { CONSULT_ID, CONSULT_LABEL, CONSULT_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
+import { useHomePaths } from './home-paths.js';
+import type { HomePathsWatch } from './home-paths.js';
 import type { RpcContext } from './rpc.js';
 
 /** 取数三态（门厅的勾选区与列表各自持有，互不拖累）。 */
@@ -39,7 +41,7 @@ type Loadable<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: '
 type ReaderState =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'ready'; session: ConsultSummary; messages: ConsultMessage[] }
+  | { kind: 'ready'; session: ConsultSummary; messages: ConsultMessage[]; drafts?: ConsultDrafts }
   | { kind: 'error'; session: ConsultSummary; message: string };
 
 /** 安装依赖（`index.tsx` 造好后注入；三处共用同一份数据面）。 */
@@ -64,6 +66,11 @@ export interface ConsultInstallDeps {
    * 门厅不会因为挂载面缺席而空一块，票 10 的断言台也不用改。
    */
   mountSlot?: (session: ConsultSummary | undefined) => ReactNode;
+  /**
+   * R3（#35）· 宿主回传的 home / dataDir 注入面：历史页错误行那句「数据在本地 <home>/sessions/」
+   * 用它渲染真路径；缺席 = 没拿到 → 中性占位「玄枢 home/sessions/」（不猜、不写死某一档）。
+   */
+  homePaths?: HomePathsWatch;
 }
 
 export interface ConsultPanelProps extends ConsultInstallDeps {
@@ -85,7 +92,9 @@ function errorText(error: unknown): string {
  * @param props - 数据面、导航与静态预置。
  * @returns 门厅 / 历史子页节点。
  */
-export function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, preloaded }: ConsultPanelProps) {
+export function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, homePaths, preloaded }: ConsultPanelProps) {
+  // R3：历史页「数据在本地 …」那一行读注入面（宿主回传的 home）；没拿到 → 中性占位。
+  const home = useHomePaths(homePaths).home;
   const [view, setView] = useState<'lobby' | 'history'>(preloaded?.view ?? 'lobby');
   const [defaults, setDefaults] = useState<Loadable<ConsultDefaults>>(
     preloaded?.defaults === undefined ? { kind: 'loading' } : { kind: 'ready', value: preloaded.defaults },
@@ -210,7 +219,10 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
     setReader({ kind: 'loading' });
     void api
       .read({ sessionId })
-      .then((answer) => { setReader({ kind: 'ready', session: answer.session, messages: answer.messages }); })
+      .then((answer) => {
+        // 票 31：`drafts` 是加性字段（没有合参记录时缺席）—— 原样交给阅读器，客户端不自己算当前性。
+        setReader({ kind: 'ready', session: answer.session, messages: answer.messages, drafts: answer.drafts });
+      })
       .catch((error: unknown) => { setReader({ kind: 'error', session: known, message: errorText(error) }); });
   };
 
@@ -314,6 +326,7 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
           query={query}
           range={range}
           now={new Date()}
+          home={home}
           onQuery={setQuery}
           onRange={setRange}
           onOpen={openRow}
@@ -338,6 +351,7 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
           <XsConsultHistoryReader
             session={reader.session}
             messages={reader.kind === 'ready' ? reader.messages : []}
+            drafts={reader.kind === 'ready' ? reader.drafts : undefined}
             error={reader.kind === 'error' ? reader.message : undefined}
             onBack={() => { setReader({ kind: 'idle' }); }}
             onContinue={() => { enterConversation(reader.session.sessionId); }}
@@ -439,7 +453,11 @@ function installConsultStyle(): void {
 .xs-consult__empty{text-align:left;padding:16px 0}
 .xs-consult__empty-why{font-weight:600;margin:0 0 6px}
 .xs-consult__messages{margin-top:12px}
+.xs-consult__round{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px;margin:12px 0}
+.xs-consult__round-head{font-size:.85rem;margin:0 0 4px;color:var(--xs-text-secondary)}
 .xs-consult__message{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:10px 0;border-bottom:1px solid var(--xs-edge-card)}
+/* 角色占第一列；徽标 / 来源 / 正文一律第二列（否则混合行会把正文挤进 44px 那一列）。 */
+.xs-consult__message>.xs-consult__badge,.xs-consult__message>.xs-consult__note,.xs-consult__message>.xs-consult__text{grid-column:2}
 .xs-consult__role{color:var(--xs-text-secondary);font-size:.85rem}
 .xs-consult__text{margin:0;line-height:1.7;white-space:pre-wrap}
 @media(max-width:1100px){.xs-consult{padding:16px}.xs-consult__row-hit{flex-direction:column;gap:2px}}
