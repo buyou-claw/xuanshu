@@ -13,7 +13,13 @@
  *     ——类型注释原文「a hand-built one-shot may include identity-free user inputs」
  *     （`dsh-llm/lib/types/types.d.ts:468-475,489-501`），所以这里手搓一条**无身份**的 user 输入即可；
  *   - `StreamChunk` 的文本增量为 `{ type:'text-delta', index, text }`（同文件 `:421-424`）。
+ *
+ * 2026-10-17（#24）起，「挑路由 + 跑一次文本流」抽到 `lib/llm/text.mjs`：日课的 AI 段要的是
+ * 同一件事（只差 system 与素材），两处各抄一份正是本仓库记过的漂移来源。本文件只剩「底稿的素材
+ * 怎么拼 + 失败怎么标」这一层业务。
  */
+
+import { streamText } from '../llm/text.mjs'
 
 /** 摘要的长度上限（底稿是精简汇总；截断而不是超长占用）。 */
 const DIGEST_LIMIT = 600
@@ -25,29 +31,6 @@ export const DIGEST_SYSTEM = '你是玄枢的底稿压缩器。把用户给的�
 /** 拼给模型的素材：每段带来源标记（与正文同一套标记，便于模型知道哪句来自哪里）。 */
 export function digestPrompt(segments) {
   return segments.map((segment) => `【来源：${segment.source} ${segment.name}】\n${segment.text}`).join('\n\n')
-}
-
-/** 从一个 zone 名挑首个可用 provider/model；挑不出 → null。 */
-async function pickRoute(llm) {
-  if (typeof llm.listProviders !== 'function' || typeof llm.listModels !== 'function') return null
-  let providers
-  try {
-    providers = llm.listProviders()
-  } catch {
-    return null
-  }
-  for (const provider of Array.isArray(providers) ? providers : []) {
-    const id = typeof provider?.id === 'string' ? provider.id : typeof provider === 'string' ? provider : ''
-    if (id === '') continue
-    try {
-      const models = await llm.listModels(id)
-      const model = Array.isArray(models) ? models.find((entry) => typeof entry?.id === 'string' && entry.id !== '') : undefined
-      if (model !== undefined) return { provider: id, model: model.id }
-    } catch {
-      /* 这条路由问不出模型：试下一条 */
-    }
-  }
-  return null
 }
 
 /**
@@ -66,26 +49,12 @@ export async function condenseWithLlm(ctx, { segments }) {
   if (!llm || typeof llm.stream !== 'function') return { ok: false, text: '', reason: 'ctx.llm 不可得（宿主没装 LLM 服务）' }
   if (!Array.isArray(segments) || segments.length === 0) return { ok: false, text: '', reason: '没有可压缩的段' }
 
-  const route = await pickRoute(llm)
-  if (route === null) return { ok: false, text: '', reason: 'ctx.llm 里没有可用的 provider/model 路由' }
-
-  let collected = ''
-  try {
-    const stream = llm.stream({
-      provider: route.provider,
-      model: route.model,
-      system: DIGEST_SYSTEM,
-      messages: [{ role: 'user', content: [{ type: 'text', text: digestPrompt(segments) }] }],
-    })
-    for await (const chunk of stream) {
-      if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') collected += chunk.text
-      if (chunk?.type === 'error') return { ok: false, text: '', reason: `LLM 流报错：${String(chunk.error ?? chunk.message ?? '未知')}`, route }
-    }
-  } catch (error) {
-    return { ok: false, text: '', reason: `LLM 调用失败：${String(error?.message ?? error)}`, route }
+  const streamed = await streamText(llm, { system: DIGEST_SYSTEM, prompt: digestPrompt(segments) })
+  if (!streamed.ok) {
+    return { ok: false, text: '', reason: streamed.reason, ...(streamed.route === undefined ? {} : { route: streamed.route }) }
   }
 
-  const collapsed = collected.replace(/\s+/g, ' ').trim()
-  if (collapsed === '') return { ok: false, text: '', reason: 'LLM 返回了空文本', route }
-  return { ok: true, text: collapsed.length > DIGEST_LIMIT ? `${collapsed.slice(0, DIGEST_LIMIT)}…` : collapsed, reason: null, route }
+  const collapsed = streamed.text.replace(/\s+/g, ' ').trim()
+  if (collapsed === '') return { ok: false, text: '', reason: 'LLM 返回了空文本', route: streamed.route }
+  return { ok: true, text: collapsed.length > DIGEST_LIMIT ? `${collapsed.slice(0, DIGEST_LIMIT)}…` : collapsed, reason: null, route: streamed.route }
 }

@@ -75,6 +75,7 @@ import { createConsultMethods } from './consult/service.mjs';
 import { createDigaoMethods } from './digao/service.mjs';
 import { resolveHostHome, XUANSHU_HOME_ENV } from './home.mjs';
 import { installHorosa } from './horosa/service.mjs';
+import { createTrafficMethods } from './notify/service.mjs';
 import { createPuMethods, installPuSkill } from './pu/service.mjs';
 import { DEFAULT_TIME_ZONE, installDailyTasks } from './rikke/daily-tasks.mjs';
 import { baseZone, createRikkeMethods } from './rikke/service.mjs';
@@ -514,7 +515,10 @@ export function apply(ctx, config) {
       ...createConsultMethods(ctx, { dataDir }),
       // 票 13：底稿（纯派生，没有 write/update）与日课（本地黄历 + 底座）。
       ...createDigaoMethods(ctx, { dataDir }),
-      ...createRikkeMethods(ctx, { dataDir }),
+      ...createRikkeMethods(ctx, { dataDir, env: process.env }),
+      // #24：触达账 / 共享设置（`traffic.status` / `traffic.markRead` / `traffic.settings.*` /
+      // `shell.settings.*`）。账本与设置都在 `<dataDir>/` 下，与日课产物同源。
+      ...createTrafficMethods(ctx, { dataDir }),
       // 票 16：工作流创建向导（新会话 + seed 自动调 `/writing-skills`；导出 skill 落
       // `<dshHome>/skills/<kebab>/SKILL.md`）。`dshHome` 与数据目录同源，skill 才落对地方。
       ...createWorkflowMethods(ctx, { dataDir, dshHome }),
@@ -551,7 +555,7 @@ export function apply(ctx, config) {
       if (typeof ctx.inject === 'function') {
         ctx.inject(['schedule'], (scoped) => {
           const timeZone = safeBaseZone(dataDir);
-          installDailyTasks({ ctx: scoped, dataDir, timeZone })
+          installDailyTasks({ ctx: scoped, dataDir, timeZone, env: process.env })
             .then((daily) => {
               log.info('票13 定时任务：日课=%s（%s）、底稿刷新=%s（%s）',
                 daily.rikke.ok ? daily.rikke.task.id : '未建', daily.rikke.reused ? '复用' : '新建',
