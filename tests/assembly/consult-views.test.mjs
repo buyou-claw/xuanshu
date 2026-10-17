@@ -308,7 +308,7 @@ describe('票 10 · 历史列表（S7 §2.1 / §2.3 / §6）', () => {
     const block = blockOf(html, 'data-xuanshu-error="list"')
     expect(block).toContain('会话清单读不到')
     expect(html).toContain('data-xuanshu-action="retry-list"')
-    expect(html).toContain('~/.dsh/sessions/')
+    expect(html).toContain('玄枢 home/sessions/')
   })
 })
 

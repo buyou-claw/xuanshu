@@ -13,6 +13,7 @@
  *      `discard()` 三个方法会说话，而它们只由按钮的 `onClick` 调用。
  */
 import type { SedimentApi, SedimentDraft, SedimentDraftAnswer, SedimentPuView, SedimentTarget } from './sediment-api.js';
+import { dataDirPath } from './home-paths.js';
 
 /* ───────────────────────── 1. 分类判据 ───────────────────────── */
 
@@ -156,10 +157,21 @@ export function previewText(text: string | undefined, maxChars = 480): string {
   return raw.length <= maxChars ? raw : `${raw.slice(0, maxChars)}…`;
 }
 
-/** 写入路径的只读展示（默认数据目录口径，与 S5 谱管理同一份数据源）。 */
-export function puPaths(slug: string): { content: string; summary: string; manifest: string } {
-  const base = `~/.dsh/xuanshu/pus/${slug}`;
-  return { content: `${base}/content.md`, summary: `${base}/summary.md`, manifest: `${base}/manifest.md` };
+/**
+ * 写入路径的只读展示（与 S5 谱管理同一份数据源：`<dataDir>/pus/<slug>/`）。
+ *
+ * `dataDir` 由宿主回传（`data.overview.dataDir`，产品 `~/.xuanshu/xuanshu` /
+ * 开发 `<repo>/.dsh-home/xuanshu`）；拿不到时给中性占位「玄枢数据目录/pus/<slug>/…」，
+ * 不写死任何一档（ADR-0014：玄枢不读写 DSH 桌面版的 home）。
+ * @param slug - 目标谱的 slug。
+ * @param dataDir - 宿主回传的数据目录；缺席时显示中性占位。
+ */
+export function puPaths(slug: string, dataDir?: string): { content: string; summary: string; manifest: string } {
+  return {
+    content: dataDirPath(dataDir, 'pus', slug, 'content.md'),
+    summary: dataDirPath(dataDir, 'pus', slug, 'summary.md'),
+    manifest: dataDirPath(dataDir, 'pus', slug, 'manifest.md'),
+  };
 }
 
 /* ───────────────────────── 5. 确认闸门的可用性 ───────────────────────── */

@@ -325,7 +325,7 @@ describe('票 07 · 五卡渲染（冷启动空态；#25 加第 5 张晚省）',
     expect(html).toContain('data-xuanshu-panel="overview"')
     expect(html).toContain('自我总览')
     expect(html).toContain('家')
-    expect(html).toContain('数据都在本地 ~/.dsh/xuanshu/')
+    expect(html).toContain('数据都在本地（玄枢数据目录/）')
   })
 
   it('五卡齐备且 DOM 顺序 = D3 读序（命盘 → 日课 → 底稿 → 快捷入口 → 晚省）', () => {

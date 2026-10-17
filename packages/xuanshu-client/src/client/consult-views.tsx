@@ -28,6 +28,7 @@ import {
   shortConsultId,
 } from './consult-model.js';
 import type { DraftRoundState, HistoryRange } from './consult-model.js';
+import { homePath, withTrailingSeparator } from './home-paths.js';
 
 /**
  * 锁定行说明卡里的因果（点行才展开；S6 §3 表 `:102` 逐字口径）。
@@ -311,6 +312,11 @@ export interface XsConsultHistoryListProps {
   query: string;
   range: HistoryRange;
   now: Date;
+  /**
+   * 宿主回传的 home（`data.overview.home`）：会话落在 `<home>/sessions/`。
+   * 缺席时错误行显示中性占位「玄枢 home/sessions/」（不猜、不写死两档中的任何一档）。
+   */
+  home?: string;
   onQuery: (value: string) => void;
   onRange: (range: HistoryRange) => void;
   onOpen: (sessionId: string) => void;
@@ -327,6 +333,7 @@ export function XsConsultHistoryList({
   query,
   range,
   now,
+  home,
   onQuery,
   onRange,
   onOpen,
@@ -385,7 +392,7 @@ export function XsConsultHistoryList({
       {error === undefined ? null : (
         <div className="xs-consult__error" data-xuanshu-error="list" role="alert">
           <p>{error}</p>
-          <p className="xs-consult__note">数据在本地：~/.dsh/sessions/（只读展示）</p>
+          <p className="xs-consult__note">{`数据在本地：${withTrailingSeparator(homePath(home, 'sessions'))}（只读展示）`}</p>
           <div className="xs-consult__actions">
             <button type="button" data-xuanshu-action="retry-list" onClick={onRetry}>重试</button>
           </div>
