@@ -885,11 +885,11 @@ F1 生产接线（apply 期读一次 `data.overview` 注入 5 处路径；`overv
 F2 host/client 失败文案表对拍 + 删两个零消费者导出、F3 恒真夹具补 `frozenAt`（证红后还原）、
 F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合并为 `f7caa9a`。
 
-**验证（数字抄工具输出，最终 tip `f7caa9a`）**
+**验证（数字抄工具输出，最终 tip `7e63e30`（t33 收尾提交，数字在那一笔刷新））**
 
 ```
 # pnpm test:inventory
-[inventory] 用例 1835 条（基线 1835）/ 文件 167 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 1811 条（基线 1811）/ 文件 164 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation → 8/8 通过，exit 0
@@ -924,7 +924,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 | 票 | 交付 |
 |---|---|
 | E1 | `scripts/worktree-create.mjs`：一条命令建工作树 + 分支 + 根/包级 `node_modules` 链接（**只链不复制**、不装包），`--base/--branch/--repo/--dry-run`，已存在/非法名可读拒绝；7 条临时 git 仓库端到端用例（含「摘链接删树后目标哨兵仍在」）。清理仍只走 `pnpm cleanup:worktrees`（§16.4 第 7 条的护栏） |
-| E3 | `scripts/check-doc-numbers.mjs`：真值 = 清单基线 total/files + 客户端产物 `statSync` 字节；只核对 README 与 §16.3/§16.6 的**当前**验证块（历史旧数字不误报）；漂移 exit 1 逐条点名「文件:行 期望/实际」，不可验证 exit 2；接线 `verify:all` 末步 + CI「doc numbers gate」；14 条判据（一致/单点/多处/真源缺/块缺/历史不误报/注入面） |
+| E3 | `scripts/check-doc-numbers.mjs`：真值 = 清单基线 total/files + 客户端产物 `statSync` 字节；只核对 README 与 §16.3/§16.7 的**当前**验证块（历史旧数字不误报）；漂移 exit 1 逐条点名「文件:行 期望/实际」，不可验证 exit 2；接线 `verify:all` 末步 + CI「doc numbers gate」；17 条判据（一致/单点/多处/真源缺/块缺/历史不误报/注入面） |
 | E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
 
 **验证（数字抄工具输出）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
