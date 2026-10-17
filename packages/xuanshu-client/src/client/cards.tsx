@@ -21,6 +21,7 @@ import type { DigaoApi } from './digao-api.js';
 import type { DigaoUiController } from './digao-controller.js';
 import type { AiReadiness, AiReadinessController } from './ai-model.js';
 import { XsAiGate } from './ai-views.js';
+import { notifyFailureText, notifyReasonCode } from './notify.js';
 import {
   ACTION_COPY,
   BADGE_DERIVED,
@@ -421,12 +422,17 @@ function RikkeAiLine({ ai }: { ai?: RikkeAiNote }) {
   );
 }
 
-/** 最近一次通知失败的原因行（#24：通知失败要在界面看得见，但**不影响**日课内容）。 */
+/** 最近一次通知失败的原因行（#24：通知失败要在界面看得见，但**不影响**日课内容；#40：已知 token 说人话）。 */
 function RikkeNotifyLine({ notify }: { notify?: RikkeNotify }) {
   if (notify?.status !== 'failed') return null;
   return (
-    <p className="xs-card__note" role="alert" data-xuanshu-notify="failed">
-      {`通知没发出去：${notify.reason ?? '（没有给理由）'}`}
+    <p
+      className="xs-card__note"
+      role="alert"
+      data-xuanshu-notify="failed"
+      data-xuanshu-reason-code={notifyReasonCode(notify)}
+    >
+      {`通知没发出去：${notifyFailureText(notify)}`}
     </p>
   );
 }

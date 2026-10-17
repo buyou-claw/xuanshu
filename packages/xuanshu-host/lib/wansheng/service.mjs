@@ -71,6 +71,8 @@ export function createWanshengMethods(ctx, config = {}) {
             status: latest.notify.status,
             at: latest.at,
             ...(latest.notify.reason === null ? {} : { reason: latest.notify.reason }),
+            // #40：与日课同一口径 —— 已知失败带机器码，界面据此给人话（老账行缺键时按 reason 兜底）。
+            ...(typeof latest.notify.reasonCode === 'string' ? { reasonCode: latest.notify.reasonCode } : {}),
           }
         }
       }

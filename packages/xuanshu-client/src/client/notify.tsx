@@ -51,6 +51,50 @@ export const TRAFFIC_STATUS_TEXT = {
   skipped: '跳过',
 } as const;
 
+/** 通知失败里最常被壳侧英文 token 挡住的那几种原因（#40）。 */
+export interface NotifyFailureLike {
+  reason?: string | null;
+  reasonCode?: string;
+}
+
+/**
+ * #40：已知的壳侧失败 token → **人话 + 去哪开**（与宿主 `notify/reason.mjs` 同一份文案，
+ * 跨包没有可共享的运行时模块，两边各留一份、逐字对齐）。
+ */
+export const NOTIFY_FAILURE_TEXT: Record<string, string> = {
+  'permission-denied': '权限缺失：系统通知权限被关。请到「系统设置 → 通知 → 玄枢」里打开通知权限，然后再生成一次。',
+  unsupported: '系统通知不可用：这台系统 / 环境不支持系统通知。',
+  failed: '桌面壳没有弹出通知（壳没给细节）。',
+};
+
+/** 失败 token 在 reason 尾部（老账行没有 `reasonCode` 时按它认，`桌面壳没有弹出通知：permission-denied` 也认）。 */
+const SHELL_REASON_TOKEN = /(permission-denied|unsupported|failed)\s*$/u;
+
+/**
+ * 已知壳侧失败原因的机器码：优先账里记下的 `reasonCode`，老账行再从 reason 尾部认 token。
+ * @param notify - 账行 / status 投影里的 notify 对象
+ * @returns 机器码；不是已知壳侧原因时 `undefined`（其他失败原因照旧逐字展示）
+ */
+export function notifyReasonCode(notify?: NotifyFailureLike): string | undefined {
+  const explicit = typeof notify?.reasonCode === 'string' && notify.reasonCode !== '' ? notify.reasonCode : undefined;
+  if (explicit !== undefined) return explicit;
+  const reason = typeof notify?.reason === 'string' ? notify.reason : '';
+  const match = SHELL_REASON_TOKEN.exec(reason);
+  return match === null ? undefined : match[1];
+}
+
+/**
+ * 失败原因的人话（#40）：已知 token → 中文并指路；其余 reason **原样返回**（不抹平、可排查）。
+ * @param notify - 账行 / status 投影里的 notify 对象
+ * @returns 可直接渲染的一句话
+ */
+export function notifyFailureText(notify?: NotifyFailureLike): string {
+  const code = notifyReasonCode(notify);
+  if (code !== undefined && NOTIFY_FAILURE_TEXT[code] !== undefined) return NOTIFY_FAILURE_TEXT[code];
+  const reason = typeof notify?.reason === 'string' && notify.reason !== '' ? notify.reason : '';
+  return reason === '' ? '（没有给理由）' : reason;
+}
+
 /**
  * 投递历史（只读账本投影；#25 契约 §3「设置里能看到投递历史」）。
  *
@@ -73,8 +117,13 @@ export function XsDeliveryHistory({ status }: { status: TrafficStatus }) {
         <p className="xs-touch__note" data-xuanshu-note="unread">{`未读 ${unread} 条`}</p>
       )}
       {status.lastFailure === undefined ? null : (
-        <p className="xs-touch__note" role="alert" data-xuanshu-history-error="last-failure">
-          {`最近一次失败：${status.lastFailure.kind === 'wansheng' ? '晚省' : '日课'} · ${status.lastFailure.reason ?? '（没有给理由）'}`}
+        <p
+          className="xs-touch__note"
+          role="alert"
+          data-xuanshu-history-error="last-failure"
+          data-xuanshu-reason-code={notifyReasonCode(status.lastFailure)}
+        >
+          {`最近一次失败：${status.lastFailure.kind === 'wansheng' ? '晚省' : '日课'} · ${notifyFailureText(status.lastFailure)}`}
         </p>
       )}
       {entries.length === 0 ? (
@@ -102,7 +151,12 @@ export function XsDeliveryHistory({ status }: { status: TrafficStatus }) {
               <span className="xs-touch__history-status">{TRAFFIC_STATUS_TEXT[entry.notify.status] ?? entry.notify.status}</span>
               {entry.missed === true ? <span className="xs-touch__history-missed" data-xuanshu-badge="missed">补</span> : null}
               {entry.notify.reason === undefined || entry.notify.reason === null ? null : (
-                <span className="xs-touch__history-reason">{entry.notify.reason}</span>
+                <span
+                  className="xs-touch__history-reason"
+                  data-xuanshu-reason-code={notifyReasonCode(entry.notify)}
+                >
+                  {notifyFailureText(entry.notify)}
+                </span>
               )}
             </li>
           ))}

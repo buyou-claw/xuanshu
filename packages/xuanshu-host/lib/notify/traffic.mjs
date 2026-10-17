@@ -18,6 +18,7 @@ import { dirname, join } from 'node:path'
 
 import { writeAtomic } from '../atomic.mjs'
 import { NOTIFY_KINDS, NOTIFY_STATUSES, TRAFFIC_SCHEMA } from './contract.mjs'
+import { normalizeNotifyFailure } from './reason.mjs'
 
 // schema 的唯一来源在 `contract.mjs`；账本再导出同一绑定（读面 / 测试 / #25 都从一处取）。
 export { TRAFFIC_SCHEMA }
@@ -76,11 +77,16 @@ export function buildTrafficEntry(input = {}) {
   if (!NOTIFY_STATUSES.includes(status)) {
     throw new Error(`触达账的 notify.status 不认识：${JSON.stringify(status)}（只认 ${NOTIFY_STATUSES.join(' / ')}）`)
   }
-  const reason = typeof notify?.reason === 'string' && notify.reason !== '' ? notify.reason : null
-  if (status !== 'delivered' && reason === null) {
+  const rawReason = typeof notify?.reason === 'string' && notify.reason !== '' ? notify.reason : null
+  if (status !== 'delivered' && rawReason === null) {
     // 「没成」必须说得出理由：一行只有 status 的 failed/skipped 会让界面无话可说。
     throw new Error(`触达账的 notify.status=${status} 必须带可读的 reason`)
   }
+  // #40：壳侧的英文失败 token 在**写入前**翻成人话，机器码留在 `reasonCode`（可区分、原始 token 不丢）。
+  // 已经是人话 / 不认识的 reason 原样落账（其他失败原因照旧可查，不抹平）。
+  const readable = normalizeNotifyFailure(rawReason)
+  const explicitCode = typeof notify?.reasonCode === 'string' && notify.reasonCode !== '' ? notify.reasonCode : undefined
+  const reasonCode = explicitCode ?? readable.reasonCode
   return {
     schema: TRAFFIC_SCHEMA,
     id: typeof id === 'string' && id !== '' ? id : `traffic-${randomUUID()}`,
@@ -90,7 +96,11 @@ export function buildTrafficEntry(input = {}) {
     occurrenceAt: occurrenceAt ?? at,
     generated: generated === true,
     artifactPath: typeof artifactPath === 'string' ? artifactPath : null,
-    notify: { status, reason },
+    notify: {
+      status,
+      reason: readable.reason,
+      ...(reasonCode === undefined ? {} : { reasonCode }),
+    },
     read: read === true,
     missed: missed === true,
   }
@@ -158,7 +168,14 @@ export function readTraffic(dataDir, { limit } = {}) {
     unread,
     exists: true,
   }
-  if (failed !== undefined) out.lastFailure = { at: failed.at, kind: failed.kind, reason: failed.notify.reason ?? null }
+  if (failed !== undefined) {
+    out.lastFailure = {
+      at: failed.at,
+      kind: failed.kind,
+      reason: failed.notify.reason ?? null,
+      ...(typeof failed.notify.reasonCode === 'string' ? { reasonCode: failed.notify.reasonCode } : {}),
+    }
+  }
   return out
 }
 

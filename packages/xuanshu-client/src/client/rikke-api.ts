@@ -52,6 +52,8 @@ export interface RikkeNotify {
   status: 'delivered' | 'failed' | 'skipped';
   at?: string;
   reason?: string;
+  /** #40：已知壳侧失败原因的机器码（`reason` 已是人话；原始 token 留在这里可查）。 */
+  reasonCode?: string;
 }
 
 /** #24 · AI 段开关（`rikke-settings.json`）。 */

@@ -250,7 +250,7 @@ describe('#24 · 通知失败不阻塞生成、如实落账', () => {
     expect((await rikke['rikke.status']({})).notify.status).toBe('skipped')
   })
 
-  it('壳收到但没弹成（delivered:false permission-denied）→ failed + 原因；产物在；status 显示失败', async () => {
+  it('壳收到但没弹成（delivered:false 权限缺失）→ failed + 可读原因；产物在；status 显示失败', async () => {
     const target = await scene({
       shellReply: (_request, respond) => respond(200, { ok: true, delivered: false, reason: 'permission-denied' }),
     })
@@ -260,16 +260,20 @@ describe('#24 · 通知失败不阻塞生成、如实落账', () => {
     expect(target.sandbox.exists('rikke', `${TODAY}.json`)).toBe(true)
     const ledger = readTraffic(target.sandbox.dataDir)
     expect(ledger.entries[0].notify.status).toBe('failed')
-    expect(ledger.entries[0].notify.reason).toMatch(/permission-denied/u)
-    expect(ledger.lastFailure).toMatchObject({ kind: 'rikke' })
-    expect(ledger.lastFailure.reason).toMatch(/permission-denied/u)
+    // #40：权限缺失落账即人话（并指路），机器码留在 `reasonCode` 里 —— 原始英文 token 不再当文案。
+    expect(ledger.entries[0].notify.reason).toMatch(/权限缺失/u)
+    expect(ledger.entries[0].notify.reason).toMatch(/通知权限/u)
+    expect(ledger.entries[0].notify.reasonCode).toBe('permission-denied')
+    expect(ledger.lastFailure).toMatchObject({ kind: 'rikke', reasonCode: 'permission-denied' })
+    expect(ledger.lastFailure.reason).toMatch(/权限缺失/u)
 
     const { rikke, traffic } = readers(target)
     const status = await rikke['rikke.status']({})
     expect(status.notify.status).toBe('failed')
-    expect(status.notify.reason).toMatch(/permission-denied/u)
+    expect(status.notify.reason).toMatch(/权限缺失/u)
+    expect(status.notify.reasonCode).toBe('permission-denied')
     const answered = await traffic['traffic.status']({})
-    expect(answered.lastFailure).toMatchObject({ kind: 'rikke' })
+    expect(answered.lastFailure).toMatchObject({ kind: 'rikke', reasonCode: 'permission-denied' })
   })
 
   it('连不上壳（状态文件指着已关闭的端口）→ failed + 可读原因；生成链与 decision 都不受影响', async () => {

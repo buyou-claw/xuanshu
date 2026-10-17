@@ -144,7 +144,7 @@ describe('#25 · 晚省卡：当天事实 + 补徽标 + 去问事', () => {
     expect(render(h(XsMissedBadge))).toContain('data-xuanshu-badge="missed"')
   })
 
-  it('未读 > 0 → 未读徽标；最近一次推送失败 → role=alert 行（原因逐字）', () => {
+  it('未读 > 0 → 未读徽标；最近一次推送失败 → role=alert 行（权限缺失说人话 + 机器码可查）', () => {
     const html = render(h(XsWanshengCard, {
       state: 'ready',
       today: '2026-10-15',
@@ -156,7 +156,13 @@ describe('#25 · 晚省卡：当天事实 + 补徽标 + 去问事', () => {
     expect(html).toContain('data-xuanshu-badge="unread"')
     expect(html).toContain('data-xuanshu-notify="failed"')
     expect(html).toMatch(/role="alert"/u)
-    expect(html).toContain('permission-denied')
+    // #40：界面不再只显示壳侧英文 token —— 说清「权限缺失」并指路去哪开。
+    expect(html).toContain('权限缺失')
+    expect(html).toContain('系统通知权限被关')
+    expect(html).toContain('系统设置 → 通知 → 玄枢')
+    expect(html).not.toContain('上一次通知没发出去：permission-denied')
+    // 原始 token 仍可查（机器码），只是不再当文案。
+    expect(html).toContain('data-xuanshu-reason-code="permission-denied"')
   })
 
   it('事实拿不到 → 写「未知」，不写 0（不把未知冒充已知）', () => {
@@ -212,14 +218,16 @@ describe('#25 · 晚省面板：完整事实 + [立即生成] + 投递历史', (
     expect(html).toContain('计划时刻：每天 21:30（Asia/Shanghai）')
   })
 
-  it('投递历史折叠块：成功 / 失败 / 跳过 + 原因 + 是否补', () => {
+  it('投递历史折叠块：成功 / 失败 / 跳过 + 原因 + 是否补（权限缺失给人话，机器码可查）', () => {
     const html = panel()
     expect(html).toContain('data-xuanshu-history="wansheng"')
     expect(html).toContain('<summary>投递历史</summary>')
     expect(html).toContain('data-xuanshu-history-row="delivered"')
     expect(html).toContain('data-xuanshu-history-row="failed"')
     expect(html).toContain('data-xuanshu-history-row="skipped"')
-    expect(html).toContain('permission-denied')
+    expect(html).toContain('权限缺失')
+    expect(html).toContain('data-xuanshu-reason-code="permission-denied"')
+    expect(html).not.toContain('>permission-denied<')
     expect(html).toContain('data-xuanshu-badge="missed"')
     expect(html).toContain('data-xuanshu-history-missed="true"')
   })
@@ -258,7 +266,7 @@ describe('#25 · 晚省面板：完整事实 + [立即生成] + 投递历史', (
 /* ───────────────────────── 4. 设置里的投递历史 ───────────────────────── */
 
 describe('#25 · 设置里能看到投递历史（traffic.status 的读面）', () => {
-  it('三种状态都有人话文案；行里带原因与「补」', () => {
+  it('三种状态都有人话文案；行里带原因与「补」（权限缺失给人话，机器码可查）', () => {
     expect(TRAFFIC_STATUS_TEXT).toEqual({ delivered: '成功', failed: '失败', skipped: '跳过' })
     const html = render(h(XsDeliveryHistory, { status: HISTORY }))
     expect(html).toContain('data-xuanshu-history="traffic"')
@@ -267,8 +275,26 @@ describe('#25 · 设置里能看到投递历史（traffic.status 的读面）', 
     expect(html).toContain('跳过')
     expect(html).toContain('晚省')
     expect(html).toContain('日课')
-    expect(html).toContain('最近一次失败：晚省 · permission-denied')
+    // #40：最近一次失败说人话 + 带「去哪开」；原始 token 只在机器码里。
+    expect(html).toContain('最近一次失败：晚省 · 权限缺失')
+    expect(html).toContain('系统设置 → 通知 → 玄枢')
+    expect(html).toContain('data-xuanshu-reason-code="permission-denied"')
     expect(html).toContain('补生成：不补推送（界面标「补」）')
+  })
+
+  it('其他失败原因照旧逐字可查（只翻已知的权限缺失 token，不抹平别的 reason）', () => {
+    const other = {
+      entries: [{
+        id: 'traffic-y', at: '2026-10-14T13:30:01.000Z', kind: 'wansheng', date: '2026-10-14',
+        notify: { status: 'failed', reason: '连不上壳的通知端点（ECONNREFUSED）' },
+      }],
+      unread: 0,
+      lastFailure: { at: '2026-10-14T13:30:01.000Z', kind: 'wansheng', reason: '连不上壳的通知端点（ECONNREFUSED）' },
+    }
+    const html = render(h(XsDeliveryHistory, { status: other }))
+    expect(html).toContain('连不上壳的通知端点（ECONNREFUSED）')
+    expect(html).not.toContain('权限缺失')
+    expect(html).not.toContain('data-xuanshu-reason-code=')
   })
 
   it('账本空 → 「还没有投递记录。」（不编一行假记录）；未读 0 明确写成「未读 0 条」', () => {

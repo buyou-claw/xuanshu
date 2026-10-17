@@ -19,7 +19,7 @@ import { EMPTY_COPY, clockOf } from './panel.js';
 import { WANSHENG_ID, WANSHENG_LABEL, WANSHENG_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
 import type { NotifyApi, TrafficStatus } from './notify-api.js';
-import { DeliveryHistoryHost } from './notify.js';
+import { DeliveryHistoryHost, notifyFailureText, notifyReasonCode } from './notify.js';
 import type { RikkeNotify } from './rikke-api.js';
 import { installRikkeStyle } from './rikke-style.js';
 import type { WanshengApi, WanshengFacts, WanshengStatus } from './wansheng-api.js';
@@ -73,8 +73,13 @@ function touchLines(status: WanshengStatus | undefined): ReactElement | null {
         <p className="xs-wansheng__note" data-xuanshu-note="unread">{`未读 ${status?.unread} 条晚省通知`}</p>
       ) : null}
       {notify?.status === 'failed' ? (
-        <p className="xs-wansheng__alert" role="alert" data-xuanshu-notify="failed">
-          {`上一次通知没发出去：${notify.reason ?? '（没有给理由）'}`}
+        <p
+          className="xs-wansheng__alert"
+          role="alert"
+          data-xuanshu-notify="failed"
+          data-xuanshu-reason-code={notifyReasonCode(notify)}
+        >
+          {`上一次通知没发出去：${notifyFailureText(notify)}`}
         </p>
       ) : null}
     </>
