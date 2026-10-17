@@ -746,7 +746,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 ```
 # pnpm test:inventory（profile 已装；t33 复核修复轮 + 两轴再复核修复之后）
-[inventory] 用例 1811 条（基线 1811）/ 文件 164 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 1814 条（基线 1814）/ 文件 165 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门）exit 0；清单基线已按最终用例数 `--update`（1811 / 164）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门）exit 0；清单基线已按最终用例数 `--update`（1814 / 165）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -791,6 +791,17 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
    有一次红在这一条（第一次真下载 + 第二次零下载 + 新报告），单跑该文件 14/14 绿、复跑全量也绿。
    判为环境/时序抖动（它真起本地 HTTP fixture 并真跑两遍 setup），**不是**本轮改动引入（本轮只动了
    setup 的 home 默认与文档串）；遇上了先单跑该文件再判，别放宽清单门。
+7. **`git worktree remove` 会跟穿 `node_modules` junction，清空主仓依赖**（2026-10-17 t33 实测事故）：
+   实现者为了在 worktree 里能 build/跑测试，会 `mklink /J node_modules <主仓>/node_modules`（也可能在
+   `packages/*/node_modules`）。`scripts/cleanup-worktrees.mjs` 先跑 `git worktree remove` —— git for Windows
+   递归删除时**跟穿 junction**，把主仓根 `node_modules` 清空（`vitest`/`tsc` 起不来；`.dsh-home` 里 profile
+   的 `node_modules` 也空了）。**恢复**：`ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile --offline`
+   （pnpm store 还在，169 包 3.7s）→ `node scripts/install-profile.mjs --home .dsh-home`；恢复后 `verify:all` 复绿。
+   **处置**：新增 `scripts/lib/cleanup-junctions.mjs`，清理脚本在 `git worktree remove` **之前**先摘掉 worktree
+   内所有 junction/symlink（只删链接本身，绝不进目标）；判据台 `tests/lib/cleanup-junctions.test.mjs`（3 条，
+   含「目标哨兵文件必须活着」），并做了一次端到端实测（worktree + junction → 清理 → 哨兵仍在、worktree 已删）。
+   **教训**：「`rmdir /s` 不跟随 reparse point」只保护最后那一步，**先删目录的是 git**；有 junction 的工作树，
+   必须先把链接摘掉再交给任何递归删除。
 
 #### 16.5 已知边界（如实登记）
 
@@ -878,7 +889,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 
 ```
 # pnpm test:inventory
-[inventory] 用例 1811 条（基线 1811）/ 文件 164 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 1814 条（基线 1814）/ 文件 165 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation → 8/8 通过，exit 0
@@ -899,4 +910,9 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 **遗留边界（如实）**：setup 默认档端到端仍无证据（§16.5 登记，关闭方式写在那里）；`cang` 的拒绝是
 静默改判（无装配 notes 通道，§16.2 已登记）；R7 人话表仍两份（有对拍，跨包无共享运行时模块）；
 `apply` 期多一次只读 `data.overview`（含体积统计；失败降级为占位，代价写在代码注释里）。
+
+**同日清理事故与护栏（详见 §16.4 第 7 条）**：收 worktree 时 `git worktree remove` 跟穿实现者的
+`node_modules` junction，清空了主仓依赖；用 pnpm store 离线恢复（169 包）+ 重装 profile 后 `verify:all` 复绿。
+已新增 `scripts/lib/cleanup-junctions.mjs`（删 worktree 前先摘链接）与 3 条判据用例，并做了一次端到端实测；
+最终用例数因此从 1811/164 变为 **1814/165**。
 

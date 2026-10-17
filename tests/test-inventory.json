@@ -1,6 +1,6 @@
 {
   "note": "用例清单基线：收集到的用例数（含 skip）。--update 刷新；knownRed 之外的失败 = 违规。",
-  "total": 1811,
+  "total": 1814,
   "files": {
     "tests/assembly/ai-readiness-api.test.mjs": 3,
     "tests/assembly/ai-readiness-controller.test.mjs": 8,
@@ -104,6 +104,7 @@
     "tests/isolation/home.test.mjs": 14,
     "tests/isolation/port-guard.test.mjs": 13,
     "tests/isolation/resolve.test.mjs": 16,
+    "tests/lib/cleanup-junctions.test.mjs": 3,
     "tests/lib/home-single-source.test.mjs": 24,
     "tests/lib/inventory-gate.test.mjs": 26,
     "tests/lib/sandbox-prune.test.mjs": 10,

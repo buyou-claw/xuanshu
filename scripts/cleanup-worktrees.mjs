@@ -9,8 +9,10 @@
  *   1. **先证明**：worktree 的分支 tip 必须是 `HEAD` 的祖先（`git merge-base --is-ancestor`）——
  *      没并回来的活一律不动，只报告。本轮就是靠这条发现票 13 客户端两笔从未并回。
  *   2. **再存档**：工作区脏（含未跟踪）就先 `git stash --include-untracked`，草稿留在 `stash@{0}`。
- *   3. **最后删**：`git worktree remove`；若目录还在，Windows 用 `cmd /c rmdir /s /q`
- *      （`rmdir /s` 不跟随 reparse point），其它平台 `rm -rf`。
+ *   3. **最后删**：先摘掉 worktree 里的 junction/symlink（实现者的 `node_modules` 常指向主仓，
+ *      见 `scripts/lib/cleanup-junctions.mjs` 的事故记录 —— `git worktree remove` 会跟穿 junction
+ *      清空主仓依赖），再 `git worktree remove`；若目录还在，Windows 用 `cmd /c rmdir /s /q`，
+ *      其它平台 `rm -rf`。
  *
  * 用法：
  *   node scripts/cleanup-worktrees.mjs                 # 只处理 <repo>/.scratch/worktrees/** 下的 worktree
@@ -20,6 +22,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, rmSync } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { removeLinks } from './lib/cleanup-junctions.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..')
@@ -100,8 +103,19 @@ for (const entry of worktrees) {
     }
   }
   if (dryRun) {
-    console.log('[worktrees]   会删除（deregister + rmdir）')
+    const links = removeLinks(entry.path, { dryRun: true })
+    console.log(`[worktrees]   会删除（先摘 ${links.links.length} 个 junction/symlink，再 deregister + rmdir）`)
     removed += 1
+    continue
+  }
+  // 先摘链接本身：git worktree remove 在 Windows 上会跟穿 junction，删到主仓依赖。
+  const links = removeLinks(entry.path)
+  if (links.links.length > 0) {
+    console.log(`[worktrees]   已摘 ${links.removed.length}/${links.links.length} 个 junction/symlink`)
+  }
+  if (links.failed.length > 0) {
+    skipped.push(`${entry.path}：${links.failed.length} 个链接摘不掉（${links.failed[0]}…），未删`)
+    console.log('[worktrees]   跳过：链接摘不掉，避免跟穿删除')
     continue
   }
   git(['worktree', 'remove', entry.path])
