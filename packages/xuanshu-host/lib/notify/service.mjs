@@ -2,7 +2,7 @@
  * packages/xuanshu-host/lib/notify/service.mjs — 触达账 / 共享设置的 RPC 面（#24 建、#25 扩）。
  *
  * 挂在现有 `/xuanshu` 通道上（`lib/rpc.mjs`），六个方法：
- *   - `traffic.status({limit?})`  → `{entries[最新在前], unread, lastFailure?}`
+ *   - `traffic.status({limit?})`  → `{entries[最新在前], unread?, lastFailure?}`（`unread` 见下）
  *   - `traffic.markRead({ids})`   → `{ok:true, updated}`
  *   - `traffic.settings.get()`    → `{notifySummary}`
  *   - `traffic.settings.set({notifySummary})` → `{notifySummary}`
@@ -11,8 +11,9 @@
  *   - `shell.settings.set({...})` → `{settings}`（改完回读；写失败抛）
  *
  * 加性纪律（与 `rikke/service.mjs:16-18` 同款）：**拿不到就省略键**，不写 false/0 冒充已读。
- * `traffic.status` 的 `lastFailure` 只在账里真有 failed 时才出现；`shell.settings.get` 的
- * `effective` 只在壳写了运行时状态文件时才出现（读不到 ≠ 自启没生效）。
+ * `traffic.status` 的 `unread` 只在账本**可读**时出现 —— 文件不存在是合法空账（`unread: 0` 是真话），
+ * 文件在但读失败是**未知**（整键省略，不写 0 冒充「都读过了」）；`lastFailure` 只在账里真有 failed
+ * 时才出现；`shell.settings.get` 的 `effective` 只在壳写了运行时状态文件时才出现（读不到 ≠ 自启没生效）。
  */
 
 import { resolveDataDir } from '../home.mjs'
@@ -38,11 +39,15 @@ export function createTrafficMethods(ctx, config = {}) {
   const env = config.env
 
   return {
-    /** 账本读面（最新在前）。`unread` 按全账算：badge 不能用被截断的那一页算。 */
+    /**
+     * 账本读面（最新在前）。`unread` 按全账算：badge 不能用被截断的那一页算。
+     * 三态口径：`missing` → `unread: 0`（合法空账）；`unreadable` → **整键省略**（未知不是 0）。
+     */
     'traffic.status': async (request) => {
       const source = requestOf(request)
       const ledger = readTraffic(dataDir, { limit: source.limit })
-      const out = { entries: ledger.entries, unread: ledger.unread }
+      const out = { entries: ledger.entries }
+      if (ledger.state !== 'unreadable') out.unread = ledger.unread
       if (ledger.lastFailure !== undefined) out.lastFailure = ledger.lastFailure
       return out
     },

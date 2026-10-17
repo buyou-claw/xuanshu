@@ -7702,10 +7702,12 @@ var TRAFFIC_STATUS_TEXT = {
 };
 function XsDeliveryHistory({ status }) {
   const entries = Array.isArray(status.entries) ? status.entries : [];
+  const unread = typeof status.unread === "number" ? status.unread : void 0;
   return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "xs-touch__history", "data-xuanshu-history": "traffic", children: [
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("h2", { className: "xs-touch__history-title", children: "投递历史" }),
+    unread === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", role: "note", "data-xuanshu-note": "unread-unknown", children: "未读数未知（触达账存在但读不出来，不按 0 算）" }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", "data-xuanshu-note": "unread", children: `未读 ${unread} 条` }),
     status.lastFailure === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", role: "alert", "data-xuanshu-history-error": "last-failure", children: `最近一次失败：${status.lastFailure.kind === "wansheng" ? "晚省" : "日课"} · ${status.lastFailure.reason ?? "（没有给理由）"}` }),
-    entries.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", "data-xuanshu-history-empty": "true", children: "还没有投递记录。" }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("ul", { className: "xs-touch__history-list", children: entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+    entries.length === 0 ? unread === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", "data-xuanshu-history-empty": "unknown", children: "投递历史也读不出来（不是「没有记录」）。" }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", "data-xuanshu-history-empty": "true", children: "还没有投递记录。" }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("ul", { className: "xs-touch__history-list", children: entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
       "li",
       {
         className: "xs-touch__history-row",
