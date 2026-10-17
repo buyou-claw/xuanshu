@@ -597,7 +597,27 @@ export function createBestOfMethods(ctx, config = {}) {
       // S9 §6：只有一份可用 → 不跑判官，直接进「只有一份可用」中间态。
       record.judge = { mode: 'skipped', skipped: true, adoptedId: usable[0].id, ranking: [usable[0].id], error: undefined }
     } else {
-      record.judge = await runJudge(record, usable, completionOfUsable)
+      // 判官也是模型调用：独立限时并继承「停止全部」，包括查找判官路由的等待。
+      const judgeSignal = createRouteSignal(signal, routeTimeoutMs)
+      try {
+        const outcome = await raceAbort(runJudge(record, usable, completionOfUsable, judgeSignal.signal), judgeSignal.signal)
+        // cancel 已落下 skipped 账，迟到判官不能再替人把它改回一份排序。
+        if (signal.aborted) return
+        if (outcome.aborted || outcome.error !== undefined) {
+          record.judge = {
+            mode: 'failed',
+            adoptedId: completionOfUsable[0] ?? null,
+            ranking: completionOfUsable,
+            error: judgeSignal.timedOut()
+              ? '判官调用超时，已按完成顺序排前；采用仍由你决定。'
+              : `判官调用失败：${String(outcome.error?.message ?? outcome.error ?? '调用已中断')}`,
+          }
+        } else {
+          record.judge = outcome.value
+        }
+      } finally {
+        judgeSignal.dispose()
+      }
     }
     record.finishedAt = new Date().toISOString()
     persist(record)
@@ -634,8 +654,9 @@ export function createBestOfMethods(ctx, config = {}) {
   }
 
   /** judge 槽：一次带单字段工具的调用；失败回落完成顺序第一份（ADR-0010）。 */
-  async function runJudge(record, usable, completionOfUsable) {
+  async function runJudge(record, usable, completionOfUsable, signal) {
     const route = await resolveJudgeRoute(record)
+    if (signal.aborted) throw signal.reason ?? new Error('判官调用已中断')
     if (route === undefined) {
       // 如实降级：候选已经覆盖了所有已注册 provider（或本机只注册了一家）。
       // 这一轮**没有**异源判官 —— 不发起同源判官调用，也不用完成顺序冒充「排序」。
@@ -650,7 +671,9 @@ export function createBestOfMethods(ctx, config = {}) {
     const body = usable.map((candidate) => `【候选 ${candidate.id} · ${candidate.angle}】\n${candidate.text}`).join('\n\n')
     let result
     try {
-      result = await collectJudge({ route, question: record.question, body })
+      result = await collectJudge({ route, question: record.question, body, signal })
+      // adapter 可能忽略 abort；超时 / 停止之后的 usage 与排序均不得回填旧记录。
+      if (signal.aborted) throw signal.reason ?? new Error('判官调用已中断')
     } catch (error) {
       // 调用本身抛错：这次判定**没有来源**。`mode` 记的是「判定是怎么来的」，
       // 写成 'tool' 等于说一件没发生的事（ADR-0010 / spec 002:152 的 `failed` 档）。
@@ -695,7 +718,7 @@ export function createBestOfMethods(ctx, config = {}) {
   }
 
   /** judge 的一次调用（单独抽出来是为了让「调用失败」与「判定不可用」两条路分开写）。 */
-  async function collectJudge({ route, question, body }) {
+  async function collectJudge({ route, question, body, signal }) {
     const llm = softGet(ctx, 'llm')
     if (typeof llm?.stream !== 'function') throw new Error('宿主没有可用的 LLM 服务（ctx.llm）。')
     return collectStream(
@@ -705,6 +728,7 @@ export function createBestOfMethods(ctx, config = {}) {
         system: JUDGE_SYSTEM,
         messages: [{ role: 'user', content: [{ type: 'text', text: `问题：${question}\n\n${body}` }] }],
         tools: [judgeToolSchema()],
+        signal,
       }),
     )
   }

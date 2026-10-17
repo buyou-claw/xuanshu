@@ -21,6 +21,7 @@ import {
 } from '../../packages/xuanshu-client/src/client/panel.ts'
 import { XsMissedBadge, XsWanshengCard } from '../../packages/xuanshu-client/src/client/cards.tsx'
 import { WanshengPanel, installWansheng } from '../../packages/xuanshu-client/src/client/wansheng.tsx'
+import { createWanshengApi } from '../../packages/xuanshu-client/src/client/wansheng-api.ts'
 
 const render = (element) => renderToStaticMarkup(element)
 
@@ -44,6 +45,7 @@ const FACTS = {
     ],
   },
   activeWorkspaces: [{ id: 'w1', title: 'XuanShu', sessionCount: 3, lastActiveAt: '2026-10-15T02:30:00.000Z' }],
+  activeWorkflows: [{ id: 'f1', title: '整理阅读笔记', sessionCount: 1, lastActiveAt: '2026-10-15T02:00:00.000Z' }],
   digao: { generatedAt: '2026-10-15T03:00:00.000Z' },
   rikke: { generatedAt: '2026-10-15T00:00:00.000Z' },
 }
@@ -88,6 +90,31 @@ function cardOf(html, name) {
 /* ───────────────────────── 1. status → 卡级四态（纯映射） ───────────────────────── */
 
 describe('#25 · 晚省 status → 卡级四态（纯映射，可无 DOM 测）', () => {
+  it.each([
+    [undefined, '哪些工作流有活动：未知（宿主没回传）'],
+    [[], '今天没有工作流活动'],
+    [FACTS.activeWorkflows, '今天 1 个工作流有活动'],
+  ])('卡与面板分别如实显示工作流活动：%j', (activeWorkflows, expected) => {
+    const status = { ...STATUS_READY, facts: { ...FACTS, activeWorkflows } }
+    const card = render(h(XsWanshengCard, { state: 'ready', today: status.date, facts: status.facts, ...injected() }))
+    const panel = render(h(WanshengPanel, { api: {}, navigate: () => {}, preloaded: status, preloadedHistory: { entries: [], unread: 0 } }))
+    expect(card).toContain(expected)
+    expect(panel).toContain(expected)
+    if (activeWorkflows?.length) expect(panel).toContain('整理阅读笔记')
+  })
+
+  it('空态两路同一句式：「今天没有{项目|工作流}活动」（不再出现「今天 0 个…」）', () => {
+    const status = { ...STATUS_READY, facts: { ...FACTS, activeWorkspaces: [], activeWorkflows: [] } }
+    const card = render(h(XsWanshengCard, { state: 'ready', today: status.date, facts: status.facts, ...injected() }))
+    const panel = render(h(WanshengPanel, { api: {}, navigate: () => {}, preloaded: status, preloadedHistory: { entries: [], unread: 0 } }))
+    for (const html of [card, panel]) {
+      expect(html).toContain('今天没有项目活动')
+      expect(html).toContain('今天没有工作流活动')
+      // 旧的「0 个」措辞是把「已知零」写成计数式，与项目那一路的句式不一致（复核 A3）。
+      expect(html).not.toContain('今天 0 个项目有活动')
+      expect(html).not.toContain('今天 0 个工作流有活动')
+    }
+  })
   it('有产物有事实 → ready（date 用宿主给的日期）', () => {
     expect(wanshengStateFromStatus(STATUS_READY)).toEqual({
       state: 'ready',
@@ -318,13 +345,16 @@ describe('#25 · 设置里能看到投递历史（traffic.status 的读面）', 
 describe('#25 · installWansheng（加性注册 / 无 document 安全）', () => {
   function installCtx() {
     const registrations = []
+    const components = new Map()
     return {
       registrations,
+      components,
       ctx: {
         slots: {
           inject: (_key, effect) => effect(),
-          register: (options) => {
+          register: (options, component) => {
             registrations.push(options)
+            components.set(options, component)
             return () => {}
           },
           entries: () => [],
@@ -338,6 +368,23 @@ describe('#25 · installWansheng（加性注册 / 无 document 安全）', () =>
       },
     }
   }
+
+  it('实际注册入口通过 RPC 取回工作流事实并传给晚省面板', async () => {
+    const { registrations, components, ctx } = installCtx()
+    const calls = []
+    ctx.connection = { rpc: { call: async (channel, endpoint) => {
+      calls.push([channel, endpoint])
+      return { ok: true, value: STATUS_READY }
+    } } }
+    installWansheng(ctx, { api: createWanshengApi(ctx), navigate: () => {} })
+    const main = registrations.find((options) => options.name === 'main')
+    const props = main.inject()
+    const status = await props.api.status()
+    const html = render(h(components.get(main), { ...props, preloaded: status, preloadedHistory: { entries: [], unread: 0 } }))
+    expect(calls).toEqual([['/xuanshu', 'wansheng.status']])
+    expect(html).toContain('今天 1 个工作流有活动')
+    expect(html).toContain('整理阅读笔记')
+  })
 
   it('注册 main key `wansheng` + 侧栏行 `wansheng`（label 晚省，order 110），不切面板', () => {
     const { registrations, ctx } = installCtx()

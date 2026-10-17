@@ -28,6 +28,10 @@ export function exclusionNotes({ home, dataDir }) {
       reason: 'profile 代码与 node_modules（安装产物）：不是用户数据，重装即可',
     },
     {
+      path: join(dataDir, 'runtime'),
+      reason: '壳的运行时凭据与进程状态：只在本机当次运行有效，不计体积、不进备份',
+    },
+    {
       path: join(dataDir, 'logs'),
       reason: '运行日志：排障用，不是用户数据，不进备份',
     },
@@ -48,9 +52,11 @@ export function buildOverview({ home, dataDir, limits = DEFAULT_LIMITS }) {
   const notes = []
   let symlinks = 0
   const cappedLabels = []
+  const unreadable = new Set()
+  const onError = (path) => unreadable.add(path)
 
-  const groups = dataGroups({ home, dataDir }).map((group) => {
-    const measured = measureRoots(group.roots, { limits })
+  const groups = dataGroups({ home, dataDir }, { onError }).map((group) => {
+    const measured = measureRoots(group.roots, { limits, onError })
     symlinks += measured.symlinks
     if (measured.capped) cappedLabels.push(group.label)
     return {
@@ -81,6 +87,9 @@ export function buildOverview({ home, dataDir, limits = DEFAULT_LIMITS }) {
       `统计达到上限（文件 ${limits.files ?? DEFAULT_LIMITS.files} / 深度 ${limits.depth ?? DEFAULT_LIMITS.depth}）：`
       + `${cappedLabels.join('、')} 的体积可能被截断，显示的是「至少这么多」。`,
     )
+  }
+  for (const path of unreadable) {
+    notes.push(`无法读取 ${path}：统计不完整，显示的是已核对的部分，未读部分大小未知。`)
   }
 
   return {

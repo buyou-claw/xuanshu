@@ -42,6 +42,8 @@ export interface WanshengWorkspace {
 export interface WanshengFacts {
   consultSessions?: WanshengConsultSessions;
   activeWorkspaces?: WanshengWorkspace[];
+  /** 今天有活动的工作流；与工作区并列，缺席表示未知。 */
+  activeWorkflows?: WanshengWorkspace[];
   digao?: { generatedAt?: string };
   rikke?: { generatedAt?: string };
   shiji?: { updatedAt?: string };

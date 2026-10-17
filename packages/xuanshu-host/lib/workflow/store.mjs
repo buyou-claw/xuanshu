@@ -97,14 +97,25 @@ export function readWorkflow(dataDir, sessionId) {
   }
 }
 
-/** 列出全部工作流（创建时间倒序；读不动的条目跳过，不因为一条坏文件让整个列表挂掉）。 */
-export function listWorkflows(dataDir) {
+/**
+ * 列出全部工作流（创建时间倒序）。默认宽松列表跳过坏条目；strict 用于事实统计，
+ * 必须区分「没有工作流」与「清单核不了」，不能把读取失败折算成已知零条。
+ */
+export function listWorkflows(dataDir, { strict = false } = {}) {
   const root = workflowRoot(dataDir)
-  if (!existsSync(root)) return []
+  if (!strict && !existsSync(root)) return []
+  let entries
+  try {
+    entries = readdirSync(root, { withFileTypes: true })
+  } catch (error) {
+    if (strict && error?.code === 'ENOENT') return []
+    throw error
+  }
   const out = []
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
+  for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue
     const record = readWorkflow(dataDir, entry.name.slice(0, -'.json'.length))
+    if (record === null && strict) throw new Error(`工作流清单 ${entry.name} 读不出来或格式不合法，无法核对完整工作流列表。`)
     if (record !== null) out.push(record)
   }
   return out.sort((left, right) => String(right.createdAt ?? '').localeCompare(String(left.createdAt ?? '')))

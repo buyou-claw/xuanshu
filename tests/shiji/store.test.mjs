@@ -6,6 +6,7 @@
  *   ② 坏行 / 旧 schema 行不许把整份账本读死（坏行报行号，其余照读）；
  *   ③ id 是**确定性**的：重扫同一个 `source+refId` 必须落到同一个 id（否则「一项目一条」靠运气）。
  */
+import { mkdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -99,6 +100,16 @@ describe('票05 · shiji.jsonl 一条一行（整文件原子重写）', () => {
     try {
       expect(readShijiEntries(sandbox.dataDir)).toEqual({ entries: [], notes: [] })
       expect(shijiExists(sandbox.dataDir)).toBe(false)
+    } finally {
+      sandbox.cleanup()
+    }
+  })
+
+  it('账本路径被目录占用 → 读面报可读错误，不冒充空账本', () => {
+    const sandbox = makeSandbox('shiji-unreadable')
+    try {
+      mkdirSync(shijiFile(sandbox.dataDir))
+      expect(() => readShijiEntries(sandbox.dataDir)).toThrow(/事记.*读.*EISDIR/u)
     } finally {
       sandbox.cleanup()
     }

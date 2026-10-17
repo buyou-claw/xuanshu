@@ -16,7 +16,7 @@
  *   3. 统计有上限（文件数 / 深度），到顶就停并记 note —— 宁可说「至少这么多」，也不挂起界面。
  */
 
-import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs'
+import { lstatSync, readdirSync, statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
 /** 体积口径的 schema（契约 §1 定值）。 */
@@ -29,6 +29,14 @@ export const DEFAULT_LIMITS = { files: 20_000, depth: 32 }
 
 /** 任何分类都**绝不算**的文件名：本机凭据库（契约 §1「凭据不计入任何组」）。 */
 export const NEVER_COUNT_BASENAME = '.credentials.yaml'
+
+/** Windows 文件名大小写等价；排除判据必须与文件系统使用同一口径。 */
+const foldName = (name) => process.platform === 'win32' ? name.toLowerCase() : name
+
+/** 凭据库判据在体积与备份中共用，不能因大小写变体漏出密钥。 */
+export function isCredentialFile(path) {
+  return foldName(basename(path)) === NEVER_COUNT_BASENAME
+}
 
 /** `dataDir` 下属于「其它」的条目必须排除这些名字（它们各自有组，或根本不是数据）。 */
 const OTHER_EXCLUDED_NAMES = new Set([
@@ -44,6 +52,8 @@ const OTHER_EXCLUDED_NAMES = new Set([
   'skills',
   // profile 代码：几百 MB 的 node_modules，不是用户数据。
   'profiles',
+  // 壳端点 token / pid 等瞬时状态既不是业务数据，也不应离开本机。
+  'runtime',
 ])
 
 /** 缺省人类可读标签（顺序即展示顺序）。 */
@@ -68,7 +78,7 @@ const GROUP_LABELS = {
  * @param {{home: string, dataDir: string}} paths - 宿主解析出的 home 与数据目录。
  * @returns {Array<{id: string, label: string, path: string, roots: string[]}>}
  */
-export function dataGroups({ home, dataDir }) {
+export function dataGroups({ home, dataDir }, { onError } = {}) {
   const groups = [
     { id: 'pu', roots: [join(dataDir, 'pus')] },
     { id: 'cang', roots: [join(dataDir, 'cang')] },
@@ -81,7 +91,7 @@ export function dataGroups({ home, dataDir }) {
     { id: 'consult', roots: [join(home, 'sessions')] },
     { id: 'storages', roots: [join(home, 'storages')] },
     { id: 'skills', roots: [join(home, 'skills')] },
-    { id: 'other', roots: otherRoots(dataDir), path: dataDir },
+    { id: 'other', roots: otherRoots(dataDir, { onError }), path: dataDir },
   ]
   return groups.map((group) => ({
     id: group.id,
@@ -92,14 +102,14 @@ export function dataGroups({ home, dataDir }) {
 }
 
 /** 「其它」= `dataDir` 下未被前几组覆盖的直接子项（递归由遍历层负责）。 */
-export function otherRoots(dataDir) {
-  if (!existsSync(dataDir)) return []
+export function otherRoots(dataDir, { onError } = {}) {
   try {
     return readdirSync(dataDir)
-      .filter((name) => !OTHER_EXCLUDED_NAMES.has(name))
+      .filter((name) => !OTHER_EXCLUDED_NAMES.has(foldName(name)))
       .map((name) => join(dataDir, name))
-  } catch {
-    // 读不了目录（权限 / 竞态）= 没有条目可算，不抛。
+  } catch (error) {
+    // 缺失是合法空组；权限等读失败必须让概览/备份按各自语义处理。
+    if (error?.code !== 'ENOENT') onError?.(dataDir, error)
     return []
   }
 }
@@ -111,10 +121,12 @@ export function otherRoots(dataDir) {
  * @param {object} [options]
  * @param {{files?: number, depth?: number}} [options.limits] - 上限。
  * @param {(path: string, reason: string) => void} [options.onSkip] - 跳过项回调（备份要记 skipped）。
+ * @param {(path: string, error: Error) => void} [options.onError] - 读取失败（缺失 / 扫描窗口内消失除外，
+ *        那两种走 `onSkip`：前者是合法空组、后者是并发写的正常形状，都不是「读不动」）。
  * @param {(path: string) => string|undefined} [options.ignore] - 返回原因 = 跳过且不再深入。
  * @returns {{files: string[], symlinks: number, capped: boolean}}
  */
-export function walkFiles(roots, { limits = DEFAULT_LIMITS, onSkip, ignore } = {}) {
+export function walkFiles(roots, { limits = DEFAULT_LIMITS, onSkip, onError, ignore } = {}) {
   const fileCap = Number.isFinite(limits.files) && limits.files > 0 ? Math.floor(limits.files) : DEFAULT_LIMITS.files
   const depthCap = Number.isFinite(limits.depth) && limits.depth >= 0 ? Math.floor(limits.depth) : DEFAULT_LIMITS.depth
   const files = []
@@ -125,15 +137,23 @@ export function walkFiles(roots, { limits = DEFAULT_LIMITS, onSkip, ignore } = {
   const visit = (path, depth) => {
     if (capped) return
     // 凭据库在任何组里都不算（dataDir 被覆盖成 home 时它会正好落在「其它」的根下）。
-    if (basename(path) === NEVER_COUNT_BASENAME) {
+    if (isCredentialFile(path)) {
       onSkip?.(path, '凭据与密钥引用：不计体积')
       return
     }
     let stat
     try {
       stat = lstatSync(path)
-    } catch {
-      return // 不存在 / 读不到 = 没有文件
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        // 根缺失 = 合法空组（新建 home 里大多数组还不存在）；**扫描窗口内消失**（并发写 /
+        // 原子替换：写盘先写临时文件再 rename）不是读失败 —— 记跳过（带原因），让备份能成功并
+        // 逐条对账；把它当 onError 会让一次正常的 rename 变成「备份整单拒绝」。
+        if (depth > 0) onSkip?.(path, '扫描期间已消失（并发写 / 原子替换）：不纳入')
+        return
+      }
+      onError?.(path, error)
+      return
     }
     if (stat.isSymbolicLink()) {
       symlinks += 1
@@ -162,7 +182,13 @@ export function walkFiles(roots, { limits = DEFAULT_LIMITS, onSkip, ignore } = {
     let entries
     try {
       entries = readdirSync(path, { withFileTypes: true })
-    } catch {
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        // 与 lstat 的 ENOENT 同一种形状：目录在 lstat 之后、readdir 之前消失（并发删除 / rename）。
+        onSkip?.(path, '扫描期间已消失（并发写 / 原子替换）：不纳入')
+        return
+      }
+      onError?.(path, error)
       return
     }
     for (const entry of entries) {
@@ -190,8 +216,9 @@ export function measureRoots(roots, options = {}) {
   for (const file of walked.files) {
     try {
       bytes += statSync(file).size
-    } catch {
-      // 统计途中文件被删 = 少算一个，不抛（体积是给人看的口径，不是审计账）。
+    } catch (error) {
+      // 部分统计仍可展示，但必须让调用方知道有文件没核上。
+      options.onError?.(file, error)
     }
   }
   return { bytes, files: walked.files.length, symlinks: walked.symlinks, capped: walked.capped }

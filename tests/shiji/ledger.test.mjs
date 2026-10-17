@@ -8,6 +8,9 @@
  *   - **删除 = 墓碑**：`excludedAt` 之后自动扫描永不重建；恢复只能显式清墓碑；
  *   - 人工「存成今天的事记」（`source:'session'`）自动扫描**永不动**。
  */
+import fs from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { DIGEST_SYSTEM } from '../../packages/xuanshu-host/lib/digao/llm.mjs'
@@ -15,7 +18,7 @@ import {
   evidenceFingerprint, listShiji, recordSessionShiji, removeShijiEntry, restoreShijiEntry, scanAndUpdateShiji,
 } from '../../packages/xuanshu-host/lib/shiji/ledger.mjs'
 import { SHIJI_SUMMARY_SYSTEM } from '../../packages/xuanshu-host/lib/shiji/summary.mjs'
-import { writeShijiSettings } from '../../packages/xuanshu-host/lib/shiji/store.mjs'
+import { writeShijiEntries, writeShijiSettings } from '../../packages/xuanshu-host/lib/shiji/store.mjs'
 import { writeWorkflow } from '../../packages/xuanshu-host/lib/workflow/store.mjs'
 import {
   fakeLlm, fakeProjectionCache, fakeSessionQuery, fakeWorkspaceRegistry, makeCtx, makeSandbox, readJsonl, seedProject, userEvent,
@@ -369,4 +372,126 @@ describe('票05 · 排除目录由设置驱动（扫描入口读 shiji-settings.
     const entry = rows(target).find((item) => item.source === 'workspace')
     expect(entry.basis.docs).toBe(2)
   })
+})
+
+/** 模型已收到摘要请求，但尚未回答：人可以在这段真实异步窗口操作账本。 */
+function holdNextSummary(llm, text = '较早扫描的摘要。') {
+  let entered
+  let release
+  const started = new Promise((resolve) => { entered = resolve })
+  const waiting = new Promise((resolve) => { release = resolve })
+  llm.stream = async function* () {
+    entered()
+    await waiting
+    yield { type: 'text-delta', index: 0, text }
+  }
+  return { started, release }
+}
+
+describe('事记扫描跨模型等待时保留用户已完成的操作', () => {
+  it('扫描等待摘要期间删除、保存人工事记都返回成功 → 扫描完成后墓碑与新条目仍在', async () => {
+    const target = scene()
+    await scan(target)
+    const workspace = rows(target).find((entry) => entry.source === 'workspace')
+    target.sandbox.writeRoot('projects/xuan/README.md', '# 新的项目材料，需要重新摘要。\n')
+    const held = holdNextSummary(target.llm)
+    const pending = scan(target, LATER)
+    await held.started
+    let removed
+    let saved
+    try {
+      removed = removeShijiEntry(target.sandbox.dataDir, { id: workspace.id, now: LATER })
+      saved = recordSessionShiji(target.sandbox.dataDir, {
+        sessionId: 'session-xs-consult-during-scan', summary: '扫描期间确认保存的事记。', now: LATER,
+      })
+      expect(removed.ok).toBe(true)
+      expect(saved.ok).toBe(true)
+    } finally {
+      held.release()
+    }
+    const result = await pending
+    expect(rows(target).find((entry) => entry.id === workspace.id).excludedAt).toBe(LATER.toISOString())
+    expect(listShiji(target.sandbox.dataDir).entries.some((entry) => entry.id === workspace.id)).toBe(false)
+    expect(rows(target).find((entry) => entry.id === saved.entry.id)).toEqual(saved.entry)
+    expect(result.entries.find((entry) => entry.id === workspace.id).excludedAt).toBe(LATER.toISOString())
+  })
+
+  it('扫描已读到墓碑、等待另一条摘要时显式恢复 → 完成后仍保持恢复', async () => {
+    const target = scene()
+    await scan(target)
+    const workspace = rows(target).find((entry) => entry.source === 'workspace')
+    removeShijiEntry(target.sandbox.dataDir, { id: workspace.id, now: LATER })
+    target.sandbox.writeRoot('home/skills/weekly/SKILL.md', '# 工作流新的材料，需要重新摘要。\n')
+    const held = holdNextSummary(target.llm)
+    const pending = scan(target, LATER)
+    await held.started
+    try {
+      expect(restoreShijiEntry(target.sandbox.dataDir, { id: workspace.id }).ok).toBe(true)
+    } finally {
+      held.release()
+    }
+    await pending
+    expect(rows(target).find((entry) => entry.id === workspace.id).excludedAt).toBeNull()
+    expect(listShiji(target.sandbox.dataDir).entries.some((entry) => entry.id === workspace.id)).toBe(true)
+  })
+
+  it('两次刷新重叠、旧摘要较慢 → 最后保留较新一次扫描到的材料', async () => {
+    const target = scene()
+    await scan(target)
+    target.sandbox.writeRoot('projects/xuan/README.md', '# 较早的材料\n')
+    const held = holdNextSummary(target.llm)
+    const older = scan(target, LATER)
+    await held.started
+    target.sandbox.writeRoot('projects/xuan/README.md', '# 较新的材料，又多了一句。\n')
+    const llm = fakeLlm({ text: '较新材料生成的摘要。' })
+    const newerCtx = makeCtx({ services: {
+      llm,
+      workspaceRegistry: fakeWorkspaceRegistry([{
+        id: 'w1', path: target.projectRoot, title: '较新的项目名', createdAt: '2026-10-10T00:00:00.000Z', sessionIds: [],
+      }]).service,
+      sessionQuery: fakeSessionQuery().service,
+    } })
+    const newer = scanAndUpdateShiji({ ctx: newerCtx, dataDir: target.sandbox.dataDir, dshHome: target.dshHome, now: new Date('2026-10-19T03:30:00.000Z') })
+    // 给未被串行化的新扫描一次完整完成机会，再放开旧回答，复现「旧的最后覆盖新的」。
+    await Promise.race([newer, new Promise((resolve) => setImmediate(resolve))])
+    held.release()
+    await Promise.all([older, newer])
+    const after = rows(target).find((entry) => entry.source === 'workspace')
+    expect(after.name).toBe('较新的项目名')
+    expect(after.summary).toBe('较新材料生成的摘要。')
+    expect(shijiSummaryCalls(llm).at(-1).options.messages[0].content[0].text).toContain('较新的材料')
+  })
+})
+
+describe('事记账本读失败不当成空账重写', () => {
+  for (const failAt of [1, 2]) {
+    it(`${failAt === 1 ? '开始扫描' : '提交扫描结果'}时临时 EACCES → 可读失败，保留墓碑与冻结条目原文`, async () => {
+      const target = scene()
+      await scan(target)
+      writeShijiEntries(target.sandbox.dataDir, rows(target).map((entry) => ({
+        ...entry,
+        ...(entry.source === 'workspace' ? { excludedAt: LATER.toISOString() } : { frozenAt: LATER.toISOString() }),
+      })))
+      const file = resolve(target.sandbox.path('shiji.jsonl'))
+      const before = fs.readFileSync(file, 'utf8')
+      const readFileSync = fs.readFileSync
+      let reads = 0
+      fs.readFileSync = function (path, ...args) {
+        if (resolve(String(path)) === file && ++reads === failAt) {
+          throw Object.assign(new Error('temporary ledger read denial'), { code: 'EACCES' })
+        }
+        return readFileSync.call(this, path, ...args)
+      }
+      syncBuiltinESMExports()
+      try {
+        await expect(scan(target, LATER)).rejects.toThrow(/事记.*读.*EACCES/u)
+      } finally {
+        fs.readFileSync = readFileSync
+        syncBuiltinESMExports()
+      }
+      expect(fs.readFileSync(file, 'utf8')).toBe(before)
+      await expect(scan(target, LATER)).resolves.toHaveProperty('entries')
+      expect(rows(target).find((entry) => entry.source === 'workspace').excludedAt).toBe(LATER.toISOString())
+    })
+  }
 })

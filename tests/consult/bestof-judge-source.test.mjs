@@ -29,7 +29,7 @@ const JUDGE_TOOL = {
   tool: { name: 'submit_judgement', arguments: JSON.stringify({ judgement: { best: 'c1', ranking: ['c1', 'c2'] } }) },
 }
 
-async function scene({ providers = THREE, plans } = {}) {
+async function scene({ providers = THREE, plans, routeTimeoutMs } = {}) {
   const sandbox = makeSandbox('bestof-judge-source')
   roots.push(sandbox)
   const agents = fakeAgents()
@@ -44,7 +44,7 @@ async function scene({ providers = THREE, plans } = {}) {
   })
   const consult = createConsultMethods(host.ctx, { dataDir: sandbox.dataDir })
   const { session } = await consult['consult.create']({ pus: [] })
-  const bestof = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir })
+  const bestof = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir, routeTimeoutMs })
   return { sandbox, host, llm, bestof, session }
 }
 
@@ -59,6 +59,70 @@ async function runToEnd(bestof, payload) {
 }
 
 const judgeCalls = (llm) => llm.calls.filter((call) => call.system?.includes('多 AI 合参的判官'))
+
+// 判官故意忽略 signal、等待人工释放，验证宿主自己能收敛而不是依赖 adapter 配合。
+function holdJudge(llm) {
+  let release
+  let entered
+  const gate = new Promise((resolve) => { release = resolve })
+  const started = new Promise((resolve) => { entered = resolve })
+  const original = llm.service.stream
+  llm.service.stream = (options) => {
+    const inner = original(options)
+    if (!options.system?.includes('多 AI 合参的判官')) return inner
+    return (async function* () {
+      entered()
+      await gate
+      yield* inner
+    })()
+  }
+  return { started, release }
+}
+
+describe('判官的超时与停止', () => {
+  const payload = (session) => ({
+    sessionId: session.sessionId, question: QUESTION,
+    routes: [{ provider: 'deepseek' }, { provider: 'pi-ai' }], confirm: true,
+  })
+
+  it('候选完成后判官卡住也按超时收尾，迟到结果不改写回落排序', async () => {
+    const { bestof, llm, session } = await scene({ routeTimeoutMs: 20 })
+    const held = holdJudge(llm)
+    try {
+      const state = await runToEnd(bestof, payload(session))
+      expect(state.finished).toBe(true)
+      expect(state.candidates.every((candidate) => candidate.status === 'done')).toBe(true)
+      expect(state.judge.mode).toBe('failed')
+      expect(state.judge.error).toMatch(/超时/)
+      expect(state.judge.ranking).toEqual(['c1', 'c2'])
+      expect(judgeCalls(llm)[0].signal.aborted).toBe(true)
+      held.release()
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect((await bestof['bestof.state']({ runId: state.runId })).judge).toEqual(state.judge)
+    } finally {
+      held.release()
+    }
+  })
+
+  it('判官运行时停止：传递 abort，迟到结果不能覆盖已停止状态与冷读记录', async () => {
+    const { bestof, host, sandbox, llm, session } = await scene({ routeTimeoutMs: 10_000 })
+    const held = holdJudge(llm)
+    try {
+      const started = await bestof['bestof.run'](payload(session))
+      await held.started
+      const { bestOf: stopped } = await bestof['bestof.cancel']({ runId: started.runId })
+      expect(stopped.judge.mode).toBe('skipped')
+      expect(judgeCalls(llm)[0].signal?.aborted).toBe(true)
+      held.release()
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      const cold = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir })
+      expect((await bestof['bestof.state']({ runId: started.runId })).judge).toEqual(stopped.judge)
+      expect((await cold['bestof.state']({ runId: started.runId })).judge).toEqual(stopped.judge)
+    } finally {
+      held.release()
+    }
+  })
+})
 
 describe('judge 路由 · 不在候选 provider 集合里', () => {
   it('候选 deepseek + pi-ai → 判官用第三家 glm（cross-source，判官路由写进记录）', async () => {

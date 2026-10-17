@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { fakeLlm } from '../digao/lib/sandbox.mjs'
 import { generateWansheng } from '../../packages/xuanshu-host/lib/wansheng/generate.mjs'
 import { readWansheng, wanshengFile } from '../../packages/xuanshu-host/lib/wansheng/store.mjs'
+import { writeWorkflow } from '../../packages/xuanshu-host/lib/workflow/store.mjs'
 import {
   fakeSessionQuery, fakeWorkspaceRegistry, makeWanshengSandbox, writeConsultSession,
 } from './lib/sandbox.mjs'
@@ -30,7 +31,15 @@ function scene() {
   const registry = fakeWorkspaceRegistry([
     { id: 'w1', path: '/work/xuanshu', title: 'XuanShu', sessionIds: ['s-a'], createdAt: '2026-10-01T00:00:00.000Z' },
   ])
-  const query = fakeSessionQuery({ headers: { 's-a': { createdAt: Date.parse('2026-10-14T17:00:00.000Z') } } })
+  const workflowId = 'session-xs-workflow-evening'
+  writeWorkflow(box.dataDir, {
+    schema: 'xuanshu/workflow@1', id: workflowId, sessionId: workflowId,
+    name: '晚省工作流', createdAt: '2026-10-14T17:00:00.000Z',
+  })
+  const query = fakeSessionQuery({ headers: {
+    's-a': { createdAt: Date.parse('2026-10-14T17:00:00.000Z') },
+    [workflowId]: { createdAt: Date.parse('2026-10-14T17:00:00.000Z') },
+  } })
   const llm = fakeLlm()
   const ctx = { workspaceRegistry: registry.service, sessionQuery: query.service, llm }
   return { box, ctx, llm }
@@ -54,6 +63,7 @@ describe('#25 · 晚省生成：确定性事实 + 原子写', () => {
           items: [{ sessionId: 'session-xs-consult-a', title: '先收口' }],
         },
         activeWorkspaces: [{ id: 'w1', title: 'XuanShu', sessionCount: 1, lastActiveAt: '2026-10-14T17:00:00.000Z' }],
+        activeWorkflows: [{ id: 'session-xs-workflow-evening', title: '晚省工作流', sessionCount: 1, lastActiveAt: '2026-10-14T17:00:00.000Z' }],
       },
       notes: [],
     })
@@ -79,7 +89,7 @@ describe('#25 · 晚省生成：确定性事实 + 原子写', () => {
     boxes.push(box)
     const generated = await generateWansheng({ ctx: {}, dataDir: box.dataDir, date: DATE, zone: ZONE, at: AT })
     expect(generated.ok).toBe(true)
-    expect(generated.record.facts).toEqual({ consultSessions: { count: 0, items: [] } })
+    expect(generated.record.facts).toEqual({ consultSessions: { count: 0, items: [] }, activeWorkflows: [] })
     expect(generated.record.notes.join('\n')).toMatch(/workspaceRegistry|工作区/u)
   })
 })

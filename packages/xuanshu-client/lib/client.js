@@ -4159,12 +4159,15 @@ function WanshengConsultLine({ facts }) {
     /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-line__value", children: sessions === void 0 ? "今天几场问事：未知（宿主没回传）" : `今天 ${sessions.count} 场问事` })
   ] });
 }
-function WanshengWorkspaceLine({ facts }) {
-  const workspaces = facts?.activeWorkspaces;
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { className: "xs-line", "data-xuanshu-fact": "workspaces", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-line__label", children: "项目" }),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-line__value", children: workspaces === void 0 ? "哪些项目有活动：未知（宿主没回传）" : `今天 ${workspaces.length} 个项目有活动` })
-  ] });
+function WanshengActivityLines({ facts }) {
+  const groups = [
+    { key: "workspaces", label: "项目", items: facts?.activeWorkspaces },
+    { key: "workflows", label: "工作流", items: facts?.activeWorkflows }
+  ];
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(import_jsx_runtime12.Fragment, { children: groups.map(({ key, label, items }) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { className: "xs-line", "data-xuanshu-fact": key, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-line__label", children: label }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "xs-line__value", children: items === void 0 ? `哪些${label}有活动：未知（宿主没回传）` : items.length === 0 ? `今天没有${label}活动` : `今天 ${items.length} 个${label}有活动` })
+  ] }, key)) });
 }
 function WanshengArtifactLines({ facts }) {
   const lines = [];
@@ -4276,7 +4279,7 @@ function XsWanshengCard({
         state === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "xs-card__body", "data-xuanshu-ready": "wansheng", children: [
           /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "xs-lines", children: [
             /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(WanshengConsultLine, { facts }),
-            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(WanshengWorkspaceLine, { facts }),
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(WanshengActivityLines, { facts }),
             /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(WanshengArtifactLines, { facts })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(RikkeNotifyLine, { notify }),
@@ -4560,12 +4563,14 @@ function initialView(preloaded) {
   if (preloaded.read === void 0) return { kind: "error", message: "底稿文件存在但正文没读回来。" };
   const schedule = preloaded.read.schedule ?? preloaded.status.schedule;
   const shiji = preloaded.read.shiji ?? preloaded.status.shiji;
+  const shijiReason = preloaded.read.shijiReason ?? preloaded.status.shijiReason;
   return {
     kind: "ready",
     meta: preloaded.read.meta ?? preloaded.status.meta,
     markdown: preloaded.read.markdown,
     ...schedule === void 0 ? {} : { schedule },
-    ...shiji === void 0 ? {} : { shiji }
+    ...shiji === void 0 ? {} : { shiji },
+    ...shijiReason === void 0 ? {} : { shijiReason }
   };
 }
 function errorText3(error) {
@@ -4595,12 +4600,14 @@ function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }) {
       if (mine !== sequence.current) return;
       const schedule2 = read.schedule ?? status.schedule;
       const shiji2 = read.shiji ?? status.shiji;
+      const shijiReason = read.shijiReason ?? status.shijiReason;
       setView({
         kind: "ready",
         meta: read.meta ?? status.meta,
         markdown: read.markdown,
         ...schedule2 === void 0 ? {} : { schedule: schedule2 },
-        ...shiji2 === void 0 ? {} : { shiji: shiji2 }
+        ...shiji2 === void 0 ? {} : { shiji: shiji2 },
+        ...shijiReason === void 0 ? {} : { shijiReason }
       });
     }).catch((error) => {
       if (mine !== sequence.current) return;
@@ -4623,7 +4630,8 @@ function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }) {
         meta: read.meta,
         markdown: read.markdown,
         ...read.schedule === void 0 ? {} : { schedule: read.schedule },
-        ...read.shiji === void 0 ? {} : { shiji: read.shiji }
+        ...read.shiji === void 0 ? {} : { shiji: read.shiji },
+        ...read.shijiReason === void 0 ? {} : { shijiReason: read.shijiReason }
       });
     }).catch((error) => {
       if (mine !== sequence.current) return;
@@ -4642,7 +4650,8 @@ function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }) {
         ...previous,
         meta: read.meta,
         markdown: read.markdown,
-        ...read.shiji === void 0 ? {} : { shiji: read.shiji }
+        ...read.shiji === void 0 ? {} : { shiji: read.shiji },
+        shijiReason: read.shijiReason
       };
     });
   };
@@ -4712,6 +4721,7 @@ function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }) {
         meta: view.meta,
         raw,
         ...view.shiji === void 0 ? {} : { shijiRead: view.shiji },
+        ...view.shijiReason === void 0 ? {} : { shijiReason: view.shijiReason },
         ...shiji === void 0 ? {} : { shiji },
         reload: reloadAfterDelete
       }
@@ -4770,6 +4780,7 @@ function PastSection({
   group: group2,
   shijiRead,
   shiji,
+  shijiReason,
   reload
 }) {
   const records = group2?.segments ?? [];
@@ -4823,7 +4834,7 @@ function PastSection({
       },
       entry?.id ?? `${record.name}-${String(index)}`
     )),
-    shijiRead === void 0 && records.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "shiji-unread", children: DIGAO_NO_SHIJI_READ_NOTE }) : null,
+    shijiRead === void 0 && records.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": shijiReason === void 0 ? "shiji-unread" : "shiji-read-failed", children: shijiReason ?? DIGAO_NO_SHIJI_READ_NOTE }) : null,
     gone > 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "shiji-removed", children: `已删除 ${gone} 条事记：下一次刷新后正文里不会再出现；可以在设置里恢复。` }) : null,
     note === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "xs-digao__alert", role: "alert", "data-xuanshu-alert": "shiji", children: note })
   ] });
@@ -4834,6 +4845,7 @@ function DigaoBody({
   raw,
   shijiRead,
   shiji,
+  shijiReason,
   reload
 }) {
   const groups = parseDigaoMarkdown(markdown);
@@ -4856,7 +4868,16 @@ function DigaoBody({
         /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(SegmentList, { segments: group2.segments })
       ] }, `${group2.kind}-${group2.name}`))
     ] }) : null,
-    twoSections ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(PastSection, { group: past, shijiRead, shiji, reload }) : null,
+    twoSections ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+      PastSection,
+      {
+        group: past,
+        shijiRead,
+        shiji,
+        ...shijiReason === void 0 ? {} : { shijiReason },
+        reload
+      }
+    ) : null,
     legacy.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(import_jsx_runtime13.Fragment, { children: legacy.map((group2) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "xs-digao__group", "data-xuanshu-group": group2.kind, children: [
       /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h2", { className: "xs-digao__group-head", children: `来源：${group2.name}（${group2.segments.length} 段）` }),
       group2.note === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "xs-digao__note", "data-xuanshu-group-note": group2.kind, children: group2.note }),
@@ -8118,9 +8139,17 @@ function touchLines(status) {
     ) : null
   ] });
 }
+function ActivityList({ items, kind, label }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_jsx_runtime23.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": `${kind}s`, children: items === void 0 ? `哪些${label}有活动：未知（宿主没回传）` : items.length === 0 ? `今天没有${label}活动` : `今天 ${items.length} 个${label}有活动` }),
+    items === void 0 || items.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("ul", { className: "xs-wansheng__workspace-list", children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("li", { ...kind === "workspace" ? { "data-xuanshu-workspace": item.id } : { "data-xuanshu-workflow": item.id }, children: [
+      `${item.title} · ${item.sessionCount} 场会话`,
+      item.lastActiveAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: ` · 最后活跃 ${item.lastActiveAt}` })
+    ] }, item.id)) })
+  ] });
+}
 function FactsSection({ facts }) {
   const sessions = facts?.consultSessions;
-  const workspaces = facts?.activeWorkspaces;
   return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("section", { className: "xs-wansheng__facts", "data-xuanshu-facts": "wansheng", children: [
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("h2", { children: "今天的事实" }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "consult", children: sessions === void 0 ? "今天几场问事：未知（宿主没回传）" : `今天 ${sessions.count} 场问事` }),
@@ -8128,11 +8157,8 @@ function FactsSection({ facts }) {
       item.title,
       item.lastTurnAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: ` · 最后一句 ${item.lastTurnAt}` })
     ] }, item.sessionId)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "workspaces", children: workspaces === void 0 ? "哪些项目有活动：未知（宿主没回传）" : workspaces.length === 0 ? "今天没有项目活动" : `今天 ${workspaces.length} 个项目有活动` }),
-    workspaces === void 0 || workspaces.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("ul", { className: "xs-wansheng__workspace-list", children: workspaces.map((workspace) => /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("li", { "data-xuanshu-workspace": workspace.id, children: [
-      `${workspace.title} · ${workspace.sessionCount} 场会话`,
-      workspace.lastActiveAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: ` · 最后活跃 ${workspace.lastActiveAt}` })
-    ] }, workspace.id)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(ActivityList, { items: facts?.activeWorkspaces, kind: "workspace", label: "项目" }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(ActivityList, { items: facts?.activeWorkflows, kind: "workflow", label: "工作流" }),
     facts?.rikke?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "rikke", children: `日课：${facts.rikke.generatedAt} 生成` }),
     facts?.digao?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "digao", children: `底稿：${facts.digao.generatedAt} 刷新过` }),
     facts?.shiji?.updatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "shiji", children: `事记：${facts.shiji.updatedAt} 有更新` })

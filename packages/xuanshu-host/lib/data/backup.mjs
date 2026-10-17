@@ -3,15 +3,15 @@
  *
  * 契约（`.scratch/notes/spec002/contract-data-backup.md` §2，冻结）：
  *   - 目标目录**由用户自选**（复用 `cang.pickDirectory` 的系统目录选择器）；
- *   - 目标必须是绝对路径、已存在、是目录、可写，且**不能等于 / 落在 home 之内**（防递归）；
+ *   - 目标必须是绝对路径、已存在、是目录、可写，且不能位于 home / dataDir 内（含目录联接）；
  *   - 备份目录 `<targetDir>/xuanshu-backup-<YYYYMMDD-HHmmss>/`，同秒重复时加 `-2`、`-3`…，
  *     永不覆盖已有备份；
  *   - 内容 = 8 个数据组（业务数据 + 会话 + storages + skills）；**不含** `.credentials.yaml`
- *     与任何密钥引用；`cordis.yml` / `*.tmp` / `logs/**` 跳过并逐条记原因；
+ *     与任何密钥引用；runtime 凭据与状态整组排除，`cordis.yml` / `*.tmp` / `logs/**` 记跳过原因；
  *   - `manifest.json`（`xuanshu/backup@1`）每文件 `sha256` + `size`，`items[].path` 是
  *     相对 home 的 POSIX 路径，可逐项对账；
  *   - **复制后重新摘要**必须等于复制前（不一致 = 备份失败，绝不静默）；
- *   - 先写临时文件再 rename：半份文件不许留在备份里；整体失败时整个备份目录删掉。
+ *   - 源遍历截断 / 读失败即拒绝；先写临时文件再 rename，整体失败时清理本次备份目录。
  *
  * 为什么失败返回 `{ok:false,error}` 而不是 throw：这是**面向界面**的操作，
  * 用户要看到「为什么没备份成」（目标在 home 里 / 没确认 / 不可写），
@@ -20,11 +20,11 @@
 
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { accessSync, constants as fsConstants, copyFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
+import { accessSync, constants as fsConstants, copyFileSync, existsSync, mkdirSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import { writeAtomic } from '../atomic.mjs'
-import { BACKUP_SCHEMA, NEVER_COUNT_BASENAME, dataGroups, isSameOrInside, walkFiles } from './plan.mjs'
+import { BACKUP_SCHEMA, NEVER_COUNT_BASENAME, dataGroups, isCredentialFile, isSameOrInside, walkFiles } from './plan.mjs'
 
 /** 清单里 `skipped` 最多逐条列这么多；再多就用 notes 说明「另有 N 条」。 */
 const MAX_SKIPPED_ENTRIES = 500
@@ -130,12 +130,25 @@ export async function runBackup({ home, dataDir, targetDir, confirmed, clock = (
     throw error
   }
 
-  // 3) 防递归：目标等于 / 落在 home 之内时拒绝（否则备份会把自己再备份一遍，且可能扫到凭据目录）。
-  if (isSameOrInside(home, target)) {
+  // 3) 防递归：同时检查字面路径与真实路径，目录联接不能绕过门；dataDir 可以单独覆盖到 home 外。
+  let realTarget
+  let realHome
+  let realDataDir
+  try {
+    realTarget = realpathSync(target)
+    realHome = existsSync(home) ? realpathSync(home) : resolve(home)
+    realDataDir = existsSync(dataDir) ? realpathSync(dataDir) : resolve(dataDir)
+  } catch (error) {
+    return fail('invalid-target', `无法核对备份目录的真实位置：${String(error?.message ?? error)}。请确认目录可访问后重试。`)
+  }
+  if (isSameOrInside(home, target) || isSameOrInside(realHome, realTarget)) {
     return fail(
       'target-inside-home',
       `备份目录不能是玄枢 home 本身，也不能放在 home（${home}）里面：那样会把备份再备份一遍。请选 home 之外的文件夹。`,
     )
+  }
+  if (isSameOrInside(dataDir, target) || isSameOrInside(realDataDir, realTarget)) {
+    return fail('target-inside-data', `备份目录不能放在业务数据目录（${dataDir}）里面。请选数据目录之外的文件夹，避免把旧备份再次收入备份。`)
   }
 
   // 4) 定位这次备份的目录：同秒重复加后缀，绝不覆盖已有备份。
@@ -168,8 +181,8 @@ export async function runBackup({ home, dataDir, targetDir, confirmed, clock = (
 
   // 备份侧的排除口径（与 overview 的 excluded 一致，但原因按「为什么不备份」来写）。
   const ignore = (absolute) => {
-    const name = basename(absolute)
-    if (name === NEVER_COUNT_BASENAME) return '凭据与密钥引用：不进备份'
+    const name = process.platform === 'win32' ? basename(absolute).toLowerCase() : basename(absolute)
+    if (isCredentialFile(absolute)) return '凭据与密钥引用：不进备份'
     if (name === 'cordis.yml') return '运行时生成的 profile 根配置：不是用户数据'
     if (name === 'cordis.patch.yml') return '机器级补丁配置：不属于「我的数据」'
     if (name === '.anonymous-user-id') return '机器标识（遥测用）：不随备份迁移'
@@ -181,16 +194,26 @@ export async function runBackup({ home, dataDir, targetDir, confirmed, clock = (
   // 5) 收集 8 组要复制的文件（不跟随联接；跳过项逐条记原因）。
   const sources = []
   const sourceSeen = new Set()
-  for (const group of dataGroups({ home, dataDir })) {
+  let readFailure
+  const onError = (path, error) => { readFailure ??= { path, error } }
+  for (const group of dataGroups({ home, dataDir }, { onError })) {
     const walked = walkFiles(group.roots, {
       limits,
       ignore,
+      onError,
       onSkip: (absolute, reason) => {
         // 凭据是「排除项」（manifest.excluded），不混进 skipped —— 两处原因写法不同，别让用户两边都看到。
-        if (basename(absolute) === NEVER_COUNT_BASENAME) return
+        if (isCredentialFile(absolute)) return
         addSkipped(absolute, reason)
       },
     })
+    if (readFailure !== undefined) {
+      return fail('source-unreadable', `无法读取备份源 ${readFailure.path}：${String(readFailure.error?.message ?? readFailure.error)}。无法确认备份完整性，本次未写入备份目录。`)
+    }
+    // 概览可以显示「至少这么多」；完整备份不能把截断的源清单当成全部数据。
+    if (walked.capped) {
+      return fail('source-limit', `「${group.label}」达到文件数或目录深度上限，无法生成完整备份；本次未写入备份目录。请先检查该目录的规模。`)
+    }
     for (const file of walked.files) {
       if (sourceSeen.has(file)) continue
       sourceSeen.add(file)
@@ -258,6 +281,7 @@ export async function runBackup({ home, dataDir, targetDir, confirmed, clock = (
       excluded: [
         { path: NEVER_COUNT_BASENAME, reason: '凭据与密钥引用：密钥留在本机凭据库，不进备份' },
         { path: 'profiles', reason: 'profile 代码与 node_modules：重装即可，不是用户数据' },
+        { path: relPosix(home, dataDir, join(dataDir, 'runtime')), reason: '壳端点凭据与进程状态：只在本机当次运行有效，不随备份迁移' },
         { path: '**/*.tmp', reason: '原子写残留的临时文件：不备份' },
         { path: relPosix(home, dataDir, logsDir), reason: '运行日志：不备份' },
       ],

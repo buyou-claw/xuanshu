@@ -9,14 +9,15 @@
  *   1. **只产出一段文本**：骨架（宜 / 忌 / 流日）永远由确定性链算，AI 段**不参与**产物结构；
  *   2. **绝不抛**：`ctx.llm` 缺席 / 没路由 / 流报错 / 空文本 —— 一律 `{mode:'failed', reason}`；
  *      开关关掉是 `{mode:'off'}`（关闭 ≠ 失败：界面文案不同，用户的心智也不同）；
- *   3. **素材是真素材**：底座谱（`pu/repository.mjs` 的 `readBase()`）+ 底稿「最近」（`digao.json`
- *      的 `generatedAt` / 段数 / 是否 LLM 提炼）+ 当日三键。不让模型凭空推运。
+ *   3. **素材是真素材**：底座谱（`pu/repository.mjs` 的 `readBase()`）+ 底稿「最近在做什么」
+ *      的正文（有界，不带「曾经」或混合摘要）+ 当日三键。不让模型凭空推运。
  *
  * 三态落法（与底稿的 `digest:'llm'|'skeleton'` 同一个思路，但这里多一档「关」）：
  * `ai: {mode:'ok', text} | {mode:'off'} | {mode:'failed', reason}` —— 见 `generate.mjs` 的写盘顺序。
  */
 
-import { readDigaoMeta } from '../digao/store.mjs'
+import { DIGAO_SECTIONS } from '../digao/skeleton.mjs'
+import { readDigaoMarkdown, readDigaoMeta } from '../digao/store.mjs'
 import { streamText } from '../llm/text.mjs'
 import { createPuRepository } from '../pu/repository.mjs'
 
@@ -30,6 +31,8 @@ export const AI_NOTE_LIMIT = 120
 
 /** 喂给模型的素材上限（底座谱可能是长文；AI 段只需要「我是谁」的骨架）。 */
 const MATERIAL_LIMIT = 240
+/** 底稿近期安排的正文预算；保留来源标记，超长截断时仍给出省略信号。 */
+const RECENT_MATERIAL_LIMIT = 2000
 
 /** 非空字符串（去空白）。 */
 function text(value) {
@@ -59,7 +62,8 @@ export function readBaseSummary(dataDir) {
 }
 
 /**
- * 底稿「最近」的一句话（什么时候刷新的、几段、是不是 LLM 提炼过）；没有底稿 → null。
+ * 底稿「最近」的正文 + 刷新依据；没有底稿 → null，正文不可得时如实说明。
+ * 两段边界来自底稿渲染器的常量，不能把顶部混合摘要或后面的事记当成「最近」。
  * @param {string} dataDir
  * @returns {string|null}
  */
@@ -73,7 +77,13 @@ export function readRecentDigao(dataDir) {
   const parts = [generatedAt]
   if (segments !== null) parts.push(`${segments} 段`)
   if (digest !== '') parts.push(`digest=${digest}`)
-  return `底稿 ${parts.join(' · ')}`
+  const lines = readDigaoMarkdown(dataDir).split(/\r?\n/u)
+  const recentStart = lines.findIndex((line) => line.trim() === `## ${DIGAO_SECTIONS[0].title}`)
+  const pastStart = lines.findIndex((line, index) => index > recentStart && line.trim() === `## ${DIGAO_SECTIONS[1].title}`)
+  const recent = recentStart < 0 || pastStart < 0 ? '' : lines.slice(recentStart + 1, pastStart).join('\n').trim()
+  return `底稿 ${parts.join(' · ')}\n${recent === ''
+    ? '最近正文不可得（尚未生成、正文读不出来或仍是旧版结构）'
+    : clip(recent, RECENT_MATERIAL_LIMIT)}`
 }
 
 /**

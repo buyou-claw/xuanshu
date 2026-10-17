@@ -19,12 +19,16 @@
  */
 
 import { createHash } from 'node:crypto'
+import { resolve } from 'node:path'
 
 import { collectShijiEvidence } from './scan.mjs'
 import {
   SHIJI_SCHEMA, readShijiEntries, readShijiSettings, shijiId, writeShijiEntries,
 } from './store.mjs'
 import { summarizeShijiEvidence } from './summary.mjs'
+
+/** 同一账本的扫描按受理顺序完成；手动操作仍同步落盘，由提交前的合并保留。 */
+const pendingScans = new Map()
 
 /** 条目的唯一键（与 id 同源；tombstone / freeze 都按它判）。 */
 export function shijiKey(source, refId) {
@@ -177,7 +181,44 @@ function buildEntry(item, { summary, fingerprint, nowIso }) {
  * @param {{ctx?: object, dataDir: string, dshHome?: string, now?: Date}} input
  * @returns {Promise<{entries: object[], notes: string[], scannedAt: string}>}
  */
-export async function scanAndUpdateShiji({ ctx, dataDir, dshHome, now = new Date() } = {}) {
+export async function scanAndUpdateShiji(input = {}) {
+  const absolute = resolve(input.dataDir)
+  const key = process.platform === 'win32' ? absolute.toLowerCase() : absolute
+  const previous = pendingScans.get(key) ?? Promise.resolve()
+  const pending = previous.catch(() => {}).then(() => updateScannedShiji(input))
+  pendingScans.set(key, pending)
+  try {
+    return await pending
+  } finally {
+    if (pendingScans.get(key) === pending) pendingScans.delete(key)
+  }
+}
+
+/**
+ * 摘要等待期间人仍可删除、恢复或保存。只替换从扫描开始到现在未被别人改动的旧条目，
+ * 其余以刚读回的最新账本为准；新的人工条目与墓碑因此不会被旧快照覆盖。
+ * 读最新值到原子写之间没有 await，同一宿主内的同步写操作不会插进提交窗口。
+ */
+function mergeScannedEntries(initial, scanned, latest) {
+  const keyOf = (entry) => shijiKey(entry.source, entry.refId)
+  const initialByKey = new Map(initial.map((entry) => [keyOf(entry), entry]))
+  const scannedByKey = new Map(scanned.map((entry) => [keyOf(entry), entry]))
+  const latestKeys = new Set(latest.map(keyOf))
+  const merged = latest.map((entry) => {
+    const key = keyOf(entry)
+    const before = initialByKey.get(key)
+    if (before === undefined || JSON.stringify(before) !== JSON.stringify(entry)) return entry
+    return scannedByKey.get(key) ?? entry
+  })
+  for (const entry of scanned) {
+    const key = keyOf(entry)
+    if (!latestKeys.has(key) && !initialByKey.has(key)) merged.push(entry)
+  }
+  return merged
+}
+
+/** 一次扫描本身；只有 scanAndUpdateShiji 的逐账本队列调用它。 */
+async function updateScannedShiji({ ctx, dataDir, dshHome, now = new Date() }) {
   const scannedAt = now.toISOString()
   const read = readShijiEntries(dataDir)
   const notes = [...read.notes]
@@ -238,6 +279,11 @@ export async function scanAndUpdateShiji({ ctx, dataDir, dshHome, now = new Date
     if (entry.frozenAt === null) entry.frozenAt = scannedAt
   }
 
-  writeShijiEntries(dataDir, entries)
-  return { entries: [...entries].sort(byLastActiveDesc), notes, scannedAt }
+  // 不能拿开始扫描时的整账快照直接盖回去：中间跨过会话读取与若干次模型调用。
+  // 最新账本读失败时直接终止（store 只把 ENOENT 当空账），不冒险重建墓碑。
+  const latest = readShijiEntries(dataDir)
+  const merged = mergeScannedEntries(read.entries, entries, latest.entries)
+  for (const note of latest.notes) if (!notes.includes(note)) notes.push(note)
+  writeShijiEntries(dataDir, merged)
+  return { entries: [...merged].sort(byLastActiveDesc), notes, scannedAt }
 }

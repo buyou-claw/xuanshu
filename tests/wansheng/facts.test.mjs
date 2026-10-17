@@ -9,11 +9,15 @@
  *      绝不写 0 / false 冒充「已知为零」。
  */
 import { afterEach, describe, expect, it } from 'vitest'
+import fs from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
+import { resolve } from 'node:path'
 
 import { collectWanshengFacts } from '../../packages/xuanshu-host/lib/wansheng/facts.mjs'
+import { listWorkflows, writeWorkflow } from '../../packages/xuanshu-host/lib/workflow/store.mjs'
 import {
-  fakeSessionQuery, fakeWorkspaceRegistry, makeWanshengSandbox, shijiEntry, writeConsultSession,
-  writeDigaoMeta, writeRikkeArtifact, writeShiji,
+  fakeProjectionCache, fakeSessionQuery, fakeWorkspaceRegistry, makeWanshengSandbox, shijiEntry, userEvent,
+  writeConsultSession, writeDigaoMeta, writeRikkeArtifact, writeShiji,
 } from './lib/sandbox.mjs'
 
 const boxes = []
@@ -65,8 +69,126 @@ describe('#25 · 晚省事实：问事的「今天」按底座时区算（会话
   })
 })
 
+describe('#25 · 晚省事实：当天有活动的工作流', () => {
+  it('续问、创建或导出落在今天都计入；只有历史活动的工作流不计入', async () => {
+    const box = scene()
+    const sessions = ['renewed', 'created', 'exported', 'old'].map((name) => `session-xs-workflow-${name}`)
+    for (const sessionId of sessions) {
+      writeWorkflow(box.dataDir, {
+        schema: 'xuanshu/workflow@1', id: sessionId, sessionId, name: sessionId,
+        createdAt: sessionId.endsWith('-created') ? TODAY_EARLY : YESTERDAY,
+        ...(sessionId.endsWith('-exported') ? { exportedAt: '2026-10-15T02:30:00.000Z' } : {}),
+      })
+    }
+    const query = fakeSessionQuery({ headers: Object.fromEntries(sessions.map((id) => [id, {
+      createdAt: Date.parse(id.endsWith('-created') ? TODAY_EARLY : YESTERDAY),
+    }])) })
+    const cache = fakeProjectionCache(Object.fromEntries(sessions.map((id) => [id, {
+      lastPromptAt: id.endsWith('-renewed') ? Date.parse('2026-10-15T02:00:00.000Z') : null,
+    }])))
+    const { facts, notes } = await collectWanshengFacts({
+      ctx: { workspaceRegistry: fakeWorkspaceRegistry([]).service, sessionQuery: query.service, sessionProjectionCache: cache.service },
+      dataDir: box.dataDir, date: DATE, zone: ZONE,
+    })
+    expect(facts.activeWorkflows).toEqual([
+      { id: sessions[2], title: sessions[2], sessionCount: 0, lastActiveAt: '2026-10-15T02:30:00.000Z' },
+      { id: sessions[0], title: sessions[0], sessionCount: 1, lastActiveAt: '2026-10-15T02:00:00.000Z' },
+      { id: sessions[1], title: sessions[1], sessionCount: 1, lastActiveAt: TODAY_EARLY },
+    ])
+    expect(notes).toEqual([])
+  })
+
+  it('工作流也会在缺投影时回落人的提问日志', async () => {
+    const box = scene()
+    const id = 'session-xs-workflow-log'
+    writeWorkflow(box.dataDir, { schema: 'xuanshu/workflow@1', id, sessionId: id, name: '续写流程', createdAt: YESTERDAY })
+    const query = fakeSessionQuery({
+      headers: { [id]: { createdAt: Date.parse(YESTERDAY) } },
+      events: { [id]: [userEvent(1, '今天接着做', Date.parse(TODAY_EARLY))] },
+    })
+    const { facts } = await collectWanshengFacts({
+      ctx: { sessionQuery: query.service }, dataDir: box.dataDir, date: DATE, zone: ZONE,
+    })
+    expect(facts.activeWorkflows).toEqual([{ id, title: '续写流程', sessionCount: 1, lastActiveAt: TODAY_EARLY }])
+  })
+
+  it('工作流会话核不了时只省工作流这一路并记原因', async () => {
+    const box = scene()
+    const id = 'session-xs-workflow-unreadable'
+    writeWorkflow(box.dataDir, { schema: 'xuanshu/workflow@1', id, sessionId: id, name: '核不了', createdAt: YESTERDAY })
+    const query = fakeSessionQuery({ headers: { [id]: { createdAt: Date.parse(YESTERDAY) } } }).service
+    query.readSession = async () => { throw new Error('workflow log denied') }
+    const { facts, notes } = await collectWanshengFacts({
+      ctx: { workspaceRegistry: fakeWorkspaceRegistry([]).service, sessionQuery: query },
+      dataDir: box.dataDir, date: DATE, zone: ZONE,
+    })
+    expect(Object.hasOwn(facts, 'activeWorkflows')).toBe(false)
+    expect(facts.activeWorkspaces).toEqual([])
+    expect(notes.join('\n')).toMatch(/工作流.*workflow log denied.*未知/u)
+  })
+
+  it('工作流目录读不出来时不报已知空列表', async () => {
+    const box = scene()
+    box.write('workflow', 'a file instead of a readable directory')
+    const { facts, notes } = await collectWanshengFacts({ ctx: {}, dataDir: box.dataDir, date: DATE, zone: ZONE })
+    expect(Object.hasOwn(facts, 'activeWorkflows')).toBe(false)
+    expect(notes.join('\n')).toMatch(/工作流清单.*未知/u)
+  })
+
+  it('逐份工作流坏 JSON 不能变成已知空列表，既有宽松列表保持兼容', async () => {
+    const box = scene()
+    const filename = 'session-xs-workflow-broken.json'
+    box.write(`workflow/${filename}`, '{broken')
+    expect(listWorkflows(box.dataDir)).toEqual([])
+    const { facts, notes } = await collectWanshengFacts({ ctx: {}, dataDir: box.dataDir, date: DATE, zone: ZONE })
+    expect(Object.hasOwn(facts, 'activeWorkflows')).toBe(false)
+    expect(notes.join('\n')).toContain(filename)
+    expect(notes.join('\n')).toMatch(/工作流清单.*未知/u)
+  })
+
+  it.each(['directory', 'manifest'])('工作流 %s 瞬时读错时省略事实并可读报错', async (operation) => {
+    const box = scene()
+    const id = 'session-xs-workflow-unreadable-file'
+    writeWorkflow(box.dataDir, { schema: 'xuanshu/workflow@1', id, sessionId: id, name: '暂不可读', createdAt: YESTERDAY })
+    const dir = resolve(box.path('workflow'))
+    const file = resolve(box.path('workflow', `${id}.json`))
+    const originalRead = fs.readFileSync
+    const originalList = fs.readdirSync
+    const originalExists = fs.existsSync
+    fs.existsSync = (path) => operation === 'directory' && resolve(String(path)) === dir ? false : originalExists(path)
+    fs.readdirSync = function (path, ...args) {
+      if (operation === 'directory' && resolve(String(path)) === dir) throw Object.assign(new Error('fixture directory denied'), { code: 'EACCES' })
+      return originalList.call(this, path, ...args)
+    }
+    fs.readFileSync = function (path, ...args) {
+      if (operation === 'manifest' && resolve(String(path)) === file) throw Object.assign(new Error('fixture manifest denied'), { code: 'EACCES' })
+      return originalRead.call(this, path, ...args)
+    }
+    syncBuiltinESMExports()
+    try {
+      const { facts, notes } = await collectWanshengFacts({ ctx: {}, dataDir: box.dataDir, date: DATE, zone: ZONE })
+      expect(Object.hasOwn(facts, 'activeWorkflows')).toBe(false)
+      expect(notes.join('\n')).toMatch(/工作流清单.*未知/u)
+      expect(notes.join('\n')).toContain(operation === 'manifest' ? `${id}.json` : 'fixture directory denied')
+    } finally {
+      fs.readFileSync = originalRead
+      fs.readdirSync = originalList
+      fs.existsSync = originalExists
+      syncBuiltinESMExports()
+    }
+  })
+
+  it('合法空目录是已知没有工作流，不需要会话服务也不报未知', async () => {
+    const box = scene()
+    fs.mkdirSync(box.path('workflow'), { recursive: true })
+    const { facts, notes } = await collectWanshengFacts({ ctx: {}, dataDir: box.dataDir, date: DATE, zone: ZONE })
+    expect(facts.activeWorkflows).toEqual([])
+    expect(notes.join('\n')).not.toContain('工作流')
+  })
+})
+
 describe('#25 · 晚省事实：项目活动、底稿/日课/事记的时间', () => {
-  it('工作区按会话 header 的 max(createdAt, lastPromptAt) 落在今天 → 只留有活动的项目', async () => {
+  it('工作区按 header.createdAt 与投影 lastPromptAt 的最大值落在今天 → 只留有活动的项目', async () => {
     const box = scene()
     const registry = fakeWorkspaceRegistry([
       { id: 'w1', path: '/work/xuanshu', title: 'XuanShu', sessionIds: ['s-a', 's-b'], createdAt: '2026-10-01T00:00:00.000Z' },
@@ -75,9 +197,16 @@ describe('#25 · 晚省事实：项目活动、底稿/日课/事记的时间', (
     const query = fakeSessionQuery({
       headers: {
         's-a': { createdAt: Date.parse(TODAY_EARLY) },
-        's-b': { createdAt: Date.parse(YESTERDAY), lastPromptAt: Date.parse('2026-10-15T02:30:00.000Z') },
-        's-c': { createdAt: Date.parse(YESTERDAY), lastPromptAt: Date.parse(YESTERDAY) },
+        's-b': { createdAt: Date.parse(YESTERDAY) },
+        's-c': { createdAt: Date.parse(YESTERDAY) },
       },
+    })
+    // 钉版 SessionHeader 没有 lastPromptAt；它属于 sessionListMetadata 投影。
+    // 夹具必须走真实字段，否则旧实现读 header.lastPromptAt 也能绿（review-checklist §2）。
+    const cache = fakeProjectionCache({
+      's-a': { lastPromptAt: null },
+      's-b': { lastPromptAt: Date.parse('2026-10-15T02:30:00.000Z') },
+      's-c': { lastPromptAt: Date.parse(YESTERDAY) },
     })
     writeDigaoMeta(box.dataDir)
     writeRikkeArtifact(box.dataDir, { date: DATE })
@@ -87,7 +216,7 @@ describe('#25 · 晚省事实：项目活动、底稿/日课/事记的时间', (
     ])
 
     const { facts, notes } = await collectWanshengFacts({
-      ctx: { workspaceRegistry: registry.service, sessionQuery: query.service },
+      ctx: { workspaceRegistry: registry.service, sessionQuery: query.service, sessionProjectionCache: cache.service },
       dataDir: box.dataDir,
       date: DATE,
       zone: ZONE,
@@ -128,5 +257,100 @@ describe('#25 · 晚省事实：项目活动、底稿/日课/事记的时间', (
     })
     expect(Object.hasOwn(facts, 'activeWorkspaces')).toBe(false)
     expect(notes.join('\n')).toMatch(/sessionQuery|会话/u)
+  })
+
+  it.each(['absent', 'metadata-missing', 'throws'])('投影 %s 时回落日志，只数人的提问时刻', async (mode) => {
+    const box = scene()
+    const registry = fakeWorkspaceRegistry([{ id: 'w1', title: '续问项目', sessionIds: ['s-a'] }])
+    const query = fakeSessionQuery({
+      headers: { 's-a': { createdAt: Date.parse(YESTERDAY) } },
+      events: { 's-a': [
+        userEvent(1, '今天接着做', Date.parse(TODAY_EARLY)),
+        { ...userEvent(2, '自动注入的内容', Date.parse('2026-10-16T02:00:00.000Z')), data: { source: { kind: 'schedule' } } },
+      ] },
+    })
+    const cache = mode === 'absent' ? undefined : mode === 'throws'
+      ? { cachedSnapshot() { throw new Error('cache temporarily unavailable') } }
+      : fakeProjectionCache({ 's-a': { title: '只有标题，没有活动投影' } }).service
+    const { facts, notes } = await collectWanshengFacts({
+      ctx: { workspaceRegistry: registry.service, sessionQuery: query.service, sessionProjectionCache: cache },
+      dataDir: box.dataDir, date: DATE, zone: ZONE,
+    })
+    expect(facts.activeWorkspaces).toEqual([{
+      id: 'w1', title: '续问项目', sessionCount: 1, lastActiveAt: TODAY_EARLY,
+    }])
+    expect(notes).toEqual([])
+  })
+
+  it('投影明确 lastPromptAt:null 是已知无提问，不能拿 header 的伪字段当活动', async () => {
+    const box = scene()
+    const registry = fakeWorkspaceRegistry([{ id: 'w1', title: '没有提问', sessionIds: ['s-a'] }])
+    const query = fakeSessionQuery({ headers: { 's-a': { createdAt: Date.parse(YESTERDAY), lastPromptAt: Date.parse(TODAY_EARLY) } } })
+    const cache = fakeProjectionCache({ 's-a': { lastPromptAt: null } })
+    const { facts } = await collectWanshengFacts({
+      ctx: { workspaceRegistry: registry.service, sessionQuery: query.service, sessionProjectionCache: cache.service },
+      dataDir: box.dataDir, date: DATE, zone: ZONE,
+    })
+    expect(facts.activeWorkspaces).toEqual([])
+  })
+
+  it('一场日志读失败时省略整个项目活动事实并留原因，不发布不完整的空列表', async () => {
+    const box = scene()
+    const registry = fakeWorkspaceRegistry([{ id: 'w1', title: '核不了', sessionIds: ['s-a'] }])
+    const query = fakeSessionQuery({ headers: { 's-a': { createdAt: Date.parse(YESTERDAY) } } }).service
+    query.readSession = async () => { throw Object.assign(new Error('denied'), { code: 'EACCES' }) }
+    const { facts, notes } = await collectWanshengFacts({
+      ctx: { workspaceRegistry: registry.service, sessionQuery: query }, dataDir: box.dataDir, date: DATE, zone: ZONE,
+    })
+    expect(Object.hasOwn(facts, 'activeWorkspaces')).toBe(false)
+    expect(notes.join('\n')).toMatch(/s-a.*denied.*未知/u)
+  })
+
+  it('会话清单返回非数组时按未知处理，不能折算成已知没有活动', async () => {
+    const box = scene()
+    const registry = fakeWorkspaceRegistry([{ id: 'w1', title: '核不了', sessionIds: ['s-a'] }])
+    const { facts, notes } = await collectWanshengFacts({
+      ctx: { workspaceRegistry: registry.service, sessionQuery: { listSessions: async () => ({}) } },
+      dataDir: box.dataDir, date: DATE, zone: ZONE,
+    })
+    expect(Object.hasOwn(facts, 'activeWorkspaces')).toBe(false)
+    expect(notes.join('\n')).toMatch(/会话清单.*数组.*未知/u)
+  })
+
+  /* ── 复核 (c)①：事记读失败曾被空 `catch {}` 吞掉（省键但没有原因） ── */
+
+  it('事记账本读不出来（EISDIR）→ 省略 shiji 键并写明原因，晚省其余事实仍可用', async () => {
+    const box = scene()
+    // 让 `shiji.jsonl` 是个目录：`readFileSync` 抛 EISDIR（不是 ENOENT，属于「读失败」而不是「没有账本」）。
+    fs.mkdirSync(box.path('shiji.jsonl'), { recursive: true })
+    writeConsultSession(box.dataDir, { sessionId: 'session-xs-consult-a', createdAt: TODAY_EARLY })
+
+    const { facts, notes } = await collectWanshengFacts({ ctx: {}, dataDir: box.dataDir, date: DATE, zone: ZONE })
+    expect(Object.hasOwn(facts, 'shiji'), '读不出来时必须省略整个键（不编空对象/0）').toBe(false)
+    const joined = notes.join('\n')
+    expect(joined, '空 catch 吞掉了原因：用户不知道「事记这一路为什么没出现」').toMatch(/事记.*读不出来/u)
+    expect(joined).toMatch(/本轮不展示事记/u)
+    // 单路失败不拖垮整轮：问事这一路照常（今天那场照常计数）。
+    expect(facts.consultSessions.count).toBe(1)
+  })
+
+  it('事记账本权限失败（EACCES）同样只降级这一路并留原因', async () => {
+    const box = scene()
+    writeShiji(box.dataDir, [shijiEntry({ id: 'shiji-a', refId: 'w1' })])
+    const file = resolve(box.path('shiji.jsonl'))
+    const originalRead = fs.readFileSync
+    fs.readFileSync = function (path, ...args) {
+      if (resolve(String(path)) === file) throw Object.assign(new Error('fixture ledger denied'), { code: 'EACCES' })
+      return originalRead.call(this, path, ...args)
+    }
+    syncBuiltinESMExports()
+    try {
+      const { facts, notes } = await collectWanshengFacts({ ctx: {}, dataDir: box.dataDir, date: DATE, zone: ZONE })
+      expect(Object.hasOwn(facts, 'shiji')).toBe(false)
+      expect(notes.join('\n')).toMatch(/事记.*fixture ledger denied/u)
+    } finally {
+      fs.readFileSync = originalRead
+      syncBuiltinESMExports()
+    }
   })
 })

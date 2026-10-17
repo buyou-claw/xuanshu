@@ -51,10 +51,20 @@ export function createDigaoMethods(ctx, config = {}) {
    *
    * 读面与「曾经做过什么」同源（都是 `listShiji()`：倒序、不含墓碑），所以界面上看到的事记
    * 与正文那一段永远是同一批（不另立第二个渲染权威）。
+   *
+   * **账本读失败不拖垮底稿（复核 (c)②）**：事记是**加性**读面，底稿正文/元数据照常可读。
+   * 读失败时省略 `shiji` 键，原因写进**专用加性字段 `shijiReason`** —— 不编空数组（「读不出来」≠
+   * 「一条都没有」），也**不占用 `reason`**：`reason` 只表示「digao 自身失败」（客户端据此把卡判成
+   * error）；账本坏不该把健康的底稿卡变红。同样不让 `digao.status|read` 整体失败（面板会 500）。
    */
   function shijiField() {
     if (!shijiExists(dataDir)) return {}
-    const { entries } = listShiji(dataDir)
+    let entries
+    try {
+      entries = listShiji(dataDir).entries
+    } catch (error) {
+      return { shijiReason: `事记读不出来：${String(error?.message ?? error)}（本次不展示事记条目；底稿正文与刷新不受影响）` }
+    }
     return {
       shiji: {
         entries: entries.map((entry) => ({
