@@ -67,6 +67,19 @@ try {
 }
 const baseline = existsSync(BASELINE_FILE) ? JSON.parse(readFileSync(BASELINE_FILE, 'utf8')) : null
 
+/**
+ * 基线里的 `files` 键按字典序写。
+ *
+ * 不排序的话 `--update` 会把**这一轮 vitest 的报告序**当成键序：报告序随分片 / 并发 / 文件系统
+ * 而变，于是稍微动一次测试就产生一大片「值没变、位置变了」的搬移 diff，真正的计数变化反而看不清。
+ * 排序只改**键序**，不改任何计数 —— 清单门的判据 `violationsFor()` 按文件取值，与键序无关。
+ * @param files - `{ <repo 相对路径>: 用例数 }`
+ * @returns 同内容、键按字典序的新对象
+ */
+function sortedFiles(files) {
+  return Object.fromEntries(Object.entries(files).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)))
+}
+
 if (update || baseline === null) {
   const knownRed = baseline?.knownRed ?? current.failures.map((failure) => ({ ...failure, reason: '初次记录，待逐条确认' }))
   writeFileSync(
@@ -75,7 +88,7 @@ if (update || baseline === null) {
       {
         note: '用例清单基线：收集到的用例数（含 skip）。--update 刷新；knownRed 之外的失败 = 违规。',
         total: current.total,
-        files: current.files,
+        files: sortedFiles(current.files),
         knownRed,
       },
       null,

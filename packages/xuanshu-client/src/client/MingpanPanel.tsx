@@ -30,7 +30,8 @@ import {
 } from './onboarding-model.js';
 import { ERROR_COPY, MINGPAN_ID, MINGPAN_LABEL, MINGPAN_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
-import { dataDirPath } from './home-paths.js';
+import { dataDirPath, useHomePaths } from './home-paths.js';
+import type { HomePathsWatch } from './home-paths.js';
 import type { RpcContext } from './rpc.js';
 
 /**
@@ -78,6 +79,11 @@ export interface MingpanPanelProps {
    * 缺席时显示中性占位「玄枢数据目录/pus/_base/bazi.md」。
    */
   dataDir?: string;
+  /**
+   * R3（#35）· 装配期注入的 home/dataDir 注入面（与概览 / 问事 / 沉淀同一份）；
+   * 显式 `dataDir` 优先，其次读注入面，都没有才回中性占位。
+   */
+  homePaths?: HomePathsWatch;
 }
 
 /**
@@ -92,7 +98,11 @@ export function MingpanPanel({
   preloadedSnapshot,
   preloadedError,
   dataDir,
+  homePaths,
 }: MingpanPanelProps) {
+  // R3：二次确认里的底座谱路径读注入面（宿主回传的 dataDir）；显式 props 优先。
+  const injectedHomePaths = useHomePaths(homePaths);
+  const localDataDir = dataDir ?? injectedHomePaths.dataDir;
   const revision = useSyncExternalStore(controller.subscribe, controller.getRevision, controller.getRevision);
   const seeded = preloadedError !== undefined || preloadedSnapshot !== undefined;
   const [view, setView] = useState<MingpanView>(() => {
@@ -182,7 +192,7 @@ export function MingpanPanel({
       {view.kind === 'ready' ? (
         <MingpanBody
           snapshot={view.snapshot}
-          dataDir={dataDir}
+          dataDir={localDataDir}
           confirming={confirming}
           onAskRerecord={() => { setConfirming(true); }}
           onCancelRerecord={() => { setConfirming(false); }}
@@ -314,6 +324,8 @@ export function installMingpan(ctx: Context & RpcContext, deps: {
   api: BaziApi;
   controller: BaziUiController;
   navigate: (target: PanelNavTarget) => void;
+  /** R3：宿主回传的 home/dataDir 注入面（与概览 / 问事 / 沉淀同一份）。 */
+  homePaths?: HomePathsWatch;
 }): void {
   installBaziStyle();
   ctx.slots.inject('main', () =>

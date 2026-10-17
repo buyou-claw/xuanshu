@@ -53,14 +53,14 @@
 **「市场（dsh-mcp-connector）删除 UI 管不到它」是怎么成立的**——三条互相独立的机制，都能自己复验：
 
 ```powershell
-cd E:\ai_project\XuanShu
+cd <repo>
 $xhome = "$PWD\.dsh-home"                       # 别用 $home：PowerShell 里 $HOME 是只读自动变量，赋值会直接报错
 $env:DSH_HOME = $xhome
 $bin = "$xhome\profiles\xuanshu\node_modules\@deepseek-ai\dsh\lib\bin.js"
 
 # ① 行的来源是 profile 补丁层（不是市场 storage）：
 node $bin --profile xuanshu --dump-config | Select-String -Pattern '^# ==|id: mcp-horosa'
-#   → 最后一行层头是 `# == E:\ai_project\XuanShu\.dsh-home\profiles\xuanshu\cordis.patch.yml`，
+#   → 最后一行层头是 `# == <repo>\.dsh-home\profiles\xuanshu\cordis.patch.yml`，
 #     紧接着就是 `- id: mcp-horosa`（本机 2026-10-13 实测：层头在 386 行、行在 387 行）
 #   完整原始输出：captures/horosa-dump-config.txt
 
@@ -162,7 +162,7 @@ node -e "const j=JSON.parse(require('node:fs').readFileSync('.scratch/assembly-f
 用途：**不经过 DSH，直打 `127.0.0.1:8765/mcp`**，把「信封结构 / `timeAlg` 缺省口径 / 澄清闸」变成可复跑的命令。
 
 ```powershell
-cd E:\ai_project\XuanShu
+cd <repo>
 node scripts/horosa/bazi-contract.mjs                     # 人读摘要
 node scripts/horosa/bazi-contract.mjs --json              # stdout 只有一份 JSON 报告
 node scripts/horosa/bazi-contract.mjs --port 8765 --path /mcp --timeout-ms 300000

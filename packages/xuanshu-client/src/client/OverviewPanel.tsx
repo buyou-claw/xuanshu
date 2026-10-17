@@ -25,6 +25,7 @@ import { XsDestinyCard, XsDigaoCard, XsQuickLinks, XsRikkeCard, XsWanshengCard }
 import type { DestinySnapshot, DigaoSummary, OverviewInjected, RikkeContent } from './cards.js';
 import type { DigaoApi, DigaoStatus } from './digao-api.js';
 import type { DigaoOutcome, DigaoUiController } from './digao-controller.js';
+import { useHomePaths } from './home-paths.js';
 import { ERROR_COPY, PANEL_HOME, PANEL_ID, PANEL_TITLE, panelLocalNote } from './panel.js';
 import type { CardState } from './panel.js';
 import type { RikkeAiNote, RikkeApi, RikkeNotify, RikkeStatus } from './rikke-api.js';
@@ -461,6 +462,7 @@ export function OverviewPanel({
   preloadedWanshengOutcome,
   today,
   dataDir,
+  homePaths,
   baseplateReady,
   onStartOnboarding,
   onOpenDetail,
@@ -471,6 +473,9 @@ export function OverviewPanel({
   onOpenAiSettings,
 }: OverviewPanelProps) {
   const date = today ?? localDate();
+  // R3：装配期注入的宿主 home/dataDir（订阅式，晚到也能重渲染）；显式 props 优先（测试 / SSR 直传）。
+  const injectedHomePaths = useHomePaths(homePaths);
+  const localDataDir = dataDir ?? injectedHomePaths.dataDir;
   // 命盘卡：票 08 起数据驱动（loading / empty / ready / error + 快照）。
   const destiny = useBaziStatus({ api: bazi, controller: baziController, preloaded: preloadedBaziStatus });
   // 日课卡 / 底稿卡：票 13 起数据驱动（取数只读；生成与刷新是人点的，见下两个回调）。
@@ -569,7 +574,7 @@ export function OverviewPanel({
           <span className="xs-overview__home">{PANEL_HOME}</span> · {PANEL_TITLE}
         </h1>
         <p className="xs-overview__localnote" data-xuanshu-note="local-data">
-          {panelLocalNote(dataDir)}
+          {panelLocalNote(localDataDir)}
         </p>
       </header>
       {/* D3 读序：命盘 → 日课 → 底稿 → 快捷入口（窄屏单列时顺序不变）。 */}

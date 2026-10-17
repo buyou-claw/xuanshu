@@ -11,7 +11,7 @@
 ## 1. 装什么、装到哪
 
 ```powershell
-cd E:\ai_project\XuanShu
+cd <repo>
 node scripts/setup.mjs                 # 人读摘要
 node scripts/setup.mjs --json          # stdout 只输出报告 JSON
 pnpm setup:xuanshu                     # 等价入口
@@ -178,8 +178,10 @@ C2 没过时 C3 记一条「跳过：先修 C2」（八字工具必然也不可�
 Remove-Item -Recurse -Force C:\horosa                        # ① runtime 根（Windows 默认）
 Remove-Item -Recurse -Force "$env:LOCALAPPDATA\xuanshu\cache" # ② 工件缓存（719MB 在这）
 Remove-Item -Recurse -Force <dsh-home>\profiles\xuanshu       # ③ 卸 profile
-Remove-Item -Recurse -Force E:\ai_project\XuanShu\.dsh-home   #    粗暴版：整个隔离 home 一起删
+cmd /c rmdir /s /q "<repo>\.dsh-home"                        #    粗暴版：整个隔离 home 一起删
 ```
+
+④ 这一行**别用 `Remove-Item -Recurse`**：worktree 里的 `node_modules` 是指向仓根的 junction，`-Recurse` 会跟着删到仓根的真件（与 AGENTS.md 的删目录规矩同一条）；`cmd /c rmdir /s /q` 不跟随。
 
 ② 的实际路径以你机器上解析出的 `--cache` 为准（`$XUANSHU_CACHE` ＞ win32 `%LOCALAPPDATA%\xuanshu\cache` ＞ `~/.cache/xuanshu`；`%LOCALAPPDATA%` 缺失或为空白时回落到 `~/.cache/xuanshu`）。不确定就把 setup 报告里的 `pin.*.path` 拿去定位。
 `install-profile.mjs` **没有** `--uninstall` 这类开关（它只装配，不卸载）—— 卸 profile 就是删目录，删干净即可。

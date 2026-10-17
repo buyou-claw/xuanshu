@@ -163,12 +163,18 @@ describe('P4 · 设置视图：真实墓碑可恢复、冻结的不冒充、排�
   it('删除日期缺失时显示「日期未知」，仍不拿冻结时间顶替', () => {
     // 判据是「excludedAt 非空」；这个值不可读时只如实说不知道，绝不回落到 frozenAt。
     // （当前宿主把空/非法时间归一成 null，这里是防御分支：换宿主 / 旧数据也守住口径。）
+    //
+    // 夹具必须带**非空** frozenAt：`excludedAt: ''` + `frozenAt: null` 时「2026-10-16」本来
+    // 就不在任何字段里，`not.toContain` 是恒真断言 —— 拿冻结时间顶替的实现也照样绿。
+    const frozenAt = '2026-10-16T00:00:00.000Z'
     const noDate = render(h(XsShijiSettingsSection, {
-      state: { ...STATE, entries: [{ ...TOMBSTONE, excludedAt: '' }] },
+      state: { ...STATE, entries: [{ ...TOMBSTONE, excludedAt: '', frozenAt }] },
       actions: ACTIONS,
     }))
     expect(noDate).toContain('日期未知')
-    expect(noDate).not.toContain('2026-10-16')
+    expect(noDate, '冻结时间被当成「删除于」显示出来了').not.toContain(frozenAt.slice(0, 10))
+    // 守卫生效的前提：这一行真的渲染了（不是因为条目被过滤掉才「没有日期」）。
+    expect(noDate).toContain('旧的周报项目')
   })
 
   it('恢复后的条目（excludedAt 回到 null）不再算墓碑，回到普通事记', () => {

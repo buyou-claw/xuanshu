@@ -30,6 +30,8 @@ import {
 } from './consult-views.js';
 import { CONSULT_ID, CONSULT_LABEL, CONSULT_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
+import { useHomePaths } from './home-paths.js';
+import type { HomePathsWatch } from './home-paths.js';
 import type { RpcContext } from './rpc.js';
 
 /** 取数三态（门厅的勾选区与列表各自持有，互不拖累）。 */
@@ -64,6 +66,11 @@ export interface ConsultInstallDeps {
    * 门厅不会因为挂载面缺席而空一块，票 10 的断言台也不用改。
    */
   mountSlot?: (session: ConsultSummary | undefined) => ReactNode;
+  /**
+   * R3（#35）· 宿主回传的 home / dataDir 注入面：历史页错误行那句「数据在本地 <home>/sessions/」
+   * 用它渲染真路径；缺席 = 没拿到 → 中性占位「玄枢 home/sessions/」（不猜、不写死某一档）。
+   */
+  homePaths?: HomePathsWatch;
 }
 
 export interface ConsultPanelProps extends ConsultInstallDeps {
@@ -85,7 +92,9 @@ function errorText(error: unknown): string {
  * @param props - 数据面、导航与静态预置。
  * @returns 门厅 / 历史子页节点。
  */
-export function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, preloaded }: ConsultPanelProps) {
+export function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, homePaths, preloaded }: ConsultPanelProps) {
+  // R3：历史页「数据在本地 …」那一行读注入面（宿主回传的 home）；没拿到 → 中性占位。
+  const home = useHomePaths(homePaths).home;
   const [view, setView] = useState<'lobby' | 'history'>(preloaded?.view ?? 'lobby');
   const [defaults, setDefaults] = useState<Loadable<ConsultDefaults>>(
     preloaded?.defaults === undefined ? { kind: 'loading' } : { kind: 'ready', value: preloaded.defaults },
@@ -317,6 +326,7 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
           query={query}
           range={range}
           now={new Date()}
+          home={home}
           onQuery={setQuery}
           onRange={setRange}
           onOpen={openRow}

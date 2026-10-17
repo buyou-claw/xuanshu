@@ -29,7 +29,7 @@ __export(index_exports, {
   inject: () => inject
 });
 module.exports = __toCommonJS(index_exports);
-var import_react23 = require("react");
+var import_react24 = require("react");
 
 // src/client/rpc.ts
 async function rpcCall(ctx, method, payload = {}, signal) {
@@ -1135,17 +1135,60 @@ function BestofTriggerHost({ onTrigger }) {
 }
 
 // src/client/CangPanel.tsx
-var import_react2 = require("react");
+var import_react3 = require("react");
 
 // src/client/cang-model.ts
 var CANG_AI_FREE = "藏永不进 AI：只登记指针、签与跳转 —— 玄枢不读、不索引、不分析、不进上下文";
 var newCangDraft = () => ({ path: "", name: "", tags: [], actions: { open: true, reveal: true, copy: true } });
 
 // src/client/home-paths.ts
+var import_react2 = require("react");
 var DATA_DIR_PLACEHOLDER = "玄枢数据目录";
 var HOME_PLACEHOLDER = "玄枢 home";
 function isUsablePathValue(value) {
   return typeof value === "string" && value.trim() !== "";
+}
+var EMPTY_HOME_PATHS = Object.freeze({});
+function createHomePathsWatch() {
+  let snapshot = EMPTY_HOME_PATHS;
+  const listeners = /* @__PURE__ */ new Set();
+  return {
+    getSnapshot: () => snapshot,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    set(next) {
+      snapshot = { ...next };
+      for (const listener of [...listeners]) listener();
+    }
+  };
+}
+async function resolveHomePathsFromApi(api, signal) {
+  try {
+    const overview = await api.overview(signal);
+    const home = typeof overview?.home === "string" && isUsablePathValue(overview.home) ? overview.home : void 0;
+    const dataDir = typeof overview?.dataDir === "string" && isUsablePathValue(overview.dataDir) ? overview.dataDir : void 0;
+    return {
+      ...home === void 0 ? {} : { home },
+      ...dataDir === void 0 ? {} : { dataDir }
+    };
+  } catch {
+    return {};
+  }
+}
+async function primeHomePaths(watch, api) {
+  watch.set(await resolveHomePathsFromApi(api));
+}
+var NO_SUBSCRIBE = () => () => {
+};
+var EMPTY_SNAPSHOT = () => EMPTY_HOME_PATHS;
+function useHomePaths(watch) {
+  const subscribe = watch === void 0 ? NO_SUBSCRIBE : watch.subscribe;
+  const getSnapshot = watch === void 0 ? EMPTY_SNAPSHOT : watch.getSnapshot;
+  return (0, import_react2.useSyncExternalStore)(subscribe, getSnapshot, getSnapshot);
 }
 function joinXsDisplayPath(base, segments) {
   const trimmed = base.trim().replace(/[\\/]+$/, "");
@@ -1171,19 +1214,19 @@ function filterCangEntries(entries, query, tag, sort) {
   return entries.filter((entry) => (!tag || entry.tags.includes(tag)) && (!needle || [entry.name, ...entry.tags].some((value) => value.toLocaleLowerCase().includes(needle)))).sort((a, b) => sort === "name" ? a.name.localeCompare(b.name, "zh-CN") : b.createdAt.localeCompare(a.createdAt));
 }
 function CangPanel({ api, controller, navigatePus, initialData }) {
-  const state = (0, import_react2.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
-  const [data, setData] = (0, import_react2.useState)(initialData);
-  const [loading, setLoading] = (0, import_react2.useState)(!initialData);
-  const [error, setError] = (0, import_react2.useState)("");
-  const [notice, setNotice] = (0, import_react2.useState)("");
-  const [busy, setBusy] = (0, import_react2.useState)(false);
-  const [reload, setReload] = (0, import_react2.useState)(0);
-  const [query, setQuery] = (0, import_react2.useState)("");
-  const [tag, setTag] = (0, import_react2.useState)("");
-  const [sort, setSort] = (0, import_react2.useState)("recent");
-  const [desktop, setDesktop] = (0, import_react2.useState)(true);
-  const [remove, setRemove] = (0, import_react2.useState)();
-  (0, import_react2.useEffect)(() => {
+  const state = (0, import_react3.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
+  const [data, setData] = (0, import_react3.useState)(initialData);
+  const [loading, setLoading] = (0, import_react3.useState)(!initialData);
+  const [error, setError] = (0, import_react3.useState)("");
+  const [notice, setNotice] = (0, import_react3.useState)("");
+  const [busy, setBusy] = (0, import_react3.useState)(false);
+  const [reload, setReload] = (0, import_react3.useState)(0);
+  const [query, setQuery] = (0, import_react3.useState)("");
+  const [tag, setTag] = (0, import_react3.useState)("");
+  const [sort, setSort] = (0, import_react3.useState)("recent");
+  const [desktop, setDesktop] = (0, import_react3.useState)(true);
+  const [remove, setRemove] = (0, import_react3.useState)();
+  (0, import_react3.useEffect)(() => {
     const abort = new AbortController();
     setLoading(true);
     setError("");
@@ -1326,22 +1369,22 @@ function CangPanel({ api, controller, navigatePus, initialData }) {
 }
 
 // src/client/CangDrawer.tsx
-var import_react3 = require("react");
+var import_react4 = require("react");
 var import_jsx_runtime4 = require("react/jsx-runtime");
 function CangOverlay({ api, controller }) {
-  const { draft } = (0, import_react3.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
+  const { draft } = (0, import_react4.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
   return draft ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(CangDrawer, { api, controller, initial: draft }) : null;
 }
 function CangDrawer({ api, controller, initial }) {
-  const [draft, setDraft] = (0, import_react3.useState)(() => ({ ...initial, tags: [...initial.tags], actions: { ...initial.actions } }));
-  const [tags, setTags] = (0, import_react3.useState)(initial.tags.join("，"));
-  const [nameTouched, setNameTouched] = (0, import_react3.useState)(Boolean(initial.name));
-  const [pointer, setPointer] = (0, import_react3.useState)();
-  const [picker, setPicker] = (0, import_react3.useState)(false);
-  const [busy, setBusy] = (0, import_react3.useState)(false);
-  const [error, setError] = (0, import_react3.useState)("");
-  const dialog = (0, import_react3.useRef)(null);
-  (0, import_react3.useEffect)(() => {
+  const [draft, setDraft] = (0, import_react4.useState)(() => ({ ...initial, tags: [...initial.tags], actions: { ...initial.actions } }));
+  const [tags, setTags] = (0, import_react4.useState)(initial.tags.join("，"));
+  const [nameTouched, setNameTouched] = (0, import_react4.useState)(Boolean(initial.name));
+  const [pointer, setPointer] = (0, import_react4.useState)();
+  const [picker, setPicker] = (0, import_react4.useState)(false);
+  const [busy, setBusy] = (0, import_react4.useState)(false);
+  const [error, setError] = (0, import_react4.useState)("");
+  const dialog = (0, import_react4.useRef)(null);
+  (0, import_react4.useEffect)(() => {
     const abort = new AbortController();
     setPointer(void 0);
     if (draft.path.trim()) api.validate(draft.path, abort.signal).then((value) => {
@@ -1351,7 +1394,7 @@ function CangDrawer({ api, controller, initial }) {
     });
     return () => abort.abort();
   }, [api, draft.path]);
-  (0, import_react3.useEffect)(() => {
+  (0, import_react4.useEffect)(() => {
     const abort = new AbortController();
     api.capabilities(abort.signal).then((value) => {
       if (!abort.signal.aborted) setPicker(value.directoryPicker);
@@ -1561,7 +1604,7 @@ function createConsultApi(ctx) {
 }
 
 // src/client/consult.tsx
-var import_react5 = require("react");
+var import_react6 = require("react");
 
 // src/client/consult-model.ts
 var CONSULT_SESSION_PREFIX = "session-xs-consult-";
@@ -1744,14 +1787,14 @@ async function openConsultSession(options) {
 }
 
 // src/client/consult-views.tsx
-var import_react4 = require("react");
+var import_react5 = require("react");
 var import_jsx_runtime6 = require("react/jsx-runtime");
 function lockedExplain(source) {
   return source.kind === "digao" ? "底稿与八字同级、默认必加载的基础谱；它是纯派生的，要改就改源头（谱 / 工作区 / 工作流）。" : "底座始终在场、不可关：它是每一场问事的前提。";
 }
 function XsConsultPicker({ required, optional, selected, onToggle, onManagePu, onOpenDetail }) {
   const groups = groupOptional(optional);
-  const [explaining, setExplaining] = (0, import_react4.useState)(void 0);
+  const [explaining, setExplaining] = (0, import_react5.useState)(void 0);
   return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "pu-picker", children: [
     /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h3", { children: "① 本次要用的谱（勾选）" }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h4", { className: "xs-consult__group-head", "data-xuanshu-group-head": "locked", children: "── 默认在场 · 不可关 ──" }),
@@ -2227,26 +2270,27 @@ var import_jsx_runtime7 = require("react/jsx-runtime");
 function errorText(error) {
   return error instanceof Error ? error.message : String(error);
 }
-function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, preloaded }) {
-  const [view, setView] = (0, import_react5.useState)(preloaded?.view ?? "lobby");
-  const [defaults, setDefaults] = (0, import_react5.useState)(
+function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, homePaths, preloaded }) {
+  const home = useHomePaths(homePaths).home;
+  const [view, setView] = (0, import_react6.useState)(preloaded?.view ?? "lobby");
+  const [defaults, setDefaults] = (0, import_react6.useState)(
     preloaded?.defaults === void 0 ? { kind: "loading" } : { kind: "ready", value: preloaded.defaults }
   );
-  const [items, setItems] = (0, import_react5.useState)(
+  const [items, setItems] = (0, import_react6.useState)(
     preloaded?.items === void 0 ? { kind: "loading" } : { kind: "ready", value: preloaded.items }
   );
-  const [selected, setSelected] = (0, import_react5.useState)(
+  const [selected, setSelected] = (0, import_react6.useState)(
     preloaded?.defaults === void 0 ? [] : initialSelection(preloaded.defaults.optional)
   );
-  const [question, setQuestion] = (0, import_react5.useState)("");
-  const [busy, setBusy] = (0, import_react5.useState)(false);
-  const [createError, setCreateError] = (0, import_react5.useState)(void 0);
-  const [nudge, setNudge] = (0, import_react5.useState)(false);
-  const [openError, setOpenError] = (0, import_react5.useState)(void 0);
-  const [reader, setReader] = (0, import_react5.useState)({ kind: "idle" });
-  const [query, setQuery] = (0, import_react5.useState)("");
-  const [range, setRange] = (0, import_react5.useState)("all");
-  const touched = (0, import_react5.useRef)(preloaded?.defaults !== void 0);
+  const [question, setQuestion] = (0, import_react6.useState)("");
+  const [busy, setBusy] = (0, import_react6.useState)(false);
+  const [createError, setCreateError] = (0, import_react6.useState)(void 0);
+  const [nudge, setNudge] = (0, import_react6.useState)(false);
+  const [openError, setOpenError] = (0, import_react6.useState)(void 0);
+  const [reader, setReader] = (0, import_react6.useState)({ kind: "idle" });
+  const [query, setQuery] = (0, import_react6.useState)("");
+  const [range, setRange] = (0, import_react6.useState)("all");
+  const touched = (0, import_react6.useRef)(preloaded?.defaults !== void 0);
   const seeded = preloaded !== void 0;
   const reloadDefaults = () => {
     setDefaults({ kind: "loading" });
@@ -2268,7 +2312,7 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
       setItems({ kind: "error", message: errorText(error) });
     });
   };
-  (0, import_react5.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     if (seeded) return;
     reloadDefaults();
     reloadItems();
@@ -2434,6 +2478,7 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
         query,
         range,
         now: /* @__PURE__ */ new Date(),
+        home,
         onQuery: setQuery,
         onRange: setRange,
         onOpen: openRow,
@@ -2578,7 +2623,7 @@ function createDataApi(ctx) {
 }
 
 // src/client/data.tsx
-var import_react6 = require("react");
+var import_react7 = require("react");
 
 // src/client/data-style.ts
 function installDataStyle() {
@@ -2721,12 +2766,12 @@ function XsDataSection({ state, actions }) {
   ] });
 }
 function DataSectionHost({ api }) {
-  const [overview, setOverview] = (0, import_react6.useState)(void 0);
-  const [busy, setBusy] = (0, import_react6.useState)(false);
-  const [stage, setStage] = (0, import_react6.useState)(void 0);
-  const [result, setResult] = (0, import_react6.useState)(void 0);
-  const [error, setError] = (0, import_react6.useState)(void 0);
-  (0, import_react6.useEffect)(() => {
+  const [overview, setOverview] = (0, import_react7.useState)(void 0);
+  const [busy, setBusy] = (0, import_react7.useState)(false);
+  const [stage, setStage] = (0, import_react7.useState)(void 0);
+  const [result, setResult] = (0, import_react7.useState)(void 0);
+  const [error, setError] = (0, import_react7.useState)(void 0);
+  (0, import_react7.useEffect)(() => {
     let alive = true;
     void api.overview().then((value) => {
       if (alive) setOverview(value);
@@ -2845,22 +2890,22 @@ function createDigaoUiController(api) {
 }
 
 // src/client/digao.tsx
-var import_react10 = require("react");
+var import_react11 = require("react");
 
 // src/client/ai-views.tsx
-var import_react7 = require("react");
+var import_react8 = require("react");
 var import_jsx_runtime9 = require("react/jsx-runtime");
-var EMPTY_SNAPSHOT = { checking: false };
-var getEmptySnapshot = () => EMPTY_SNAPSHOT;
+var EMPTY_SNAPSHOT2 = { checking: false };
+var getEmptySnapshot = () => EMPTY_SNAPSHOT2;
 var NOOP_SUBSCRIBE = () => () => {
 };
 function useAiReadiness(controller) {
-  const snapshot = (0, import_react7.useSyncExternalStore)(
+  const snapshot = (0, import_react8.useSyncExternalStore)(
     controller?.subscribe ?? NOOP_SUBSCRIBE,
     controller?.snapshot ?? getEmptySnapshot,
     controller?.snapshot ?? getEmptySnapshot
   );
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     if (controller === void 0) return () => {
     };
     const release = controller.start();
@@ -2953,7 +2998,7 @@ function XsAiGate({ readiness, checking = false, onRetry, onOpenSettings }) {
 }
 
 // src/client/notify.tsx
-var import_react8 = require("react");
+var import_react9 = require("react");
 
 // src/client/notify-api.ts
 var NOTIFY_ENDPOINTS = {
@@ -3006,12 +3051,12 @@ var NOTIFY_FAILURE_TEXT = {
   unsupported: "系统通知不可用：这台系统 / 环境不支持系统通知。",
   failed: "桌面壳没有弹出通知（壳没给细节）。"
 };
-var SHELL_REASON_TOKEN = /(permission-denied|unsupported|failed)\s*$/u;
+var NOTIFY_FAILURE_TOKEN = /(permission-denied|unsupported|failed)\s*$/u;
 function notifyReasonCode(notify) {
   const explicit = typeof notify?.reasonCode === "string" && notify.reasonCode !== "" ? notify.reasonCode : void 0;
   if (explicit !== void 0) return explicit;
   const reason = typeof notify?.reason === "string" ? notify.reason : "";
-  const match = SHELL_REASON_TOKEN.exec(reason);
+  const match = NOTIFY_FAILURE_TOKEN.exec(reason);
   return match === null ? void 0 : match[1];
 }
 function notifyFailureText(notify) {
@@ -3063,9 +3108,9 @@ function XsDeliveryHistory({ status }) {
   ] });
 }
 function DeliveryHistoryHost({ notify, preloaded }) {
-  const [status, setStatus] = (0, import_react8.useState)(preloaded);
-  const [error, setError] = (0, import_react8.useState)(void 0);
-  (0, import_react8.useEffect)(() => {
+  const [status, setStatus] = (0, import_react9.useState)(preloaded);
+  const [error, setError] = (0, import_react9.useState)(void 0);
+  (0, import_react9.useEffect)(() => {
     if (preloaded !== void 0 || notify === void 0) return;
     let alive = true;
     void notify.status({ limit: 50 }).then((answer) => {
@@ -3187,9 +3232,9 @@ function XsTouchSettingsRow({ state, actions }) {
   ] });
 }
 function TouchSettingsHost({ rikke, notify }) {
-  const [state, setState] = (0, import_react8.useState)(void 0);
-  const [error, setError] = (0, import_react8.useState)(void 0);
-  (0, import_react8.useEffect)(() => {
+  const [state, setState] = (0, import_react9.useState)(void 0);
+  const [error, setError] = (0, import_react9.useState)(void 0);
+  (0, import_react9.useEffect)(() => {
     let alive = true;
     void Promise.all([rikke.getSettings(), notify.getSettings()]).then(([rikkeSettings, notifySettings]) => {
       if (!alive) return;
@@ -3494,7 +3539,7 @@ function IllusCardsError({ className = "xs-empty__illus" }) {
 }
 
 // src/client/watch.ts
-var import_react9 = require("react");
+var import_react10 = require("react");
 function createMainPanelsWatch(slots) {
   const read = () => {
     const keys = /* @__PURE__ */ new Set();
@@ -3533,7 +3578,7 @@ function createMainPanelsWatch(slots) {
   };
 }
 function useMainPanels(watch) {
-  return (0, import_react9.useSyncExternalStore)(watch.subscribe, watch.getSnapshot, watch.getSnapshot);
+  return (0, import_react10.useSyncExternalStore)(watch.subscribe, watch.getSnapshot, watch.getSnapshot);
 }
 var EMPTY_MAIN_PANELS = {
   subscribe: () => () => {
@@ -4528,11 +4573,11 @@ function errorText3(error) {
 }
 function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }) {
   const seeded = preloaded !== void 0;
-  const [view, setView] = (0, import_react10.useState)(() => initialView(preloaded));
-  const [busy, setBusy] = (0, import_react10.useState)(false);
-  const [raw, setRaw] = (0, import_react10.useState)(preloadedRawView === true);
-  const [note, setNote] = (0, import_react10.useState)(void 0);
-  const sequence = (0, import_react10.useRef)(0);
+  const [view, setView] = (0, import_react11.useState)(() => initialView(preloaded));
+  const [busy, setBusy] = (0, import_react11.useState)(false);
+  const [raw, setRaw] = (0, import_react11.useState)(preloadedRawView === true);
+  const [note, setNote] = (0, import_react11.useState)(void 0);
+  const sequence = (0, import_react11.useRef)(0);
   const load = () => {
     const mine = ++sequence.current;
     setNote(void 0);
@@ -4562,7 +4607,7 @@ function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }) {
       setView({ kind: "error", message: errorText3(error) });
     });
   };
-  (0, import_react10.useEffect)(() => {
+  (0, import_react11.useEffect)(() => {
     if (seeded) return;
     load();
   }, [api, seeded]);
@@ -4735,9 +4780,9 @@ function PastSection({
   }));
   const live = rows.filter((row) => shijiRead === void 0 || row.entry !== void 0);
   const gone = shijiRead === void 0 ? 0 : records.length - live.length;
-  const [pendingId, setPendingId] = (0, import_react10.useState)(void 0);
-  const [busyId, setBusyId] = (0, import_react10.useState)(void 0);
-  const [note, setNote] = (0, import_react10.useState)(void 0);
+  const [pendingId, setPendingId] = (0, import_react11.useState)(void 0);
+  const [busyId, setBusyId] = (0, import_react11.useState)(void 0);
+  const [note, setNote] = (0, import_react11.useState)(void 0);
   const remove = (entry, name) => {
     if (shiji === void 0) return;
     setBusyId(entry.id);
@@ -4845,7 +4890,7 @@ function installDigao(ctx, deps) {
 }
 
 // src/client/MingpanPanel.tsx
-var import_react11 = require("react");
+var import_react12 = require("react");
 
 // src/client/bazi-style.ts
 function installBaziStyle() {
@@ -5164,20 +5209,23 @@ function MingpanPanel({
   navigate,
   preloadedSnapshot,
   preloadedError,
-  dataDir
+  dataDir,
+  homePaths
 }) {
-  const revision = (0, import_react11.useSyncExternalStore)(controller.subscribe, controller.getRevision, controller.getRevision);
+  const injectedHomePaths = useHomePaths(homePaths);
+  const localDataDir = dataDir ?? injectedHomePaths.dataDir;
+  const revision = (0, import_react12.useSyncExternalStore)(controller.subscribe, controller.getRevision, controller.getRevision);
   const seeded = preloadedError !== void 0 || preloadedSnapshot !== void 0;
-  const [view, setView] = (0, import_react11.useState)(() => {
+  const [view, setView] = (0, import_react12.useState)(() => {
     if (preloadedError !== void 0) return { kind: "error", message: preloadedError };
     if (preloadedSnapshot !== void 0) {
       return preloadedSnapshot === null ? { kind: "empty" } : { kind: "ready", snapshot: preloadedSnapshot };
     }
     return { kind: "loading" };
   });
-  const [confirming, setConfirming] = (0, import_react11.useState)(false);
-  const sequence = (0, import_react11.useRef)(0);
-  (0, import_react11.useEffect)(() => {
+  const [confirming, setConfirming] = (0, import_react12.useState)(false);
+  const sequence = (0, import_react12.useRef)(0);
+  (0, import_react12.useEffect)(() => {
     if (seeded) return;
     const mine = ++sequence.current;
     setView((current) => current.kind === "ready" ? current : { kind: "loading" });
@@ -5228,7 +5276,7 @@ function MingpanPanel({
       MingpanBody,
       {
         snapshot: view.snapshot,
-        dataDir,
+        dataDir: localDataDir,
         confirming,
         onAskRerecord: () => {
           setConfirming(true);
@@ -5377,7 +5425,7 @@ function createWorkspaceCatalog(ctx) {
 }
 
 // src/client/mounts.tsx
-var import_react13 = require("react");
+var import_react14 = require("react");
 
 // src/client/mounts-model.ts
 var MOUNT_BOUNDARY_LINE = "对象是工作区 / 工作流。谱不在这里——谱在问事面板里勾选。";
@@ -5587,7 +5635,7 @@ function createMountsController(options) {
 }
 
 // src/client/mounts-views.tsx
-var import_react12 = require("react");
+var import_react13 = require("react");
 var import_jsx_runtime15 = require("react/jsx-runtime");
 function XsMountStatusBar({ status, budgetSource, hint, onOpen }) {
   const text = status === void 0 ? hint ?? "挂载 … 字 / 预算 …" : statusLine(status);
@@ -5659,7 +5707,7 @@ function XsMountDrawer({
   onRefresh,
   gotoWorkspaces
 }) {
-  const [showAllNotes, setShowAllNotes] = (0, import_react12.useState)(false);
+  const [showAllNotes, setShowAllNotes] = (0, import_react13.useState)(false);
   const status = preview === void 0 ? void 0 : {
     keptChars: preview.keptChars,
     budget: preview.budget,
@@ -5759,7 +5807,7 @@ function installMountsStyle() {
   document.head.appendChild(style);
 }
 function MountsOverlay({ controller, workspaces, gotoWorkspaces }) {
-  const state = (0, import_react13.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
+  const state = (0, import_react14.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
   if (!state.open) return null;
   const rows = layerRows(state.preview);
   return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
@@ -5798,7 +5846,7 @@ function MountsOverlay({ controller, workspaces, gotoWorkspaces }) {
   );
 }
 function MountsSectionFor({ controller, session, reason }) {
-  const state = (0, import_react13.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
+  const state = (0, import_react14.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
   const mounts = session?.mounts ?? [];
   const status = session === void 0 ? void 0 : statusFromPreview(controller.cachedPreview(session.sessionId));
   return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
@@ -5842,7 +5890,7 @@ function installMounts(ctx, deps) {
 }
 
 // src/client/onboarding.tsx
-var import_react15 = require("react");
+var import_react16 = require("react");
 
 // src/client/cities.ts
 var CITY_DEBOUNCE_MS = 180;
@@ -6044,7 +6092,7 @@ function createCityQuery(options) {
 }
 
 // src/client/onboarding-steps.tsx
-var import_react14 = require("react");
+var import_react15 = require("react");
 var import_jsx_runtime17 = require("react/jsx-runtime");
 var STEP_TITLES = [
   "出生日期与钟表时间",
@@ -6092,7 +6140,7 @@ function StepShell({ step, title, hint, children }) {
   ] });
 }
 function XsTimeStep({ draft, onChange, onNudge, onNow }) {
-  const [grain, setGrain] = (0, import_react14.useState)("fourMinute");
+  const [grain, setGrain] = (0, import_react15.useState)("fourMinute");
   const empty = draft.date.trim() === "" || draft.time.trim() === "";
   const activeLabel = NUDGE_GRAINS.find((row) => row.id === grain)?.label ?? "四分钟";
   return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
@@ -6169,8 +6217,8 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
   );
 }
 function XsPlaceStep({ draft, query, results, manualHint, onQuery, onPick, onManual }) {
-  const [lonText, setLonText] = (0, import_react14.useState)("");
-  const [latText, setLatText] = (0, import_react14.useState)("");
+  const [lonText, setLonText] = (0, import_react15.useState)("");
+  const [latText, setLatText] = (0, import_react15.useState)("");
   const missing = missingCoordinates(draft);
   const searching = query.trim() !== "";
   const noMatch = searching && results.items.length === 0;
@@ -6588,39 +6636,39 @@ function XsAiStep({
 var import_jsx_runtime18 = require("react/jsx-runtime");
 var MANUAL_REJECTED_HINT = "经纬度不合法，已忽略（经度在前，例如 118.78 / 32.06）";
 function useCityQuery(api, query) {
-  const controller = (0, import_react15.useMemo)(
+  const controller = (0, import_react16.useMemo)(
     () => createCityQuery({
       // 失败**不在这里吞**：让 `bazi.cities` 的拒绝走到调度器里，由它静默回落小库。
       loadFull: (keyword, signal) => api.cities({ query: keyword, limit: CITY_RESULT_LIMIT }, signal).then((result) => result.items)
     }),
     [api]
   );
-  (0, import_react15.useEffect)(() => {
+  (0, import_react16.useEffect)(() => {
     controller.setQuery(query);
   }, [controller, query]);
-  (0, import_react15.useEffect)(() => () => {
+  (0, import_react16.useEffect)(() => () => {
     controller.dispose();
   }, [controller]);
-  return (0, import_react15.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  return (0, import_react16.useSyncExternalStore)(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 }
 function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiStatus, onOpenAiSettings }) {
-  const [draft, setDraft] = (0, import_react15.useState)(() => preloadedDraft ?? defaultDraft());
-  const [step, setStep] = (0, import_react15.useState)(1);
-  const [query, setQuery] = (0, import_react15.useState)("");
-  const [zone, setZone] = (0, import_react15.useState)(void 0);
-  const [zonePending, setZonePending] = (0, import_react15.useState)(false);
-  const [manualHint, setManualHint] = (0, import_react15.useState)(void 0);
-  const [gateAnswer, setGateAnswer] = (0, import_react15.useState)("");
-  const [result, setResult] = (0, import_react15.useState)(void 0);
-  const [busy, setBusy] = (0, import_react15.useState)(false);
-  const castSequence = (0, import_react15.useRef)(0);
-  const zoneSequence = (0, import_react15.useRef)(0);
+  const [draft, setDraft] = (0, import_react16.useState)(() => preloadedDraft ?? defaultDraft());
+  const [step, setStep] = (0, import_react16.useState)(1);
+  const [query, setQuery] = (0, import_react16.useState)("");
+  const [zone, setZone] = (0, import_react16.useState)(void 0);
+  const [zonePending, setZonePending] = (0, import_react16.useState)(false);
+  const [manualHint, setManualHint] = (0, import_react16.useState)(void 0);
+  const [gateAnswer, setGateAnswer] = (0, import_react16.useState)("");
+  const [result, setResult] = (0, import_react16.useState)(void 0);
+  const [busy, setBusy] = (0, import_react16.useState)(false);
+  const castSequence = (0, import_react16.useRef)(0);
+  const zoneSequence = (0, import_react16.useRef)(0);
   const aiSnapshot = useAiReadiness(aiStatus);
   const cityResults = useCityQuery(api, query);
   const patch = (next) => {
     setDraft((current) => ({ ...current, ...next }));
   };
-  (0, import_react15.useEffect)(() => {
+  (0, import_react16.useEffect)(() => {
     const prefill = controller.consumePrefill();
     if (prefill === void 0) return;
     setDraft(prefill);
@@ -6629,7 +6677,7 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiStatus, 
     setGateAnswer("");
   }, [controller]);
   const { lon, lat, date, time, zoneManual } = draft;
-  (0, import_react15.useEffect)(() => {
+  (0, import_react16.useEffect)(() => {
     if (zoneManual) return;
     if (!Number.isFinite(lon) || !Number.isFinite(lat) || date.trim() === "") {
       setZone(void 0);
@@ -6902,7 +6950,7 @@ function OverviewIcon({ size = 20 }) {
 }
 
 // src/client/OverviewPanel.tsx
-var import_react16 = require("react");
+var import_react17 = require("react");
 var import_jsx_runtime20 = require("react/jsx-runtime");
 function localDate(now = /* @__PURE__ */ new Date()) {
   const pad = (value) => String(value).padStart(2, "0");
@@ -6939,11 +6987,11 @@ function destinyStateFromStatus(status) {
 function useBaziStatus(options) {
   const { api, controller, preloaded } = options;
   const active = controller ?? NO_CONTROLLER;
-  const revision = (0, import_react16.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
-  const [status, setStatus] = (0, import_react16.useState)(
+  const revision = (0, import_react17.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
+  const [status, setStatus] = (0, import_react17.useState)(
     preloaded ?? (api === void 0 ? { state: "empty" } : void 0)
   );
-  (0, import_react16.useEffect)(() => {
+  (0, import_react17.useEffect)(() => {
     if (preloaded !== void 0) {
       setStatus(preloaded);
       return;
@@ -6999,11 +7047,11 @@ function digaoStateFromStatus(status, outcome) {
 function useRikkeStatus(options) {
   const { api, controller, preloaded, preloadedOutcome } = options;
   const active = controller ?? NO_RIKKE_CONTROLLER;
-  const revision = (0, import_react16.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
-  const [status, setStatus] = (0, import_react16.useState)(
+  const revision = (0, import_react17.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
+  const [status, setStatus] = (0, import_react17.useState)(
     preloaded ?? (api === void 0 ? { date: "", exists: false } : void 0)
   );
-  (0, import_react16.useEffect)(() => {
+  (0, import_react17.useEffect)(() => {
     if (preloaded !== void 0) {
       setStatus(preloaded);
       return;
@@ -7030,11 +7078,11 @@ function useRikkeStatus(options) {
 function useDigaoStatus(options) {
   const { api, controller, preloaded, preloadedOutcome } = options;
   const active = controller ?? NO_DIGAO_CONTROLLER;
-  const revision = (0, import_react16.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
-  const [status, setStatus] = (0, import_react16.useState)(
+  const revision = (0, import_react17.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
+  const [status, setStatus] = (0, import_react17.useState)(
     preloaded ?? (api === void 0 ? { exists: false, meta: null } : void 0)
   );
-  (0, import_react16.useEffect)(() => {
+  (0, import_react17.useEffect)(() => {
     if (preloaded !== void 0) {
       setStatus(preloaded);
       return;
@@ -7094,11 +7142,11 @@ function wanshengStateFromStatus(status, outcome) {
 function useWanshengStatus(options) {
   const { api, controller, preloaded, preloadedOutcome } = options;
   const active = controller ?? NO_WANSHENG_CONTROLLER;
-  const revision = (0, import_react16.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
-  const [status, setStatus] = (0, import_react16.useState)(
+  const revision = (0, import_react17.useSyncExternalStore)(active.subscribe, active.getRevision, active.getRevision);
+  const [status, setStatus] = (0, import_react17.useState)(
     preloaded ?? (api === void 0 ? { date: "", exists: false } : void 0)
   );
-  (0, import_react16.useEffect)(() => {
+  (0, import_react17.useEffect)(() => {
     if (preloaded !== void 0) {
       setStatus(preloaded);
       return;
@@ -7150,6 +7198,7 @@ function OverviewPanel({
   preloadedWanshengOutcome,
   today,
   dataDir,
+  homePaths,
   baseplateReady,
   onStartOnboarding,
   onOpenDetail,
@@ -7160,6 +7209,8 @@ function OverviewPanel({
   onOpenAiSettings
 }) {
   const date = today ?? localDate();
+  const injectedHomePaths = useHomePaths(homePaths);
+  const localDataDir = dataDir ?? injectedHomePaths.dataDir;
   const destiny = useBaziStatus({ api: bazi, controller: baziController, preloaded: preloadedBaziStatus });
   const rikkeState = useRikkeStatus({
     api: rikke,
@@ -7215,7 +7266,7 @@ function OverviewPanel({
         " · ",
         PANEL_TITLE
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "xs-overview__localnote", "data-xuanshu-note": "local-data", children: panelLocalNote(dataDir) })
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "xs-overview__localnote", "data-xuanshu-note": "local-data", children: panelLocalNote(localDataDir) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "xs-overview__grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(XsDestinyCard, { state: destiny.state, snapshot: destiny.snapshot, ...injected }),
@@ -7278,7 +7329,7 @@ function OverviewPanel({
 }
 
 // src/client/PuPanel.tsx
-var import_react17 = require("react");
+var import_react18 = require("react");
 var import_jsx_runtime21 = require("react/jsx-runtime");
 var pendingJob;
 var pendingView = "create";
@@ -7295,21 +7346,21 @@ async function fileData(file) {
   return { name: file.name, data };
 }
 function PuPanel({ ctx }) {
-  const [rows, setRows] = (0, import_react17.useState)([]);
-  const [loading, setLoading] = (0, import_react17.useState)(true);
-  const [query, setQuery] = (0, import_react17.useState)("");
-  const [level, setLevel] = (0, import_react17.useState)("");
-  const [source, setSource] = (0, import_react17.useState)("");
-  const [view, setView] = (0, import_react17.useState)(pendingJob ? pendingView : "list");
-  const [step, setStep] = (0, import_react17.useState)(pendingJob ? 3 : 1);
-  const [job, setJob] = (0, import_react17.useState)(pendingJob);
-  const [text, setText] = (0, import_react17.useState)("");
-  const [files, setFiles] = (0, import_react17.useState)([]);
-  const [draft, setDraft] = (0, import_react17.useState)(pendingJob && pendingView === "detail" && pendingSelected ? pendingSelected : blank);
-  const [selected, setSelected] = (0, import_react17.useState)(pendingSelected);
-  const [original, setOriginal] = (0, import_react17.useState)(pendingSelected ? JSON.stringify(pendingSelected) : "");
-  const [error, setError] = (0, import_react17.useState)("");
-  const [busy, setBusy] = (0, import_react17.useState)(false);
+  const [rows, setRows] = (0, import_react18.useState)([]);
+  const [loading, setLoading] = (0, import_react18.useState)(true);
+  const [query, setQuery] = (0, import_react18.useState)("");
+  const [level, setLevel] = (0, import_react18.useState)("");
+  const [source, setSource] = (0, import_react18.useState)("");
+  const [view, setView] = (0, import_react18.useState)(pendingJob ? pendingView : "list");
+  const [step, setStep] = (0, import_react18.useState)(pendingJob ? 3 : 1);
+  const [job, setJob] = (0, import_react18.useState)(pendingJob);
+  const [text, setText] = (0, import_react18.useState)("");
+  const [files, setFiles] = (0, import_react18.useState)([]);
+  const [draft, setDraft] = (0, import_react18.useState)(pendingJob && pendingView === "detail" && pendingSelected ? pendingSelected : blank);
+  const [selected, setSelected] = (0, import_react18.useState)(pendingSelected);
+  const [original, setOriginal] = (0, import_react18.useState)(pendingSelected ? JSON.stringify(pendingSelected) : "");
+  const [error, setError] = (0, import_react18.useState)("");
+  const [busy, setBusy] = (0, import_react18.useState)(false);
   const call = (method, payload) => rpcCall(ctx, method, payload);
   const reload = async () => {
     setLoading(true);
@@ -7322,10 +7373,10 @@ function PuPanel({ ctx }) {
       setLoading(false);
     }
   };
-  (0, import_react17.useEffect)(() => {
+  (0, import_react18.useEffect)(() => {
     void reload();
   }, []);
-  (0, import_react17.useEffect)(() => {
+  (0, import_react18.useEffect)(() => {
     if (job?.status !== "running") return;
     let disposed = false;
     let timer;
@@ -7353,7 +7404,7 @@ function PuPanel({ ctx }) {
       clearTimeout(timer);
     };
   }, [job?.id, job?.status]);
-  (0, import_react17.useEffect)(() => {
+  (0, import_react18.useEffect)(() => {
     if (job?.status === "ready" && job.draft && step === 3 && view === "create") {
       setDraft(job.draft);
       setStep(4);
@@ -7694,7 +7745,7 @@ function createRikkeUiController(api) {
 }
 
 // src/client/rikke.tsx
-var import_react18 = require("react");
+var import_react19 = require("react");
 
 // src/client/rikke-style.ts
 function installRikkeStyle() {
@@ -7746,15 +7797,15 @@ function initialView2(preloaded) {
 }
 function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }) {
   const seeded = preloaded !== void 0;
-  const [view, setView] = (0, import_react18.useState)(() => initialView2(preloaded));
-  const [busy, setBusy] = (0, import_react18.useState)(false);
-  const [confirming, setConfirming] = (0, import_react18.useState)(false);
-  const [editing, setEditing] = (0, import_react18.useState)(preloadedTimeEdit === true);
-  const [timeDraft, setTimeDraft] = (0, import_react18.useState)(
+  const [view, setView] = (0, import_react19.useState)(() => initialView2(preloaded));
+  const [busy, setBusy] = (0, import_react19.useState)(false);
+  const [confirming, setConfirming] = (0, import_react19.useState)(false);
+  const [editing, setEditing] = (0, import_react19.useState)(preloadedTimeEdit === true);
+  const [timeDraft, setTimeDraft] = (0, import_react19.useState)(
     () => clockOf(preloaded !== void 0 && !("error" in preloaded) ? preloaded.schedule?.time : void 0)
   );
-  const [note, setNote] = (0, import_react18.useState)(void 0);
-  const sequence = (0, import_react18.useRef)(0);
+  const [note, setNote] = (0, import_react19.useState)(void 0);
+  const sequence = (0, import_react19.useRef)(0);
   const load = () => {
     const mine = ++sequence.current;
     void api.status().then((status2) => {
@@ -7766,11 +7817,11 @@ function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }) {
       setView({ kind: "error", message: errorText6(error) });
     });
   };
-  (0, import_react18.useEffect)(() => {
+  (0, import_react19.useEffect)(() => {
     if (seeded) return;
     load();
   }, [api, seeded]);
-  (0, import_react18.useEffect)(() => {
+  (0, import_react19.useEffect)(() => {
     if (seeded || notify === void 0) return;
     void notify.markDeliveredRead({ kind: "rikke" }).catch(() => {
     });
@@ -8039,7 +8090,7 @@ function createWanshengUiController(api) {
 }
 
 // src/client/wansheng.tsx
-var import_react19 = require("react");
+var import_react20 = require("react");
 var import_jsx_runtime23 = require("react/jsx-runtime");
 function errorText8(error) {
   return error instanceof Error ? error.message : String(error);
@@ -8096,14 +8147,14 @@ function WanshengPanel({
   preloadedTimeEdit
 }) {
   const seeded = preloaded !== void 0;
-  const [view, setView] = (0, import_react19.useState)(() => initialView3(preloaded));
-  const [busy, setBusy] = (0, import_react19.useState)(false);
-  const [editing, setEditing] = (0, import_react19.useState)(preloadedTimeEdit === true);
-  const [timeDraft, setTimeDraft] = (0, import_react19.useState)(
+  const [view, setView] = (0, import_react20.useState)(() => initialView3(preloaded));
+  const [busy, setBusy] = (0, import_react20.useState)(false);
+  const [editing, setEditing] = (0, import_react20.useState)(preloadedTimeEdit === true);
+  const [timeDraft, setTimeDraft] = (0, import_react20.useState)(
     () => clockOf(preloaded !== void 0 && !("error" in preloaded) ? preloaded.schedule?.time : void 0)
   );
-  const [note, setNote] = (0, import_react19.useState)(void 0);
-  const sequence = (0, import_react19.useRef)(0);
+  const [note, setNote] = (0, import_react20.useState)(void 0);
+  const sequence = (0, import_react20.useRef)(0);
   const load = () => {
     const mine = ++sequence.current;
     void api.status().then((status2) => {
@@ -8115,7 +8166,7 @@ function WanshengPanel({
       setView({ kind: "error", message: errorText8(error) });
     });
   };
-  (0, import_react19.useEffect)(() => {
+  (0, import_react20.useEffect)(() => {
     if (seeded) return;
     load();
   }, [api, seeded]);
@@ -8260,7 +8311,7 @@ function createWorkflowApi(ctx) {
 }
 
 // src/client/workflow/WorkflowPanel.tsx
-var import_react20 = require("react");
+var import_react21 = require("react");
 
 // src/client/workflow/workflow-model.ts
 var WORKFLOW_ID = "workflow";
@@ -8308,13 +8359,13 @@ function initialView4(preloaded) {
 }
 function WorkflowPanel({ api, navigate, preloaded }) {
   const seeded = preloaded !== void 0;
-  const [view, setView] = (0, import_react20.useState)(() => initialView4(preloaded));
-  const [busy, setBusy] = (0, import_react20.useState)(false);
-  const [createError, setCreateError] = (0, import_react20.useState)(void 0);
-  const [draft, setDraft] = (0, import_react20.useState)({ sessionId: "", name: "", description: "", content: "" });
-  const [exportError, setExportError] = (0, import_react20.useState)(void 0);
-  const [exported, setExported] = (0, import_react20.useState)(void 0);
-  (0, import_react20.useEffect)(() => {
+  const [view, setView] = (0, import_react21.useState)(() => initialView4(preloaded));
+  const [busy, setBusy] = (0, import_react21.useState)(false);
+  const [createError, setCreateError] = (0, import_react21.useState)(void 0);
+  const [draft, setDraft] = (0, import_react21.useState)({ sessionId: "", name: "", description: "", content: "" });
+  const [exportError, setExportError] = (0, import_react21.useState)(void 0);
+  const [exported, setExported] = (0, import_react21.useState)(void 0);
+  (0, import_react21.useEffect)(() => {
     if (seeded) return;
     let cancelled = false;
     void (async () => {
@@ -8670,29 +8721,29 @@ function createSedimentController(api) {
 }
 
 // src/client/sediment-views.tsx
-var import_react21 = require("react");
+var import_react22 = require("react");
 var import_jsx_runtime25 = require("react/jsx-runtime");
 var SEDIMENT_ENTRY_ID = "xuanshu.sediment-entry";
 var SEDIMENT_DRAFT_CARD_ID = "xuanshu.sediment-draft";
 var SEDIMENT_NOTICE_ID = "xuanshu.sediment-notice";
 var SEDIMENT_TURNTAIL_ORDER = 30;
-var NO_SUBSCRIBE = () => () => {
+var NO_SUBSCRIBE2 = () => () => {
 };
 var EMPTY_STATE = { kind: "empty" };
 function useSedimentState(controller, sessionId) {
   const snapshot = () => controller === void 0 || sessionId === void 0 ? EMPTY_STATE : controller.getState(sessionId);
-  return (0, import_react21.useSyncExternalStore)(controller === void 0 ? NO_SUBSCRIBE : controller.subscribe, snapshot, snapshot);
+  return (0, import_react22.useSyncExternalStore)(controller === void 0 ? NO_SUBSCRIBE2 : controller.subscribe, snapshot, snapshot);
 }
 function errorText11(error) {
   return error instanceof Error ? error.message : String(error);
 }
 function XsSedimentEntry({ sessionId, api, controller, navigate, preloadedTargets }) {
   const consult = isConsultSessionId(sessionId);
-  const [targets, setTargets] = (0, import_react21.useState)(preloadedTargets);
-  const [slug, setSlug] = (0, import_react21.useState)(preloadedTargets?.[0]?.slug ?? "");
-  const [error, setError] = (0, import_react21.useState)("");
+  const [targets, setTargets] = (0, import_react22.useState)(preloadedTargets);
+  const [slug, setSlug] = (0, import_react22.useState)(preloadedTargets?.[0]?.slug ?? "");
+  const [error, setError] = (0, import_react22.useState)("");
   const state = useSedimentState(controller, sessionId);
-  (0, import_react21.useEffect)(() => {
+  (0, import_react22.useEffect)(() => {
     if (!consult || api === void 0 || preloadedTargets !== void 0) return;
     const abort = new AbortController();
     api.listTargets(abort.signal).then((rows) => {
@@ -8752,18 +8803,20 @@ function stateLabel(kind) {
   if (kind === "done") return "done";
   return "empty";
 }
-function XsSedimentDraftCard({ sessionId, api, controller, navigate, dataDir, initialConfirmOpen, preloadedTargetView }) {
+function XsSedimentDraftCard({ sessionId, api, controller, navigate, dataDir, homePaths, initialConfirmOpen, preloadedTargetView }) {
   const consult = isConsultSessionId(sessionId);
+  const injectedHomePaths = useHomePaths(homePaths);
+  const localDataDir = dataDir ?? injectedHomePaths.dataDir;
   const state = useSedimentState(controller, sessionId);
-  const [open, setOpen] = (0, import_react21.useState)(initialConfirmOpen === true);
-  const [targetView, setTargetView] = (0, import_react21.useState)(preloadedTargetView);
-  const [stale, setStale] = (0, import_react21.useState)(false);
-  const [busy, setBusy] = (0, import_react21.useState)(false);
-  const [actionError, setActionError] = (0, import_react21.useState)("");
+  const [open, setOpen] = (0, import_react22.useState)(initialConfirmOpen === true);
+  const [targetView, setTargetView] = (0, import_react22.useState)(preloadedTargetView);
+  const [stale, setStale] = (0, import_react22.useState)(false);
+  const [busy, setBusy] = (0, import_react22.useState)(false);
+  const [actionError, setActionError] = (0, import_react22.useState)("");
   const draft = state.answer?.draft;
   const target = state.answer?.target;
   const slug = target?.slug;
-  (0, import_react21.useEffect)(() => {
+  (0, import_react22.useEffect)(() => {
     if (!open || api === void 0 || slug === void 0 || preloadedTargetView !== void 0) return void 0;
     const abort = new AbortController();
     api.readTarget(slug, abort.signal).then((view) => {
@@ -8830,7 +8883,7 @@ function XsSedimentDraftCard({ sessionId, api, controller, navigate, dataDir, in
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__meta", children: `${countWords(draft.body)} 字 · 尚未写进任何谱` }),
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__target", children: `目标谱：${target.name}（${target.slug}）` }),
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("pre", { className: "xs-sediment__preview", "data-xuanshu-preview": "sediment", children: previewText(draft.body) }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__path", children: `草稿落点（只读）：${dataDirPath(dataDir, "sediment", `${state.answer?.draftId ?? ""}.json`)}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__path", children: `草稿落点（只读）：${dataDirPath(localDataDir, "sediment", `${state.answer?.draftId ?? ""}.json`)}` }),
       state.reason === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__error", role: "alert", children: state.reason }),
       actionError === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__error", role: "alert", children: actionError }),
       /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "xs-sediment__actions", children: [
@@ -8847,7 +8900,7 @@ function XsSedimentDraftCard({ sessionId, api, controller, navigate, dataDir, in
           draft,
           target,
           base: targetView,
-          dataDir,
+          dataDir: localDataDir,
           stale,
           busy,
           error: actionError === "" ? void 0 : actionError,
@@ -8865,7 +8918,7 @@ function XsSedimentDraftCard({ sessionId, api, controller, navigate, dataDir, in
     ] }) : null,
     state.kind === "done" && state.pu !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "xs-sediment__done", children: [
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { "data-xuanshu-state": "committed", children: `已更新到谱「${state.pu.name}」。` }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__note", children: `写入路径：${puPaths(state.pu.slug, dataDir).content}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__note", children: `写入路径：${puPaths(state.pu.slug, localDataDir).content}` }),
       /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "xs-sediment__actions", children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", "data-xuanshu-nav": "pus", onClick: () => {
         navigate("pus");
       }, children: "查看谱 ->" }) })
@@ -8935,7 +8988,7 @@ function XsSedimentConfirmDialog({ draft, target, base, dataDir, stale, busy, er
   ] }) });
 }
 function XsSedimentNotice({ controller, navigate }) {
-  const notice = (0, import_react21.useSyncExternalStore)(controller.subscribe, controller.getNotice, controller.getNotice);
+  const notice = (0, import_react22.useSyncExternalStore)(controller.subscribe, controller.getNotice, controller.getNotice);
   if (notice === void 0) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { className: "xs-sediment__notice", "data-xuanshu-notice": "sediment", role: "status", children: [
     /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { children: `已更新到谱「${notice.pu.name}」（${countWords(notice.pu.body)} 字）。` }),
@@ -9049,7 +9102,7 @@ function createShijiApi(ctx) {
 }
 
 // src/client/shiji-views.tsx
-var import_react22 = require("react");
+var import_react23 = require("react");
 var import_jsx_runtime26 = require("react/jsx-runtime");
 var SHIJI_ENTRY_ID = "xuanshu.shiji-entry";
 var SHIJI_SAVE_NOTE = "这一场的要点可以在你点了并确认之后，存成今天的一条事记。";
@@ -9059,9 +9112,9 @@ function errorText12(error) {
 }
 function XsShijiSaveEntry({ sessionId, api, navigate }) {
   const consult = isConsultSessionId(sessionId);
-  const [open, setOpen] = (0, import_react22.useState)(false);
-  const [busy, setBusy] = (0, import_react22.useState)(false);
-  const [result, setResult] = (0, import_react22.useState)(void 0);
+  const [open, setOpen] = (0, import_react23.useState)(false);
+  const [busy, setBusy] = (0, import_react23.useState)(false);
+  const [result, setResult] = (0, import_react23.useState)(void 0);
   if (!consult || api === void 0 || sessionId === void 0) return null;
   const save = () => {
     setBusy(true);
@@ -9217,7 +9270,7 @@ function XsShijiSettingsSection({ state, actions }) {
   ] });
 }
 function ShijiSettingsHost({ api }) {
-  const [state, setState] = (0, import_react22.useState)({
+  const [state, setState] = (0, import_react23.useState)({
     entries: [],
     excludedDirs: [],
     draftDir: "",
@@ -9238,7 +9291,7 @@ function ShijiSettingsHost({ api }) {
       setState((previous) => ({ ...previous, loading: false, error: `读不到事记设置：${errorText12(reason)}` }));
     });
   };
-  (0, import_react22.useEffect)(() => {
+  (0, import_react23.useEffect)(() => {
     load();
   }, [api]);
   const writeExcludedDirs = (next, note) => {
@@ -10248,6 +10301,8 @@ function apply(ctx) {
   const bestof = createBestofApi(rpc);
   const bestofController = createBestofController({ api: bestof });
   const data = createDataApi(rpc);
+  const homePaths = createHomePathsWatch();
+  void primeHomePaths(homePaths, data);
   const injected = () => ({
     navigate,
     mainPanels,
@@ -10275,7 +10330,9 @@ function apply(ctx) {
     wansheng,
     wanshengController,
     // #29：问事入口的门禁读这一份只读状态（与向导第 6 步同一个控制器）。
-    aiStatus: aiReadiness
+    aiStatus: aiReadiness,
+    // R3：宿主回传的 home / dataDir（概览页眉「数据都在本地 …」用它，不是占位）。
+    homePaths
   });
   ctx.slots.inject("main", () => {
     const dispose = ctx.slots.register(
@@ -10299,20 +10356,22 @@ function apply(ctx) {
   installPuPanel(rpc);
   installCangClient(rpc);
   installOnboarding(rpc, baziDeps);
-  installMingpan(rpc, baziDeps);
+  installMingpan(rpc, { ...baziDeps, homePaths });
   installConsult(rpc, {
     api: consultApi,
     navigate,
     openSession,
     refreshSessions,
-    mountSlot: (session) => (0, import_react23.createElement)(MountsSectionFor, { controller: mountsController, session })
+    // R3：历史页错误行那句「数据在本地 <home>/sessions/」读同一份注入面。
+    homePaths,
+    mountSlot: (session) => (0, import_react24.createElement)(MountsSectionFor, { controller: mountsController, session })
   });
   installMounts(rpc, { api: mountsApi, workspaces: () => workspaceCatalog.list(), workspaceAvailable: workspaceCatalog.available });
   installDigao(rpc, { api: digao, shiji, navigate });
   installRikke(rpc, { api: rikke, navigate, notify });
   installTouchSettings(rpc, { rikke, notify });
   installWorkflowPanel(rpc, { api: workflow, navigate });
-  installSediment(rpc, { api: sediment, controller: sedimentController, navigate });
+  installSediment(rpc, { api: sediment, controller: sedimentController, navigate, homePaths });
   installBestOf(ctx, {
     api: bestof,
     controller: bestofController,

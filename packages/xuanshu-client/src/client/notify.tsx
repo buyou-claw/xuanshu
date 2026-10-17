@@ -67,8 +67,12 @@ export const NOTIFY_FAILURE_TEXT: Record<string, string> = {
   failed: '桌面壳没有弹出通知（壳没给细节）。',
 };
 
-/** 失败 token 在 reason 尾部（老账行没有 `reasonCode` 时按它认，`桌面壳没有弹出通知：permission-denied` 也认）。 */
-const SHELL_REASON_TOKEN = /(permission-denied|unsupported|failed)\s*$/u;
+/**
+ * 失败 token 在 reason 尾部（老账行没有 `reasonCode` 时按它认，`桌面壳没有弹出通知：permission-denied` 也认）。
+ * 导出是为了与宿主 `notify/reason.mjs` 的识别正则**对拍**（`tests/notify/reason-parity.test.mjs`）：
+ * 两侧各留一份文案时，正则也必须逐字一致，否则同一行账在宿主与界面会得出不同结论。
+ */
+export const NOTIFY_FAILURE_TOKEN = /(permission-denied|unsupported|failed)\s*$/u;
 
 /**
  * 已知壳侧失败原因的机器码：优先账里记下的 `reasonCode`，老账行再从 reason 尾部认 token。
@@ -79,7 +83,7 @@ export function notifyReasonCode(notify?: NotifyFailureLike): string | undefined
   const explicit = typeof notify?.reasonCode === 'string' && notify.reasonCode !== '' ? notify.reasonCode : undefined;
   if (explicit !== undefined) return explicit;
   const reason = typeof notify?.reason === 'string' ? notify.reason : '';
-  const match = SHELL_REASON_TOKEN.exec(reason);
+  const match = NOTIFY_FAILURE_TOKEN.exec(reason);
   return match === null ? undefined : match[1];
 }
 
