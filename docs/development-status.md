@@ -782,6 +782,10 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
    `dsh-client-ui-settings-general`），本轮「我的数据」据此落成设置页而不是新面板。
 5. **改完自有包必须重跑 `node scripts/install-profile.mjs --home .dsh-home`**（旧陷阱，本轮又踩）：
    S3 会红在「profile 里装的 client 与仓库不一致」；同步后恢复。
+6. **`tests/setup/setup-cli.test.mjs` 的「连跑两次全绿」在满载时偶发红**：本轮两次全量 `verify:all` 里
+   有一次红在这一条（第一次真下载 + 第二次零下载 + 新报告），单跑该文件 14/14 绿、复跑全量也绿。
+   判为环境/时序抖动（它真起本地 HTTP fixture 并真跑两遍 setup），**不是**本轮改动引入（本轮只动了
+   setup 的 home 默认与文档串）；遇上了先单跑该文件再判，别放宽清单门。
 
 #### 16.5 已知边界（如实登记）
 
