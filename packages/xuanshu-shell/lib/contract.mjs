@@ -10,6 +10,18 @@
  *   - `.scratch/notes/spec002/contract-shell-notify.md` §0/§1/§2/§5
  *   - `packages/xuanshu-host/lib/notify/{contract,settings}.mjs`
  *   - `scripts/isolation/defaults.mjs`
+ *
+ * **对冻结契约 §0 的显式例外（R8 / #39，2026-10-17 登记）**
+ * ------------------------------------------------------------------
+ * 契约 §0 原文：「web 端口：`19388`（常量来源 `scripts/isolation/defaults.mjs` 的 `DEFAULT_WEB_PORT`；
+ * 壳/宿主/启动器都引用它，**不写第二份字面量**）。」
+ *
+ * 壳做不到字面意义上的「引用」：装进 Electron 应用后 `scripts/**` 与 `packages/xuanshu-host/**`
+ * 都不在包内（见上），壳只能各存一份值。所以**本文件是这一条款唯一的登记例外**——
+ *   - 它不是第二真源，只是真源的**镜像副本**；真源仍是上面三条；
+ *   - 漂移由 `tests/shell/contract-parity.test.mjs` 逐值对拍堵死（改任一侧都会红）；
+ *   - 改值顺序固定：真源 → 本文件 → 对拍测试里钉死的契约字面量（`§2` 那几条），三处同改；
+ *   - 除本文件外，壳**不得**再复制任何契约值；新增复制必须先按同样格式登记 + 加对拍。
  */
 
 /** 壳写、宿主读的运行时状态文件 schema（契约 §1）。 */
