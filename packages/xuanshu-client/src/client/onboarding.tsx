@@ -31,6 +31,9 @@ import {
 } from './onboarding-model.js';
 import type { NudgeGrain, OnboardingDraft } from './onboarding-model.js';
 import {
+  AI_STEP,
+  STEP_COUNT,
+  XsAiStep,
   XsConfirmStep,
   XsPlaceStep,
   XsStepBar,
@@ -38,6 +41,8 @@ import {
   XsTimeStep,
   XsZoneStep,
 } from './onboarding-steps.js';
+import type { AiReadinessController } from './ai-model.js';
+import { useAiReadiness } from './ai-views.js';
 import { ONBOARDING_ID, ONBOARDING_LABEL, ONBOARDING_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
 import type { RpcContext } from './rpc.js';
@@ -72,14 +77,18 @@ export interface OnboardingPanelProps {
   navigate: (target: PanelNavTarget) => void;
   /** 静态预置草稿（重录预填 / 测试与 SSR 断言用；给了就不从 controller 取）。 */
   preloadedDraft?: OnboardingDraft;
+  /** #29：「接上 AI」的只读状态（与概览共用同一个控制器；缺席 → 未知，不静默禁用）。 */
+  aiStatus?: AiReadinessController;
+  /** 能真的打开 DSH「设置 → 模型」时才给（没有就只显示路径文本）。 */
+  onOpenAiSettings?: () => void;
 }
 
 /**
- * 冷启动向导（五步）。
- * @param props - 数据面、控制器与导航。
+ * 冷启动向导（八字五步 + 「接上 AI」）。
+ * @param props - 数据面、控制器、导航与「接上 AI」状态面。
  * @returns 向导面板节点。
  */
-export function OnboardingPanel({ api, controller, navigate, preloadedDraft }: OnboardingPanelProps) {
+export function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiStatus, onOpenAiSettings }: OnboardingPanelProps) {
   const [draft, setDraft] = useState<OnboardingDraft>(() => preloadedDraft ?? defaultDraft());
   const [step, setStep] = useState(1);
   const [query, setQuery] = useState('');
@@ -91,6 +100,8 @@ export function OnboardingPanel({ api, controller, navigate, preloadedDraft }: O
   const [busy, setBusy] = useState(false);
   const castSequence = useRef(0);
   const zoneSequence = useRef(0);
+
+  const aiSnapshot = useAiReadiness(aiStatus);
 
   const cityResults = useCityQuery(api, query);
 
@@ -139,7 +150,7 @@ export function OnboardingPanel({ api, controller, navigate, preloadedDraft }: O
   }, [api, lon, lat, date, time, zoneManual]);
 
   const gotoStep = (target: number): void => {
-    setStep(Math.min(5, Math.max(1, target)));
+    setStep(Math.min(STEP_COUNT, Math.max(1, target)));
   };
 
   const pickCity = (city: City): void => {
@@ -177,6 +188,20 @@ export function OnboardingPanel({ api, controller, navigate, preloadedDraft }: O
   };
 
   /**
+   * 离开「接上 AI」这一步（完成或跳过都走这里）。
+   *
+   * 跳过的语义是**入口仍禁用**：不清任何 provider 配置（本来也没写），只是回总览；
+   * 门禁读的是只读状态面，未接上时问事格继续置灰并指向「设置 → 模型」。
+   */
+  const leaveAiStep = (): void => {
+    setDraft(defaultDraft());
+    setStep(1);
+    setResult(undefined);
+    setGateAnswer('');
+    navigate('overview');
+  };
+
+  /**
    * 出盘。`answer === undefined` = 走第 5 步的确认；给了 `answer` = 澄清闸里的「回答并重新出盘」。
    */
   const cast = (answer?: string): void => {
@@ -193,11 +218,9 @@ export function OnboardingPanel({ api, controller, navigate, preloadedDraft }: O
         setResult(answer2);
         setBusy(false);
         if (answer2.phase !== 'ok') return; // 澄清闸 / 失败：留在向导内
-        // 落谱成功：通知概览重取数，然后回 S1（读快照，不重新出盘）。
+        // 落谱成功：通知概览重取数，然后走最后一步「接上 AI」（不重新出盘、不直接回总览）。
         controller.invalidate();
-        setDraft(defaultDraft());
-        setStep(1);
-        navigate('overview');
+        setStep(AI_STEP);
       })
       .catch((error: unknown) => {
         if (mine !== castSequence.current) return;
@@ -262,6 +285,16 @@ export function OnboardingPanel({ api, controller, navigate, preloadedDraft }: O
           onGotoManual={() => { gotoStep(2); }}
         />
       ) : null}
+      {step === AI_STEP ? (
+        <XsAiStep
+          {...(aiSnapshot?.readiness === undefined ? {} : { readiness: aiSnapshot.readiness })}
+          checking={aiSnapshot?.checking === true}
+          {...(aiStatus === undefined ? {} : { onRetry: () => { void aiStatus.refresh(); } })}
+          {...(onOpenAiSettings === undefined ? {} : { onOpenSettings: onOpenAiSettings })}
+          onFinish={leaveAiStep}
+          onSkip={leaveAiStep}
+        />
+      ) : null}
 
       {result === undefined || result.phase === 'gate' ? null : (
         <div
@@ -283,7 +316,7 @@ export function OnboardingPanel({ api, controller, navigate, preloadedDraft }: O
         <button type="button" data-xuanshu-action="prev" disabled={step === 1} onClick={() => { gotoStep(step - 1); }}>
           {'<- 上一步'}
         </button>
-        <button type="button" data-xuanshu-action="next" disabled={step === 5} onClick={() => { gotoStep(step + 1); }}>
+        <button type="button" data-xuanshu-action="next" disabled={step === STEP_COUNT} onClick={() => { gotoStep(step + 1); }}>
           {'下一步 ->'}
         </button>
         <span className="xs-wizard__spacer" />
@@ -309,6 +342,10 @@ export interface BaziInstallDeps {
   api: BaziApi;
   controller: BaziUiController;
   navigate: (target: PanelNavTarget) => void;
+  /** #29：与概览共用同一个「接上 AI」只读控制器（向导第 6 步读它）。 */
+  aiStatus?: AiReadinessController;
+  /** #29：能真的打开设置时才给。 */
+  onOpenAiSettings?: () => void;
 }
 
 /**

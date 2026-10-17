@@ -36,6 +36,8 @@ import { createElement as h } from 'react';
 
 import { createBaziApi } from './bazi-api.js';
 import { createBaziUiController } from './bazi-controller.js';
+import { createAiApi } from './ai-api.js';
+import { createAiReadinessController } from './ai-model.js';
 import { createBestofApi } from './bestof-api.js';
 import { createBestofController } from './bestof-model.js';
 import { installBestOf } from './bestof.js';
@@ -146,7 +148,16 @@ export function apply(ctx: Context): void {
   const rpc = ctx as Context & RpcContext;
   const bazi = createBaziApi(rpc);
   const baziController = createBaziUiController();
-  const baziDeps = { api: bazi, controller: baziController, navigate };
+
+  // #29「接上 AI」：**一份**只读控制器，概览（问事入口门禁）与向导第 6 步共用。
+  // 它只调 `routes.list`（票 28 那份只读清单）：配好后自己停轮询；窗口聚焦 / 手动重试可再问一次。
+  //
+  // `onOpenAiSettings` 今天**刻意不给**：DSH 0.2.0-rc.2 没有公开的「打开设置」客户端 API
+  // （`openSection` 只经 `settings.onboarding` 的 owner props 下发，`settings.launcher` 是 single 槽
+  // 且已被占用；见票 28 侦察 §5.3）。给不出就不渲染按钮，界面显示逐字路径「设置 → 模型」——
+  // 绝不做一个点了没反应的按钮（那正是本票要修的 bug）。将来宿主给了公开入口，这里换一行即可。
+  const aiReadiness = createAiReadinessController({ api: createAiApi(rpc) });
+  const baziDeps = { api: bazi, controller: baziController, navigate, aiStatus: aiReadiness };
 
   // 票 10：问事门厅的数据面 + 「进入正式对话」的导航面。
   // `openSession` 只**导航**（`dsh-api-facts.md` §6.2：它不创建）；拿不到 `uiWorkspace` 时给
@@ -226,6 +237,8 @@ export function apply(ctx: Context): void {
     rikkeController,
     digao,
     digaoController,
+    // #29：问事入口的门禁读这一份只读状态（与向导第 6 步同一个控制器）。
+    aiStatus: aiReadiness,
   });
 
   // ③ 主面板：keyed 槽按 key 分派；key 必须与侧栏行 id 相同。
