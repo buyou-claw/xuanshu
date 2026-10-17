@@ -68,6 +68,8 @@ import type { RpcContext } from './rpc.js';
 import { createSedimentApi } from './sediment-api.js';
 import { createSedimentController } from './sediment-model.js';
 import { installSediment } from './sediment-views.js';
+import { createShijiApi } from './shiji-api.js';
+import { installShiji } from './shiji-views.js';
 import { installOverviewStyle } from './style.js';
 import { THEME_SOURCE, THEME_TOKENS } from './tokens.js';
 import { EMPTY_MAIN_PANELS, createMainPanelsWatch } from './watch.js';
@@ -205,6 +207,9 @@ export function apply(ctx: Context): void {
   const notify = createNotifyApi(rpc);
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
+  // 票 27（#27）：事记数据面（底稿面板的 [删除] + 会话里的「存成今天的事记」共用一份）。
+  // 造它不发请求：两个写动作都只由人点触发，`confirmed: true` 写死在 `shiji-api.ts` 里。
+  const shiji = createShijiApi(rpc);
 
   // 票 16：工作流门厅的数据面（创建 / 列表 / 导出三件事都**只由人点**触发，apply 期不发请求）。
   const workflow = createWorkflowApi(rpc);
@@ -292,7 +297,9 @@ export function apply(ctx: Context): void {
   installMounts(rpc, { api: mountsApi, workspaces: () => workspaceCatalog.list(), workspaceAvailable: workspaceCatalog.available });
 
   // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
-  installDigao(rpc, { api: digao, navigate });
+  // #27：底稿面板多了「曾经做过什么」的事记 [删除]（走 `shiji.remove`，删的是账本那一条），
+  // 所以面板也要事记数据面。
+  installDigao(rpc, { api: digao, shiji, navigate });
   installRikke(rpc, { api: rikke, navigate, notify });
   // #24：设置里的一行两项开关（AI 建议段 / 通知摘要）。纯加性，不新增面板、不新增侧栏行。
   installTouchSettings(rpc, { rikke, notify });
@@ -324,4 +331,10 @@ export function apply(ctx: Context): void {
       }
     },
   });
+
+  // ⑫ 票 27（#27）：会话内「存成今天的事记」——`conversation.composer.dock` 上的**一个** cell。
+  //    只在问事会话里渲染（判据是自铸 id 前缀）；点了并确认之后才调 `shiji.fromSession`。
+  //    注册序：`panel-surface.mjs` 的 `EXTRA_REGISTRATIONS` 里它排在 sediment / bestof 之后
+  //    （三者都挂在 `workflow` 那一对之后，靠数组顺序分先后 —— 这里谁在后，那边谁就在后）。
+  installShiji(rpc, { api: shiji, navigate });
 }
