@@ -13,7 +13,7 @@
  * `createOverviewHashBridge()` 这个纯函数里，测试用假 `location` 就能跑。
  */
 
-/** 与壳侧 `main-flow.mjs::OVERVIEW_HASH` 同一个值（不带 `#`）。 */
+/** 与壳侧 `main-flow.mjs::OVERVIEW_HASH` 同一个值（不带 `#`）。两侧对拍见 `tests/shell/contract-parity.test.mjs`（R8 / #39）：改任一侧的值都会红。 */
 export const OVERVIEW_HASH = 'xuanshu-overview'
 
 /**

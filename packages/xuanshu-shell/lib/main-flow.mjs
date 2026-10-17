@@ -121,6 +121,9 @@ export function nextSupervisorLoad({ supervisor, lastLoadedUrl } = {}) {
 /**
  * 通知点击后前端要落的 hash（**不带** `#`；与客户端 `overview-hash.ts` 同一个值）。
  *
+ * 两侧对拍：`tests/shell/contract-parity.test.mjs` 直接 import 本常量与客户端那份并断言相等 +
+ * 握手闭环（R8 / #39）——改任一侧的值会让那组用例红。
+ *
  * 为什么用 hash：前端**没有路由**（契约 §7），但票面验收要求「点通知停在 overview」。
  * hash 是最小的一条通道：不引路由库、不动 `loadURL` 的地址、客户端只需监听 load + hashchange。
  */
