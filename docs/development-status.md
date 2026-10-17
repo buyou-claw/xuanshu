@@ -734,8 +734,13 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 - `routes.list`：默认路由未知时 `isDefault = null`（之前写成 `false`，把「不知道」冒充成「不是」）；providers 与 models 两处都改。
 - `rikke.status` 的 `unread` / `notify` **只数 `kind==='rikke'`** 的账行（晚省不再蹭日课未读）；打开日课面板只标日课账已读。
 - 客户端新增 `#xuanshu-overview` hash 通道（壳点通知后 `show()` + 让页面回 overview；前端无路由，这是它能做到的上限）。
-- 宿主 home/dataDir 解析**只剩一份实现**（`lib/home.mjs`；`bazi/service.mjs` 只是同一函数对象的再导出）；
+- 宿主 home/dataDir 解析**只剩一份实现**（`lib/home.mjs`）：`bazi/service.mjs` 只是同一函数对象的再导出；
+  `cang/service.mjs` 的 dataDir 走 `resolveDataDir()`，`horosa/{service,paths}.mjs` 的 home 走
+  `resolveHostHome()` 与 `pointsAtRealDshHome`（复核 C2 之前这两处各有一份无门的解析）。真实 `~/.dsh` 的拒绝
+  在同一道门上：horosa 把原因写进 `paths.note`（进 `installHorosa` 的装配 notes 与 `snapshot().paths`），
+  cang 由同一判据改判玄枢自己的 home（该组没有装配报告通道，是如实的**行为**结果，不带 note 字段）；
   事记/工作流的 skill 扫描根也走 `resolveSearchHome()`，`DSH_HOME=~/.dsh` 时**拒绝**取真实 home 并记 note。
+  生产落**点**门（`lib/index.js` 的 `planWriteTarget`）语义未改。
 
 #### 16.3 验证（数字全部抄工具输出）
 

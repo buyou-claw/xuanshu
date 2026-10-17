@@ -48,6 +48,7 @@
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
+import { resolveHostHome } from '../home.mjs'
 import { HOROSA_BAZI_TOOL, HOROSA_DEFAULT_HOST, HOROSA_DEFAULT_PORT, HOROSA_MCP_PATH, HOROSA_SETUP_COMMAND, HOROSA_STATUS_SCHEMA } from './constants.mjs'
 import { buildBaziPayload, classifyBaziEnvelope } from './bazi.mjs'
 import { checkHorosaEndpoint, mcpCallTool, mcpToolsList } from './guard.mjs'
@@ -205,14 +206,20 @@ function namedLogger(ctx) {
 }
 
 /**
- * 解析 DSH home：profileContext.home → `$DSH_HOME` → 交给 `resolveHorosaPaths` 走兜底。
- * 兜底是**玄枢自己的 home**（`XUANSHU_DSH_HOME` ＞ `~/.xuanshu`，ADR-0014），不是 `~/.dsh`。
+ * 解析 DSH home：**唯一实现在 `home.mjs::resolveHostHome`**（复核 C2：从前本模块自己串
+ * `profileContext.home → $DSH_HOME → undefined`，且没有「真实 ~/.dsh」这道门）。
+ *
+ * 回执与 `resolveHostHome` 同形：`{ home, source, realDsh }`。`realDsh:true` 时调用方**必须**把
+ * home 交给 `resolveHorosaPaths` 改判 —— 那道门用的是**同一份** `home.mjs::pointsAtRealDshHome`，不许原样用下去。
+ *
+ * @returns {{home: string, source: string, realDsh: boolean}}
  */
-function resolveDshHome(ctx, env) {
-  const profileCtx = softService(ctx, 'profileContext')
-  if (typeof profileCtx?.home === 'string' && profileCtx.home !== '') return profileCtx.home
-  if (typeof env?.DSH_HOME === 'string' && env.DSH_HOME !== '') return env.DSH_HOME
-  return undefined // 交给 resolveHorosaPaths 走玄枢自己的兜底
+function resolveDshHome(ctx, env, homedirPath) {
+  return resolveHostHome({
+    profileContext: softService(ctx, 'profileContext'),
+    env,
+    ...(homedirPath === undefined ? {} : { homedirPath }),
+  })
 }
 
 /** `process.kill(pid, 0)` 探活（EPERM 表示存在但不属于我 → 仍算活着）。 */
@@ -233,13 +240,23 @@ function pidAlive(pid) {
  *
  * 与 `installHorosa` 的分工：本函数每次调用都给**独立实例**（测试要能各自造状态），
  * 「同进程多次装配共用一份」由 `installHorosa` 里的模块级安装槽负责。
+ *
+ * `env` / `homedirPath` 是 home 解析的测试接缝（缺省 `process.env` / 真实家目录）：
+ * 与 `lib/home.mjs` 的纯函数接缝同形，用例才能在**不碰真 home** 的前提下验证「真实 ~/.dsh 被拒」。
  */
-export function createHorosaRuntime({ ctx, config, log, paths, plan } = {}) {
+export function createHorosaRuntime({ ctx, config, log, paths, plan, env, homedirPath } = {}) {
   const cfg = normalizeConfig(config)
-  const env = process.env
+  const resolvedEnv = env ?? process.env
   // `log` 由调用方给（测试/宿主）时优先用它，否则从 ctx 取；两种都包成安全 logger。
   const logger = log !== undefined && log !== null ? wrapLogger(log) : namedLogger(ctx)
-  const resolvedPaths = paths && typeof paths === 'object' ? paths : resolveHorosaPaths({ dshHome: resolveDshHome(ctx, env), config: cfg, env })
+  const resolvedPaths = paths && typeof paths === 'object'
+    ? paths
+    : resolveHorosaPaths({
+      dshHome: resolveDshHome(ctx, resolvedEnv, homedirPath).home,
+      config: cfg,
+      env: resolvedEnv,
+      ...(homedirPath === undefined ? {} : { homedirPath }),
+    })
   let planCache = plan && typeof plan === 'object' ? plan : null
   /** `plan.wheelExists === false` 时的排障 hint（ensure 时算一次；start 的失败路径沿用它）。 */
   let wheelHint = null
@@ -332,7 +349,7 @@ export function createHorosaRuntime({ ctx, config, log, paths, plan } = {}) {
   /** 解析 plan（缓存；失败也缓存 —— 免得每次轮询都去戳文件系统）。 */
   function ensurePlan() {
     if (planCache && typeof planCache.ok === 'boolean') return planCache
-    planCache = resolveHorosaPlan({ paths: resolvedPaths, config: cfg, env })
+    planCache = resolveHorosaPlan({ paths: resolvedPaths, config: cfg, env: resolvedEnv })
     return planCache
   }
 
@@ -899,21 +916,33 @@ function scheduleAutostart(ctx, service, cfg, notes) {
  *
  * @param {object} ctx cordis 宿主上下文（裸 `{}` 也要活：没有 logger/commands/provide/effect 都行）
  * @param {object} [config] 补丁行 config（全部可选、全部有缺省；本票不改 `cordis.patch.yml`）
+ * @param {object} [options] home 解析的测试接缝（缺省 = 真机：`process.env` / 真实家目录）
+ * @param {object} [options.env] `process.env` 的形状
+ * @param {string} [options.homedirPath] 用户家目录的形状（只给「真实 ~/.dsh」判据用）
  * @returns {{ok:boolean, code:string|null, detail:string, service:object|null, paths:object|null, provided:boolean, commanded:boolean, autostart:boolean, notes:string[]}}
  */
-export function installHorosa(ctx, config) {
+export function installHorosa(ctx, config, options = {}) {
   const notes = []
   const log = namedLogger(ctx)
   try {
     const cfg = normalizeConfig(config)
+    const env = options?.env ?? process.env
+    const homedirPath = options?.homedirPath
     if (cfg.enabled === false) {
       notes.push('config.enabled=false：整个 horosa 底座跳过装配。')
       return { ok: true, code: null, detail: 'horosa 底座被 config.enabled=false 关掉。', service: null, paths: null, provided: false, commanded: false, autostart: false, notes }
     }
 
-    const paths = resolveHorosaPaths({ dshHome: resolveDshHome(ctx, process.env), config: cfg, env: process.env })
+    const paths = resolveHorosaPaths({
+      dshHome: resolveDshHome(ctx, env, homedirPath).home,
+      config: cfg,
+      env,
+      ...(homedirPath === undefined ? {} : { homedirPath }),
+    })
+    // 真实 ~/.dsh 被拒的原因必须**看得见**：装配返回体的 notes（调用方/用例可读）与 snapshot().paths.note 同源。
+    if (typeof paths.note === 'string' && paths.note !== '') notes.push(paths.note)
 
-    const key = installKey(paths, cfg, process.env)
+    const key = installKey(paths, cfg, env)
     let service = INSTALLED.get(key) ?? null
     if (service === null) {
       service = createHorosaRuntime({ ctx, config: cfg, log, paths })
@@ -923,7 +952,7 @@ export function installHorosa(ctx, config) {
     }
 
     // ① 状态文件：同步落一次（P9 的判据是「装配后文件就在」）。**先写**再注册服务/命令。
-    const status = service.persistStatus('idle', { code: null, detail: `已装配（config: autoStart=${cfg.autoStart}，端点缺省 http://${HOROSA_DEFAULT_HOST}:${effectivePort(cfg)}${HOROSA_MCP_PATH}${process.env.XUANSHU_HOROSA_PORT ? `，端口由 $XUANSHU_HOROSA_PORT=${process.env.XUANSHU_HOROSA_PORT} 注入` : ''}）；等自启/手动 start。`, hint: null })
+    const status = service.persistStatus('idle', { code: null, detail: `已装配（config: autoStart=${cfg.autoStart}，端点缺省 http://${HOROSA_DEFAULT_HOST}:${effectivePort(cfg)}${HOROSA_MCP_PATH}${env.XUANSHU_HOROSA_PORT ? `，端口由 $XUANSHU_HOROSA_PORT=${env.XUANSHU_HOROSA_PORT} 注入` : ''}）；等自启/手动 start。`, hint: null })
 
     // ② 服务 + ③ 命令 + ④ 自启
     const provided = provideService(ctx, service, notes)
