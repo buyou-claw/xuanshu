@@ -21,7 +21,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
 
-import { parseSkillFile, skillFile } from '../workflow/skill-export.mjs'
+import { isSkillName, parseSkillFile, skillFile } from '../workflow/skill-export.mjs'
 import { readWorkflow } from '../workflow/store.mjs'
 
 /** 非严格读一个 cordis service（拿不到就 undefined，绝不抛）——与 `consult/service.mjs` 同款。 */
@@ -248,6 +248,13 @@ function readWorkflowLayer(mount, head, limits) {
     return {
       ...layer,
       hint: '这个工作流还没有导出过 skill：先去工作流面板导出一次，再挂载它（没有导出就没有可注入的正文）。',
+    }
+  }
+  // 清单是本地 JSON（可被手改）：名字不合规就不拼路径（否则 `../..` 能把这层变成任意文件读取）。
+  if (!isSkillName(skillName)) {
+    return {
+      ...layer,
+      hint: `这个工作流清单里的 skill 名不合法（${JSON.stringify(skillName)}）：不能拿它去拼 skill 路径，请重新导出一次。`,
     }
   }
   const dshHome = resolveSkillHome(limits)

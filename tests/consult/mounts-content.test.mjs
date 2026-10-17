@@ -20,7 +20,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { readDirectoryLayers, readMountLayer } from '../../packages/xuanshu-host/lib/mounts/content.mjs'
 import { skillFile } from '../../packages/xuanshu-host/lib/workflow/skill-export.mjs'
-import { WORKFLOW_SCHEMA, writeWorkflow } from '../../packages/xuanshu-host/lib/workflow/store.mjs'
+import { WORKFLOW_SCHEMA, readWorkflow, writeWorkflow } from '../../packages/xuanshu-host/lib/workflow/store.mjs'
 import { fakeFsReader, fakeWorkspaceRegistryForMounts, makeHost, makeSandbox } from './lib/sandbox.mjs'
 
 const roots = []
@@ -215,6 +215,24 @@ describe('票 12 · readMountLayer：工作区真读、工作流读已导出的 
     expect(layer.hint).toContain('weekly-report')
     expect(layer.hint).toMatch(/读不到|不存在/u)
     expect(layer.hint).not.toContain('还没有导出过 skill')
+  })
+
+  it('清单里的 skill 名不合法（手改过的记录）：不拼路径去读，如实说名字不合法', async () => {
+    const sandbox = makeSandbox('workflow-skill-name')
+    roots.push(sandbox)
+    const { sessionId } = workflowFixture(sandbox, { exported: false })
+    // 手改清单：给一个能穿越到 skills 根之外的「名字」。
+    const record = readWorkflow(sandbox.dataDir, sessionId)
+    writeWorkflow(sandbox.dataDir, { ...record, skillName: '../../outside', exportedAt: '2026-10-16T03:00:00.000Z' })
+    const { host } = hostFor([])
+    const layer = await readMountLayer(
+      host.ctx,
+      { kind: 'workflow', id: sessionId, label: '周报自动化' },
+      { dataDir: sandbox.dataDir },
+    )
+    expect(layer.segments).toEqual([])
+    expect(layer.hint).toMatch(/skill 名不合法/u)
+    expect(layer.hint).toContain('../../outside')
   })
 
   it('工作流清单里没有这一条：给该层的 error（可读），不抛', async () => {
