@@ -430,6 +430,8 @@ rejected-history:   两稿都 false
 
 ### 14. 复核轮：`32216d9` 的 5 条发现（2026-10-16，全修）
 
+本节及其「追加复核」保留当轮证据；清单门错误采集、挂载失败恢复与合参并发的现行实现以 §15 为准。
+
 复核报告入库在 `docs/reviews/spec001-32216d9-review.md`（结论：本轮不通过；Standards 1 条 P1 + Spec 4 条 P2）。
 它写的每一处都是真的，逐条处置如下；**§13 里与本节冲突的说法以本节为准**。
 
@@ -552,6 +554,28 @@ remount-failure:     originalAddRecovered=true / withdrawalInLog=true /
   `currentRun` 守卫是**进程内** Map：两个宿主实例共用同一个 `dataDir` 时互不知情（与基线同类，未构造该现场）。
   本轮也未重跑「干净无 profile」的全仓矩阵（上一轮的数字见 §13）。
 
+### 15. 复核轮：`4b3c2a3` 的 F1–F4（2026-10-17，全修）
+
+原报告：`docs/reviews/spec001-4b3c2a3-review.md`。四条原始反例均先跑红，再补实现与回归用例；
+独立 Standards / Spec 复核各 0 条新发现。
+
+| # | 修复与现行判据 | 验证 |
+|---|---|---|
+| F1 | 生产清单 runner 同时采集 JSON 断言报告和自有 Vitest reporter 的结构化错误报告；后者通过 `module.errors()` / `allSuites().errors()` 独立采 hook / suite 错误及未处理错误，消息为空也计错。报告缺失、过期或文件覆盖不全一律拒绝。生产判定不再依赖文件级 `message` 非空或终端文本；旧 JSON 形状兼容仅用于直接调用 `collectReport` 的历史测试 | 空消息 `afterAll` + 已知失败确实违规；已知失败 + 主动跳过正常豁免。真实夹具及报告缺失 / 过期 / 不完整回归均通过 |
+| F2 | 重挂投递未确认时，交付账额外保留一份平面的 `previousDelivery`，保存此前已交付且尚未撤回的凭据；新版确认后清快照、撤下确认后清条目。重挂读取失败也保留旧条目 | 真 rc.2 Loop 重跑「挂载成功 → 撤下失败 → 重挂失败 → 再撤下」：撤下声明进入日志，最终账清空；边界回归另覆盖重挂读取失败 |
+| F3 | 新 `bestof.run` 的首次 `store.write` 直接写盘，成功后才发布内存记录与 `currentRun`；旧轮后台回填继续走守卫 | 第二轮受理后、候选首块前，盘上已是第二轮，新 API 实例按该 `runId` 冷读成功 |
+| F4 | 同一会话的受理、采用 / 合并（含投递和最终记账）、停止按调用顺序排队，前一个失败也释放队列；候选生成仍在后台，不同会话互不阻塞。采用投递后的持久化返回值也必须检查 | c2 冷恢复等待时启动新轮，新轮在采用完成后继承 c2 账；候选包含 c2、不含旧 c1。独立探针补验 merge 排队、异会话完成、失败释放及旧 cancel 不覆盖新轮 |
+
+证据保留在 `.scratch/review-4b-standards/`、`.scratch/review-4b-spec-mount-data-MXJq4N/`、
+`.scratch/fix-f-persist-data-7NRMXP/`、`.scratch/review-f-spec-queue-data-qTs8Fo/`。
+四个相关测试文件合计 **88 passed**；独立 Standards 另跑清单门文件 **26 passed**。
+用例增量为 inventory-gate +4 / boundary +2 / bestof-adopt +1 / bestof-history +1，未修改 `knownRed`。
+宿主副本已用 `node scripts/install-profile.mjs --home .dsh-home --skip-install` 同步。
+
+代价与边界：同会话的慢采用 / 合并会让后续状态操作等待；队列属于单个 `createBestOfMethods` 实例，
+没有提供跨进程锁。`previousDelivery` 最多一份、不会递归增长。未做真实模型或 UI 端到端验收，
+未重跑干净无 profile 全仓矩阵；S7 多采用稿回看验收仍待补。升级 Vitest 时须复核 reporter API 与真实错误夹具。
+
 完整装配五条 seam 的当前结果：S2（进程内启动）、S3（客户端产物）、S4（上游行基线）、S5（真实 CLI 报告）通过；
 **S1 schema 导出失败**。
 
@@ -559,10 +583,10 @@ remount-failure:     originalAddRecovered=true / withdrawalInLog=true /
 而同版本官方 web bundle 自带的 `@deepseek-ai/dsh-agent-preset` 是另一种 carrier，报
 `unrecognized Loader tree carrier`。真实 web 与宿主启动正常。测试保留失败，无上游源码改动、无放宽断言。
 
-当前全仓基线（`node scripts/check-test-inventory.mjs`，2026-10-16 二次复核修复轮 + 追加复核修复之后）：
+当前全仓基线（`pnpm verify:all` 中的清单门，2026-10-17 F1–F4 修复之后，整体 exit 0）：
 
 ```
-[inventory] 用例 1139 条（基线 1139）/ 文件 104 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 1147 条（基线 1147）/ 文件 104 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 ```
 
@@ -581,7 +605,8 @@ remount-failure:     originalAddRecovered=true / withdrawalInLog=true /
 以及 history +5 / inventory-gate +4 / bestof-run +1 / mounts-preview +1；同时据实删掉 12 条「验旧注入机制」的用例
 （`send` 6 条 / `mounts-inject` 6 条），其覆盖搬到边界用例 —— 所以 `--update` 时那两处「用例变少」
 是**有意的**，理由写在提交信息与本节。二次复核修复轮 + 追加复核修复 **+20 条用例**（1119 → 1139，见 §14 的用例账：
-boundary +4 / bestof-store +11 / bestof-history +2 / bestof-adopt +1 / inventory-gate +2，另有 1 个真 vitest 夹具文件不计入）。）
+boundary +4 / bestof-store +11 / bestof-history +2 / bestof-adopt +1 / inventory-gate +2，另有 1 个真 vitest 夹具文件不计入）；
+F1–F4 修复轮 **+8 条**（1139 → 1147，见 §15），文件数和 `knownRed` 不变。）
 
 同一时刻的装配五 seam：**S2 / S3 / S4（185 行基线全命中）/ S5 PASS，S1 FAIL**；`tsc --noEmit` exit 0；
 `build-client --check` in sync（386627 B）。

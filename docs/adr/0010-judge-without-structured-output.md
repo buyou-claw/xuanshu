@@ -17,6 +17,7 @@ Spec 001 的实现决策里写着多 AI 合参的 judge 槽走「`json_schema st
 4. **`bestOf` 记录不落 `message.candidates`**（rc.2 无此字段，见 ADR-0009 第 7 条）：落旁挂文件，`costUsd` 从 `assistant/message` 的 `usage` 累计。
 5. **历史只带采用稿**：注入下一轮上下文时只放 `adoptedId` 指向的那一份；其余候选留在旁挂记录里供回看——这条是产品规格（分歧可见、拍板在人），不是上下文预算的副产品。
 6. **模型选择复用既有 provider 配置与凭据**：`ctx.llm.listProviders()` / `listModels(provider)` / `listConfigurableProviders()`（`:272` / `:350` / `:286`），凭据走 `ctx.credentials.resolve(ref)`（`dsh-credentials/lib/types/index.d.ts:129`）。玄枢**不自建密钥存储**。
+7. **合参状态按会话串行提交**（2026-10-17，修复 F3/F4）：新轮首次直接写旁挂文件，成功后才发布为当前轮；旧候选后台回填继续受当前轮守卫保护。同一问事的受理、拍板与采用投递使用进程内操作队列，采用投递和账本提交完成后，下一轮才读取历史并继承账本。候选流本身不占队列，仍然并行；不同会话互不等待。冷恢复或合并调用较慢时，同会话后续状态操作会等待它结束；操作失败会释放队列。该队列不提供跨进程锁。
 
 **Considered Options**：
 

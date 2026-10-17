@@ -240,6 +240,13 @@ export function createContextAssembly(ctx, config = {}) {
     const confirmed = (entry) => deliveryConfirmed(entry, { loggedMarkers, loggedReceipts })
     const retracted = (entry) => withdrawalConfirmed(entry, { loggedReceipts })
     const withdrawalPending = (entry) => typeof entry?.withdrawal === 'string' && entry.withdrawal !== ''
+    // 新一次投递失败不能抹去旧正文尚未撤回的事实（F2）。
+    const activeDelivery = (entry) => {
+      if (!entry || retracted(entry)) return undefined
+      if (confirmed(entry)) return { head: entry.head, ...(entry.receipt ? { receipt: entry.receipt } : {}) }
+      if (entry.previousDelivery && confirmed(entry.previousDelivery)) return entry.previousDelivery
+      return undefined
+    }
 
     // 当前挂载：本次交付凭据不在日志里（新增 / 没落日志），或者**撤下声明已经发过**
     // （不管落没落日志：撤回过的正文不再算现况，重挂就得重新投一次）⇒ 要补投。
@@ -254,7 +261,7 @@ export function createContextAssembly(ctx, config = {}) {
     let changed = false
     for (const entry of ledger) {
       if (currentKeys.has(mountLedgerKey(entry))) continue
-      if (retracted(entry) || !confirmed(entry)) {
+      if (!activeDelivery(entry)) {
         changed = true
         continue
       }
@@ -263,14 +270,26 @@ export function createContextAssembly(ctx, config = {}) {
 
     const preview = pending.length > 0 ? await buildMountPreview(ctx, config, pending) : undefined
     const delivered = preview === undefined ? { entries: [], receiptKeys: [] } : deliveredFromPreview(preview, pending, { loggedMarkers })
+    delivered.entries = delivered.entries.map((entry) => {
+      const previousDelivery = activeDelivery(entryOf(entry))
+      return previousDelivery ? { ...entry, previousDelivery } : entry
+    })
     const text = buildMountDeltaContext({ preview, removed })
 
-    // 已交付且**没有撤下纪录**的层：账原样留着（老条目没有新字段也照旧 —— 标记在日志里就算交付过）。
+    // 未被这次预览替换的条目继续留着；新正文确认后，旧交付凭据才可以收掉。
     const stillDelivered = []
+    const replaced = new Set(delivered.entries.map(mountLedgerKey))
     for (const mount of current) {
       const entry = entryOf(mount)
-      if (entry === undefined || !confirmed(entry) || withdrawalPending(entry)) continue
-      stillDelivered.push(entry)
+      if (entry === undefined || replaced.has(mountLedgerKey(entry))) continue
+      if (entry.previousDelivery && confirmed(entry) && !withdrawalPending(entry)) {
+        const { previousDelivery, ...stable } = entry
+        stillDelivered.push(stable)
+        changed = true
+      } else {
+        // 本次读取也可能失败；保留旧凭据和未完成撤下，下一问继续核实。
+        stillDelivered.push(entry)
+      }
     }
 
     // 没有可投的层、也没有撤下声明，但**确认状态变了**（撤下已在日志里确认 ⇒ 条目清掉）：

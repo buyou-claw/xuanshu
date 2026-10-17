@@ -12,12 +12,11 @@
  *      这一份只管「报告新鲜度」与三条数量判据。
  *
  * 环境：真文件系统（临时目录），零网络。**大部分用例的 `spawn` 是注入的替身**
- * （「子进程跑挂了」这种现场可以当场造出来），**但有一条例外**：`文件级失败` 那一组里
- * 「真实 vitest 跑一次 beforeAll 抛错的夹具」会真的 spawn 一次 `node_modules/vitest/vitest.mjs`
- * —— 因为那条发现本身就是「vitest 报出来的形状和我以为的不一样」，合成报告证明不了它。
+ * （「子进程跑挂了」这种现场可以当场造出来）；hook / 未处理错误 / 合法跳过则另起真实 Vitest
+ * 跑夹具，验证生产 runner 的断言与独立错误两条报告通道，避免只靠合成报告自证。
  */
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -48,6 +47,7 @@ function reportPathOf(label) {
 
 /** 造一份能解析的 vitest 报告（形状照 `--reporter=json`）。 */
 function writeReport(path, files) {
+  writeFileSync(`${path}.errors.json`, JSON.stringify({ schema: 'xuanshu/test-errors@1', modules: Object.keys(files).map((name) => ({ name, errors: [] })), unhandledErrors: [] }))
   writeFileSync(
     path,
     JSON.stringify({
@@ -155,6 +155,37 @@ describe('清单门 · 读报告（这一轮的报告才算数）', () => {
 })
 
 describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）', () => {
+  it('F1：已知红不能豁免没有错误消息的 afterAll 失败', () => {
+    const run = runSuiteReport({
+      vitest: join(process.cwd(), 'node_modules/vitest/vitest.mjs'),
+      reportPath: reportPathOf('empty-hook'),
+      repoRoot: process.cwd(),
+      spawn: (command, args, options) => spawnSync(command, [...args, '--config', 'tests/lib/fixtures/inventory-errors/vitest.config.mjs'], options),
+      echo: () => {},
+    })
+    const current = collectReport(run.report, { repoRoot: process.cwd(), ...run })
+    const { known, violations } = violationsFor({ current, baseline: {
+      files: current.files,
+      knownRed: current.failures.map((failure) => ({ ...failure, reason: '夹具已知红' })),
+    } })
+    expect(known).toHaveLength(2)
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toMatch(/文件级失败.*empty-message/u)
+  })
+
+  it.each(['missing', 'stale', 'incomplete'])('结构化错误报告 %s 时不能接受断言报告', (state) => {
+    const reportPath = reportPathOf(`errors-${state}`)
+    const result = attempt({ reportPath, spawn: () => {
+      writeReport(reportPath, { 'tests/a.test.mjs': ['通过'] })
+      if (state === 'missing') rmSync(`${reportPath}.errors.json`)
+      else if (state === 'stale') utimesSync(`${reportPath}.errors.json`, 0, 0)
+      else writeFileSync(`${reportPath}.errors.json`, JSON.stringify({ schema: 'xuanshu/test-errors@1', modules: [], unhandledErrors: [] }))
+      return { status: 0 }
+    } })
+    expect(result.ok).toBe(false)
+    expect(result.message).toMatch(/结构化错误报告/u)
+  })
+
   /** 评审给的那份真实报告形状（`beforeAll` 抛错）：文件 failed、用例全 skipped、numFailedTests 0。 */
   const hookReport = {
     numTotalTestSuites: 2,
@@ -254,7 +285,7 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
 
   it('纯断言失败的文件（文件级 message 是空串）→ 不因新判据误报文件级失败', () => {
     // 真报告的对照组（复核 32216d9 的同目录 mixed-report.json、本仓 assembly-contract 报告）：
-    // 只有断言失败时 `result.message === ''`。新判据只认非空 message ⇒ 这一形状不受影响。
+    // 这里只测旧 JSON 兼容面：纯断言失败的空 message 不应被推断为 hook 错误。
     const current = collectReport(
       {
         success: false,
@@ -356,7 +387,7 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
     expect(detectUnhandledErrors(`${nested}\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n     Errors  1 error\n`)).toBe(true)
   })
 
-  it('**真 vitest** 跑一遍未处理错误夹具：reporter 文本认得出它（形状假设由真 vitest 说了算）', () => {
+  it('**真 vitest** 跑一遍未处理错误夹具：结构化错误通道独立记录', () => {
     const reportPath = reportPathOf('unhandled-real')
     const run = runSuiteReport({
       vitest: join(process.cwd(), 'node_modules', 'vitest', 'vitest.mjs'),
@@ -369,9 +400,9 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
     const unhandledResult = run.report.testResults.find((entry) => entry.name.endsWith('unhandled.fixture.mjs'))
     expect(unhandledResult?.status).toBe('passed')
     expect(unhandledResult?.assertionResults?.map((assertion) => assertion.status)).toEqual(['passed'])
-    // 但 reporter 文本与退出码都看得出来
+    // 独立错误报告不能被通过的断言报告掩盖。
     expect(run.exitCode).toBe(1)
-    expect(run.unhandledErrors, 'reporter 文本里应当有 Unhandled Errors 段').toBe(true)
+    expect(run.unhandledErrors, '独立报告中应当存在未处理错误').toBe(true)
     const current = collectReport(run.report, { repoRoot: process.cwd(), exitCode: run.exitCode, unhandledErrors: run.unhandledErrors })
     // 与已知红（hook / mixed 两个夹具里那条已知红）并存时也要报出来
     const { violations } = violationsFor({
@@ -408,8 +439,7 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
     })
     const current = collectReport(run.report, { repoRoot: process.cwd(), exitCode: run.exitCode })
     // 真实形状：mixed 与 afterAll 两个夹具里各有一条已知红按用例记账（两者同名 `known red`）；
-    // 三个文件都进了文件级失败 —— hook-failure / mixed 是「有没跑起来的用例」，
-    // afterAll 是「跳过 0 条、只有文件级 message」（R1 的新形状）。
+    // 三个文件都通过结构化 suite errors 进入文件级失败，断言失败另行记账。
     const byFile = (a, b) => a.file.localeCompare(b.file)
     expect(current.failures.map(({ file, title }) => ({ file, title })).sort(byFile)).toEqual(
       [
@@ -420,10 +450,10 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
     expect(current.suiteFailures.map((entry) => entry.file).sort()).toEqual(
       [HOOK_FIXTURE, MIXED_FIXTURE, AFTER_ALL_FIXTURE].sort(),
     )
-    // R1 的关键实测：afterAll 的形状是「0 skipped + 文件级 message 非空」，与断言失败（message 空串）可区分。
+    // afterAll 在用例运行之后抛错：没有 skipped，仍有独立错误条目。
     const afterAll = current.suiteFailures.find((entry) => entry.file === AFTER_ALL_FIXTURE)
     expect(afterAll?.skippedAssertions, 'afterAll 吃不到用例，所以没有 skipped').toBe(0)
-    expect(afterAll?.message, 'afterAll 抛错时文件级 message 就是那次 hook 的错误文本').toBe('NEW_AFTER_ALL_ERROR')
+    expect(afterAll?.message, 'suite error 应保留 hook 的错误文本').toBe('NEW_AFTER_ALL_ERROR')
     expect(run.exitCode).toBe(1)
     const { violations, known } = violationsFor({
       current,
@@ -436,8 +466,9 @@ describe('清单门 · 文件级失败（R1：hook / suite / 未处理错误）'
       },
     })
     expect(known, '两个夹具里的已知红都照常豁免').toHaveLength(2)
-    expect(violations, '三个文件的 hook 错误都必须被文件级失败拦下').toHaveLength(3)
-    expect(violations.every((violation) => /文件级失败/u.test(violation))).toBe(true)
+    expect(violations.filter((violation) => /文件级失败/u.test(violation))).toHaveLength(3)
+    expect(violations.filter((violation) => /未处理错误/u.test(violation))).toHaveLength(1)
+    expect(violations).toHaveLength(4)
   })
 })
 

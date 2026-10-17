@@ -81,6 +81,58 @@ const logText = (agents) => JSON.stringify(allDeliveries(agents))
 const recordOf = (sandbox, sessionId) => sandbox.json('consult', `${sessionId}.bestof.json`)
 
 describe('task-14 · 采用后：采用稿进历史，落选候选永不进日志', () => {
+  it('F4：冷恢复中的改选与下一轮交错，下一轮仍只带新的采用稿', async () => {
+    const agents = fakeAgents()
+    const llm = fakeLlm([{ text: WINNER }, { text: LOSER }, JUDGE_PLAN, { text: '下一轮甲' }, { text: '下一轮乙' }, JUDGE_PLAN])
+    let delayed = false
+    let entered
+    let release
+    const waiting = new Promise((resolveEntered) => { entered = resolveEntered })
+    const held = new Promise((resolveHeld) => { release = resolveHeld })
+    const services = {
+      agents: {
+        ...agents.service,
+        get: (id) => delayed ? undefined : agents.service.get(id),
+        resume: async (options) => {
+          entered()
+          await held
+          return { agent: agents.service.get(options.resumeSessionId) }
+        },
+      },
+      agentPresets: { resolve: async () => ({ id: 'standard' }), mount: async () => ({}) },
+      agentDefaultModel: fakeAgentDefaultModel().service,
+      llm: llm.service,
+      sessionQuery: { readSession: async (id) => ({
+        session: { id, agentPreset: 'standard' },
+        events: [...agents.live.values()].flatMap((agent) => agent.calls.filter((call) => call.kind === 'followup').map((call, index) => userEvent(index + 1, call.message))),
+      }) },
+    }
+    const { bestof, session } = await scene({ services })
+    const first = await runToEnd(bestof, session.sessionId)
+    await bestof['bestof.adopt']({ runId: first.runId, decision: 'adopt', adoptedId: 'c1' })
+    delayed = true
+    const adopting = bestof['bestof.adopt']({ runId: first.runId, decision: 'adopt', adoptedId: 'c2' })
+    try {
+      await waiting
+      const before = llm.calls.length
+      const starting = bestof['bestof.run']({ sessionId: session.sessionId, question: '沿用刚采用的结论' })
+      await new Promise((resolveTurn) => setImmediate(resolveTurn))
+      release()
+      expect((await adopting).delivery.ok).toBe(true)
+      const second = await starting
+      for (let index = 0; index < 600; index += 1) {
+        if ((await bestof['bestof.state']({ runId: second.runId })).finished) break
+        await new Promise((resolveTurn) => setTimeout(resolveTurn, 5))
+      }
+      const prompts = llm.calls.slice(before).filter((call) => call.system?.includes('本候选视角')).map((call) => JSON.stringify(call.messages))
+      expect(prompts).toHaveLength(2)
+      for (const prompt of prompts) {
+        expect(prompt).toContain(LOSER)
+        expect(prompt).not.toContain(WINNER)
+      }
+    } finally { release() }
+  })
+
   it('采用 c1：日志多出**恰好一条**消息 —— 采用稿本身，带我们的 source kind', async () => {
     const { bestof, session, agents, sandbox } = await scene()
     const started = await runToEnd(bestof, session.sessionId)

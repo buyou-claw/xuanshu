@@ -147,6 +147,7 @@ export function normalizeMounts(input) {
  *        正文真的落进了日志。同一层重新挂载后必须有新的 `receipt`，**旧一轮的正文标记不算数**（R5）；
  *      - `withdrawal`：**本次撤下声明**那条消息的 id。它在日志里出现过 ⇒ 撤下已说出口，
  *        条目才可以清掉；没出现 ⇒ 下一问重发（撤下失败不许丢重试依据，R5）；
+ *      - `previousDelivery`：新投递尚未确认时保留的旧交付凭据，撤下义务不能随重试消失（F2）；
  *      - `head`：注入文本里 `【来源：挂载 <head>】` 标记的主体 —— **老条目**（没有上面两个字段）
  *        唯一的凭据：标记在日志里就算交付过（向后兼容，不许因此每问重投）。
  *   2. **宽容**：交付账是我们自己写的缓存，坏条目丢掉就行（不像 `mounts` 那样抛错）——
@@ -171,6 +172,10 @@ export function normalizeDeliveredMounts(input) {
     const head = typeof entry.head === 'string' && entry.head !== '' ? entry.head : undefined
     const receipt = typeof entry.receipt === 'string' && entry.receipt !== '' ? entry.receipt : undefined
     const withdrawal = typeof entry.withdrawal === 'string' && entry.withdrawal !== '' ? entry.withdrawal : undefined
+    // 重挂尚未确认时保留此前仍生效的交付；只保存一份凭据，不递归累积历史。
+    const previous = entry.previousDelivery
+    const previousHead = typeof previous?.head === 'string' && previous.head !== '' ? previous.head : undefined
+    const previousReceipt = typeof previous?.receipt === 'string' && previous.receipt !== '' ? previous.receipt : undefined
     out.push({
       kind,
       id,
@@ -178,6 +183,10 @@ export function normalizeDeliveredMounts(input) {
       ...(head === undefined ? {} : { head }),
       ...(receipt === undefined ? {} : { receipt }),
       ...(withdrawal === undefined ? {} : { withdrawal }),
+      ...(previousHead === undefined && previousReceipt === undefined ? {} : { previousDelivery: {
+        ...(previousHead === undefined ? {} : { head: previousHead }),
+        ...(previousReceipt === undefined ? {} : { receipt: previousReceipt }),
+      } }),
     })
   }
   return out

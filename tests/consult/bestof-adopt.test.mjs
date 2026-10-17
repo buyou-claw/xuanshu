@@ -61,6 +61,25 @@ async function runToEnd(bestof, sessionId, payload = {}) {
 }
 
 describe('bestof.state · 轮询与冷读（契约 §1「供界面轮询/回看」）', () => {
+  it('F3：第二轮受理后、首块返回前，新实例也能按 runId 冷读', async () => {
+    const { bestof, session, sandbox, host, llm } = await scene({ plans: [...CANDIDATES, JUDGE_PLAN, ...CANDIDATES, JUDGE_PLAN] })
+    await runToEnd(bestof, session.sessionId)
+    let release
+    const held = new Promise((resolveHeld) => { release = resolveHeld })
+    const stream = llm.service.stream
+    llm.service.stream = (options) => (async function* () { await held; yield* stream(options) })()
+    try {
+      const second = await bestof['bestof.run']({ sessionId: session.sessionId, question: '第二个问题' })
+      const cold = createBestOfMethods(host.ctx, { dataDir: sandbox.dataDir })
+      const recovered = await cold['bestof.state']({ runId: second.runId })
+      expect(recovered.runId).toBe(second.runId)
+      expect(recovered.candidates.every((candidate) => candidate.status === 'running')).toBe(true)
+    } finally {
+      release()
+      await new Promise((resolveDone) => setTimeout(resolveDone, 20))
+    }
+  })
+
   it('进程重启后按 runId 仍读得回来（读旁挂文件，不靠内存）', async () => {
     const { bestof, session, sandbox, host } = await scene()
     const { started, state } = await runToEnd(bestof, session.sessionId)

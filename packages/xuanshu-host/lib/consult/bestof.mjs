@@ -195,6 +195,18 @@ export function createBestOfMethods(ctx, config = {}) {
   const aborts = new Map()
   /** 每层会话当前那一轮（`runId`）：`bestof.run` 覆盖写时更新，给 `persist` 判「我还算不算当前那一轮」。 */
   const currentRun = new Map()
+  const sessionOperations = new Map()
+
+  // 同一场问事的受理、拍板及投递按请求顺序完成。新轮不能在采用稿尚未交付时继承旧账。
+  // 只排队这些状态操作；候选流仍在后台并行，别的会话互不等待。
+  function serializeSession(sessionId, operation) {
+    const previous = sessionOperations.get(sessionId) ?? Promise.resolve()
+    const pending = previous.catch(() => {}).then(operation)
+    sessionOperations.set(sessionId, pending)
+    return pending.finally(() => {
+      if (sessionOperations.get(sessionId) === pending) sessionOperations.delete(sessionId)
+    })
+  }
 
   function findRecord(runId) {
     const inMemory = live.get(runId)
@@ -427,78 +439,81 @@ export function createBestOfMethods(ctx, config = {}) {
     'bestof.run': async (request) => {
       const source = request && typeof request === 'object' && !Array.isArray(request) ? request : {}
       const sessionId = requireSessionId(source.sessionId)
-      const question = requireText(source.question, '问题')
-      const capability = bestofCapability(ctx)
-      if (!capability.ok) throw new Error(`这次合参发不出去。${capability.detail}`)
-      // 合参挂在问事会话上：旁挂清单是「这是哪一次问事」的权威（票 10 契约 §2）。
-      const manifest = consultStore.read(sessionId)
-      if (manifest === null) {
-        throw new Error(`问事记录不存在：${sessionId}（合参挂在问事会话上，先 consult.create）。`)
-      }
-      // 候选流不带会话历史（它直接走 `ctx.llm.stream()`），所以把这场问事的上下文**读出来带上**：
-      // 底座谱 + 底稿 + 勾选谱 + 挂载，与 `agent/pre-step` 边界**同一份装配**。
-      // 评审实测的缺陷正是这一处：候选只拿到一句裸问题 —— 问「结合我的信息建议怎么做？」
-      // 时，答出来的东西与这场问事毫无关系，而界面上一切正常。
-      // 这里**只取文本**：候选流不落会话日志，所以不去动「挂载已交付」那本账（那是边界的事）。
-      const { text: context } = await assembly.buildInjection(manifest)
-      // 评审 R5 补的另一半：**会话文本历史**（含被采用的合参稿）。只有候选槽带 —— 判官与合并槽
-      // 继续遵守各自的边界（H4：判官只看问题与候选）。读不到历史就是 `null`（不编一段假的）。
-      const history = await assembly.buildHistory(sessionId)
+      return serializeSession(sessionId, async () => {
+        const question = requireText(source.question, '问题')
+        const capability = bestofCapability(ctx)
+        if (!capability.ok) throw new Error(`这次合参发不出去。${capability.detail}`)
+        // 合参挂在问事会话上：旁挂清单是「这是哪一次问事」的权威（票 10 契约 §2）。
+        const manifest = consultStore.read(sessionId)
+        if (manifest === null) {
+          throw new Error(`问事记录不存在：${sessionId}（合参挂在问事会话上，先 consult.create）。`)
+        }
+        // 候选流不带会话历史（它直接走 `ctx.llm.stream()`），所以把这场问事的上下文**读出来带上**：
+        // 底座谱 + 底稿 + 勾选谱 + 挂载，与 `agent/pre-step` 边界**同一份装配**。
+        // 评审实测的缺陷正是这一处：候选只拿到一句裸问题 —— 问「结合我的信息建议怎么做？」
+        // 时，答出来的东西与这场问事毫无关系，而界面上一切正常。
+        // 这里**只取文本**：候选流不落会话日志，所以不去动「挂载已交付」那本账（那是边界的事）。
+        const { text: context } = await assembly.buildInjection(manifest)
+        // 评审 R5 补的另一半：**会话文本历史**（含被采用的合参稿）。只有候选槽带 —— 判官与合并槽
+        // 继续遵守各自的边界（H4：判官只看问题与候选）。读不到历史就是 `null`（不编一段假的）。
+        const history = await assembly.buildHistory(sessionId)
 
-      const angles = resolveAngles(source.angles)
-      const routes = await resolveRoutes(ctx, { profileIds: source.profileIds, count: angles.length })
-      if (routes.length < 2) throw new Error(`合参至少要两路（现在 ${routes.length} 路）：去设置加一个视角或换一个 provider。`)
+        const angles = resolveAngles(source.angles)
+        const routes = await resolveRoutes(ctx, { profileIds: source.profileIds, count: angles.length })
+        if (routes.length < 2) throw new Error(`合参至少要两路（现在 ${routes.length} 路）：去设置加一个视角或换一个 provider。`)
 
-      // **采用稿账本**（复核 N4 / 32216d9 的 R2–R4）：一层会话只留最后一份记录（覆盖写），而
-      // 「谁还是当前采用稿」要跨轮才说得清 —— 新记录**继承**上一份的账本，此后每次采用 / 否决各追加一条。
-      // 消费方是 `history.mjs` 的候选历史投影（只带各轮当前那几份采用稿）。
-      // 上一版记录（只有 `deliveries / adoptedId / rejected`）在**被覆盖之前**先迁移一次：否则
-      // 第二个新轮次起旧轮的采用关系就没了，旧采用稿会重新混进候选历史（R4）。
-      const previousRecord = store.read(sessionId)
-      const record = {
-        schema: BESTOF_SCHEMA,
-        runId: newRunId(),
-        sessionId,
-        question,
-        createdAt: new Date().toISOString(),
-        candidates: angles.map((angle, index) => ({
-          id: `c${index + 1}`,
-          angle: angle.id,
-          angleName: angle.name,
-          provider: routes[index].provider,
-          model: routes[index].model,
-          status: 'running',
-          text: '',
-        })),
-        judge: { mode: 'pending', adoptedId: null, ranking: [] },
-        adoptedId: null,
-        rejected: false,
-        draftLedger: migrateLegacyDecisions(previousRecord),
-      }
-      live.set(record.runId, record)
-      persist(record)
-      // **落盘成功之后**才认下「这层会话当前是这一轮」：`persist` 抛错（磁盘满 / 权限 / AV 锁）时
-      // `bestof.run` 已经向调用方抛错，旧轮仍是当前轮、它的收尾写照常落盘 —— 盘面与「当前轮」不会分叉
-      // （加固的缘由见 `persist` 的注释：分叉会让迟到的拍板被静默丢弃）。
-      currentRun.set(sessionId, record.runId)
-      // 每个 run 一个中断开关：「停止全部」靠它把 N 路流真的掐掉（契约 §1 的 additive `bestof.cancel`）。
-      const controller = new AbortController()
-      aborts.set(record.runId, controller)
-      // 后台跑：不 await（见文件头第 1 条）。失败已折进记录，这里只兜住「连记录都没写成」。
-      void execute(record, { question, context, history, routes, signal: controller.signal })
-        .catch((error) => {
-          record.finishedAt = new Date().toISOString()
-          record.judge = { mode: 'failed', adoptedId: null, ranking: [], error: `合参执行失败：${String(error?.message ?? error)}` }
-          try {
-            persist(record)
-          } catch {
-            /* 落盘失败也无处可报：调用方靠 state 看到 failed */
-          }
-        })
-        .finally(() => {
-          aborts.delete(record.runId)
-        })
-      return view(record)
+        // **采用稿账本**（复核 N4 / 32216d9 的 R2–R4）：一层会话只留最后一份记录（覆盖写），而
+        // 「谁还是当前采用稿」要跨轮才说得清 —— 新记录**继承**上一份的账本，此后每次采用 / 否决各追加一条。
+        // 消费方是 `history.mjs` 的候选历史投影（只带各轮当前那几份采用稿）。
+        // 上一版记录（只有 `deliveries / adoptedId / rejected`）在**被覆盖之前**先迁移一次：否则
+        // 第二个新轮次起旧轮的采用关系就没了，旧采用稿会重新混进候选历史（R4）。
+        const previousRecord = store.read(sessionId)
+        const record = {
+          schema: BESTOF_SCHEMA,
+          runId: newRunId(),
+          sessionId,
+          question,
+          createdAt: new Date().toISOString(),
+          candidates: angles.map((angle, index) => ({
+            id: `c${index + 1}`,
+            angle: angle.id,
+            angleName: angle.name,
+            provider: routes[index].provider,
+            model: routes[index].model,
+            status: 'running',
+            text: '',
+          })),
+          judge: { mode: 'pending', adoptedId: null, ranking: [] },
+          adoptedId: null,
+          rejected: false,
+          draftLedger: migrateLegacyDecisions(previousRecord),
+        }
+        // 新轮的首次写不走旧轮回填守卫；写失败时不发布内存记录或改变当前轮。
+        store.write(record)
+        live.set(record.runId, record)
+        // **落盘成功之后**才认下「这层会话当前是这一轮」：首次写抛错（磁盘满 / 权限 / AV 锁）时
+        // `bestof.run` 已经向调用方抛错，旧轮仍是当前轮、它的收尾写照常落盘 —— 盘面与「当前轮」不会分叉
+        // （加固的缘由见 `persist` 的注释：分叉会让迟到的拍板被静默丢弃）。
+        currentRun.set(sessionId, record.runId)
+        // 每个 run 一个中断开关：「停止全部」靠它把 N 路流真的掐掉（契约 §1 的 additive `bestof.cancel`）。
+        const controller = new AbortController()
+        aborts.set(record.runId, controller)
+        // 后台跑：不 await（见文件头第 1 条）。失败已折进记录，这里只兜住「连记录都没写成」。
+        void execute(record, { question, context, history, routes, signal: controller.signal })
+          .catch((error) => {
+            record.finishedAt = new Date().toISOString()
+            record.judge = { mode: 'failed', adoptedId: null, ranking: [], error: `合参执行失败：${String(error?.message ?? error)}` }
+            try {
+              persist(record)
+            } catch {
+              /* 落盘失败也无处可报：调用方靠 state 看到 failed */
+            }
+          })
+          .finally(() => {
+            aborts.delete(record.runId)
+          })
+        return view(record)
+      })
     },
 
     /**
@@ -513,27 +528,29 @@ export function createBestOfMethods(ctx, config = {}) {
       const runId = requireText(source.runId, 'runId')
       const record = findRecord(runId)
       if (record === undefined) throw new Error(`合参记录不存在：${runId}。`)
-      // 这一轮已被取代时**什么都不做**（与 `bestof.adopt` 的取代判据同一口径，只是判据取**内存里的
-      // 逻辑先后**）：写在盘面上的更旧一轮若去 abort 自己的 controller，状态不落盘、界面也只看得到
-      // `state` —— 回应一个「已停止」等于替新一轮发言。
-      if (hasNewerRun(record)) {
-        throw new Error(`这一轮合参已经被更新的一轮取代（当前是 ${currentRun.get(record.sessionId)}）：刷新界面再操作 —— 对旧记录写入会盖掉新一轮。`)
-      }
-      const controller = aborts.get(runId)
-      if (controller !== undefined) controller.abort()
-      if (record.finishedAt === undefined) {
-        // abort 之后 `execute` 会把在跑的那几路收尾；这里先把「还挂着」的标成已停止，
-        // 免得轮询在收尾完成前看到一个自相矛盾的状态。
-        for (const candidate of record.candidates) {
-          if (candidate.status === 'running') candidate.status = 'stopped'
+      return serializeSession(record.sessionId, async () => {
+        // 这一轮已被取代时**什么都不做**（与 `bestof.adopt` 的取代判据同一口径，只是判据取**内存里的
+        // 逻辑先后**）：写在盘面上的更旧一轮若去 abort 自己的 controller，状态不落盘、界面也只看得到
+        // `state` —— 回应一个「已停止」等于替新一轮发言。
+        if (hasNewerRun(record)) {
+          throw new Error(`这一轮合参已经被更新的一轮取代（当前是 ${currentRun.get(record.sessionId)}）：刷新界面再操作 —— 对旧记录写入会盖掉新一轮。`)
         }
-        record.judge = { mode: 'skipped', skipped: true, adoptedId: null, ranking: [], error: '已停止：这一轮没有跑完，判官不会给出排序。' }
-        record.finishedAt = new Date().toISOString()
-        if (!persist(record)) {
-          throw new Error('这一轮合参已经被更新的一轮取代：停止状态没有落盘，刷新界面看当前那一轮。')
+        const controller = aborts.get(runId)
+        if (controller !== undefined) controller.abort()
+        if (record.finishedAt === undefined) {
+          // abort 之后 `execute` 会把在跑的那几路收尾；这里先把「还挂着」的标成已停止，
+          // 免得轮询在收尾完成前看到一个自相矛盾的状态。
+          for (const candidate of record.candidates) {
+            if (candidate.status === 'running') candidate.status = 'stopped'
+          }
+          record.judge = { mode: 'skipped', skipped: true, adoptedId: null, ranking: [], error: '已停止：这一轮没有跑完，判官不会给出排序。' }
+          record.finishedAt = new Date().toISOString()
+          if (!persist(record)) {
+            throw new Error('这一轮合参已经被更新的一轮取代：停止状态没有落盘，刷新界面看当前那一轮。')
+          }
         }
-      }
-      return { bestOf: view(record) }
+        return { bestOf: view(record) }
+      })
     },
 
     /** 轮询 / 回看（契约 §1）：内存里的活记录优先，进程重启后按 runId 冷查旁挂文件。 */
@@ -558,89 +575,90 @@ export function createBestOfMethods(ctx, config = {}) {
       }
       const record = findRecord(runId)
       if (record === undefined) throw new Error(`合参记录不存在：${runId}。`)
-      // 一层会话只留**最后一份**记录（覆盖写），而 `live` 里可能还留着更早那几轮 —— 对旧 runId 迟到的
-      // 拍板会把旧记录 persist 回去、**盖掉新那一轮**（连它的采用稿账本一起）。所以只允许对
-      // 「当前那一份记录」拍板；其它情况给可读错误，让人刷新界面（复核 48e0e0a 规格轴指出的这条）。
-      // **两道判据一起用**：内存里的逻辑先后（`hasNewerRun`，覆盖「新一轮首次落盘失败 / 两个宿主实例
-      // 共用 dataDir」时盘面还写着旧轮那一小段窗口）与盘面上的取代关系。两者都通过、但落盘仍被跳过时，
-      // 下面的 `persist` 返回值会把它顶成可读错误 —— 绝不静默报「已采用」。
-      if (hasNewerRun(record)) {
-        throw new Error(`这一轮合参已经被更新的一轮取代（当前是 ${currentRun.get(record.sessionId)}）：刷新界面再拍板 —— 对旧记录写入会盖掉新一轮。`)
-      }
-      const latest = store.read(record.sessionId)
-      if (latest !== null && latest.runId !== record.runId) {
-        throw new Error(`这一轮合参已经被更新的一轮取代（当前是 ${latest.runId}）：刷新界面再拍板 —— 对旧记录写入会盖掉新一轮。`)
-      }
-      if (record.finishedAt === undefined) throw new Error('候选还在生成中：等这一轮跑完再拍板（或先点「停止全部」）。')
-
-      const usable = usableCandidates(record)
-      if (decision === 'adopt') {
-        const id = requireText(source.adoptedId, 'adoptedId')
-        const candidate = usable.find((entry) => entry.id === id)
-        if (candidate === undefined) throw new Error(`没有这份可用候选：${id}。`)
-        record.adoptedId = id
-        record.rejected = false
-        delete record.mergedBy
-      } else if (decision === 'merge') {
-        if (usable.length < 2) throw new Error(`可合并的候选不足两份（现在 ${usable.length} 份）：换一份采用，或先补一路。`)
-        const ranked = rankByJudge(record, usable)
-        let text = typeof source.mergedText === 'string' ? source.mergedText.trim() : ''
-        let usage
-        if (text === '') {
-          const selection = defaultModelSelection(ctx) ?? { provider: ranked[0].provider, model: ranked[0].model }
-          const merged = await mergeCandidates(ctx, { route: selection, question: record.question, candidates: ranked })
-          text = merged.text
-          usage = merged.usage
-          account(record, { route: selection, usage })
+      return serializeSession(record.sessionId, async () => {
+        // 一层会话只留**最后一份**记录（覆盖写），而 `live` 里可能还留着更早那几轮 —— 对旧 runId 迟到的
+        // 拍板会把旧记录 persist 回去、**盖掉新那一轮**（连它的采用稿账本一起）。所以只允许对
+        // 「当前那一份记录」拍板；其它情况给可读错误，让人刷新界面（复核 48e0e0a 规格轴指出的这条）。
+        // **两道判据一起用**：内存里的逻辑先后（`hasNewerRun`，覆盖「新一轮首次落盘失败 / 两个宿主实例
+        // 共用 dataDir」时盘面还写着旧轮那一小段窗口）与盘面上的取代关系。两者都通过、但落盘仍被跳过时，
+        // 下面的 `persist` 返回值会把它顶成可读错误 —— 绝不静默报「已采用」。
+        if (hasNewerRun(record)) {
+          throw new Error(`这一轮合参已经被更新的一轮取代（当前是 ${currentRun.get(record.sessionId)}）：刷新界面再拍板 —— 对旧记录写入会盖掉新一轮。`)
         }
-        const merged = record.candidates.find((candidate) => candidate.id === 'merged')
-        const payload = {
-          id: 'merged',
-          angle: 'merged',
-          angleName: '合并稿',
-          provider: (defaultModelSelection(ctx) ?? ranked[0]).provider,
-          model: (defaultModelSelection(ctx) ?? ranked[0]).model,
-          status: 'done',
-          text,
-          usage,
+        const latest = store.read(record.sessionId)
+        if (latest !== null && latest.runId !== record.runId) {
+          throw new Error(`这一轮合参已经被更新的一轮取代（当前是 ${latest.runId}）：刷新界面再拍板 —— 对旧记录写入会盖掉新一轮。`)
         }
-        if (merged === undefined) record.candidates.push(payload)
-        else Object.assign(merged, payload)
-        record.adoptedId = 'merged'
-        record.rejected = false
-        record.mergedBy = { by: typeof source.mergedText === 'string' && source.mergedText.trim() !== '' ? 'caller' : 'host', at: new Date().toISOString() }
-      } else {
-        // 否决（玄枢自有语义，S9 §2.5 / README 定案 D4）：不采用任何一份，也不跑判官。
-        record.adoptedId = null
-        record.rejected = true
-        delete record.mergedBy
-        // 账本追加一条否决（复核 N4）：**按轮**记 —— 这一轮此前可能已经采用过一份并投进了日志，
-        // 否决之后它不再是当前采用稿，候选历史里也不该再出现（S9:174「否决轮次不带任何候选正文」）；
-        // 而**别的轮**已采用的稿不受影响（那一份仍在会话日志里、仍是这场问事的采用决定）。
-        record.draftLedger = [...(Array.isArray(record.draftLedger) ? record.draftLedger : []), { kind: 'rejected', runId: record.runId, at: new Date().toISOString() }]
-      }
-      // 决定本身必须先落盘（**失败不许静默**）：被取代时 `persist` 不写，这一拍就不能报成功 ——
-      // 采用稿已经投进会话日志、账本却没落，「当前采用稿」下一轮读盘就会把刚投的那份当非当前过滤掉
-      // （复核 32216d9 追加复核的 SP-1）。这里在**投递之前**判：报错时还什么都没写进会话。
-      if (!persist(record)) {
-        throw new Error('这一轮合参已经被更新的一轮取代：这一拍没有落盘（采用稿也还没写进会话），刷新界面重拍。')
-      }
+        if (record.finishedAt === undefined) throw new Error('候选还在生成中：等这一轮跑完再拍板（或先点「停止全部」）。')
 
-      // 采用 / 合并 = 人点了「这一份就是定稿」→ 把**它**写进会话历史（只写这一份；落选候选永不进日志）。
-      // 否决什么都不写。投递失败不上抛（决定已经落盘），但如实回 `delivery.ok=false`。
-      if (decision === 'reject') return { bestOf: view(record) }
-      const snapshot = view(record)
-      try {
-        await deliverAdopted(record, snapshot, { merged: decision === 'merge' })
-      } catch (error) {
-        record.deliveryError = String(error?.message ?? error)
-        record.deliveryAttemptedAt = new Date().toISOString()
-      }
-      // 这一次是补记投递结果的写：被取代时不落盘也不抛 —— 决定与投递都已如实回报，
-      // 此时抛错只会让「采用稿其实已经进会话」的调用方以为整件事失败了。
-      persist(record)
-      const delivered = deliveryOf(record)
-      return { bestOf: view(record), ...(delivered === undefined ? {} : { delivery: delivered }) }
+        const usable = usableCandidates(record)
+        if (decision === 'adopt') {
+          const id = requireText(source.adoptedId, 'adoptedId')
+          const candidate = usable.find((entry) => entry.id === id)
+          if (candidate === undefined) throw new Error(`没有这份可用候选：${id}。`)
+          record.adoptedId = id
+          record.rejected = false
+          delete record.mergedBy
+        } else if (decision === 'merge') {
+          if (usable.length < 2) throw new Error(`可合并的候选不足两份（现在 ${usable.length} 份）：换一份采用，或先补一路。`)
+          const ranked = rankByJudge(record, usable)
+          let text = typeof source.mergedText === 'string' ? source.mergedText.trim() : ''
+          let usage
+          if (text === '') {
+            const selection = defaultModelSelection(ctx) ?? { provider: ranked[0].provider, model: ranked[0].model }
+            const merged = await mergeCandidates(ctx, { route: selection, question: record.question, candidates: ranked })
+            text = merged.text
+            usage = merged.usage
+            account(record, { route: selection, usage })
+          }
+          const merged = record.candidates.find((candidate) => candidate.id === 'merged')
+          const payload = {
+            id: 'merged',
+            angle: 'merged',
+            angleName: '合并稿',
+            provider: (defaultModelSelection(ctx) ?? ranked[0]).provider,
+            model: (defaultModelSelection(ctx) ?? ranked[0]).model,
+            status: 'done',
+            text,
+            usage,
+          }
+          if (merged === undefined) record.candidates.push(payload)
+          else Object.assign(merged, payload)
+          record.adoptedId = 'merged'
+          record.rejected = false
+          record.mergedBy = { by: typeof source.mergedText === 'string' && source.mergedText.trim() !== '' ? 'caller' : 'host', at: new Date().toISOString() }
+        } else {
+          // 否决（玄枢自有语义，S9 §2.5 / README 定案 D4）：不采用任何一份，也不跑判官。
+          record.adoptedId = null
+          record.rejected = true
+          delete record.mergedBy
+          // 账本追加一条否决（复核 N4）：**按轮**记 —— 这一轮此前可能已经采用过一份并投进了日志，
+          // 否决之后它不再是当前采用稿，候选历史里也不该再出现（S9:174「否决轮次不带任何候选正文」）；
+          // 而**别的轮**已采用的稿不受影响（那一份仍在会话日志里、仍是这场问事的采用决定）。
+          record.draftLedger = [...(Array.isArray(record.draftLedger) ? record.draftLedger : []), { kind: 'rejected', runId: record.runId, at: new Date().toISOString() }]
+        }
+        // 决定本身必须先落盘（**失败不许静默**）：被取代时 `persist` 不写，这一拍就不能报成功 ——
+        // 采用稿已经投进会话日志、账本却没落，「当前采用稿」下一轮读盘就会把刚投的那份当非当前过滤掉
+        // （复核 32216d9 追加复核的 SP-1）。这里在**投递之前**判：报错时还什么都没写进会话。
+        if (!persist(record)) {
+          throw new Error('这一轮合参已经被更新的一轮取代：这一拍没有落盘（采用稿也还没写进会话），刷新界面重拍。')
+        }
+
+        // 采用 / 合并 = 人点了「这一份就是定稿」→ 把**它**写进会话历史（只写这一份；落选候选永不进日志）。
+        // 否决什么都不写。投递失败不上抛（决定已经落盘），但如实回 `delivery.ok=false`。
+        if (decision === 'reject') return { bestOf: view(record) }
+        const snapshot = view(record)
+        try {
+          await deliverAdopted(record, snapshot, { merged: decision === 'merge' })
+        } catch (error) {
+          record.deliveryError = String(error?.message ?? error)
+          record.deliveryAttemptedAt = new Date().toISOString()
+        }
+        // 投递与记账都完成后才释放会话操作队列，下一轮继承的就是最终采用关系。
+        if (!persist(record)) throw new Error('采用稿投递后的记账未完成：请刷新后重试。')
+        const delivered = deliveryOf(record)
+        return { bestOf: view(record), ...(delivered === undefined ? {} : { delivery: delivered }) }
+      })
     },
   }
 }

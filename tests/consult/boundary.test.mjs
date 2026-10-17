@@ -106,12 +106,12 @@ async function scene({ withFs = true, digao = true, mounts = [], basePu = false,
  *
  * @param {object} options `step` 默认 1；`claimed` 默认就是那一句问题
  */
-async function step(listener, agent, { step: stepNumber = 1, claimed = [QUESTION], signal } = {}) {
+async function step(listener, agent, { step: stepNumber = 1, claimed = [QUESTION], signal, append = true } = {}) {
   const decision = await listener(
     { agent, turn: 1, step: stepNumber, signal },
     () => Promise.resolve({ kind: 'enter', messages: claimed }),
   )
-  if (Array.isArray(decision?.messages) && Array.isArray(agent?.events)) {
+  if (append && Array.isArray(decision?.messages) && Array.isArray(agent?.events)) {
     for (const message of decision.messages) {
       if (claimed.includes(message)) continue
       agent.events.push({ type: 'user/message', seq: agent.events.length + 1, time: Date.now(), data: message })
@@ -138,6 +138,34 @@ const ledgerEntry = (mount) => ({
 })
 
 describe('发问边界 · 首次交付（R2：材料一次落进日志，永久在场）', () => {
+  it('F2：失败撤下、失败重挂之后再撤下，仍须撤回曾经交付的旧正文', async () => {
+    const { listener, session, api, sandbox } = await scene({ mounts: [SPEC] })
+    const agent = loggedAgent(session.sessionId)
+    await step(listener, agent)
+    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [] })
+    await step(listener, agent, { append: false })
+    sandbox.write('work/README.md', '新版工作区内容')
+    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [SPEC] })
+    await step(listener, agent, { append: false })
+    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [] })
+    const withdrawn = await step(listener, agent)
+    expect(textOf(injectedOf(withdrawn))).toContain('已撤下、不再适用')
+    expect(injectedOf(await step(listener, agent))).toBeUndefined()
+  })
+
+  it('F2：重挂时读取失败，也不能丢掉尚未确认的撤下', async () => {
+    const { listener, session, api, host } = await scene({ mounts: [SPEC] })
+    const agent = loggedAgent(session.sessionId)
+    await step(listener, agent)
+    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [] })
+    await step(listener, agent, { append: false })
+    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [SPEC] })
+    host.ctx.get('fs').readText = async () => { throw new Error('工作区暂不可读') }
+    await step(listener, agent)
+    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [] })
+    expect(textOf(injectedOf(await step(listener, agent)))).toContain('已撤下、不再适用')
+  })
+
   it('第一步：材料并进模型输入，排在用户那句话之前；底座谱 / 底稿 / 勾选谱都在', async () => {
     const { listener, session } = await scene()
     const agent = loggedAgent(session.sessionId)
@@ -364,7 +392,9 @@ describe('发问边界 · 挂载按变化补投（R3/R4）', () => {
     const text = textOf(injectedOf(await step(listener, agent, { claimed: [{ ...QUESTION, id: 'q-3' }] })))
     expect(text).toContain('REMOUNT_AFTER_FAILED_WITHDRAWAL')
 
-    // 撤下纪录作废：账里剩下的只有这次交付的回执，不再有待确认的 `withdrawal`。
+    // 新交付确认前保留旧事实；确认后只剩新回执，不再有待确认的撤下。
+    expect(manifestOf().mountsInjected).toEqual([{ ...ledgerEntry(SPEC), receipt: expect.any(String), previousDelivery: { head: ledgerEntry(SPEC).head } }])
+    expect(injectedOf(await step(listener, agent))).toBeUndefined()
     expect(manifestOf().mountsInjected).toEqual([{ ...ledgerEntry(SPEC), receipt: expect.any(String) }])
   })
 
