@@ -1,0 +1,212 @@
+/**
+ * 票 05（#26）· 扫描：工作区 / 工作流两路依据（契约 §1）
+ *
+ * 判据只打「依据集合」这一层（摘要在 `summary.test.mjs`、账本在 `ledger.test.mjs`）：
+ *   - 工作区：`basis.sessions` 只数**有人说过话**的会话（`user/message` + `source.kind==='user'`；
+ *     投影缓存的 `lastPromptAt` 与 DSH 侧栏同口径），`basis.docs` = 真读到的说明文档数；
+ *   - 最后活跃 = `max(工作区 createdAt, 会话 lastPromptAt)`；**会话服务缺席**时按本次扫描时刻记并留 note；
+ *   - 工作流：**只收导出过 skill 的**（`exportedAt` 非空 **且** `<dshHome>/skills/<name>/SKILL.md` 真存在）；
+ *   - 目录 `status()==='missing-dir'` 的工作区当「本轮没扫到」（后续由账本写冻结）。
+ */
+import { describe, expect, it } from 'vitest'
+
+import { collectShijiEvidence, resolveShijiDshHome } from '../../packages/xuanshu-host/lib/shiji/scan.mjs'
+import { writeWorkflow } from '../../packages/xuanshu-host/lib/workflow/store.mjs'
+import {
+  assistantEvent, fakeProjectionCache, fakeSessionQuery, fakeWorkspaceRegistry, makeCtx, makeSandbox, seedProject, userEvent,
+} from './lib/sandbox.mjs'
+
+const NOW = new Date('2026-10-17T03:30:00.000Z')
+const PROMPT_AT = Date.parse('2026-10-16T12:00:00.000Z')
+
+/** 造一个现场：一个项目 + 两个会话 + 一份导出过的工作流。 */
+function scene() {
+  const sandbox = makeSandbox('shiji-scan')
+  const projectRoot = seedProject(sandbox, 'xuan', {
+    docs: { 'README.md': '# XuanShu\n在做玄枢。', 'docs/shiji.md': '# 事记\n一两句摘要。', 'src/index.ts': 'code' },
+  })
+  const dshHome = sandbox.rootPath('home')
+  sandbox.writeRoot('home/skills/weekly/SKILL.md', '---\nname: weekly\ndescription: 周报\n---\n\n把周报自动化。\n')
+
+  writeWorkflow(sandbox.dataDir, {
+    schema: 'xuanshu/workflow@1',
+    id: 'session-xs-workflow-ok',
+    name: '把周报自动化',
+    sessionId: 'session-xs-workflow-ok',
+    cwd: sandbox.path('workflow'),
+    seed: '把周报自动化',
+    createdAt: '2026-10-15T00:00:00.000Z',
+    skillName: 'weekly',
+    skillPath: sandbox.rootPath('home/skills/weekly/SKILL.md'),
+    exportedAt: '2026-10-16T03:00:00.000Z',
+  })
+  writeWorkflow(sandbox.dataDir, {
+    schema: 'xuanshu/workflow@1',
+    id: 'session-xs-workflow-no-file',
+    name: '文件被手删了',
+    sessionId: 'session-xs-workflow-no-file',
+    cwd: sandbox.path('workflow'),
+    seed: 'x',
+    createdAt: '2026-10-15T00:00:00.000Z',
+    skillName: 'gone',
+    exportedAt: '2026-10-16T03:00:00.000Z',
+  })
+  writeWorkflow(sandbox.dataDir, {
+    schema: 'xuanshu/workflow@1',
+    id: 'session-xs-workflow-not-exported',
+    name: '还没导出',
+    sessionId: 'session-xs-workflow-not-exported',
+    cwd: sandbox.path('workflow'),
+    seed: 'y',
+    createdAt: '2026-10-15T00:00:00.000Z',
+    skillName: 'weekly',
+  })
+
+  const workspaces = [{
+    id: 'w1',
+    path: projectRoot,
+    title: 'XuanShu',
+    createdAt: '2026-10-10T00:00:00.000Z',
+    updatedAt: '2026-10-10T00:00:00.000Z',
+    sessionIds: ['s1', 's2'],
+  }]
+  return { sandbox, projectRoot, dshHome, workspaces }
+}
+
+/** 一个「s1 有人说过话、s2 只有注入上下文」的会话现场。 */
+function sessions() {
+  const headers = {
+    s1: { createdAt: Date.parse('2026-10-01T00:00:00.000Z'), cwd: 'E:\\proj' },
+    s2: { createdAt: Date.parse('2026-10-02T00:00:00.000Z'), cwd: 'E:\\proj' },
+    'session-xs-workflow-ok': { createdAt: Date.parse('2026-10-15T00:00:00.000Z'), cwd: 'wf' },
+  }
+  const events = {
+    s1: [userEvent(1, '事记怎么接？', PROMPT_AT - 1000), assistantEvent(2, '这样接。', PROMPT_AT), userEvent(3, '好。', PROMPT_AT)],
+    s2: [{ type: 'user/message', seq: 1, time: PROMPT_AT, data: { id: 'm1', source: { kind: 'xuanshu-consult' }, content: [{ type: 'text', text: '注入的上下文' }] } }],
+  }
+  const query = fakeSessionQuery({ headers, events, titles: { s1: '事记怎么接', s2: '底稿' } })
+  const cache = fakeProjectionCache({
+    s1: { title: '事记怎么接', lastPromptAt: PROMPT_AT },
+    s2: { title: '底稿', lastPromptAt: null },
+    'session-xs-workflow-ok': { title: '周报工作流', lastPromptAt: PROMPT_AT },
+  })
+  return { query, cache }
+}
+
+describe('票05 · 工作区这一路：会话数 / 文档数 / 最后活跃', () => {
+  it('一个项目一条依据：basis={sessions:1,docs:2}，只数有人说过话的会话，lastActiveAt 取 max(createdAt,lastPromptAt)', async () => {
+    const { sandbox, dshHome, workspaces } = scene()
+    try {
+      const { query, cache } = sessions()
+      const registry = fakeWorkspaceRegistry(workspaces)
+      const ctx = makeCtx({ services: { workspaceRegistry: registry.service, sessionQuery: query.service, sessionProjectionCache: cache.service } })
+      const result = await collectShijiEvidence({ ctx, dataDir: sandbox.dataDir, dshHome, now: NOW })
+
+      const workspaceItems = result.items.filter((item) => item.source === 'workspace')
+      expect(workspaceItems).toHaveLength(1)
+      const item = workspaceItems[0]
+      expect(item.refId).toBe('w1')
+      expect(item.name).toBe('XuanShu')
+      expect(item.basis).toEqual({ sessions: 1, docs: 2 })
+      expect(item.sessions).toEqual(['s1'])
+      expect(item.lastActiveAt).toBe('2026-10-16T12:00:00.000Z')
+      expect(item.material.sessionTitles).toEqual(['事记怎么接'])
+      expect(item.material.docs.map((doc) => doc.relPath)).toEqual(['README.md', 'docs/shiji.md'])
+      // 指纹素材 = 文档三元组（relPath,size,mtimeMs），不含正文。
+      expect(item.docs.map((doc) => doc.relPath)).toEqual(['README.md', 'docs/shiji.md'])
+      expect(item.docs.every((doc) => typeof doc.size === 'number' && typeof doc.mtimeMs === 'number')).toBe(true)
+      expect(result.notes).toEqual([])
+    } finally {
+      sandbox.cleanup()
+    }
+  })
+
+  it('目录 status()=missing-dir → 本轮当作没扫到（不产依据；冻结由账本写）', async () => {
+    const { sandbox, dshHome, workspaces } = scene()
+    try {
+      const { query, cache } = sessions()
+      const registry = fakeWorkspaceRegistry(workspaces, { missing: ['w1'] })
+      const ctx = makeCtx({ services: { workspaceRegistry: registry.service, sessionQuery: query.service, sessionProjectionCache: cache.service } })
+      const result = await collectShijiEvidence({ ctx, dataDir: sandbox.dataDir, dshHome, now: NOW })
+      expect(result.items.filter((item) => item.source === 'workspace')).toEqual([])
+      expect(result.notes.join('\n')).toMatch(/missing-dir|没扫到|不在/u)
+    } finally {
+      sandbox.cleanup()
+    }
+  })
+
+  it('会话服务缺席 → lastActiveAt 用本次扫描时刻，并记一条 note（不编历史活跃时间）', async () => {
+    const { sandbox, dshHome, workspaces } = scene()
+    try {
+      const registry = fakeWorkspaceRegistry(workspaces)
+      const ctx = makeCtx({ services: { workspaceRegistry: registry.service } })
+      const result = await collectShijiEvidence({ ctx, dataDir: sandbox.dataDir, dshHome, now: NOW })
+      const item = result.items.find((entry) => entry.source === 'workspace')
+      expect(item.lastActiveAt).toBe(NOW.toISOString())
+      expect(item.basis.sessions).toBe(0)
+      expect(result.notes.join('\n')).toMatch(/会话服务不可得/u)
+    } finally {
+      sandbox.cleanup()
+    }
+  })
+
+  it('用户排除目录在扫描这一层就生效（docs 计数不含被排除的目录）', async () => {
+    const { sandbox, dshHome, workspaces } = scene()
+    try {
+      seedProject(sandbox, 'xuan', { docs: { 'docs/private/secret.md': '# 私密\n' } })
+      const { query, cache } = sessions()
+      const registry = fakeWorkspaceRegistry(workspaces)
+      const ctx = makeCtx({ services: { workspaceRegistry: registry.service, sessionQuery: query.service, sessionProjectionCache: cache.service } })
+      const result = await collectShijiEvidence({ ctx, dataDir: sandbox.dataDir, dshHome, now: NOW, excludedDirs: ['docs/private'] })
+      const item = result.items.find((entry) => entry.source === 'workspace')
+      expect(item.basis.docs).toBe(2)
+      expect(item.material.docs.map((doc) => doc.relPath)).not.toContain('docs/private/secret.md')
+    } finally {
+      sandbox.cleanup()
+    }
+  })
+})
+
+describe('票05 · 工作流这一路：只收导出过 skill 的', () => {
+  it('exportedAt 非空且 SKILL.md 真存在 → 一条；文件被删 / 没导出 → 都不收', async () => {
+    const { sandbox, dshHome } = scene()
+    try {
+      const { query, cache } = sessions()
+      const ctx = makeCtx({ services: { sessionQuery: query.service, sessionProjectionCache: cache.service } })
+      const result = await collectShijiEvidence({ ctx, dataDir: sandbox.dataDir, dshHome, now: NOW })
+      const workflows = result.items.filter((item) => item.source === 'workflow')
+      expect(workflows.map((item) => item.refId)).toEqual(['session-xs-workflow-ok'])
+      const item = workflows[0]
+      expect(item.name).toBe('把周报自动化')
+      expect(item.basis).toEqual({ sessions: 1, docs: 1 })
+      expect(item.material.docs[0].relPath).toBe('SKILL.md')
+      expect(item.material.docs[0].text).toContain('把周报自动化')
+      expect(item.lastActiveAt).toBe('2026-10-16T12:00:00.000Z') // 会话活动晚于 exportedAt / createdAt
+    } finally {
+      sandbox.cleanup()
+    }
+  })
+
+  it('没有工作区注册表也照扫工作流（两路互不拖累）', async () => {
+    const { sandbox, dshHome } = scene()
+    try {
+      const ctx = makeCtx({ services: {} })
+      const result = await collectShijiEvidence({ ctx, dataDir: sandbox.dataDir, dshHome, now: NOW })
+      expect(result.items.filter((item) => item.source === 'workspace')).toEqual([])
+      expect(result.items.filter((item) => item.source === 'workflow')).toHaveLength(1)
+      expect(result.items.every((item) => item.source !== 'session')).toBe(true)
+      expect(result.notes.join('\n')).toMatch(/workspaceRegistry/u)
+      // 「核不了」要能传给账本：否则下一轮会把所有工作区条目误判成「源头消失」。
+      expect(result.routes).toEqual({ workspace: false, workflow: true })
+    } finally {
+      sandbox.cleanup()
+    }
+  })
+})
+
+describe('票05 · dshHome 解析（skill 落点，不靠 ctx.skills.list）', () => {
+  it('config/profileContext → dataDir 的父目录（目录名是 xuanshu）；拿不到才退环境变量/家目录', () => {
+    expect(resolveShijiDshHome({}, 'E:\\home\\xuanshu')).toBe('E:\\home')
+    expect(resolveShijiDshHome({ get: () => ({ home: 'E:\\explicit' }) }, 'E:\\other\\data')).toBe('E:\\explicit')
+  })
+})

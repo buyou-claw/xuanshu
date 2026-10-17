@@ -81,6 +81,9 @@ import { baseZone, createRikkeMethods } from './rikke/service.mjs';
 import { installRpc } from './rpc.mjs';
 import { createSedimentMethods } from './sediment/service.mjs';
 import { installSedimentSkill } from './sediment/skill.mjs';
+// 票 05（#26）：事记账本（扫描 / 摘要 / 冻结 / 墓碑）。独立方法组 —— 不并进 digao.*，
+// 那边的方法名被 `tests/digao/service.test.mjs` 全量钉死；扫描挂在 `refreshDigao()` 的同一条管线里。
+import { createShijiMethods } from './shiji/service.mjs';
 import { createWorkflowMethods } from './workflow/service.mjs';
 
 /** cordis 插件名（= 包名 = 补丁行 id，契约 §0）。 */
@@ -460,6 +463,9 @@ export function apply(ctx, config) {
       ...createConsultMethods(ctx, { dataDir }),
       // 票 13：底稿（纯派生，没有 write/update）与日课（本地黄历 + 底座）。
       ...createDigaoMethods(ctx, { dataDir }),
+      // 票 05（#26）：事记（只可删、不可改；删除 = 墓碑，恢复走显式 RPC）。
+      // 单独展开（方法名独立），扫描挂点是 `refreshDigao()` 内部，没有第二条扫描路径。
+      ...createShijiMethods(ctx, { dataDir }),
       ...createRikkeMethods(ctx, { dataDir }),
       // 票 16：工作流创建向导（新会话 + seed 自动调 `/writing-skills`；导出 skill 落
       // `<dshHome>/skills/<kebab>/SKILL.md`）。`dshHome` 与数据目录同源，skill 才落对地方。
