@@ -173,9 +173,11 @@ describe('票13 · 底稿到点 → 跑 `digao.refresh` 那一份生成链', () 
 
     const meta = target.sandbox.readJson('digao.json')
     expect(meta.schema).toBe('xuanshu/digao@1')
-    expect(meta.segments).toBe(3)
-    expect(meta.sources).toBe(2) // 谱 + 工作区（工作流本票留空）
-    expect(meta.bySource).toEqual({ pu: 2, workspace: 1 })
+    // #27：段数/路数多了事记这一路（`segments` 含「曾经」；`sources` 数有贡献的四路）。
+    expect(meta.segments).toBe(4)
+    expect(meta.sources).toBe(3)
+    expect(meta.bySource).toEqual({ pu: 2, workspace: 1, shiji: 1 })
+    expect(meta.sections).toEqual({ recent: 3, past: 1 })
     expect(meta.digest).toBe('llm')
     expect(meta.generatedAt).toBe('2026-10-15T19:30:00.000Z') // 时间基准来自注入的 now
 
@@ -184,7 +186,8 @@ describe('票13 · 底稿到点 → 跑 `digao.refresh` 那一份生成链', () 
     expect(markdown).toContain(DIGEST_TEXT)
     expect(markdown).toContain('【来源：谱 底座】')
     expect(markdown).toContain('【来源：工作区 XuanShu】')
-    expect(markdown.indexOf('## 来源：谱')).toBeLessThan(markdown.indexOf('## 来源：工作区'))
+    expect(markdown).toContain('【来源：事记 XuanShu】')
+    expect(markdown.indexOf('## 最近在做什么')).toBeLessThan(markdown.indexOf('## 曾经做过什么'))
     // 整文件原子重写：只此两份，没有 .tmp 残留。
     expect(digaoFiles(target.sandbox)).toEqual(['digao.json', 'digao.md'])
     expect(target.sandbox.files().filter((file) => file.endsWith('.tmp'))).toEqual([])
@@ -257,8 +260,18 @@ describe('票13 · 底稿到点 → 跑 `digao.refresh` 那一份生成链', () 
     await methods['digao.refresh']({})
     const fromHuman = target.sandbox.read('digao.md')
 
-    const strip = (text) => text.replace(/^- 生成时间：.*$/mu, '')
+    // #27：正文里现在带**时间派生**的内容 —— 「最近活跃 <日期>」（来自事记账本的 `lastActiveAt`）
+    // 与「曾经」每条事记的日期区间。本用例的工作区没有会话服务，账本按契约 §1 用「本次扫描时刻」
+    // 兜底（不编历史），所以两次刷新之间那两处日期会前进 —— 这是内容事实，不是链条分叉。
+    // ⇒ 归一时把三处时间（生成时间 / 最近活跃 / 事记日期区间）一起换掉，其余逐字比对。
+    const strip = (text) => text
+      .replace(/^- 生成时间：.*$/mu, '')
+      .replace(/最近活跃 \d{4}-\d{2}-\d{2}/gu, '最近活跃 <日期>')
+      .replace(/】\d{4}-\d{2}-\d{2}～\d{4}-\d{2}-\d{2} ·/gu, '】<日期区间> ·')
     expect(strip(fromHuman)).toBe(strip(fromTimer))
+    // 三处时间之外**一个字符都不许差**：两端口径确实是同一份链。
+    expect(fromHuman).toContain('## 最近在做什么')
+    expect(fromHuman).toContain('## 曾经做过什么')
     const metaFromHuman = target.sandbox.readJson('digao.json')
     expect({ ...metaFromHuman, generatedAt: null }).toEqual({ ...metaFromTimer, generatedAt: null })
   })
