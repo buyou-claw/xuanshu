@@ -36,6 +36,41 @@ export interface ConsultMessage {
   at?: string;
   /** 注入消息的来源标记（自定义 `MessageSourceMap` kind，如 `xuanshu-consult`）。 */
   source?: string;
+  /**
+   * 采用稿自己的**消息 id**（只有 `source === 'xuanshu-bestof-adopted'` 才给）。
+   *
+   * 票 31：回看要按轮分组，客户端拿账本里的 `messageId` 对日志里的消息 —— 只给正文与 kind 对不上。
+   * 其余消息不给 id：那会改动票 10 冻结的投影形状，而它们没有第二个消费方。
+   */
+  messageId?: string;
+}
+
+/**
+ * 一轮合参的回看信息（票 31；`consult.read` 的**加性**字段 `drafts`）。
+ *
+ * 为什么由宿主给：`currentAdoptedMessageIds()` 的按轮语义已经在服务端落地（复核 R2/R3），
+ * 客户端再实现一遍必然漂移 —— 这里只做查表与渲染。
+ */
+export interface ConsultDraftRound {
+  /** 稳定标识（宿主账本里的 `runId`；老记录是 `legacy`）。 */
+  runId: string;
+  /** 给人看的轮次序号（1 起，按账本顺序）。 */
+  round: number;
+  /** 这一轮投递过的采用稿消息 id（含后来被改选 / 否决掉的那几份）。 */
+  messageIds: string[];
+  /** 这一轮**当前**算数的那一份（末条决定是 adopted 时才有；被否决的轮没有）。 */
+  currentId?: string;
+  /** 这一轮最后那个决定是不是否决（否决轮不能显示成当前）。 */
+  rejected: boolean;
+}
+
+/** `consult.read` 的加性字段：轮次表 + 当前集合。 */
+export interface ConsultDrafts {
+  rounds: ConsultDraftRound[];
+  /** 判得出「当前采用稿」吗；`false` = 判不出来（不声称某一份被取代 / 被否决）。 */
+  resolved: boolean;
+  /** 当前采用稿消息 id（`resolved=false` 时为空数组）。 */
+  currentIds: string[];
 }
 
 /** 恒定在场项（底座谱 / 底稿）：`present=false` 时 `reason` 说明为什么现在没有。 */
@@ -80,8 +115,11 @@ export interface ConsultApi {
   ): Promise<{ accepted: true }>;
   /** 历史列表（按 `createdAt` 倒序；**读旁挂目录**，不扫会话日志）。 */
   list(signal?: AbortSignal): Promise<{ items: ConsultSummary[] }>;
-  /** 点开即读（只读；不进会话、不追加任何事件）。 */
-  read(payload: { sessionId: string }, signal?: AbortSignal): Promise<{ session: ConsultSummary; messages: ConsultMessage[] }>;
+  /** 点开即读（只读；不进会话、不追加任何事件）。`drafts` 是票 31 的加性字段（没有合参记录时缺席）。 */
+  read(
+    payload: { sessionId: string },
+    signal?: AbortSignal,
+  ): Promise<{ session: ConsultSummary; messages: ConsultMessage[]; drafts?: ConsultDrafts }>;
   /**
    * 改标题（改的是旁挂清单，不是会话记录）。
    * 契约冻结了这个方法；设计稿 S7 §6 的只读态没有改名入口，因此**本票的界面不动它**。
@@ -102,7 +140,12 @@ export function createConsultApi(ctx: RpcContext): ConsultApi {
     send: (payload, signal) => rpcCall<{ accepted: true }>(ctx, CONSULT_ENDPOINTS.send, payload, signal),
     list: (signal) => rpcCall<{ items: ConsultSummary[] }>(ctx, CONSULT_ENDPOINTS.list, {}, signal),
     read: (payload, signal) =>
-      rpcCall<{ session: ConsultSummary; messages: ConsultMessage[] }>(ctx, CONSULT_ENDPOINTS.read, payload, signal),
+      rpcCall<{ session: ConsultSummary; messages: ConsultMessage[]; drafts?: ConsultDrafts }>(
+        ctx,
+        CONSULT_ENDPOINTS.read,
+        payload,
+        signal,
+      ),
     rename: (payload, signal) => rpcCall<{ session: ConsultSummary }>(ctx, CONSULT_ENDPOINTS.rename, payload, signal),
     defaults: (signal) => rpcCall<ConsultDefaults>(ctx, CONSULT_ENDPOINTS.defaults, {}, signal),
   };

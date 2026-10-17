@@ -96,14 +96,20 @@ var BESTOF_ENDPOINTS = {
   run: "bestof.run",
   state: "bestof.state",
   adopt: "bestof.adopt",
-  cancel: "bestof.cancel"
+  cancel: "bestof.cancel",
+  /** 票 28：只读路由清单（providers → models → keyConfigured、默认路由、可配置未注册）。 */
+  routes: "routes.list",
+  /** 票 28：跑前估算（N 路 × model × 输入规模 + price:'unknown'），纯只读。 */
+  estimate: "bestof.estimate"
 };
 function createBestofApi(ctx) {
   return {
     run: (payload, signal) => rpcCall(ctx, BESTOF_ENDPOINTS.run, payload, signal),
     state: (payload, signal) => rpcCall(ctx, BESTOF_ENDPOINTS.state, payload, signal),
     adopt: (payload, signal) => rpcCall(ctx, BESTOF_ENDPOINTS.adopt, payload, signal),
-    cancel: (payload, signal) => rpcCall(ctx, BESTOF_ENDPOINTS.cancel, payload, signal)
+    cancel: (payload, signal) => rpcCall(ctx, BESTOF_ENDPOINTS.cancel, payload, signal),
+    listRoutes: (signal) => rpcCall(ctx, BESTOF_ENDPOINTS.routes, {}, signal),
+    estimate: (payload, signal) => rpcCall(ctx, BESTOF_ENDPOINTS.estimate, payload, signal)
   };
 }
 
@@ -115,6 +121,81 @@ var BESTOF_ANGLE_OPTIONS = [
   { id: "classic", name: "经典派" },
   { id: "cautious", name: "审慎派" }
 ];
+var BESTOF_MIN_ROUTES = 2;
+var BESTOF_MAX_ROUTES = 4;
+function routeKey(route) {
+  return `${route.provider}::${route.model ?? ""}`;
+}
+function flattenCatalogRoutes(catalog) {
+  const options = [];
+  for (const provider of catalog?.providers ?? []) {
+    for (const model of provider.models ?? []) {
+      const modelName = model.name ?? null;
+      options.push({
+        provider: provider.id,
+        model: model.id,
+        modelName,
+        providerName: provider.name ?? null,
+        label: `${provider.id} · ${modelName ?? model.id}`,
+        keyConfigured: provider.keyConfigured,
+        isDefault: provider.isDefault && model.isDefault
+      });
+    }
+  }
+  return options;
+}
+function defaultRouteSelection(catalog, { min = BESTOF_MIN_ROUTES, max = BESTOF_MAX_ROUTES } = {}) {
+  const options = flattenCatalogRoutes(catalog);
+  if (options.length === 0) return [];
+  const preferred = options.find((option) => option.isDefault) ?? options[0];
+  if (preferred === void 0) return [];
+  const preferredProvider = preferred.provider;
+  const picked = [];
+  const push = (option) => {
+    if (option === void 0) return;
+    if (picked.some((entry) => routeKey(entry) === routeKey(option))) return;
+    picked.push(option);
+  };
+  push(preferred);
+  push(options.find((option) => option.provider !== preferredProvider));
+  for (const option of options) {
+    if (picked.length >= Math.min(min, max, options.length)) break;
+    push(option);
+  }
+  return picked.slice(0, max).map((option) => ({ provider: option.provider, model: option.model }));
+}
+function routeSelectionProblem(routes) {
+  const list = Array.isArray(routes) ? routes : [];
+  if (list.length < BESTOF_MIN_ROUTES) return `合参至少两路（现在 ${list.length} 路）：再选一家 provider 或 model。`;
+  if (list.length > BESTOF_MAX_ROUTES) return `合参最多四路（现在 ${list.length} 路）：去掉几路再跑。`;
+  if (new Set(list.map(routeKey)).size !== list.length) return "有重复路由（同一个 provider::model 只能算一路）。";
+  return void 0;
+}
+function keyConfiguredLabel(value) {
+  if (value === true) return "已配 key";
+  if (value === false) return "缺 key";
+  return "未知";
+}
+function estimateInputLabel(estimate) {
+  if (estimate === void 0 || !Number.isFinite(estimate.inputTokens)) return "输入规模未知（估算不可用）";
+  return `≈ ${estimate.inputTokens} tokens/路（估算）`;
+}
+function estimatePriceLabel(estimate) {
+  return estimate?.price === "unknown" || estimate === void 0 ? "金额未知" : "金额未知";
+}
+function judgeSameSource(view) {
+  return view?.judge?.mode === "same-source" || view?.judge?.source === "same-source";
+}
+function judgeSourceNotice(view) {
+  if (view === void 0) return void 0;
+  if (judgeSameSource(view)) {
+    return `判官与候选同源：${view.judge.error ?? "没有不在候选里的另一家 provider"}（暂按完成顺序排前）`;
+  }
+  const provider = view.judge?.provider;
+  if (typeof provider !== "string" || provider === "") return void 0;
+  const model = typeof view.judge?.model === "string" ? view.judge.model : "未知模型";
+  return `判官来自 ${provider} · ${model}（不在候选 provider 集合里）。`;
+}
 function isUsable(candidate) {
   return (candidate.status === "done" || candidate.status === "stopped") && candidate.text !== "";
 }
@@ -148,11 +229,14 @@ function rankTag(view, candidateId) {
 }
 function judgeUnavailable(view) {
   const mode = view.judge?.mode;
-  if (mode === "skipped" || mode === "failed") return true;
+  if (mode === "skipped" || mode === "failed" || mode === "same-source") return true;
   return typeof view.judge?.error === "string" && view.judge.error !== "";
 }
 function fallbackNotice(view) {
   if (!judgeUnavailable(view)) return void 0;
+  if (judgeSameSource(view)) {
+    return `没有不在候选里的另一家 provider：这一轮没有异源判官，暂按先完成的一份排前（${view.judge?.error ?? "判官与候选同源"}）。这只影响排序展示，采用与否仍然由你点。`;
+  }
   if (view.judge?.mode === "skipped") {
     return view.judge.error ?? "只有一份可用候选，这一轮不跑判官（照样由你点采用）。";
   }
@@ -201,6 +285,37 @@ function createBestofController({ api, pollMs = 400 }) {
     timer = void 0;
   };
   const message = (error) => String(error?.message ?? error);
+  let estimateToken = 0;
+  let estimateFor;
+  async function loadEstimate(signal) {
+    const token = estimateToken + 1;
+    estimateToken = token;
+    const question = state.question.trim();
+    const sessionId = state.sessionId;
+    if (sessionId === void 0 || sessionId === "") return;
+    if (question === "") return;
+    try {
+      let catalog = state.catalog;
+      if (catalog === void 0 && typeof api.listRoutes === "function") {
+        try {
+          catalog = await api.listRoutes(signal);
+        } catch {
+          catalog = void 0;
+        }
+      }
+      if (token !== estimateToken) return;
+      const routes = state.routes ?? (catalog === void 0 ? void 0 : defaultRouteSelection(catalog));
+      if (typeof api.estimate !== "function") throw new Error("这个宿主没有 bestof.estimate（老版本）：无法给出跑前估算。");
+      const estimate = await api.estimate({ sessionId, question, ...routes === void 0 || routes.length === 0 ? {} : { routes } }, signal);
+      if (token !== estimateToken) return;
+      estimateFor = question;
+      const selected = state.routes ?? estimate.routes.map(({ provider, model }) => ({ provider, model }));
+      set({ ...catalog === void 0 ? {} : { catalog }, estimate, estimateError: void 0, routes: selected });
+    } catch (error) {
+      if (token !== estimateToken) return;
+      set({ estimate: void 0, estimateError: message(error) });
+    }
+  }
   async function poll(runId) {
     try {
       const view = await api.state({ runId });
@@ -237,10 +352,36 @@ function createBestofController({ api, pollMs = 400 }) {
         set({ phase: "disabled", question, sessionId, view: void 0, error: void 0, notice: "多 AI 合参当前是关的：去 设置 · 通用 里打开它。" });
         return;
       }
-      set({ phase: "confirm", question, sessionId, view: void 0, error: void 0, notice: void 0 });
+      set({
+        phase: "confirm",
+        question,
+        sessionId,
+        view: void 0,
+        error: void 0,
+        notice: void 0,
+        catalog: void 0,
+        estimate: void 0,
+        estimateError: void 0,
+        routes: void 0
+      });
+      estimateFor = void 0;
+      void loadEstimate();
     },
     editQuestion(question) {
-      set({ question });
+      const stale = estimateFor !== void 0 && estimateFor !== question.trim();
+      set({ question, ...stale ? { estimate: void 0, estimateError: void 0 } : {} });
+    },
+    async refreshEstimate(signal) {
+      await loadEstimate(signal);
+    },
+    async toggleRoute(route) {
+      const current = state.routes ?? [];
+      const key = routeKey(route);
+      const exists = current.some((entry) => routeKey(entry) === key);
+      let next = exists ? current.filter((entry) => routeKey(entry) !== key) : [...current, { provider: route.provider, ...route.model === void 0 ? {} : { model: route.model } }];
+      if (next.length > BESTOF_MAX_ROUTES) next = current;
+      set({ routes: next, estimate: void 0, estimateError: void 0 });
+      await loadEstimate();
     },
     async confirm(signal) {
       const question = state.question.trim();
@@ -252,8 +393,28 @@ function createBestofController({ api, pollMs = 400 }) {
         set({ phase: "confirm", error: "还没有问事会话：先去「问事」开一次会话。" });
         return;
       }
+      if (state.estimate === void 0 && state.estimateError === void 0) await loadEstimate(signal);
+      const routes = state.routes;
+      if (routes !== void 0 && routes.length > 0) {
+        if (state.estimate === void 0) {
+          set({ phase: "confirm", error: `跑前估算不可用（${state.estimateError ?? "未知原因"}）：不能带着显式路由开跑，稍后重试或换回默认两路。` });
+          return;
+        }
+        const problem = routeSelectionProblem(routes);
+        if (problem !== void 0) {
+          set({ phase: "confirm", error: problem });
+          return;
+        }
+      }
+      const explicit = state.estimate !== void 0 && routes !== void 0 && routes.length >= BESTOF_MIN_ROUTES;
+      const payload = explicit ? {
+        sessionId: state.sessionId,
+        question,
+        routes: routes.map((route) => ({ provider: route.provider, model: route.model })),
+        confirm: true
+      } : { sessionId: state.sessionId, question, angles: BESTOF_ANGLE_OPTIONS.map((option) => option.id) };
       try {
-        const view = await api.run({ sessionId: state.sessionId, question, angles: BESTOF_ANGLE_OPTIONS.map((option) => option.id) }, signal);
+        const view = await api.run(payload, signal);
         stoppedByUser = false;
         set({ phase: bestofPhase(view), view, error: void 0, notice: void 0 });
         if (view.finished !== true) {
@@ -268,7 +429,18 @@ function createBestofController({ api, pollMs = 400 }) {
     },
     dismiss() {
       clearTimer();
-      set({ phase: "idle", view: void 0, question: "", error: void 0, notice: void 0 });
+      estimateToken += 1;
+      set({
+        phase: "idle",
+        view: void 0,
+        question: "",
+        error: void 0,
+        notice: void 0,
+        catalog: void 0,
+        estimate: void 0,
+        estimateError: void 0,
+        routes: void 0
+      });
     },
     async stop() {
       const view = state.view;
@@ -373,29 +545,83 @@ function XsBestofOverlay({ state, actions }) {
   ] }) });
 }
 function XsBestofTriggerNote() {
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "xs-bestof__note", children: [
-    "首版 2 路：",
-    BESTOF_ANGLE_OPTIONS.map((option) => option.name).join(" + "),
-    "（同一模型两视角）。 候选只回答、不执行任何动作（不带工具、不读写你的文件）。"
-  ] });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__note", children: "2–4 路不同 provider 并列（缺省两家；同一模型也可以按两个视角各跑一路）。 候选只回答、不执行任何动作（不带工具、不读写你的文件）。" });
 }
 function XsBestofCostConfirm({ state, actions }) {
-  const confirmed = state.view;
+  const estimate = state.estimate;
+  const selected = state.routes ?? [];
+  const selectedKeys = new Set(selected.map(routeKey));
+  const problem = selected.length > 0 ? routeSelectionProblem(selected) : void 0;
+  const options = flattenCatalogRoutes(state.catalog);
+  const catalog = state.catalog;
+  const routeLines = estimate?.routes ?? selected.map((route) => ({ ...route, modelName: null }));
+  const count = selected.length > 0 ? selected.length : routeLines.length;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-xs-bestof": "confirm", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "xs-bestof__head", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "多 AI 合参 · 预估费用确认" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "xs-bestof__tag", children: [
         "候选 ",
-        BESTOF_ANGLE_OPTIONS.length,
+        count > 0 ? count : 2,
         " 路"
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(XsBestofTriggerNote, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "xs-bestof__note", children: [
-      "预估费用：",
-      costLabel(confirmed),
-      "（模型与密钥复用 DSH 的 provider 配置，玄枢不另配密钥）"
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "xs-bestof__routes", "data-xs-bestof": "routes", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__note", children: "本次并列的路由：" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { children: routeLines.map((route) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { "data-xs-route": routeKey(route), children: [
+        route.provider,
+        " · ",
+        route.modelName ?? route.model
+      ] }, routeKey(route))) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "xs-bestof__note", children: [
+        "输入规模：",
+        estimate !== void 0 ? estimateInputLabel(estimate) : state.estimateError !== void 0 ? estimateInputLabel(void 0) : "估算中…"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "xs-bestof__note", children: [
+        "预估金额：",
+        estimatePriceLabel(estimate),
+        "（钉版没有价表；玄枢不编金额）"
+      ] }),
+      options.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "xs-bestof__route-picker", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__note", children: "换几家/几个 model（2–4 路；配置与密钥在 DSH「设置 → 模型」里改，玄枢只读）：" }),
+        options.map((option) => {
+          const key = routeKey(option);
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { "data-xs-route-option": key, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                type: "checkbox",
+                checked: selectedKeys.has(key),
+                onChange: () => actions.onToggleRoute?.({ provider: option.provider, model: option.model })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "xs-bestof__note", children: [
+              option.label,
+              "（",
+              option.providerName ?? option.provider,
+              "）· ",
+              keyConfiguredLabel(option.keyConfigured)
+            ] })
+          ] }, key);
+        }),
+        (catalog?.configurable.length ?? 0) > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "xs-bestof__note", children: [
+          "可配置但未注册：",
+          catalog?.configurable.map((entry) => `${entry.name ?? entry.id}（${keyConfiguredLabel(entry.keyConfigured)}）`).join("、"),
+          "—— 去 DSH「设置 → 模型」里添加；玄枢不写配置与密钥。"
+        ] }),
+        (catalog?.failures.length ?? 0) > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "xs-bestof__note", children: [
+          "有路由列不出模型：",
+          catalog?.failures.map((entry) => `${entry.provider}（${entry.reason}）`).join("、")
+        ] })
+      ] }),
+      state.estimateError !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "xs-bestof__note", children: [
+        "估算不可用（",
+        state.estimateError,
+        "）：将按老路径开跑。"
+      ] }),
+      problem !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__error", role: "alert", children: problem })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__note", children: "模型与密钥复用 DSH 的 provider 配置，玄枢不另配密钥。" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "xs-bestof__note", children: "这一轮要合参的问题是？" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -409,7 +635,7 @@ function XsBestofCostConfirm({ state, actions }) {
     ] }),
     state.error !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__error", role: "alert", children: state.error }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "xs-bestof__actions", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "xs-btn--primary", onClick: actions.onStart, children: "开始合参" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "xs-btn--primary", onClick: actions.onStart, disabled: problem !== void 0, children: "开始合参" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: actions.onCancel, children: "取消" })
     ] })
   ] });
@@ -511,6 +737,7 @@ function XsBestofCandidateCard({
       rank !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: `xs-bestof__tag${rankIsFallback === true ? "" : " xs-bestof__tag--rank"}`, children: rank }),
       adopted === true && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "xs-bestof__tag", children: "已采用" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "xs-bestof__tag", children: candidateStatusLabel(candidate) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "xs-bestof__tag", children: candidate.provider }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "xs-bestof__tag", children: candidate.model })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "xs-bestof__body", children: candidate.text }),
@@ -519,8 +746,11 @@ function XsBestofCandidateCard({
 }
 function XsBestofJudgePanel({ view }) {
   const unavailable = judgeUnavailable(view);
+  const sameSource = judgeSameSource(view);
+  const sourceNotice = judgeSourceNotice(view);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "xs-bestof__judge", "data-xs-bestof": "judge", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: unavailable ? "判官（本次未给出有效排序）" : "判官（只排序，不替你做决定）" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: sameSource ? "判官（同源：候选里没有另一家可选）" : unavailable ? "判官（本次未给出有效排序）" : "判官（只排序，不替你做决定）" }),
+    sourceNotice !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "xs-bestof__note", "data-xs-bestof": "judge-source", children: sourceNotice }),
     rankedCandidates(view).map((candidate) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "xs-bestof__judge-row", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: candidate.id }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "xs-bestof__tag", children: view.judge?.reasons?.[candidate.id] ?? "（判官未给理由）" })
@@ -597,6 +827,10 @@ function bestofActions(deps) {
     onRetry: () => {
       const { question, sessionId } = controller.snapshot();
       controller.ask({ question, sessionId: sessionId ?? "" });
+    },
+    // 票 28：确认屏上增删一路（控制器负责 2–4 路上限与重算 estimate）。
+    onToggleRoute: (route) => {
+      void controller.toggleRoute(route);
     },
     ...deps.openSettings === void 0 ? {} : { onOpenSettings: deps.openSettings }
   };
@@ -1052,7 +1286,12 @@ function createConsultApi(ctx) {
     create: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.create, payload, signal),
     send: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.send, payload, signal),
     list: (signal) => rpcCall(ctx, CONSULT_ENDPOINTS.list, {}, signal),
-    read: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.read, payload, signal),
+    read: (payload, signal) => rpcCall(
+      ctx,
+      CONSULT_ENDPOINTS.read,
+      payload,
+      signal
+    ),
     rename: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.rename, payload, signal),
     defaults: (signal) => rpcCall(ctx, CONSULT_ENDPOINTS.defaults, {}, signal)
   };
@@ -1153,6 +1392,62 @@ function filterHistory(items, query, range = "all", now = /* @__PURE__ */ new Da
 }
 function roleLabel(role) {
   return role === "user" ? "你" : "AI";
+}
+var ADOPTED_DRAFT_SOURCE = "xuanshu-bestof-adopted";
+function draftStateOf(round, messageId, drafts) {
+  if (drafts.resolved !== true) return "unknown";
+  if (round.currentId === messageId) return "current";
+  if (round.rejected) return "rejected";
+  return round.currentId === void 0 ? "unknown" : "superseded";
+}
+function reviewTimeline(messages, drafts) {
+  const byMessage = /* @__PURE__ */ new Map();
+  if (drafts !== void 0 && drafts !== null) {
+    for (const round of drafts.rounds) {
+      for (const messageId of round.messageIds) byMessage.set(messageId, round);
+    }
+  }
+  const items = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message === void 0) continue;
+    const key = `${String(index)}-${message.role}`;
+    const messageId = message.messageId;
+    const round = drafts === void 0 || drafts === null || message.source !== ADOPTED_DRAFT_SOURCE || messageId === void 0 ? void 0 : byMessage.get(messageId);
+    if (round === void 0 || drafts === void 0 || drafts === null || messageId === void 0) {
+      items.push({ kind: "message", key, message });
+      continue;
+    }
+    const state = draftStateOf(round, messageId, drafts);
+    const last = items[items.length - 1];
+    if (last !== void 0 && last.kind === "round" && last.runId === round.runId && last.round === round.round) {
+      last.items.push({ message, state });
+      if (state === "current") last.state = "current";
+      continue;
+    }
+    items.push({
+      kind: "round",
+      key: `${key}-round-${round.runId}`,
+      round: round.round,
+      runId: round.runId,
+      state,
+      items: [{ message, state }]
+    });
+  }
+  return items;
+}
+function draftRoundLabel(item) {
+  const prefix = `第 ${String(item.round)} 轮合参`;
+  if (item.state === "current") return `${prefix} · 当前采用稿`;
+  if (item.state === "rejected") return `${prefix} · 已否决（不列为当前）`;
+  if (item.state === "superseded") return `${prefix} · 已被后来的一份取代`;
+  return `${prefix} · 当前性未知`;
+}
+function draftBadgeLabel(state) {
+  if (state === "current") return "当前采用稿";
+  if (state === "rejected") return "已被否决 · 非当前";
+  if (state === "superseded") return "已被后一份取代 · 非当前";
+  return "当前性未知";
 }
 async function openConsultSession(options) {
   const { sessionId, refresh, open } = options;
@@ -1480,15 +1775,33 @@ function XsConsultHistoryList({
     /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "history-search-boundary", children: historyEmptyCopy.searchBoundary })
   ] });
 }
+function XsConsultMessageRow({ message, draft }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
+    "article",
+    {
+      className: `xs-consult__message xs-consult__message--${message.role}`,
+      "data-xuanshu-message": message.role,
+      ...draft === void 0 ? {} : { "data-xuanshu-draft": draft },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__role", children: roleLabel(message.role) }),
+        draft === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__badge", "data-xuanshu-draft-badge": draft, children: draftBadgeLabel(draft) }),
+        message.source === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("small", { className: "xs-consult__note", "data-xuanshu-source": message.source, children: `注入 · ${message.source}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__text", children: message.text })
+      ]
+    }
+  );
+}
 function XsConsultHistoryReader({
   session,
   messages,
+  drafts,
   loading = false,
   error,
   onBack,
   onContinue,
   onRetry
 }) {
+  const items = reviewTimeline(messages, drafts);
   return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "xs-consult__reader", "data-xuanshu-view": "reader", children: [
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__toolbar", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "back-list", onClick: onBack, children: "← 列表" }),
@@ -1506,18 +1819,25 @@ function XsConsultHistoryReader({
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "back-list", onClick: onBack, children: "返回列表" })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-consult__messages", children: messages.map((message, index) => /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
-      "article",
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-consult__messages", children: items.map((item) => item.kind === "message" ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(XsConsultMessageRow, { message: item.message }, item.key) : /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
+      "section",
       {
-        className: `xs-consult__message xs-consult__message--${message.role}`,
-        "data-xuanshu-message": message.role,
+        className: "xs-consult__round",
+        "data-xuanshu-round": String(item.round),
+        "data-xuanshu-round-state": item.state,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__role", children: roleLabel(message.role) }),
-          message.source === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("small", { className: "xs-consult__note", "data-xuanshu-source": message.source, children: `注入 · ${message.source}` }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__text", children: message.text })
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h4", { className: "xs-consult__round-head", "data-xuanshu-round-head": String(item.round), children: draftRoundLabel(item) }),
+          item.items.map((row, index) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+            XsConsultMessageRow,
+            {
+              message: row.message,
+              draft: row.state
+            },
+            `${item.key}-${String(index)}`
+          ))
         ]
       },
-      `${String(index)}-${message.role}`
+      item.key
     )) }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "reader-readonly", children: "回看是只读的：不改会话记录、不进会话、不追加任何事件。" })
   ] });
@@ -1720,7 +2040,7 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
     setView("history");
     setReader({ kind: "loading" });
     void api.read({ sessionId }).then((answer) => {
-      setReader({ kind: "ready", session: answer.session, messages: answer.messages });
+      setReader({ kind: "ready", session: answer.session, messages: answer.messages, drafts: answer.drafts });
     }).catch((error) => {
       setReader({ kind: "error", session: known, message: errorText(error) });
     });
@@ -1862,6 +2182,7 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
       {
         session: reader.session,
         messages: reader.kind === "ready" ? reader.messages : [],
+        drafts: reader.kind === "ready" ? reader.drafts : void 0,
         error: reader.kind === "error" ? reader.message : void 0,
         onBack: () => {
           setReader({ kind: "idle" });
@@ -1944,7 +2265,11 @@ function installConsultStyle() {
 .xs-consult__empty{text-align:left;padding:16px 0}
 .xs-consult__empty-why{font-weight:600;margin:0 0 6px}
 .xs-consult__messages{margin-top:12px}
+.xs-consult__round{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px;margin:12px 0}
+.xs-consult__round-head{font-size:.85rem;margin:0 0 4px;color:var(--xs-text-secondary)}
 .xs-consult__message{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:10px 0;border-bottom:1px solid var(--xs-edge-card)}
+/* 角色占第一列；徽标 / 来源 / 正文一律第二列（否则混合行会把正文挤进 44px 那一列）。 */
+.xs-consult__message>.xs-consult__badge,.xs-consult__message>.xs-consult__note,.xs-consult__message>.xs-consult__text{grid-column:2}
 .xs-consult__role{color:var(--xs-text-secondary);font-size:.85rem}
 .xs-consult__text{margin:0;line-height:1.7;white-space:pre-wrap}
 @media(max-width:1100px){.xs-consult{padding:16px}.xs-consult__row-hit{flex-direction:column;gap:2px}}

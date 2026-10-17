@@ -55,7 +55,8 @@ const MOUNT_MARKER = new RegExp(`${MOUNT_MARKER_PREFIX}([^】]*)】`, 'gu')
  * 把「问事上下文」接到 `agent/pre-step` 边界上。
  *
  * @param {object} ctx cordis 宿主上下文（需要 `ctx.on`）
- * @param {{dataDir?: string, mountBudget?: number}} [config]
+ * @param {{dataDir?: string, dshHome?: string, mountBudget?: number}} [config]
+ *        `dshHome` 透传给挂载读面（票 31：工作流挂载读 `<dshHome>/skills/<name>/SKILL.md`）。
  * @returns {Function} 退订函数（拿不到 `ctx.on` 时是个空函数）
  */
 export function installConsultBoundary(ctx, config = {}) {

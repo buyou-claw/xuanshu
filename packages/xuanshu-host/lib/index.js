@@ -69,11 +69,12 @@ import { fileURLToPath } from 'node:url';
 
 import { createBaziMethods } from './bazi/service.mjs';
 import { createBestOfMethods } from './consult/bestof.mjs';
+import { createRouteMethods } from './consult/routes.mjs';
 import { installConsultBoundary } from './consult/boundary.mjs';
 import { createCangMethods } from './cang/service.mjs';
 import { createConsultMethods } from './consult/service.mjs';
 import { createDigaoMethods } from './digao/service.mjs';
-import { resolveHostHome, XUANSHU_HOME_ENV } from './home.mjs';
+import { pointsAtRealDshHome, realDshHome, resolveHostHome, XUANSHU_HOME_ENV } from './home.mjs';
 import { installHorosa } from './horosa/service.mjs';
 import { createTrafficMethods } from './notify/service.mjs';
 import { createPuMethods, installPuSkill } from './pu/service.mjs';
@@ -82,6 +83,9 @@ import { baseZone, createRikkeMethods } from './rikke/service.mjs';
 import { installRpc } from './rpc.mjs';
 import { createSedimentMethods } from './sediment/service.mjs';
 import { installSedimentSkill } from './sediment/skill.mjs';
+// 票 05（#26）：事记账本（扫描 / 摘要 / 冻结 / 墓碑）。独立方法组 —— 不并进 digao.*，
+// 那边的方法名被 `tests/digao/service.test.mjs` 全量钉死；扫描挂在 `refreshDigao()` 的同一条管线里。
+import { createShijiMethods } from './shiji/service.mjs';
 import { createWorkflowMethods } from './workflow/service.mjs';
 
 /** cordis 插件名（= 包名 = 补丁行 id，契约 §0）。 */
@@ -220,7 +224,7 @@ function resolveDshHome(profileCtx, notes) {
 }
 
 /**
- * 解析数据目录：`config.dataDir` 覆盖优先（测试用），否则 `<dshHome>/xuanshu`。
+ * 解析数据目录：`config.dataDir` 覆盖优先（测试 / 嵌入方的注入口），否则 `<dshHome>/xuanshu`。
  * 装配报告与「谱 / 藏」能力**共用这一份**——两处各算一遍就会出现
  * 「报告写在 A、谱落在 B」这种最难查的错位。
  */
@@ -228,6 +232,29 @@ function resolveDataDir(dshHome, config) {
   return typeof config?.dataDir === 'string' && config.dataDir !== ''
     ? config.dataDir
     : join(dshHome, DATA_DIR_NAME);
+}
+
+/**
+ * 「这次要写到哪儿、能不能写」——**唯一一处**决定拒绝的地方。
+ *
+ * 拒绝的判据是**写到哪里**，不是「home 变量长什么样」：
+ *   - 显式给了 `config.dataDir`（测试 / 嵌入方的注入口）→ 只拒它本身落在真实 `~/.dsh` 里；
+ *   - 否则写 `<home>/xuanshu` → home 指向真实 `~/.dsh` 时整条拒。
+ *
+ * 为什么要把这两种分开：宿主被**进程内**装配时（`apply(ctx, { dataDir })`，测试与将来的嵌入方）
+ * 进程环境里可能天然带着 `DSH_HOME=~/.dsh`（DSH 会话里就是这样），而真正写盘的落点明明是那个
+ * 显式 dataDir —— 那时按 home 变量拒绝，等于把「玄枢不写真实 home」错误地实现成「玄枢不工作」。
+ * 反过来，显式 dataDir 落在真实 home 里时**照样拒**（这是同一件事的另一种形态）。
+ *
+ * @returns {{homeInfo: {home: string, source: string, realDsh: boolean}, dataDir: string, blocked: string|undefined}}
+ */
+function planWriteTarget(profileCtx, config, notes) {
+  const homeInfo = resolveDshHome(profileCtx, notes);
+  const dataDir = resolveDataDir(homeInfo.home, config);
+  const blocked = pointsAtRealDshHome(dataDir)
+    ? `数据目录 ${dataDir} 落在用户真实 DSH home（${realDshHome()}）里：玄枢与 DSH 桌面版零交集，绝不读写它。`
+    : undefined;
+  return { homeInfo, dataDir, blocked };
 }
 
 /**
@@ -268,7 +295,8 @@ function buildReport(ctx, config) {
   }
   const profileName =
     typeof profileCtx?.name === 'string' && profileCtx.name !== '' ? profileCtx.name : FALLBACK_PROFILE_NAME;
-  const homeInfo = resolveDshHome(profileCtx, notes);
+  const target = planWriteTarget(profileCtx, config, notes);
+  const homeInfo = target.homeInfo;
   const dshHome = homeInfo.home;
   const profileDir =
     typeof profileCtx?.dir === 'string' && profileCtx.dir !== '' ? profileCtx.dir : join(dshHome, 'profiles', profileName);
@@ -331,9 +359,9 @@ function buildReport(ctx, config) {
   const missingRows = specifiers.filter((specifier) => report.patchRowIds.includes(specifier) !== true);
   if (missingRows.length > 0) notes.push(`补丁行未出现在本进程树中：${missingRows.join(', ')}。`);
   const allProbed = specifiers.every((specifier) => plugins[specifier] !== undefined);
-  report.ok = profileCtx !== undefined && allProbed && missingRows.length === 0 && !homeInfo.realDsh;
+  report.ok = profileCtx !== undefined && allProbed && missingRows.length === 0 && target.blocked === undefined;
 
-  return { report, dataDir, homeInfo };
+  return { report, dataDir: target.dataDir, homeInfo, blocked: target.blocked };
 }
 
 /** 临时文件名序号：同一进程内多次写报告也不会撞名。 */
@@ -362,16 +390,16 @@ function writeReportFile(dataDir, report) {
 /**
  * 采集 + 落盘一次（命令处理器复用同一路径，保证「探到的」和「写下的」同源）。
  *
- * 解析结果指向真实 `~/.dsh` 时**抛错不落盘**（拒绝写），错误文案就是给人看的处置说明。
+ * 落点落在真实 `~/.dsh` 里时**抛错不落盘**（拒绝写），错误文案就是给人看的处置说明。
  * 这是「玄枢从不读写 ~/.dsh」在运行时的唯一硬门：脚本侧的 home 门拦不住
  * 「用户手敲 `dsh --profile xuanshu`、环境里没有 `DSH_HOME`」这条路径。
  */
 function probeAndWrite(ctx, config) {
-  const { report, dataDir, homeInfo } = buildReport(ctx, config);
-  if (homeInfo.realDsh) {
+  const { report, dataDir, blocked } = buildReport(ctx, config);
+  if (blocked !== undefined) {
     const error = new Error(
-      `拒绝把玄枢的数据写进用户真实 DSH home（${homeInfo.home}，来源 ${homeInfo.source}）：`
-      + `玄枢与 DSH 桌面版零交集。用 DSH_HOME=<玄枢自己的 home> 启动，或设 ${XUANSHU_HOME_ENV}。`,
+      `拒绝把玄枢的数据写进用户真实 DSH home：${blocked}`
+      + `改法：让 DSH 用玄枢自己的 home 启动（DSH_HOME=<玄枢 home>，产品 ~/.xuanshu / 开发 <repo>/.dsh-home），或设 ${XUANSHU_HOME_ENV}。`,
     );
     error.code = 'XUANSHU_REFUSES_REAL_DSH_HOME';
     throw error;
@@ -443,33 +471,35 @@ function registerReportCommand(ctx, config) {
  */
 export function apply(ctx, config) {
   const log = namedLogger(ctx);
-  // 第一件事：解析 home 并**判断能不能用**。解析结果指向用户真实 ~/.dsh 时，这里直接收工 ——
+  // 第一件事：算出「写到哪」并**判断能不能写**。落点落在用户真实 ~/.dsh 里时，这里直接收工 ——
   // 不写报告、不建数据目录、不装 horosa、不注册 RPC。理由（ADR-0014）：玄枢与 DSH 桌面版零交集，
   // 往 ~/.dsh 写东西会改掉用户正在用的桌面实例。绝不抛：装配失败不该把整个 profile 拖垮。
-  let homeInfo;
+  //
+  // 判据是**落点**（`planWriteTarget`），不是 home 变量本身：进程内装配时调用方给的
+  // `config.dataDir` 才是真正会写的地方（进程环境里可能天然带着 `DSH_HOME=~/.dsh`）。
+  let plan;
   try {
-    homeInfo = resolveDshHome(softGet(ctx, 'profileContext'), []);
+    plan = buildReport(ctx, config);
   } catch (error) {
-    log.warn('DSH home 解析失败（已兜住，不写任何东西）：%C', String(error?.message ?? error));
+    log.warn('装配报告采集失败（已兜住，不写任何东西）：%C', String(error?.message ?? error));
     return;
   }
-  if (homeInfo.realDsh) {
+  if (plan.blocked !== undefined) {
     log.warn(
-      '拒绝在用户真实 DSH home 上运行：%C —— 本次不写装配报告、不建数据目录、不装 horosa。'
+      '拒绝把玄枢的数据写进用户真实 DSH home：%C —— 本次不写装配报告、不建数据目录、不装 horosa。'
       + `用 DSH_HOME=<玄枢自己的 home>（产品 ~/.xuanshu / 开发 <repo>/.dsh-home）启动，或设 ${XUANSHU_HOME_ENV}。`,
-      homeInfo.home,
+      plan.blocked,
     );
     return;
   }
 
-  let written;
   try {
-    written = probeAndWrite(ctx, config);
+    const file = writeReportFile(plan.dataDir, plan.report);
     log.info(
       '装配报告已写出 %C（ok=%s，补丁行 %d 条）',
-      written.file,
-      String(written.report.ok),
-      written.report.patchRowIds.length,
+      file,
+      String(plan.report.ok),
+      plan.report.patchRowIds.length,
     );
   } catch (error) {
     log.warn('装配报告写入失败：%C', String(error?.message ?? error));
@@ -494,10 +524,9 @@ export function apply(ctx, config) {
   let dataDir;
   let dshHome;
   try {
-    // 同一次 `apply` 里也算一遍（上面的 homeInfo 在早退分支之后就不能再用了）：
-    // 数据目录与装配报告同源，报告与数据各写一处是最难查的一类错位。
-    dshHome = homeInfo.home;
-    dataDir = resolveDataDir(dshHome, config);
+    // 与装配报告同源（`plan` 里已经算好）：报告与数据各写一处是最难查的一类错位。
+    dshHome = plan.homeInfo.home;
+    dataDir = plan.dataDir;
     installPuSkill(ctx);
     // 票 15：内置 skill `xuanshu:sediment`（把一场问事汇成「更新到谱」的草稿）。
     // 与票 09 的 create-pu 并列注册；拿不到 skills 服务时它自己静默跳过（主路径不依赖它）。
@@ -512,9 +541,13 @@ export function apply(ctx, config) {
       // 票 10：问事容器（`consult.create/send/list/read/rename/defaults`）。
       // 会话走 `ctx.agents.create` + 自铸 id 前缀 + 专用 cwd（`<dataDir>/consult`），
       // 清单落旁挂文件；底座谱/可选谱的读面分别只走票 08 的 `bazi.basePu` 与票 09 的 `pu.*`。
-      ...createConsultMethods(ctx, { dataDir }),
+      // `dshHome` 是票 31 的挂载读面要用到的（工作流挂载读它导出的 `<dshHome>/skills/<name>/SKILL.md`）。
+      ...createConsultMethods(ctx, { dataDir, dshHome }),
       // 票 13：底稿（纯派生，没有 write/update）与日课（本地黄历 + 底座）。
       ...createDigaoMethods(ctx, { dataDir }),
+      // 票 05（#26）：事记（只可删、不可改；删除 = 墓碑，恢复走显式 RPC）。
+      // 单独展开（方法名独立），扫描挂点是 `refreshDigao()` 内部，没有第二条扫描路径。
+      ...createShijiMethods(ctx, { dataDir }),
       ...createRikkeMethods(ctx, { dataDir, env: process.env }),
       // #24：触达账 / 共享设置（`traffic.status` / `traffic.markRead` / `traffic.settings.*` /
       // `shell.settings.*`）。账本与设置都在 `<dataDir>/` 下，与日课产物同源。
@@ -529,13 +562,17 @@ export function apply(ctx, config) {
       // 票 11：多 AI 合参（`bestof.run/state/adopt`）。
       // 候选并发多路 `ctx.llm.stream()`、judge 走单字段工具（ADR-0010），
       // 记录落 `<dataDir>/consult/<sessionId>.bestof.json`；`consult.*` 的六个方法一字不动。
-      ...createBestOfMethods(ctx, { dataDir }),
+      // `dshHome` 与 consult 同源：候选流的材料快照里也可能带工作流挂载（票 31）。
+      ...createBestOfMethods(ctx, { dataDir, dshHome }),
+      // 票 28：只读路由清单（`routes.list`）—— providers → models → keyConfigured、默认路由、
+      // 可配置但未注册的家。**只读**：玄枢不写 provider 配置与密钥（那是 DSH「设置 → 模型」的职责）。
+      ...createRouteMethods(ctx),
     });
     // 票 10/12 的**统一发问边界**（评审 R2/R3/R4）：底座谱 / 底稿 / 勾选谱 / 临时挂载在
     // `agent/pre-step` 处按当前状态现算并并进每一步的模型输入 —— 谁发起的那一轮都一样
     // （门厅 composer / 原生 composer / 沉淀的 followup / 重启后恢复），且**不靠 inbox 排队**
     // （`dispose()` 会把待消费的消息撤掉）。细节与三条门写在 `lib/consult/boundary.mjs`。
-    installConsultBoundary(ctx, { dataDir });
+    installConsultBoundary(ctx, { dataDir, dshHome });
   } catch (error) {
     log.warn('谱 / 藏 / 八字 / 底稿 / 日课 / 工作流 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
   }

@@ -15,6 +15,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createDigaoMethods, readDigaoMeta } from '../../packages/xuanshu-host/lib/digao/service.mjs'
+import { DIGEST_SYSTEM } from '../../packages/xuanshu-host/lib/digao/llm.mjs'
 import { createPuRepository } from '../../packages/xuanshu-host/lib/pu/repository.mjs'
 import { fakeLlm, makeCtx, makeSandbox } from './lib/sandbox.mjs'
 
@@ -38,7 +39,9 @@ function scene({ llm } = {}) {
     summary: '擅长 Rust；做过十年工具链。',
   }, true)
   const workspaceRegistry = {
-    list: () => [{ id: 'w1', path: 'E:\\ai_project\\XuanShu', title: 'XuanShu', sessionIds: ['a', 'b', 'c'] }],
+    // 票 05 起 `refreshDigao()` 会先扫事记（会读工作区的说明文档）：这里指到一次性沙箱，
+    // 免得测试去读真实仓库的文档（断言与底稿无关，只是保持 hermetic）。
+    list: () => [{ id: 'w1', path: sandbox.root, title: 'XuanShu', sessionIds: ['a', 'b', 'c'] }],
   }
   const ctx = makeCtx({ workspaceRegistry, llm })
   return { sandbox, repository, methods: createDigaoMethods(ctx, { dataDir: sandbox.dataDir }) }
@@ -132,7 +135,9 @@ describe('票13 · 底稿的 LLM 降级（契约 §1/§4）', () => {
     expect(markdown).not.toContain('未提炼')
     expect(markdown.indexOf('## 摘要')).toBeLessThan(markdown.indexOf('## 来源：谱'))
 
-    const stream = llm.calls.find((call) => call.method === 'stream')
+    // 票 05（#26）起同一条刷新里还会跑事记摘要（`ctx.llm.stream` 也会被调用一次），所以这里
+    // **按 system 提示挑底稿压缩那一次** —— 不是放宽断言，是把两种调用分开认。
+    const stream = llm.calls.find((call) => call.method === 'stream' && call.options?.system === DIGEST_SYSTEM)
     expect(stream).toBeDefined()
     expect(stream.options.provider).toBe('fake-provider')
     expect(stream.options.model).toBe('fake-model')

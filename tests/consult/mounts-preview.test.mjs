@@ -15,11 +15,17 @@
  *   ③ 预算拿不到就编一个默认数（「看起来在工作」比「说不知道」危险得多）；
  *   ④ 预览把 `Config.mountBudget` 丢了（测试与运维的覆盖形同虚设）。
  */
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
+
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { buildConsultContext, sourceMarkMount } from '../../packages/xuanshu-host/lib/consult/context.mjs'
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
 import { createConsultStore } from '../../packages/xuanshu-host/lib/consult/store.mjs'
 import { MOUNT_BUDGET_CHARS_PER_TOKEN, MOUNT_BUDGET_WINDOW_SHARE, resolveHistoryBudget, resolveMountBudget } from '../../packages/xuanshu-host/lib/mounts/budget.mjs'
+import { skillFile } from '../../packages/xuanshu-host/lib/workflow/skill-export.mjs'
+import { WORKFLOW_SCHEMA, writeWorkflow } from '../../packages/xuanshu-host/lib/workflow/store.mjs'
 import { fakeFsReader, fakeWorkspaceRegistryForMounts, makeHost, makeSandbox } from './lib/sandbox.mjs'
 
 const roots = []
@@ -53,6 +59,36 @@ function scene(options = {}) {
 }
 
 const MOUNT = { kind: 'workspace', id: 'ws-print', label: '打印车间' }
+
+/**
+ * 造一条**真**工作流清单（`writeWorkflow` 落盘）；`exported:true` 时同时落一份真导出的 `SKILL.md`。
+ * `dshHome` = 沙箱根目录（`<root>/skills/weekly-report/SKILL.md`）。
+ */
+function seedWorkflow(sandbox, {
+  sessionId = 'session-xs-workflow-0f1e2d3c-0000-4000-8000-000000000000',
+  name = '周报自动化',
+  exported = true,
+  body = '# 周报自动化\n把每周的进展汇总成一份周报。',
+} = {}) {
+  const record = {
+    schema: WORKFLOW_SCHEMA,
+    id: sessionId,
+    name,
+    sessionId,
+    cwd: sandbox.path('workflow'),
+    seed: name,
+    createdAt: '2026-10-16T02:00:00.000Z',
+  }
+  if (exported) {
+    const skillName = 'weekly-report'
+    const file = skillFile(sandbox.root, skillName)
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, `---\nname: ${skillName}\ndescription: "把周报自动化"\n---\n\n${body}\n`, 'utf8')
+    Object.assign(record, { skillName, skillPath: file, exportedAt: '2026-10-16T03:00:00.000Z' })
+  }
+  writeWorkflow(sandbox.dataDir, record)
+  return { sessionId, name }
+}
 
 describe('票 12 · setMounts(preview:true)：只算不写', () => {
   it('**预览后旁挂清单字节不变**（用户点取消不该改动任何东西）', async () => {
@@ -206,20 +242,57 @@ describe('票 12 · 超预算：披露三档 Tag 与状态数字自洽（S8 §2.
   it('多层超预算：状态栏的分母（keptLayers / totalLayers）与通知一致', async () => {
     const { api, sandbox } = scene({ mountBudget: 40 })
     sandbox.write('work/big.md', '内'.repeat(400))
+    const workflow = seedWorkflow(sandbox, { exported: false })
     const { preview } = await api['consult.setMounts']({
       sessionId: SESSION_ID,
       mounts: [
         MOUNT,
-        { kind: 'workflow', id: 'wf-1', label: '3D 打印排产' },
+        { kind: 'workflow', id: workflow.sessionId, label: workflow.name },
       ],
       preview: true,
     })
     expect(preview.layers).toHaveLength(2)
-    // 工作流层没有内容可读（票 16 才接）：它不算「纳入」，也不该挡住工作区层
-    const workflow = preview.layers.find((layer) => layer.kind === 'workflow')
-    expect(workflow.kept).toBe(false)
-    expect(workflow.hint).toMatch(/票 16/u)
+    // 工作流层没有导出过 skill：它不算「纳入」，也不该挡住工作区层
+    const workflowLayer = preview.layers.find((layer) => layer.kind === 'workflow')
+    expect(workflowLayer.kept).toBe(false)
+    expect(workflowLayer.hint).toMatch(/还没有导出过 skill/u)
     expect(preview.keptLayers).toBe(1)
     expect(preview.notice).toContain('1 / 2 层')
+  })
+})
+
+describe('票 31 · 工作流挂载：注入已导出的 SKILL.md 正文，预算与披露不回归', () => {
+  it('已导出：预览里有 SKILL.md 段，模型输入里有正文，披露块照旧', async () => {
+    const { api, sandbox } = scene({ mountBudget: 10_000 })
+    const workflow = seedWorkflow(sandbox)
+    const mount = { kind: 'workflow', id: workflow.sessionId, label: workflow.name }
+    const { preview } = await api['consult.setMounts']({ sessionId: SESSION_ID, mounts: [mount], preview: true })
+
+    const layer = preview.layers[0]
+    expect(layer.kind).toBe('workflow')
+    expect(layer.kept).toBe(true)
+    expect(layer.keptSegments.map((segment) => segment.label)).toEqual(['SKILL.md'])
+    // 挂载披露是「注入内容里必须看得到砍了多少」的既有口径，不因换了数据源而消失。
+    expect(preview.notice).toContain('挂载披露')
+
+    const text = buildConsultContext({ dataDir: sandbox.dataDir, basePu: null, digao: null, selected: [], mounts: preview })
+    expect(text).toContain('【来源：临时挂载·披露】')
+    expect(text).toContain(sourceMarkMount(layer.head))
+    expect(text).toContain('把每周的进展汇总成一份周报。')
+    expect(text).not.toContain('还没有导出过 skill')
+  })
+
+  it('预算不够：工作流正文按段边界整层丢弃，不因为读的是 skill 就绕过预算', async () => {
+    const { api, sandbox } = scene({ mountBudget: 5 })
+    const workflow = seedWorkflow(sandbox, { body: `# 长文\n${'内'.repeat(200)}` })
+    const mount = { kind: 'workflow', id: workflow.sessionId, label: workflow.name }
+    const { preview } = await api['consult.setMounts']({ sessionId: SESSION_ID, mounts: [mount], preview: true })
+
+    expect(preview.budget).toBe(5)
+    expect(preview.keptChars).toBe(0)
+    expect(preview.truncatedChars).toBeGreaterThan(0)
+    const text = buildConsultContext({ dataDir: sandbox.dataDir, basePu: null, digao: null, selected: [], mounts: preview })
+    expect(text).toContain('未纳入本次上下文')
+    expect(text).not.toContain('内内内')
   })
 })

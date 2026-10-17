@@ -23,6 +23,7 @@ import { createBaziMethods, resolveDataDir } from '../bazi/service.mjs'
 import { createPuMethods } from '../pu/service.mjs'
 import { buildMountPreview, requireMountableWorkspaces } from '../mounts/preview.mjs'
 import { consultAgentCapability, createConsultAgent, resumeConsultAgent } from './agent.mjs'
+import { adoptedDraftRounds, createBestofStore, currentAdoptedMessageIds } from './bestof-store.mjs'
 import { isSessionNotFound, projectConsultMessages } from './history.mjs'
 import { readDigao, messageSearchDirs } from './inject.mjs'
 import { createConsultQuestionMessage } from './message.mjs'
@@ -44,14 +45,37 @@ function softGet(ctx, name) {
 }
 
 /**
+ * 回看的轮次表（票 31；加性字段 `drafts`）：
+ * `undefined` = 这场问事**没有合参记录** ⇒ 响应里连键都不加（老形状 `{session, messages}` 逐字不变）。
+ *
+ * `resolved` 单独给出来，是因为 `currentAdoptedMessageIds()` 的 `null` 有语义
+ * （「判不出来，别过滤」）—— 界面据此**不声称**某一份「已被取代 / 已否决」。
+ *
+ * @param {object|null} record `bestof-store.read()` 的原样产物
+ * @returns {{rounds: Array<object>, resolved: boolean, currentIds: string[]}|undefined}
+ */
+function draftReviewOf(record) {
+  if (record === null) return undefined
+  const current = currentAdoptedMessageIds(record)
+  return {
+    rounds: adoptedDraftRounds(record),
+    resolved: current instanceof Set,
+    currentIds: current instanceof Set ? [...current] : [],
+  }
+}
+
+/**
  * 建 `consult.*` 方法组。
  * @param {object} ctx cordis 宿主上下文（裸 `{}` 也要活）
- * @param {{dataDir?: string}} [config] 数据目录（缺省按 `profileContext.home` → `$DSH_HOME` → `~/.dsh` 推导）
+ * @param {{dataDir?: string, dshHome?: string}} [config] 数据目录（缺省按 `profileContext.home` → `$DSH_HOME` → `~/.dsh` 推导）；
+ *        `dshHome` 只用于工作流挂载读它的导出 skill（票 31），缺席时按数据目录布局推导。
  * @returns {Record<string, Function>} 六个方法（契约 §2）
  */
 export function createConsultMethods(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
   const store = createConsultStore(dataDir)
+  /** 合参记录（票 31：回看要按轮标出「当前采用稿」，判据只能来自这份账本）。 */
+  const bestofStore = createBestofStore(dataDir)
   /** 本进程建过/接过的会话句柄（`consult.send` 复用；进程重启后靠 `agents.resume` 重新接）。 */
   const handles = new Map()
   /** 每个会话最多一个「等这一轮结束」的订阅（免得并发发问堆监听器）。 */
@@ -296,7 +320,13 @@ export function createConsultMethods(ctx, config = {}) {
         if (isSessionNotFound(error)) return { session: toConsultSummary(manifest), messages: [] }
         throw new Error(`会话正文读不出来（${sessionId}）：${String(error?.message ?? error)}`)
       }
-      return { session: toConsultSummary(manifest), messages: projectConsultMessages(snapshot) }
+      const drafts = draftReviewOf(bestofStore.read(sessionId))
+      return {
+        session: toConsultSummary(manifest),
+        messages: projectConsultMessages(snapshot),
+        // 加性字段（票 31）：没有合参记录时**连键都不加**（`{session, messages}` 逐字不变）。
+        ...(drafts === undefined ? {} : { drafts }),
+      }
     },
 
     /** 改名（契约 §2，S7 的「标题」）：落到旁挂清单上，列表与阅读器读的都是它。 */
