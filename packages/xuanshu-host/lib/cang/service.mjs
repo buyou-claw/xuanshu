@@ -13,9 +13,9 @@
  */
 
 import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fallbackXuanshuHome } from '../home.mjs';
 import { createCangRegistry } from './registry.mjs';
 
 function softGet(ctx, name) { try { return ctx.get(name, false); } catch { return undefined; } }
@@ -38,7 +38,8 @@ function nativeAnchors(profile) {
 
 export function createCangMethods(ctx, config = {}) {
   const profile = softGet(ctx, 'profileContext');
-  const dataDir = config.dataDir ?? join(profile?.home ?? process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'xuanshu');
+  // 兜底是玄枢自己的 home（`XUANSHU_DSH_HOME` ＞ `~/.xuanshu`），不是 `~/.dsh`（ADR-0014）。
+  const dataDir = config.dataDir ?? join(profile?.home ?? process.env.DSH_HOME ?? fallbackXuanshuHome({ env: process.env }).home, 'xuanshu');
   const registry = createCangRegistry({ dataDir });
   let nativePromise;
   async function native() {

@@ -391,7 +391,8 @@ export async function runStartup(options = {}) {
       EXIT.usage,
       'home',
       `拒绝在用户真实 DSH home 上运行：${home}`,
-      `换隔离 home：node scripts/isolation/startup.mjs --home "${join(repoRoot, '.dsh-home')}"（或设 ${ENV.home}）`,
+      `换隔离 home：node scripts/isolation/startup.mjs --home "${join(repoRoot, '.dsh-home')}"（开发档默认；`
+      + `产品档是自己的 ~/.xuanshu，见 docs/runbook/home.md），也可设 ${ENV.home}`,
     )
   }
 

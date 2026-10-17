@@ -19,9 +19,9 @@
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 
+import { fallbackXuanshuHome } from '../home.mjs'
 import { skillFile } from '../workflow/skill-export.mjs'
 import { listWorkflows } from '../workflow/store.mjs'
 import { collectProjectDocs } from './docs.mjs'
@@ -45,7 +45,8 @@ function text(value) {
  *
  * 与 `workflow/service.mjs` 的 `resolveDshHome()` 同一条顺序，但**不能 import 它**（本模块必须是
  * 叶子：`workflow/service.mjs` 会把会话/agent 面拖进扫描链）。顺序：
- * 显式参数 → `profileContext.home` → `dataDir` 的父目录（目录名是 `xuanshu` 时）→ `$DSH_HOME` → `~/.dsh`。
+ * 显式参数 → `profileContext.home` → `dataDir` 的父目录（目录名是 `xuanshu` 时）→ `$DSH_HOME` →
+ * **玄枢自己的兜底**（`XUANSHU_DSH_HOME` ＞ `~/.xuanshu`；票 22/#22 起不再是 `~/.dsh`，ADR-0014）。
  */
 export function resolveShijiDshHome(ctx, dataDir, explicit) {
   if (typeof explicit === 'string' && explicit !== '') return explicit
@@ -53,7 +54,7 @@ export function resolveShijiDshHome(ctx, dataDir, explicit) {
   if (typeof profile?.home === 'string' && profile.home !== '') return profile.home
   if (typeof dataDir === 'string' && dataDir !== '' && basename(dataDir) === 'xuanshu') return dirname(dataDir)
   if (typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME !== '') return process.env.DSH_HOME
-  return join(homedir(), '.dsh')
+  return fallbackXuanshuHome({ env: process.env }).home
 }
 
 /** 人说的那一句（注入的上下文 / 采用稿 / 定时提醒都不算）。 */

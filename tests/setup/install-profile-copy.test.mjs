@@ -164,6 +164,13 @@ function makeFixtureRepo(sandbox, options = {}) {
 
   mkdirSync(join(repo, 'scripts'), { recursive: true })
   cpSync(SCRIPT_UNDER_TEST, join(repo, 'scripts', 'install-profile.mjs'))
+  // 票 22：`install-profile.mjs` 现在 `import './isolation/resolve.mjs'`（home 解析只有一份）。
+  // fixture 仓库必须把这份依赖一起带上，否则跑的是「一个会 ERR_MODULE_NOT_FOUND 的脚本」。
+  // 只复制被测实现自己的那棵树（`scripts/isolation/*.mjs`：纯 Node 内置模块，零第三方依赖）。
+  cpSync(join(REPO_ROOT, 'scripts', 'isolation'), join(repo, 'scripts', 'isolation'), {
+    recursive: true,
+    filter: (src) => /\.[cm]?js$/.test(src) || !/\.[^\\/]+$/.test(src),
+  })
 
   return { repo, profile, home: sandbox.dir(`home-${Math.random().toString(36).slice(2, 8)}`) }
 }

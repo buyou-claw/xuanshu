@@ -23,6 +23,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
+import { fallbackXuanshuHome } from '../home.mjs'
 import { HOROSA_SERVE_LOG_FILENAME, HOROSA_STATUS_FILENAME } from './constants.mjs'
 
 /** 数据目录名（`<dshHome>/xuanshu/`，票 01/04/05 同款「一切归你」目录）。 */
@@ -81,7 +82,8 @@ function defaultCacheDir(platform, env) {
  * @param {string} [options.platform] `process.platform` 的形状（测试注入点）
  */
 export function resolveHorosaPaths({ dshHome, config = {}, env = process.env, platform = process.platform } = {}) {
-  const home = text(dshHome) || envText(env, 'DSH_HOME') || join(homedir(), '.dsh')
+  // 兜底是**玄枢自己的 home**（`XUANSHU_DSH_HOME` ＞ `~/.xuanshu`），不是 `~/.dsh`（ADR-0014）。
+  const home = text(dshHome) || envText(env, 'DSH_HOME') || fallbackXuanshuHome({ env }).home
   const cfg = config && typeof config === 'object' ? config : {}
   const dataDir = text(cfg.dataDir) || envText(env, 'XUANSHU_HOROSA_DATA_DIR') || join(home, DATA_DIR_NAME, 'horosa')
   const runtimeRoot = text(cfg.runtimeRoot) || envText(env, 'HOROSA_RUNTIME_ROOT') || defaultRuntimeRoot(platform)
