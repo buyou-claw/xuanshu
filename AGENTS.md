@@ -12,6 +12,14 @@ Issues 与 specs 存放在 GitHub Issues（`buyou-claw/xuanshu`），经 `gh` CL
 
 single-context：根目录一个 `CONTEXT.md`（玄枢术语表）+ `docs/adr/`（全局决策）。See `docs/agents/domain.md`.
 
+### 并行实现（起 worktree / 多 agent 并行前）
+
+起 worktree、并行分派或收 worktree 前读：`docs/agents/parallel-work.md`.
+
+### 复核清单（跑 code-review 前）
+
+跑 `code-review` / 两轴复核前读：`docs/agents/review-checklist.md`.
+
 ### 仓库现状与验证
 
 - **现状 / 证据 / 陷阱**：`docs/development-status.md` —— 票→issue 对照、验证边界、操作陷阱都在这一份里，动手前先读。
