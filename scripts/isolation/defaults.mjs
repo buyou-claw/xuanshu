@@ -26,6 +26,18 @@ export const HOROSA_MCP_PATH = '/mcp'
 export const DESKTOP_WEB_PORT = 19387
 
 /**
+ * 玄枢**自己的 home** 两档默认（ADR-0014「玄枢有自己的壳与 home，与 DSH 桌面版零交集」）：
+ *   - `product`：`<homedir>/.xuanshu` —— 装好的玄枢（壳 / 发布入口）用它；
+ *   - `dev`：`<repo>/.dsh-home` —— 仓库检出里的开发/测试用它（已 gitignore）。
+ * 判别方式见 `resolve.mjs::resolveHomeMode()`（本文件是纯数据，不做判断）。
+ * 两档都**不是** `~/.dsh`：真实 home 只许被拒绝，绝不许被当成玄枢的家。
+ */
+export const PRODUCT_HOME_DIR_NAME = '.xuanshu'
+export const DEV_HOME_DIR_NAME = '.dsh-home'
+/** 合法的 home 档位（`resolveHomeMode` 的封闭枚举；非法值一律是用法错）。 */
+export const HOME_MODES = ['dev', 'product']
+
+/**
  * 本票自己引入的覆盖变量（前缀 XUANSHU_ 是为了不和 DSH 自身的 env 撞车）。
  * 优先级见 resolve.mjs：显式 CLI 参数 > 这些变量 > 定值。
  *

@@ -51,7 +51,6 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
-import { homedir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -63,7 +62,7 @@ import {
   ENV,
   INVALID_PROBE_PORT,
 } from './isolation/defaults.mjs'
-import { CLI_SOURCES, isUnderPath, resolveInstance, resolveRepoRoot, samePath } from './isolation/resolve.mjs'
+import { CLI_SOURCES, isUnderPath, pointsAtRealDshHome, realDshHome, resolveHomeWithSource, resolveInstance, resolveRepoRoot, samePath } from './isolation/resolve.mjs'
 import { runStartup } from './isolation/startup.mjs'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -121,7 +120,9 @@ function printHelp() {
 function parseArgs(argv) {
   const opts = {
     json: false,
-    home: process.env[ENV.home],
+    // home 不在这里从环境变量预填：`XUANSHU_DSH_HOME` / `$DSH_HOME` / 默认值的整套优先级只有一份
+    // （`resolveHomeWithSource`）。预填会把「环境给的」记成 `--home`（来源就说不清了）。
+    home: undefined,
     profile: process.env[ENV.profile],
     cliBin: process.env[ENV.cliBin],
     only: undefined,
@@ -448,9 +449,21 @@ async function main() {
 
   const startedAt = Date.now()
   const repoRoot = resolveRepoRoot(REPO_ROOT)
-  const home = resolve(opts.home ?? join(repoRoot, '.dsh-home'))
+  // home 的解析**只有一份**（`resolveHomeWithSource`）：验收台过去自己读 `XUANSHU_DSH_HOME` 并写死
+  // `<repo>/.dsh-home`，于是「用户设了 `$DSH_HOME=~/.xuanshu` 时启动器用 A、验收台验 B」——
+  // 一个隔离工具里两套事实是最坏的一类错。现在两处同源，`homeSource` 也跟着进 evidence。
+  const homeInfo = resolveHomeWithSource({ home: opts.home, env: process.env, repoRoot })
+  const home = homeInfo.home
   const profile = opts.profile ?? DEFAULT_PROFILE
-  const realHome = join(homedir(), '.dsh')
+  const realHome = homeInfo.realHome ?? realDshHome()
+  // 默认 home（不看任何覆盖）也必须过「永不等于真实 ~/.dsh」这道判据：显式 --home 只是这一条的一种输入。
+  // 纯函数现算一次（不 spawn、不落盘），结论进 `home-isolated` 的 evidence 与 ok。
+  // **两档都算**：这一处跑在仓库里（自动判成 dev），只看当前生效的那一档就永远看不到产品档的回归。
+  const defaultHomeInfo = resolveHomeWithSource({ env: {}, repoRoot })
+  const defaultHomes = { dev: null, product: null }
+  for (const mode of ['dev', 'product']) {
+    defaultHomes[mode] = resolveHomeWithSource({ env: {}, mode, repoRoot }).home
+  }
   const requireAssembly = process.env.XUANSHU_REQUIRE_ASSEMBLY === '1'
   const installHint = `node scripts/install-profile.mjs --home "${home}"`
   const tmpRoot = join(repoRoot, TMP_REL)
@@ -466,6 +479,8 @@ async function main() {
     env: {
       repoRoot,
       home,
+      homeSource: homeInfo.source,
+      homeMode: homeInfo.mode,
       profile,
       profileDir: join(home, 'profiles', profile),
       realHome,
@@ -602,7 +617,12 @@ async function main() {
       const rows = ISOLATED_PATH_KEYS.map((key) => ({ key, path: instance[key], underHome: isUnderPath(home, instance[key]) }))
       const escaped = rows.filter((row) => !row.underHome)
       const homeMatches = samePath(instance.home, home)
-      const notRealHome = !samePath(instance.home, realHome) && !isUnderPath(realHome, instance.home)
+      const notRealHome = !pointsAtRealDshHome(instance.home, { realHome })
+      // 「玄枢 home 永不等于 ~/.dsh」不能只靠「这次显式传的那个值」：默认值本身也得过判据。
+      // 否则默认值哪天被改回 `~/.dsh`，这条 check 在显式 `--home` 下照样全绿（假绿）。
+      // 两档默认（dev / product）**都要**过：产品档 `~/.xuanshu` 是 ADR-0014 的家，dev 档是仓库里的家。
+      const defaultHomeIsNotReal = Object.values(defaultHomes)
+        .every((candidate) => !pointsAtRealDshHome(candidate, { realHome }))
 
       // 纯函数对照组（契约 §5 I1 指定的测法）：换一个 home，7 条路径必须两两不同。
       let alt
@@ -620,7 +640,7 @@ async function main() {
       }))
       const notDistinct = paired.filter((row) => !row.distinct)
 
-      const ok = homeMatches && notRealHome && escaped.length === 0
+      const ok = homeMatches && notRealHome && defaultHomeIsNotReal && escaped.length === 0
         && alt !== undefined && notDistinct.length === 0
         && doctor.checks.home?.ok === true && doctor.checks.stateIsolated?.ok === true
       result.checks['home-isolated'] = check('home-isolated', ok,
@@ -634,11 +654,19 @@ async function main() {
                 ? `报告里的 home=${instance.home} ≠ 请求的 ${home}`
                 : !notRealHome
                   ? `home 撞上用户真实 DSH home：${instance.home}`
-                  : `${rows.length} 条派生路径全在 ${home} 下；换 home（${alt.home}）后 ${paired.length} 条两两不同`,
+                  : !defaultHomeIsNotReal
+                    ? `默认 home 撞上用户真实 DSH home：${Object.entries(defaultHomes).map(([mode, dir]) => `${mode}=${dir}`).join('、')}`
+                    : `${rows.length} 条派生路径全在 ${home} 下（home 来源 ${homeInfo.source}）；`
+                      + `默认 home（dev=${defaultHomes.dev}、product=${defaultHomes.product}）都不是真实 home；`
+                      + `换 home（${alt.home}）后 ${paired.length} 条两两不同`,
         {
           hint: ok ? undefined : '这是隔离实现的问题（不是用法问题）：报给隔离启动器的维护者',
           evidence: {
             home: instance.home, requestedHome: home, realHome,
+            homeSource: doctor.checks.home?.evidence?.homeSource,
+            homeMode: homeInfo.mode,
+            defaultHome: defaultHomeInfo.home, defaultHomeSource: defaultHomeInfo.source,
+            defaultHomes, defaultHomeIsNotReal,
             paths: rows, alternateHome: alt?.home, pairedDistinct: paired.map((row) => [row.key, row.distinct]),
             homeCheck: doctor.checks.home?.detail, stateIsolated: doctor.checks.stateIsolated?.detail,
           },

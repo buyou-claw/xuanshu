@@ -76,20 +76,25 @@ xuanshu-client               # 玄枢客户端插件（自带预编译 bundle；
 # 仓库根
 node scripts/install-profile.mjs                 # link 模式（开发/测试）：联接 + pnpm install
 node scripts/install-profile.mjs --copy          # copy 模式（真分发）：复制 + 依赖改写为 link:<绝对路径>
-node scripts/install-profile.mjs --home <dir>    # 装到隔离的 DSH_HOME（测试用）
+node scripts/install-profile.mjs --home <dir>    # 装到指定的 home（测试 / 产品 `~/.xuanshu`）
 ```
 
-安装完验证：
+home 的默认值只有一份（`scripts/isolation/resolve.mjs`）：开发档 `<repo>/.dsh-home`、产品档
+`~/.xuanshu`（ADR-0014），`--home` / `$XUANSHU_DSH_HOME` 可覆盖；**默认绝不指向真实 `~/.dsh`**。
+详见 `docs/runbook/home.md`。
+
+安装完验证（`dsh` 本体只认 `DSH_HOME`，所以要把它指到同一个 home）：
 
 ```bash
-$env:DSH_HOME = "$HOME\.dsh"
+$env:DSH_HOME = "$HOME\.xuanshu"
 dsh --profile xuanshu --dump-config     # 打印装配后的补丁栈（含每一层是谁贡献的）
 dsh --profile xuanshu headless "..."    # 真启动（该命令需要 LLM；装配契约测试走不调 LLM 的路径）
 ```
 
 ## 数据目录
 
-运行期数据一律落 `$DSH_HOME/xuanshu/`（默认 `~/.dsh/xuanshu/`），全部是本地文件、可整体拷走：
+运行期数据一律落 `<玄枢 home>/xuanshu/`（产品 `~/.xuanshu/xuanshu/`，开发 `<repo>/.dsh-home/xuanshu/`），
+全部是本地文件、可整体拷走：
 
 ```
 $DSH_HOME/xuanshu/

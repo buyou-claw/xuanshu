@@ -59,7 +59,7 @@ node scripts/isolation/startup.mjs --mode env -- --trusted-host xuanshu.test
 
 | 旋钮 | 默认 | 命令行 | 环境变量（按优先级） |
 |---|---|---|---|
-| 隔离 home | `<repo>/.dsh-home` | `--home <dir>` | `XUANSHU_DSH_HOME` → `DSH_HOME` → 默认 |
+| 隔离 home | 开发档 `<repo>/.dsh-home`（产品档是玄枢自己的 `~/.xuanshu`，ADR-0014） | `--home <dir>` | `XUANSHU_DSH_HOME` → `DSH_HOME`（仅当不指向真实 home）→ 默认 |
 | xuanshu web 端口 | `19388` | `--web-port <n>` | `XUANSHU_WEB_PORT` → 默认 |
 | horosa 端口 | `8765` | `--horosa-port <n>` | `XUANSHU_HOROSA_PORT` → `HOROSA_SKILL_PORT` → 默认 |
 | profile 名 | `xuanshu` | `--profile <name>` | `XUANSHU_PROFILE` → 默认 |
@@ -68,6 +68,7 @@ node scripts/isolation/startup.mjs --mode env -- --trusted-host xuanshu.test
 优先级一律：**显式命令行 > `XUANSHU_*` > 上游自身变量（如 `HOROSA_SKILL_PORT`）> 定值**。
 
 `DSH_HOME` 有个坑要知道：**它指向真实 `~/.dsh` 时会被忽略**（在 DSH 会话里跑本脚本时，环境天然带着 desktop 的 `DSH_HOME`），忽略这件事会记进报告的 `notes`；要覆盖就用 `--home` 或 `XUANSHU_DSH_HOME`。
+玄枢自己的 home（产品 `~/.xuanshu` / 开发 `<repo>/.dsh-home`）、怎么换、怎么迁移，见 [home.md](home.md)。
 
 **horosa 端口要换就得两边一起换**（`HOROSA_SKILL_PORT` 给 `serve`，`--horosa-port`/`XUANSHU_HOROSA_PORT` 给守卫）：只改一边，守卫会看到"端口空着"而放行、实例却连到另一个端口。
 
