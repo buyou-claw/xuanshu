@@ -746,7 +746,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 ```
 # pnpm test:inventory（profile 已装；t32 复核修复轮之后）
-[inventory] 用例 1761 条（基线 1761）/ 文件 162 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 1795 条（基线 1795）/ 文件 163 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -756,7 +756,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 515773B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 519790B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门）exit 0；清单基线已按最终用例数 `--update`（1761 / 162）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门）exit 0；清单基线已按最终用例数 `--update`（1795 / 163）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
