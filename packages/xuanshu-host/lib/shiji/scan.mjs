@@ -15,15 +15,25 @@
  *   - **服务软取**：任一服务缺席 = 「这一路核不了」，不是「没有」；降级写 `notes`，绝不编时间/内容；
  *   - **单点失败不拖垮整轮**：一个项目目录读不动只影响它自己；坏工作流清单由 `workflow/store.mjs` 跳过；
  *   - **本模块只读**：不写 `shiji.jsonl`、不调 LLM、不 import `rikke/**` / `digao/**` / `workflow/service.mjs`
- *     （`digao/generate.mjs` 会 import 事记的账本，反向依赖必须保持单向）。
+ *     （`digao/generate.mjs` 会 import 事记的账本，反向依赖必须保持单向；`consult/history.mjs` 是只含
+ *     纯函数的叶子，不会把会话 / agent 面拖进扫描链）。
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
 
+import { projectConsultMessages } from '../consult/history.mjs'
 import { resolveSearchHome } from '../home.mjs'
 import { skillFile } from '../workflow/skill-export.mjs'
 import { listWorkflows } from '../workflow/store.mjs'
 import { collectProjectDocs } from './docs.mjs'
+
+/**
+ * 会话内容的取材上限（#38：素材要有「会话内容」，但**有界**——摘要 prompt 不许被一场会话炸掉）。
+ * 判据全在这里，测试直接钉这几个数。
+ */
+export const MAX_CONTENT_SESSIONS = 3
+export const MAX_SESSION_QUESTIONS = 3
+export const MAX_QUESTION_CHARS = 200
 
 /** 非严格读一个 cordis service（拿不到就 undefined，绝不抛）。 */
 function softGet(ctx, name) {
@@ -60,6 +70,30 @@ function isUserEvent(event) {
   return event?.type === 'user/message' && event?.data?.source?.kind === 'user'
 }
 
+/** 有界化一句人问的话（折叠空白 + 截断；摘要 prompt 的素材不许无限长）。 */
+function boundedQuestion(text) {
+  const collapsed = text.replace(/\s+/gu, ' ').trim()
+  return collapsed.length > MAX_QUESTION_CHARS ? `${collapsed.slice(0, MAX_QUESTION_CHARS)}…` : collapsed
+}
+
+/**
+ * 会话日志 →「人问过的句子」（首问在前，有界）。
+ *
+ * 投影复用 `consult/history.mjs` 的唯一实现（不另写一份解析）；只留 `role:'user'` 且来源是人的消息 ——
+ * 玄枢注入的上下文（`xuanshu-consult`）与采用稿（`xuanshu-bestof-adopted`）不是「人在会话里说的话」。
+ * 助手回话**不进素材**：摘要是「这场会话在问什么」，而回话常带代码 / 执行复盘（不读代码正文的口径）。
+ *
+ * @param {{events?: object[]}} snapshot `ctx.sessionQuery.readSession()` 的返回
+ * @returns {string[]} 至多 `MAX_SESSION_QUESTIONS` 句，每句至多 `MAX_QUESTION_CHARS` 字
+ */
+function questionsOf(snapshot) {
+  return projectConsultMessages(snapshot)
+    .filter((message) => message.role === 'user' && (message.source === undefined || message.source === 'user'))
+    .map((message) => boundedQuestion(message.text))
+    .filter((text) => text !== '')
+    .slice(0, MAX_SESSION_QUESTIONS)
+}
+
 /**
  * 采集一批会话的「有没有人说过话 / 最后活跃 / 标题」。
  *
@@ -72,7 +106,9 @@ function isUserEvent(event) {
  *     与 DSH 侧栏显示一致（缓存可能落后，但落后到把有轮次读成没有的概率远低于每轮读全量日志的成本）；
  *     但缓存**缺 `sessionListMetadata` 键**（这一层没挂载该投影）不等于「没有轮次」→ 回落读日志。
  *
- * @returns {Promise<{bySession: Map<string, {title: string, lastActiveMs: number}>, available: boolean}>}
+ * @returns {Promise<{bySession: Map<string, {title: string, lastActiveMs: number, questions: string[]|null}>,
+ *          available: boolean}>} `questions:null` = 这一场还没读过日志（投影缓存答了活跃时间）；
+ *          `questions:[]` = 读过日志、确实没有可摘的人问文本。
  */
 async function collectSessionEvidence(ctx, sessionIds, notes) {
   const bySession = new Map()
@@ -100,6 +136,7 @@ async function collectSessionEvidence(ctx, sessionIds, notes) {
     let title = ''
     let lastActiveMs = 0
     let answeredByCache = false
+    let questions = null
     const header = headers.get(id)
     if (header !== undefined && cacheAvailable) {
       try {
@@ -124,11 +161,12 @@ async function collectSessionEvidence(ctx, sessionIds, notes) {
         if (userEvents.length > 0) {
           lastActiveMs = Math.max(...userEvents.map((event) => (Number.isFinite(event?.time) ? event.time : 0)))
         }
+        // 日志本来就读了：顺手把人问过的句子留下来（不让 #38 再读第二遍）。
+        questions = questionsOf(snapshot)
       } catch (error) {
         // 「会话还不存在」= 确实还没有内容（不是错误）；别的错误 = 读不动（记一笔，不编）。
-        if (error?.code !== 'SESSION_QUERY_SESSION_NOT_FOUND') {
-          notes.push(`会话日志读不出来（${id}）：${String(error?.message ?? error)}`)
-        }
+        if (error?.code === 'SESSION_QUERY_SESSION_NOT_FOUND') questions = []
+        else notes.push(`会话日志读不出来（${id}）：${String(error?.message ?? error)}`)
       }
     }
     if (lastActiveMs <= 0) continue
@@ -140,9 +178,63 @@ async function collectSessionEvidence(ctx, sessionIds, notes) {
         /* 标题不是判据：拿不到就少一句摘要素材 */
       }
     }
-    bySession.set(id, { title, lastActiveMs })
+    bySession.set(id, { title, lastActiveMs, questions })
   }
   return { bySession, available }
+}
+
+/**
+ * 一条依据的「会话内容」素材（#38）：从会话日志取人问过的句子，**按条数与字数有界**。
+ *
+ * 三件事要和别处对齐：
+ *   - 只取**计入依据**的会话（`counted`：日志里真有人说过话），按最后活跃倒序取前
+ *     `MAX_CONTENT_SESSIONS` 场 —— 素材有界，摘要 prompt 不会被几十场会话炸掉；
+ *   - 日志已经读过（`collectSessionEvidence` 的回落路径）就直接用，不再读第二遍；
+ *   - 拿不到就**如实降级**：没有会话内容时摘要只按标题 + 文档生成，并在 `notes` 里说明原因
+ *     （「核不了 ≠ 没有」，绝不编会话里的事）。
+ *
+ * @param {object} ctx cordis 宿主上下文
+ * @param {string[]} counted 计入依据的会话 id
+ * @param {Map<string, {title: string, lastActiveMs: number, questions: string[]|null}>} bySession
+ * @param {string[]} notes 降级说明写这里
+ * @param {string} label 条目名（写进 notes，用户要知道是哪条降级了）
+ * @returns {Promise<Array<{sessionId: string, title: string, questions: string[]}>>}
+ */
+async function collectSessionTexts(ctx, counted, bySession, notes, label) {
+  if (counted.length === 0) return []
+  const query = softGet(ctx, 'sessionQuery')
+  const canRead = typeof query?.readSession === 'function'
+  const ordered = [...counted].sort((left, right) => (bySession.get(right)?.lastActiveMs ?? 0) - (bySession.get(left)?.lastActiveMs ?? 0))
+  const texts = []
+  let failed = 0
+  for (const id of ordered.slice(0, MAX_CONTENT_SESSIONS)) {
+    const entry = bySession.get(id)
+    if (entry === undefined) continue
+    if (entry.questions === null) {
+      if (!canRead) {
+        failed += 1
+        continue
+      }
+      try {
+        entry.questions = questionsOf(await query.readSession(id))
+      } catch (error) {
+        // 「会话还不存在」= 确实没有内容（不是错误）；别的 = 读不动（降级，不编）。
+        if (error?.code === 'SESSION_QUERY_SESSION_NOT_FOUND') entry.questions = []
+        else failed += 1
+      }
+    }
+    const questions = Array.isArray(entry.questions) ? entry.questions : []
+    if (questions.length === 0) continue
+    texts.push({ sessionId: id, title: entry.title, questions })
+  }
+  if (failed > 0) {
+    notes.push(texts.length === 0
+      ? `事记「${label}」：会话正文读不出来（${failed} 场），摘要按会话标题 + 说明文档生成（不编会话里的事）。`
+      : `事记「${label}」：有 ${failed} 场会话的正文读不出来，摘要只带上读得到的会话内容（不编）。`)
+  } else if (texts.length === 0) {
+    notes.push(`事记「${label}」：会话里没有可摘的人问文本，摘要按会话标题 + 说明文档生成（不编内容）。`)
+  }
+  return texts
 }
 
 /** 参与指纹 / 摘要的文档证据（只留元组，不留正文）。 */
@@ -213,6 +305,8 @@ async function collectWorkspaceItems({ ctx, dataDir, excludedDirs, now, notes })
     const counted = sessionIds.filter((id) => bySession.has(id))
     const titles = counted.map((id) => bySession.get(id)?.title ?? '').filter((value) => value !== '')
     const sessionTimes = counted.map((id) => bySession.get(id)?.lastActiveMs ?? 0)
+    // 会话内容（#38）：标题之外的「会话里到底问过什么」。拿不到就降级并在 notes 说明。
+    const sessionTexts = await collectSessionTexts(ctx, counted, bySession, notes, title)
 
     let lastActiveAt
     if (!available) {
@@ -230,7 +324,7 @@ async function collectWorkspaceItems({ ctx, dataDir, excludedDirs, now, notes })
       basis: { sessions: counted.length, docs: docs.docs.length },
       sessions: [...counted].sort(),
       docs: docs.docs.map(docEvidence),
-      material: { sessionTitles: titles, docs: docs.docs.map((doc) => ({ relPath: doc.relPath, text: doc.text })) },
+      material: { sessionTitles: titles, sessionTexts, docs: docs.docs.map((doc) => ({ relPath: doc.relPath, text: doc.text })) },
     })
   }
   return { items, available: true }
@@ -280,6 +374,8 @@ async function collectWorkflowItems({ ctx, dataDir, dshHome, now, notes }) {
     }
     const sessionId = text(record.sessionId)
     const active = sessionId === '' ? undefined : bySession.get(sessionId)
+    // 工作流这一路同样要有会话内容（#38 AC1）：它的依据会话就是导出这条 skill 的那一场。
+    const sessionTexts = await collectSessionTexts(ctx, active === undefined ? [] : [sessionId], bySession, notes, name)
     items.push({
       source: 'workflow',
       refId,
@@ -290,6 +386,7 @@ async function collectWorkflowItems({ ctx, dataDir, dshHome, now, notes }) {
       docs: [{ relPath: 'SKILL.md', size: info.size, mtimeMs: info.mtimeMs }],
       material: {
         sessionTitles: active?.title ? [active.title] : [],
+        sessionTexts,
         docs: [{ relPath: 'SKILL.md', text: body.length > 4000 ? body.slice(0, 4000) : body }],
       },
     })
