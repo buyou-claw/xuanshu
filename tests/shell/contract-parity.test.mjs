@@ -21,6 +21,16 @@ import * as hostContract from '../../packages/xuanshu-host/lib/notify/contract.m
 import { validateNotify as hostValidate } from '../../packages/xuanshu-host/lib/notify/send.mjs'
 import { CLOSE_BEHAVIORS, DEFAULT_SHELL_SETTINGS } from '../../packages/xuanshu-host/lib/notify/settings.mjs'
 import * as isolationDefaults from '../../scripts/isolation/defaults.mjs'
+// R8（#39）：客户端侧的 `OVERVIEW_HASH` —— 从**客户端源码**直接 import（vitest 用 vite 转译 TS），
+// 不抄字面量。壳侧那份从 `main-flow.mjs` import（下面那组 describe 用）。
+import {
+  OVERVIEW_HASH as CLIENT_OVERVIEW_HASH,
+  isOverviewHash,
+} from '../../packages/xuanshu-client/src/client/overview-hash.ts'
+import {
+  OVERVIEW_HASH as SHELL_OVERVIEW_HASH,
+  overviewUrlWithHash,
+} from '../../packages/xuanshu-shell/lib/main-flow.mjs'
 
 describe('#23 · 契约常量：壳的本地副本 == 宿主 / 隔离启动器的真源', () => {
   it('schema 名逐字相等（shell-notify / notify / shell-settings）', () => {
@@ -142,5 +152,50 @@ describe('#23 · 载荷校验：壳的拒收判据 == 宿主的发送前校验',
     }
     expect(shellValidate({ ...valid, title: ' 今日日课已生成 ' })).toEqual({ ok: true })
     expect(hostValidate({ ...valid, title: ' 今日日课已生成 ' })).toEqual({ ok: true })
+  })
+})
+
+/**
+ * R8（#39）· `OVERVIEW_HASH` 跨包单事实来源：客户端与壳侧**直接 import 对拍**。
+ *
+ * 为什么加这组：`#xuanshu-overview` 是壳「点通知 → 把页面带到首页」与客户端「认这个 hash →
+ * 切 overview」之间唯一的握手值。两个包各写一份字面量（客户端 bundle 不能 import 壳、壳不能
+ * import 客户端 bundle，所以只能各存一份），从前 `tests/assembly/overview-hash.test.mjs` 只钉
+ * **客户端自己那份**的字面量 —— 壳侧那份漂移时没有任何用例会红，真机表现是「壳改了 hash、
+ * 客户端不认，点通知后停在原地」。
+ *
+ * 会红的对照（R8 必留证据，两条都实测过）：
+ *   ① 把 `packages/xuanshu-client/src/client/overview-hash.ts` 的 `OVERVIEW_HASH` 改一个字符 → 本组红；
+ *   ② 把 `packages/xuanshu-shell/lib/main-flow.mjs` 的 `OVERVIEW_HASH` 改一个字符 → 本组红。
+ * 断言分两层：常量逐字相等（含钉死的握手值，防「两侧一起改错」也算绿——同本文件 §2 的既有做法）；
+ * 以及**行为闭环**（壳造出的地址里的 hash，客户端判据必须认），后者抓的是 `#` 前缀/归一化这类
+ * 「常量相等但语义不通」的漂移。
+ */
+describe('R8（#39）· OVERVIEW_HASH：壳侧与客户端 import 对拍（不是各写一份字面量）', () => {
+  it('两侧常量相等，且等于钉死的握手值（防两侧一起改错也算绿）', () => {
+    expect(CLIENT_OVERVIEW_HASH).toBe(SHELL_OVERVIEW_HASH)
+    expect(CLIENT_OVERVIEW_HASH).toBe('xuanshu-overview')
+    expect(SHELL_OVERVIEW_HASH).toBe('xuanshu-overview')
+    // 两侧都必须是非空字符串，且**不带** `#`（带 `#` 的写法只有客户端判断一处，见下条）。
+    for (const value of [CLIENT_OVERVIEW_HASH, SHELL_OVERVIEW_HASH]) {
+      expect(typeof value).toBe('string')
+      expect(value.length).toBeGreaterThan(0)
+      expect(value.startsWith('#')).toBe(false)
+    }
+  })
+
+  it('握手闭环：壳造出的地址 hash 能被客户端判据认出来（含「替换旧 hash」）', () => {
+    const url = overviewUrlWithHash('http://127.0.0.1:19388/#old')
+    expect(url).toBeTypeOf('string')
+    const hash = new URL(url).hash
+    expect(isOverviewHash(hash)).toBe(true)
+    expect(hash).toBe(`#${CLIENT_OVERVIEW_HASH}`)
+    expect(hash).toBe(`#${SHELL_OVERVIEW_HASH}`)
+  })
+
+  it('负路径：客户端只认这一个 handshake，别的 hash 都不切面板', () => {
+    for (const hash of ['#xuanshu-overview-typo', '#overview', '#xuanshu-overview/', '']) {
+      expect(isOverviewHash(hash), `hash=${JSON.stringify(hash)}`).toBe(false)
+    }
   })
 })
