@@ -15,7 +15,7 @@
  * junction；POSIX `symlinkSync` 分支本机未实测（`scripts/worktree-create.mjs` 的注释已如实标注）。
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -31,7 +31,9 @@ const made = []
 
 /** 临时 git 仓库：根与 packages/a 有 node_modules（带哨兵）；packages/b 没有（应被跳过）。 */
 function makeRepo() {
-  const repo = mkdtempSync(join(tmpdir(), 'wt create-'))
+  // `realpathSync.native` 把 CI 的 8.3 短名（`RUNNER~1`）展开成长名：git 的 worktree 列表
+  // 与脚本输出都用长名，比较前先统一，否则本地绿、GitHub Actions 红（2026-10-17 实测）。
+  const repo = realpathSync.native(mkdtempSync(join(tmpdir(), 'wt create-')))
   made.push(repo)
   runGit(repo, ['init', '-q'])
   runGit(repo, ['config', 'user.email', 'worktree-create@test.invalid'])
