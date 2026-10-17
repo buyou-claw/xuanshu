@@ -17,6 +17,8 @@
  *     用同一个 `PANEL_ID` 常量注册 main 与 sidebar 两处。
  */
 
+import { DATA_DIR_PLACEHOLDER, dataDirPath, withTrailingSeparator } from './home-paths.js';
+
 /**
  * 面板 key == 侧栏行 id。
  * 值固定为 `overview`（票 01 契约 §0 / §4；票 07 · 首页替换在此落四卡）。
@@ -95,8 +97,19 @@ export const CONSULT_ORDER = 30;
 export const PANEL_TITLE = '自我总览';
 /** 面板页头的「家」分区标记（D1 定案，S15 §2）。 */
 export const PANEL_HOME = '家';
-/** 页眉右上角常驻只读路径展示（S1 §9 C11）。 */
-export const PANEL_LOCAL_NOTE = '数据都在本地 ~/.dsh/xuanshu/';
+/**
+ * 页眉右上角常驻只读路径展示（S1 §9 C11）。
+ *
+ * `dataDir` 由宿主回传（`data.overview.dataDir`，产品档 `~/.xuanshu/xuanshu` /
+ * 开发档 `<repo>/.dsh-home/xuanshu`）；拿不到时给中性占位「玄枢数据目录」——
+ * 不写死任何一档的路径，也不落回 DSH 桌面版的 home（ADR-0014）。
+ * @param dataDir - 宿主回传的数据目录；缺席时显示中性占位。
+ */
+export function panelLocalNote(dataDir?: string): string {
+  return typeof dataDir === 'string' && dataDir.trim() !== ''
+    ? `数据都在本地 ${withTrailingSeparator(dataDirPath(dataDir))}`
+    : `数据都在本地（${withTrailingSeparator(DATA_DIR_PLACEHOLDER)}）`;
+}
 
 /** 卡头文案（S1 §3.1；#25 加第 5 张「晚省」）。 */
 export const CARD_TITLE = {

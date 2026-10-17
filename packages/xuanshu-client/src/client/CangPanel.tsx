@@ -21,6 +21,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { CangApi, CangController, CangEntry, CangList } from './cang-model.js';
 import { CANG_AI_FREE, newCangDraft } from './cang-model.js';
+import { dataDirPath } from './home-paths.js';
 
 /**
  * 过滤 + 排序（**纯函数**，无 DOM）：只在登记表的元数据上匹配。
@@ -105,6 +106,7 @@ export function CangPanel({ api, controller, navigatePus, initialData }: CangPan
     </article>)}</details>)}
     {/* 移除只删**登记**，不删文件 —— 确认文案把这件事说死（宿主那侧也只追加一行 remove 事件）。 */}
     {remove && <div className="xs-cang__confirm" role="alertdialog" aria-label="确认移除登记"><p>只从藏库移除「{remove.name}」的登记，不会删除你的文件。</p><button type="button" disabled={busy} onClick={() => void action(async () => { await api.remove(remove.id); setRemove(undefined); controller.changed(); })}>确认移除登记</button><button type="button" disabled={busy} onClick={() => setRemove(undefined)}>取消</button></div>}
-    <footer><code>{data?.registryPath ?? '~/.dsh/xuanshu/cang/registry.jsonl'}</code><p>只存指针 + 签 + 跳转，不存内容。拷走注册表 ≠ 拷走这些文件；换机器后请重新定位。</p></footer>
+    {/* 注册表路径由宿主 `cang.list` 回传（真实绝对路径）；拿不到时给中性占位，不写死任何一档。 */}
+    <footer><code>{data?.registryPath ?? dataDirPath(undefined, 'cang', 'registry.jsonl')}</code><p>只存指针 + 签 + 跳转，不存内容。拷走注册表 ≠ 拷走这些文件；换机器后请重新定位。</p></footer>
   </section>;
 }
