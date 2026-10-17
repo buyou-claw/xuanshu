@@ -25,7 +25,7 @@
     "test:setup": "vitest run tests/setup",
     "test:watch": "vitest",
     "cleanup:worktrees": "node scripts/cleanup-worktrees.mjs",
-    "verify:all": "node ./node_modules/typescript/bin/tsc --noEmit -p packages/xuanshu-client/tsconfig.json && node scripts/build-client.mjs --check && node scripts/check-test-inventory.mjs"
+    "verify:all": "node ./node_modules/typescript/bin/tsc --noEmit -p packages/xuanshu-client/tsconfig.json && node scripts/build-client.mjs --check && node scripts/check-test-inventory.mjs && node scripts/check-doc-numbers.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-native-command": "0.2.0-rc.2",

@@ -1,9 +1,10 @@
 # 仓库的第一道 CI 门（此前：没有 workflow、没有 hook、没有 lint 配置）。
 #
-# 只放**本机能验、且不依赖机器私有证据**的三件事：
+# 只放**本机能验、且不依赖机器私有证据**的四件事：
 #   1. tsc --noEmit          类型面
 #   2. build-client --check  提交的 lib/client.js 与 src/** 同步（改了源码忘重建会一路绿到 review）
 #   3. check-test-inventory  用例清单门：用例不许悄悄消失；已知红在 tests/test-inventory.json 里逐条列明理由
+#   4. check-doc-numbers     文档数字门：README / 开发台账里手抄的用例数、文件数、产物体积与工具源不一致就红
 #
 # 证据前置：`tests/setup/pin.test.mjs` 要读 `.scratch/assembly-foundation/captures/` 里的两份**公开 release 资产**
 # （`SHA256SUMS.txt` / `runtime-manifest.json`）。`.scratch/` 不入库，所以这里按 `scripts/setup/horosa-pin.json`
@@ -50,3 +51,6 @@ jobs:
 
       - name: test inventory gate
         run: node scripts/check-test-inventory.mjs
+
+      - name: doc numbers gate
+        run: node scripts/check-doc-numbers.mjs
