@@ -54,7 +54,20 @@ export function projectConsultMessages(snapshot, { keepAdoptedIds = null } = {})
         && !keepAdoptedIds.has(event.data?.id)) continue
       const text = textOf(event.data?.content)
       if (text === null) continue
-      messages.push({ role: 'user', text, ...pick(atOf(event.time), 'at'), ...pick(kindOf(event.data?.source), 'source') })
+      const source = kindOf(event.data?.source)
+      // 采用稿单独带上**消息 id**（票 31）：回看要按轮分组，客户端拿账本里的 `messageId`
+      // 去对日志里的消息 —— 只给正文与 kind 是对不上的。只给采用稿加：别的消息没有第二个消费方，
+      // 而给每条消息都加 id 会改动票 10 冻结的投影形状（`{role,text,at?,source?}`）。
+      const messageId = source === ADOPTED_KIND && typeof event.data?.id === 'string' && event.data.id !== ''
+        ? event.data.id
+        : undefined
+      messages.push({
+        role: 'user',
+        text,
+        ...pick(atOf(event.time), 'at'),
+        ...pick(source, 'source'),
+        ...(messageId === undefined ? {} : { messageId }),
+      })
     } else if (event?.type === 'assistant/message') {
       const text = textOf(event.data?.message?.content)
       if (text === null) continue

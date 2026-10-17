@@ -13,6 +13,8 @@ import { describe, expect, it } from 'vitest'
 import {
   CONSULT_SESSION_PREFIX,
   contextSummary,
+  draftBadgeLabel,
+  draftRoundLabel,
   filterHistory,
   formatHistoryMeta,
   groupHistory,
@@ -22,6 +24,7 @@ import {
   isConsultSession,
   nudgeNeeded,
   openConsultSession,
+  reviewTimeline,
   roleLabel,
   shortConsultId,
   toggleSelection,
@@ -230,5 +233,93 @@ describe('票 10 · 打开宿主建的会话：先 refresh 再 openSession，失
       open: (id) => { seen.push(id) },
     })
     expect(seen).toEqual(['session-xs-consult-abc'])
+  })
+})
+
+/* ───────────────────────── 回看：按轮分组 + 当前采用稿（票 31 / Spec 002 §补两处已知缺陷） ───────────────────────── */
+
+/**
+ * 「当前采用稿」从**全场一份**变成**各轮各一份**之后，回看要按轮分组渲染。
+ *
+ * 判据全在宿主给的 `drafts` 上（`consult.read` 的加性字段）：客户端只查表，**不自己**再实现
+ * 一遍按轮语义 —— 两处各算一遍必然漂移，而漂移的界面会「历史里算当前、回看里不算」。
+ */
+describe('票 31 · 回看按轮分组与当前采用稿', () => {
+  const draftsOf = (over = {}) => ({
+    rounds: [
+      { runId: 'bestof-r1', round: 1, messageIds: ['m-r1'], currentId: 'm-r1', rejected: false },
+      { runId: 'bestof-r2', round: 2, messageIds: ['m-r2'], currentId: undefined, rejected: true },
+    ],
+    resolved: true,
+    currentIds: ['m-r1'],
+    ...over,
+  })
+
+  const messages = [
+    { role: 'user', text: '帮我看这次转岗的时机' },
+    { role: 'user', text: '方案 A：先按 3000/月 试算。', source: 'xuanshu-bestof-adopted', messageId: 'm-r1' },
+    { role: 'assistant', text: '好，按 A 记下。' },
+    { role: 'user', text: '方案 B：先核对前提。', source: 'xuanshu-bestof-adopted', messageId: 'm-r2' },
+  ]
+
+  it('同一轮的采用稿合成一组（按日志顺序），普通消息原样单独出现', () => {
+    const items = reviewTimeline(messages, draftsOf())
+    expect(items.map((item) => (item.kind === 'round' ? `round:${String(item.round)}:${item.state}` : 'message'))).toEqual([
+      'message',
+      'round:1:current',
+      'message',
+      'round:2:rejected',
+    ])
+    expect(items[1].items.map((row) => row.state)).toEqual(['current'])
+  })
+
+  it('每轮标出当前采用稿；被否决的轮**不显示为当前**（item 也标 rejected）', () => {
+    const items = reviewTimeline(messages, draftsOf())
+    const first = items.find((item) => item.kind === 'round' && item.round === 1)
+    const second = items.find((item) => item.kind === 'round' && item.round === 2)
+    expect(first.state).toBe('current')
+    expect(first.items[0].state).toBe('current')
+    expect(second.state).toBe('rejected')
+    expect(second.items[0].state).toBe('rejected')
+    expect(draftRoundLabel(first)).toContain('第 1 轮合参')
+    expect(draftRoundLabel(first)).toContain('当前采用稿')
+    expect(draftRoundLabel(second)).toContain('已否决')
+    expect(draftRoundLabel(second)).not.toContain('当前采用稿')
+    expect(draftBadgeLabel('rejected')).toBe('已被否决 · 非当前')
+    expect(draftBadgeLabel('current')).toBe('当前采用稿')
+  })
+
+  it('同一轮改选：旧的那份标「已被取代」，当前只标最后一份；同轮两稿合成一组', () => {
+    const rounds = [{
+      runId: 'bestof-r1',
+      round: 1,
+      messageIds: ['m-c1', 'm-c2'],
+      currentId: 'm-c2',
+      rejected: false,
+    }]
+    const items = reviewTimeline([
+      { role: 'user', text: 'C1', source: 'xuanshu-bestof-adopted', messageId: 'm-c1' },
+      { role: 'user', text: 'C2', source: 'xuanshu-bestof-adopted', messageId: 'm-c2' },
+    ], { rounds, resolved: true, currentIds: ['m-c2'] })
+    expect(items).toHaveLength(1)
+    expect(items[0].kind).toBe('round')
+    expect(items[0].items.map((row) => row.state)).toEqual(['superseded', 'current'])
+    expect(draftRoundLabel(items[0])).toContain('当前采用稿')
+  })
+
+  it('没有 drafts（老宿主 / 没有合参记录）→ 全部按普通消息渲染：**一个字符都不改**', () => {
+    for (const drafts of [undefined, null]) {
+      const items = reviewTimeline(messages, drafts)
+      expect(items.every((item) => item.kind === 'message')).toBe(true)
+      expect(items).toHaveLength(messages.length)
+    }
+  })
+
+  it('对不上任何轮次的采用稿（账本里没有它）：当普通消息渲染，**不声称**它是当前或被取代', () => {
+    const items = reviewTimeline(
+      [{ role: 'user', text: '来历不明的一份', source: 'xuanshu-bestof-adopted', messageId: 'm-unknown' }],
+      draftsOf(),
+    )
+    expect(items[0].kind).toBe('message')
   })
 })

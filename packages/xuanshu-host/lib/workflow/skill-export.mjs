@@ -26,6 +26,20 @@ const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 /** DSH 的 skill 名上限（`isSkillName` 的常见约束；超了扫描器直接忽略）。 */
 const NAME_LIMIT = 64
 
+/**
+ * 名字是不是合法的 skill 目录名（与导出 / DSH 扫描器**同一条判据**）。
+ *
+ * 为什么单独导出（票 31）：工作流挂载会按清单里的 `skillName` 去拼
+ * `<dshHome>/skills/<name>/SKILL.md`，而清单是本地 JSON（可被手改）——
+ * 不校验就把 `../..` 之类拼进路径，等于允许从挂载读任意文件。
+ *
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export function isSkillName(value) {
+  return typeof value === 'string' && value.length <= NAME_LIMIT && KEBAB.test(value)
+}
+
 /** `<dshHome>/skills`（`user-dsh` 根）。 */
 export function skillsRoot(dshHome) {
   return join(dshHome, 'skills')

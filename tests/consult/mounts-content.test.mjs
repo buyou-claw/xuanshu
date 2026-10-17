@@ -9,13 +9,18 @@
  *      而且体积常常最大 —— 它们必须出现在「裁掉」那一列里（带人话理由），而不是悄悄消失。
  *   ② **读的顺序不稳定**：`listDir` 的返回顺序不保证，直接用它会让同一目录两次读出来不一样，
  *      披露与注入就都不可复现 → 一律按名字排序。
- *   ③ **工作流挂载编内容**：工作流的数据源属票 16（未确认），此时**如实说「还没接上」**，
- *      不许造一层看起来有内容的假层。
+ *   ③ **工作流挂载编内容**：票 16 之后，工作流层读的是它**已导出**的 `SKILL.md`
+ *      （票 31）；没有导出过就**如实说「这个工作流还没有导出过 skill」**，不许造一层看起来有内容的假层。
  *   ④ **路径不存在就整体报错**：一层读不出来不该把其它层拖下水 —— 记在该层的 `error` 上。
  */
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
+
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { readDirectoryLayers, readMountLayer } from '../../packages/xuanshu-host/lib/mounts/content.mjs'
+import { skillFile } from '../../packages/xuanshu-host/lib/workflow/skill-export.mjs'
+import { WORKFLOW_SCHEMA, readWorkflow, writeWorkflow } from '../../packages/xuanshu-host/lib/workflow/store.mjs'
 import { fakeFsReader, fakeWorkspaceRegistryForMounts, makeHost, makeSandbox } from './lib/sandbox.mjs'
 
 const roots = []
@@ -42,6 +47,36 @@ function hostFor(workspaces) {
   const fs = fakeFsReader()
   const host = makeHost({ services: { workspaceRegistry: registry.service, fs: fs.service } })
   return { host, registry, fs }
+}
+
+/**
+ * 造一份**真**工作流清单（`writeWorkflow` 落盘）与（可选）**真**导出的 `SKILL.md`。
+ *
+ * 为什么走真 store / 真路径：票 31 要读的就是票 16 导出出来的那份产物 ——
+ * 手搓一个 `<dshHome>/skills/...` 字符串会让「落点规则变了、测试还是绿」。
+ * `dshHome` = 沙箱根目录（`<root>/skills/<name>/SKILL.md`；`dataDir` 是 `<root>/xuanshu`）。
+ */
+function workflowFixture(sandbox, { exported = true, body = '# 周报自动化\n把每周的进展汇总成一份周报。' } = {}) {
+  const sessionId = 'session-xs-workflow-0f1e2d3c-0000-4000-8000-000000000000'
+  const skillName = 'weekly-report'
+  const record = {
+    schema: WORKFLOW_SCHEMA,
+    id: sessionId,
+    name: '周报自动化',
+    sessionId,
+    cwd: sandbox.path('workflow'),
+    seed: '把周报自动化',
+    createdAt: '2026-10-16T02:00:00.000Z',
+  }
+  let skillPath
+  if (exported) {
+    skillPath = skillFile(sandbox.root, skillName)
+    mkdirSync(dirname(skillPath), { recursive: true })
+    writeFileSync(skillPath, `---\nname: ${skillName}\ndescription: "把周报自动化"\n---\n\n${body}\n`, 'utf8')
+    Object.assign(record, { skillName, skillPath, exportedAt: '2026-10-16T03:00:00.000Z' })
+  }
+  writeWorkflow(sandbox.dataDir, record)
+  return { sessionId, skillName, skillPath, record }
 }
 
 describe('票 12 · readDirectoryLayers：确定性、只读、不读噪音', () => {
@@ -105,7 +140,7 @@ describe('票 12 · readDirectoryLayers：确定性、只读、不读噪音', ()
   })
 })
 
-describe('票 12 · readMountLayer：工作区真读、工作流如实说「还没接上」', () => {
+describe('票 12 · readMountLayer：工作区真读、工作流读已导出的 skill（票 31）', () => {
   it('工作区层：head 带路径，段与裁掉两列都在', async () => {
     const { root } = workspaceDir('layer')
     const { host } = hostFor([{ id: 'ws-print', path: root, title: '打印车间' }])
@@ -125,13 +160,92 @@ describe('票 12 · readMountLayer：工作区真读、工作流如实说「还�
     expect(layer.segments).toEqual([])
   })
 
-  it('工作流层：不编内容，给 hint 说明数据源属票 16；也不去读文件系统', async () => {
+  it('工作流层：读已导出的 SKILL.md 正文（票 31）—— 段是 SKILL.md，正文原样，不碰 ctx.fs', async () => {
+    const sandbox = makeSandbox('workflow-layer')
+    roots.push(sandbox)
+    const { sessionId } = workflowFixture(sandbox)
     const { host, fs } = hostFor([])
-    const layer = await readMountLayer(host.ctx, { kind: 'workflow', id: 'wf-1', label: '3D 打印排产' })
+    const layer = await readMountLayer(
+      host.ctx,
+      { kind: 'workflow', id: sessionId, label: '周报自动化' },
+      { dataDir: sandbox.dataDir },
+    )
     expect(layer.kind).toBe('workflow')
-    expect(layer.segments).toEqual([])
-    expect(layer.hint).toMatch(/票 16/u)
+    expect(layer.head).toContain('工作流「周报自动化」')
+    expect(layer.error).toBeUndefined()
+    expect(layer.hint).toBeUndefined()
+    expect(layer.segments).toHaveLength(1)
+    expect(layer.segments[0].label).toBe('SKILL.md')
+    expect(layer.segments[0].text).toContain('把每周的进展汇总成一份周报。')
+    // frontmatter 是给扫描器的元数据，不进要给模型的正文
+    expect(layer.segments[0].text).not.toContain('---')
+    // 读的是真盘（node:fs），不走 ctx.fs：挂载内容读取仍然是一次写都不做
     expect(fs.calls).toEqual([])
+  })
+
+  it('工作流没有导出过 skill：如实说「这个工作流还没有导出过 skill」，不编内容（票 31）', async () => {
+    const sandbox = makeSandbox('workflow-unexported')
+    roots.push(sandbox)
+    const { sessionId } = workflowFixture(sandbox, { exported: false })
+    const { host } = hostFor([])
+    const layer = await readMountLayer(
+      host.ctx,
+      { kind: 'workflow', id: sessionId, label: '周报自动化' },
+      { dataDir: sandbox.dataDir },
+    )
+    expect(layer.segments).toEqual([])
+    expect(layer.error).toBeUndefined()
+    expect(layer.hint).toContain('这个工作流还没有导出过 skill')
+    // 不许把「还没导出」写成一段看起来像正文的东西
+    expect(layer.hint).not.toContain('周报')
+  })
+
+  it('导出记录在、SKILL.md 被手动删了：如实说读不到（不冒充「没导出过」）', async () => {
+    const sandbox = makeSandbox('workflow-skill-gone')
+    roots.push(sandbox)
+    const { sessionId, skillPath } = workflowFixture(sandbox)
+    rmSync(skillPath, { force: true })
+    const { host } = hostFor([])
+    const layer = await readMountLayer(
+      host.ctx,
+      { kind: 'workflow', id: sessionId, label: '周报自动化' },
+      { dataDir: sandbox.dataDir },
+    )
+    expect(layer.segments).toEqual([])
+    expect(layer.hint).toContain('weekly-report')
+    expect(layer.hint).toMatch(/读不到|不存在/u)
+    expect(layer.hint).not.toContain('还没有导出过 skill')
+  })
+
+  it('清单里的 skill 名不合法（手改过的记录）：不拼路径去读，如实说名字不合法', async () => {
+    const sandbox = makeSandbox('workflow-skill-name')
+    roots.push(sandbox)
+    const { sessionId } = workflowFixture(sandbox, { exported: false })
+    // 手改清单：给一个能穿越到 skills 根之外的「名字」。
+    const record = readWorkflow(sandbox.dataDir, sessionId)
+    writeWorkflow(sandbox.dataDir, { ...record, skillName: '../../outside', exportedAt: '2026-10-16T03:00:00.000Z' })
+    const { host } = hostFor([])
+    const layer = await readMountLayer(
+      host.ctx,
+      { kind: 'workflow', id: sessionId, label: '周报自动化' },
+      { dataDir: sandbox.dataDir },
+    )
+    expect(layer.segments).toEqual([])
+    expect(layer.hint).toMatch(/skill 名不合法/u)
+    expect(layer.hint).toContain('../../outside')
+  })
+
+  it('工作流清单里没有这一条：给该层的 error（可读），不抛', async () => {
+    const sandbox = makeSandbox('workflow-missing')
+    roots.push(sandbox)
+    const { host } = hostFor([])
+    const layer = await readMountLayer(
+      host.ctx,
+      { kind: 'workflow', id: 'session-xs-workflow-deadbeef-0000-4000-8000-000000000000', label: '幽灵' },
+      { dataDir: sandbox.dataDir },
+    )
+    expect(layer.error).toMatch(/工作流清单/u)
+    expect(layer.segments).toEqual([])
   })
 
   it('ctx.fs 不可得：该层 error（挂载清单本身仍然保存），不抛', async () => {

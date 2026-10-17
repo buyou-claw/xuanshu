@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { currentAdoptedMessageIds, migrateLegacyDecisions } from '../../packages/xuanshu-host/lib/consult/bestof-store.mjs'
+import { adoptedDraftRounds, currentAdoptedMessageIds, migrateLegacyDecisions } from '../../packages/xuanshu-host/lib/consult/bestof-store.mjs'
 
 describe('采用稿账本 · 谁还是当前采用稿（N4）', () => {
   it('没有记录 / 还没人拍板 → null（判不出来就别过滤）', () => {
@@ -225,5 +225,109 @@ describe('采用稿账本 · 旧记录迁移（复核 32216d9 的 R4）', () => 
       ],
     }
     expect(currentAdoptedMessageIds(keylessMixed)).toEqual(new Set(['m-keyless-1']))
+  })
+})
+
+/**
+ * 回看按轮分组（票 31；Spec 002 §补两处已知缺陷）。
+ *
+ * 客户端拿到的必须是**每一轮**的结论，而不是全场一条：`currentAdoptedMessageIds()` 只回答
+ * 「哪几份算当前」，说不出「这份属于第几轮」。`adoptedDraftRounds()` 把同一份账本摊成轮次表，
+ * 于是「按轮分组 + 标当前」在客户端只是一次查表，不必再实现一遍按轮语义（两处各算一遍必然漂移）。
+ */
+describe('采用稿轮次 · 回看按轮分组与当前性（票 31）', () => {
+  it('两轮各采用一份：轮次序号按账本顺序（1 起），两轮都标当前', () => {
+    const record = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-run1', candidateId: 'c1', runId: 'bestof-r1', at: 'T1' },
+        { kind: 'rejected', runId: 'bestof-r2' },
+        { kind: 'adopted', messageId: 'm-run3', candidateId: 'c2', runId: 'bestof-r3', at: 'T3' },
+      ],
+    }
+    expect(adoptedDraftRounds(record)).toEqual([
+      { runId: 'bestof-r1', round: 1, messageIds: ['m-run1'], currentId: 'm-run1', rejected: false },
+      { runId: 'bestof-r2', round: 2, messageIds: [], currentId: undefined, rejected: true },
+      { runId: 'bestof-r3', round: 3, messageIds: ['m-run3'], currentId: 'm-run3', rejected: false },
+    ])
+  })
+
+  it('同一轮改选：两份投递都归这一轮，当前只认最后那一份（前一份标成被取代）', () => {
+    const record = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-c1', runId: 'bestof-r1' },
+        { kind: 'adopted', messageId: 'm-c2', runId: 'bestof-r1' },
+      ],
+    }
+    expect(adoptedDraftRounds(record)).toEqual([
+      { runId: 'bestof-r1', round: 1, messageIds: ['m-c1', 'm-c2'], currentId: 'm-c2', rejected: false },
+    ])
+  })
+
+  it('同一轮 adopted → rejected → adopted：只认最后一轮的 adopted；被否决的中间态不作数', () => {
+    const readopt = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-c1', runId: 'bestof-r1' },
+        { kind: 'rejected', runId: 'bestof-r1' },
+        { kind: 'adopted', messageId: 'm-c3', runId: 'bestof-r1' },
+      ],
+    }
+    expect(adoptedDraftRounds(readopt)).toEqual([
+      { runId: 'bestof-r1', round: 1, messageIds: ['m-c1', 'm-c3'], currentId: 'm-c3', rejected: false },
+    ])
+    const rejectedAtEnd = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-c1', runId: 'bestof-r1' },
+        { kind: 'rejected', runId: 'bestof-r1' },
+      ],
+    }
+    expect(adoptedDraftRounds(rejectedAtEnd)).toEqual([
+      { runId: 'bestof-r1', round: 1, messageIds: ['m-c1'], currentId: undefined, rejected: true },
+    ])
+  })
+
+  it('老记录（没有账本）：按迁移规则合成「旧轮」，仍能标出当前那份', () => {
+    const legacy = {
+      adoptedId: 'c2',
+      rejected: false,
+      deliveries: [
+        { candidateId: 'c1', messageId: 'm-c1-old' },
+        { candidateId: 'c2', messageId: 'm-c2' },
+      ],
+    }
+    expect(adoptedDraftRounds(legacy)).toEqual([
+      { runId: 'legacy', round: 1, messageIds: ['m-c2'], currentId: 'm-c2', rejected: false },
+    ])
+  })
+
+  it('没有记录 / 空账本里判不出采用 → 空轮次表（不凭空造轮）', () => {
+    expect(adoptedDraftRounds(null)).toEqual([])
+    expect(adoptedDraftRounds(undefined)).toEqual([])
+    expect(adoptedDraftRounds({ draftLedger: [] })).toEqual([])
+    expect(adoptedDraftRounds({ adoptedId: null, draftLedger: [] })).toEqual([])
+  })
+
+  it('没有 runId 的条目各自成轮（与 SP-3 同一条口径，不许合成一轮）', () => {
+    const rounds = adoptedDraftRounds({
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-keyless-1' },
+        { kind: 'adopted', messageId: 'm-keyless-2' },
+      ],
+    })
+    expect(rounds.map((row) => row.messageIds)).toEqual([['m-keyless-1'], ['m-keyless-2']])
+    expect(rounds.map((row) => row.round)).toEqual([1, 2])
+    expect(rounds.every((row) => row.currentId === row.messageIds[0])).toBe(true)
+  })
+
+  it('轮次表与当前集合自洽：currentId 并集 === currentAdoptedMessageIds()', () => {
+    const record = {
+      draftLedger: [
+        { kind: 'adopted', messageId: 'm-run1', runId: 'bestof-r1' },
+        { kind: 'adopted', messageId: 'm-run2', runId: 'bestof-r2' },
+        { kind: 'rejected', runId: 'bestof-r2' },
+        { kind: 'adopted', messageId: 'm-run3', runId: 'bestof-r3' },
+      ],
+    }
+    const current = [...adoptedDraftRounds(record).map((row) => row.currentId).filter(Boolean)]
+    expect(new Set(current)).toEqual(currentAdoptedMessageIds(record))
   })
 })

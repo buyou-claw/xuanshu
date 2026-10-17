@@ -18,7 +18,11 @@
  * 确定性：目录项按名字排序、递归顺序固定，同一个目录两次读出来**逐字节一样**
  * （裁剪与披露要能复现，见 §5 步骤 3/7）。
  */
-import { join } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { basename, dirname } from 'node:path'
+
+import { isSkillName, parseSkillFile, skillFile } from '../workflow/skill-export.mjs'
+import { readWorkflow } from '../workflow/store.mjs'
 
 /** 非严格读一个 cordis service（拿不到就 undefined，绝不抛）——与 `consult/service.mjs` 同款。 */
 function softGet(ctx, name) {
@@ -190,29 +194,127 @@ export async function readDirectoryLayers(fs, dirPath, limits = {}, signal) {
 }
 
 /**
- * 把一次挂载读成「一层」（工作区走目录；工作流的数据源属票 16 —— 如实说明，不编内容）。
+ * skill 扫描根 `<dshHome>/skills` 的父目录（票 31）。
  *
- * @param {object} ctx - 宿主上下文（用 `ctx.fs` 与 `ctx.workspaceRegistry`）。
+ * 生产装配（`lib/index.js`）**显式**把 `dshHome` 传进这一层 —— 它与 workflow 的导出落点同源
+ * （`workflow/service.mjs` 的 `resolveDshHome`）。只拿到 `dataDir` 时沿用票 01 的布局
+ * （数据目录是 `<dshHome>/xuanshu`，与 `resolveMountBudget` 同一套推导）。
+ * 两者都没有就**不猜**：宁可如实报错，也不去读一个碰巧存在的 `~/.dsh`。
+ *
+ * @param {{dataDir?: string, dshHome?: string}} [config]
+ * @returns {string|undefined}
+ */
+function resolveSkillHome(config) {
+  if (typeof config?.dshHome === 'string' && config.dshHome !== '') return config.dshHome
+  if (typeof config?.dataDir === 'string' && config.dataDir !== '' && basename(config.dataDir) === 'xuanshu') {
+    return dirname(config.dataDir)
+  }
+  return undefined
+}
+
+/**
+ * 工作流层：读该工作流**已导出**的 `SKILL.md` 正文（票 31）。
+ *
+ * 判据顺序（与 `workflow/service.mjs` 的导出落点逐条对齐）：
+ *   ① 清单里有没有这一条 → 没有就是 error（挂一个不存在的工作流没有意义）；
+ *   ② 清单里有没有 `skillName` → 没有 = **从没导出过**（只有这一步才说「还没有导出过 skill」）；
+ *   ③ 文件在不在 → 不在 = 导出过但被删了（点名 skill 名与路径，别提「没导出过」）；
+ *   ④ 解析（`parseSkillFile`）→ frontmatter 坏 / 正文空都如实说明。
+ *
+ * 返回的层形状与工作区分支**逐字段同构**（`segments` / `dropped` / `error?` / `hint?`），
+ * 所以 `clip.mjs` 的预算裁剪、`context.mjs` 的披露与 `boundary.mjs` 的交付账都不用改一行。
+ *
+ * @param {{kind: string, id: string, label: string}} mount
+ * @param {string} head
+ * @param {{dataDir?: string, dshHome?: string}} limits
+ * @returns {object}
+ */
+function readWorkflowLayer(mount, head, limits) {
+  const id = `${mount.kind}:${mount.id}`
+  const layer = { id, kind: mount.kind, label: mount.label, head, segments: [], dropped: [] }
+  const dataDir = typeof limits?.dataDir === 'string' && limits.dataDir !== '' ? limits.dataDir : undefined
+  if (dataDir === undefined) {
+    return { ...layer, error: '找不到玄枢数据目录（dataDir）：工作流清单读不出来（挂载清单本身仍然保存）。' }
+  }
+  const record = readWorkflow(dataDir, mount.id)
+  if (record === null) {
+    return {
+      ...layer,
+      error: `这个工作流不在工作流清单里（id=${mount.id}）：去工作流面板确认，或先移除它。`,
+    }
+  }
+  const skillName = typeof record.skillName === 'string' && record.skillName !== '' ? record.skillName : undefined
+  if (skillName === undefined) {
+    return {
+      ...layer,
+      hint: '这个工作流还没有导出过 skill：先去工作流面板导出一次，再挂载它（没有导出就没有可注入的正文）。',
+    }
+  }
+  // 清单是本地 JSON（可被手改）：名字不合规就不拼路径（否则 `../..` 能把这层变成任意文件读取）。
+  if (!isSkillName(skillName)) {
+    return {
+      ...layer,
+      hint: `这个工作流清单里的 skill 名不合法（${JSON.stringify(skillName)}）：不能拿它去拼 skill 路径，请重新导出一次。`,
+    }
+  }
+  const dshHome = resolveSkillHome(limits)
+  if (dshHome === undefined) {
+    return {
+      ...layer,
+      error: '不知道 DSH home（skill 扫描根）：读不出这个工作流导出的 skill（挂载清单本身仍然保存）。',
+    }
+  }
+  const file = skillFile(dshHome, skillName)
+  if (!existsSync(file)) {
+    return {
+      ...layer,
+      hint: `这个工作流导出过 skill（${skillName}），但 ${file} 读不到（可能被手动删掉了）：重新导出一次，或先移除这个挂载。`,
+    }
+  }
+  let text
+  try {
+    text = readFileSync(file, 'utf8')
+  } catch (error) {
+    return { ...layer, error: `读不出这个工作流导出的 skill（${file}）：${String(error?.message ?? error)}` }
+  }
+  const parsed = parseSkillFile(text)
+  if (!parsed.ok) {
+    return {
+      ...layer,
+      hint: `这个工作流导出的 skill 文件不合法：${parsed.reason}（重新导出一次；不合法的 skill 不会被 DSH 扫描器收进去）。`,
+    }
+  }
+  const body = String(parsed.content ?? '').trim()
+  if (body === '') {
+    return { ...layer, hint: `这个工作流导出的 skill 正文是空的（${file}）：没有可注入的内容，重新导出时把正文写进去。` }
+  }
+  return {
+    ...layer,
+    head: `${head}（skill ${skillName}）`,
+    segments: [{ id: 'SKILL.md', label: 'SKILL.md', chars: countChars(body), text: body }],
+  }
+}
+
+/**
+ * 把一次挂载读成「一层」：工作区走目录；工作流读它**已导出**的 `SKILL.md`（票 31）。
+ *
+ * 工作流为什么不是 hint 空层了：票 16 已经落地（`workflow.exportSkill` 把正文写到
+ * `<dshHome>/skills/<kebab>/SKILL.md`，清单里记 `skillName` / `skillPath`），而票 31 的验收
+ * 就是「挂载工作流时模型看到 SKILL.md 正文」。读不到时**只说读到的事实**：
+ *   - 从没导出过 ⇒ 「这个工作流还没有导出过 skill」；
+ *   - 导出过但文件没了 ⇒ 点名 skill 名与路径，请人重新导出（不冒充「没导出过」）；
+ *   - 文件不合法 / 正文为空 ⇒ 说清是哪一种（不编正文）。
+ *
+ * @param {object} ctx - 宿主上下文（工作区分支用 `ctx.fs` 与 `ctx.workspaceRegistry`）。
  * @param {{kind: string, id: string, label: string}} mount - 一条 `MountRef`。
- * @param {{maxFiles?: number, maxFileChars?: number, maxDepth?: number}} [limits]
+ * @param {{dataDir?: string, dshHome?: string, maxFiles?: number, maxFileChars?: number, maxDepth?: number}} [limits]
+ *        `dataDir` / `dshHome` 是工作流分支的读面（生产装配显式给；断言台给沙箱）。
  * @returns {Promise<object>} 层。
  */
 export async function readMountLayer(ctx, mount, limits = {}) {
   const id = `${mount.kind}:${mount.id}`
   const head = mount.kind === 'workspace' ? `工作区「${mount.label}」` : `工作流「${mount.label}」`
-  if (mount.kind === 'workflow') {
-    // 工作流的产出（skill / 产物路径）由票 16 定义（设计稿「待验证 3」未确认）。
-    // 这里**不编内容**：给一层带 `hint` 的空层，界面照实说「还没接上」。
-    return {
-      id,
-      kind: mount.kind,
-      label: mount.label,
-      head,
-      segments: [],
-      dropped: [],
-      hint: '工作流内容的数据源属票 16（工作流创建向导）：现在还没接上，挂载只登记、不注入内容。',
-    }
-  }
+  if (mount.kind === 'workflow') return readWorkflowLayer(mount, head, limits)
 
   const fs = softGet(ctx, 'fs')
   if (typeof fs?.resolve !== 'function' || typeof fs?.readText !== 'function' || typeof fs?.listDir !== 'function') {

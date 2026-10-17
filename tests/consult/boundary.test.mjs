@@ -14,12 +14,15 @@
  * 材料不必每轮重发、挂载只需按**变化**补。断言台的 `step()` 照做这件事（把新增的消息落进
  * 假日志），否则「材料已在日志里」这条判据在替身上永远为假，测出来的行为与真机不是一回事。
  */
-import { join } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { installConsultBoundary, PRE_STEP_EVENT } from '../../packages/xuanshu-host/lib/consult/boundary.mjs'
 import { createConsultMethods } from '../../packages/xuanshu-host/lib/consult/service.mjs'
 import { CONSULT_MESSAGE_SOURCE_KIND } from '../../packages/xuanshu-host/lib/consult/message.mjs'
+import { skillFile } from '../../packages/xuanshu-host/lib/workflow/skill-export.mjs'
+import { WORKFLOW_SCHEMA, writeWorkflow } from '../../packages/xuanshu-host/lib/workflow/store.mjs'
 import {
   envelope,
   fakeAgentDefaultModel,
@@ -44,6 +47,33 @@ const SPEC_B = { kind: 'workspace', id: 'ws-b', label: 'B 车间' }
 const ZIWEI = { name: '紫微笔记', level: 'optional', description: '紫微斗数的读书笔记。', summary: '紫微：十四主星与四化的笔记。' }
 const RUANJIAN = { name: '软件开发', level: 'base', description: '手上的软件项目与排期。', summary: '软件开发：项目、排期与复盘。' }
 const DIGAO_TEXT = '# 底稿\n底稿正文第一行：最近在做的事。\n底稿正文第二行：手上有的谱。\n'
+
+/** 一条工作流会话 id（票 16：一个工作流 = 一个会话，`session-xs-workflow-<uuid>`）。 */
+const WORKFLOW_SESSION = 'session-xs-workflow-0f1e2d3c-0000-4000-8000-000000000000'
+
+/**
+ * 造一条**真**工作流清单；`exported:true` 时连同**真**导出的 `SKILL.md` 一起落盘（票 31）。
+ * 返回可直接当挂载项用的 `MountRef`。
+ */
+function seedWorkflow(sandbox, { exported = false, body = '每个周五把本周进展汇总成一份周报。' } = {}) {
+  const record = {
+    schema: WORKFLOW_SCHEMA,
+    id: WORKFLOW_SESSION,
+    name: '周报',
+    sessionId: WORKFLOW_SESSION,
+    cwd: sandbox.path('workflow'),
+    seed: '把周报自动化',
+    createdAt: '2026-10-16T02:00:00.000Z',
+  }
+  if (exported) {
+    const file = skillFile(sandbox.root, 'weekly-report')
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, `---\nname: weekly-report\ndescription: "把周报自动化"\n---\n\n${body}\n`, 'utf8')
+    Object.assign(record, { skillName: 'weekly-report', skillPath: file, exportedAt: '2026-10-16T03:00:00.000Z' })
+  }
+  writeWorkflow(sandbox.dataDir, record)
+  return { kind: 'workflow', id: WORKFLOW_SESSION, label: '周报' }
+}
 
 /**
  * 带**会话日志**的假 agent：`snapshotEvents()` + 一个可以被 `step()` 追加的事件数组。
@@ -520,20 +550,39 @@ describe('发问边界 · 挂载按变化补投（R3/R4）', () => {
     expect(manifestOf().mountsInjected).toEqual([ledgerEntry(SPEC)])
   })
 
-  it('N3 连带：工作流挂载（没有内容、只有一句 hint）也只投一次 —— 标记同样进日志', async () => {
+  it('N3 连带：工作流没有导出过 skill（只有一句 hint）也只投一次 —— 标记同样进日志', async () => {
     // 工作流层 `kept:false` 但带 hint：修之前它永远不算「已交付」⇒ 每一问都重投同一段披露。
-    const workflow = { kind: 'workflow', id: 'wf-1', label: '周报' }
-    const { listener, session, manifestOf } = await scene({ mounts: [workflow] })
+    const { sandbox, api, listener, session, manifestOf } = await scene({ mounts: [] })
+    const workflow = seedWorkflow(sandbox, { exported: false })
+    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [workflow] })
     const agent = loggedAgent(session.sessionId)
 
     const first = textOf(injectedOf(await step(listener, agent)))
     expect(first).toContain('【来源：挂载 工作流「周报」】')
-    expect(first).toContain('工作流内容的数据源属票 16')
+    expect(first).toContain('这个工作流还没有导出过 skill')
     expect(first).toContain('没有可注入的内容')
     expect(manifestOf().mountsInjected).toEqual([ledgerEntry(workflow)])
 
     const second = await step(listener, agent, { claimed: [{ ...QUESTION, id: 'q-2' }] })
     expect(injectedOf(second), '工作流层不该每问重投').toBeUndefined()
+  })
+
+  it('票 31：工作流挂载把**已导出**的 SKILL.md 正文交给模型（模型可见），且只投一次', async () => {
+    const { sandbox, api, listener, session, manifestOf } = await scene({ mounts: [] })
+    const workflow = seedWorkflow(sandbox, { exported: true })
+    await api['consult.setMounts']({ sessionId: session.sessionId, mounts: [workflow] })
+    const agent = loggedAgent(session.sessionId)
+
+    const first = textOf(injectedOf(await step(listener, agent)))
+    // 标记认的是层 head（交付账与日志对账的凭据）：导出过的层带上 skill 名。
+    expect(first).toContain('【来源：挂载 工作流「周报」（skill weekly-report）】')
+    expect(first).toContain('每个周五把本周进展汇总成一份周报。')
+    expect(first).toContain('【来源：临时挂载·披露】')
+    expect(first).not.toContain('还没有导出过 skill')
+    expect(manifestOf().mountsInjected).toEqual([ledgerEntry(workflow)])
+
+    const second = await step(listener, agent, { claimed: [{ ...QUESTION, id: 'q-2' }] })
+    expect(injectedOf(second), '已交付的工作流正文不该每问重投').toBeUndefined()
   })
 })
 

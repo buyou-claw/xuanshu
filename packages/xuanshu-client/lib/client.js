@@ -1286,7 +1286,12 @@ function createConsultApi(ctx) {
     create: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.create, payload, signal),
     send: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.send, payload, signal),
     list: (signal) => rpcCall(ctx, CONSULT_ENDPOINTS.list, {}, signal),
-    read: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.read, payload, signal),
+    read: (payload, signal) => rpcCall(
+      ctx,
+      CONSULT_ENDPOINTS.read,
+      payload,
+      signal
+    ),
     rename: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.rename, payload, signal),
     defaults: (signal) => rpcCall(ctx, CONSULT_ENDPOINTS.defaults, {}, signal)
   };
@@ -1387,6 +1392,62 @@ function filterHistory(items, query, range = "all", now = /* @__PURE__ */ new Da
 }
 function roleLabel(role) {
   return role === "user" ? "你" : "AI";
+}
+var ADOPTED_DRAFT_SOURCE = "xuanshu-bestof-adopted";
+function draftStateOf(round, messageId, drafts) {
+  if (drafts.resolved !== true) return "unknown";
+  if (round.currentId === messageId) return "current";
+  if (round.rejected) return "rejected";
+  return round.currentId === void 0 ? "unknown" : "superseded";
+}
+function reviewTimeline(messages, drafts) {
+  const byMessage = /* @__PURE__ */ new Map();
+  if (drafts !== void 0 && drafts !== null) {
+    for (const round of drafts.rounds) {
+      for (const messageId of round.messageIds) byMessage.set(messageId, round);
+    }
+  }
+  const items = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message === void 0) continue;
+    const key = `${String(index)}-${message.role}`;
+    const messageId = message.messageId;
+    const round = drafts === void 0 || drafts === null || message.source !== ADOPTED_DRAFT_SOURCE || messageId === void 0 ? void 0 : byMessage.get(messageId);
+    if (round === void 0 || drafts === void 0 || drafts === null || messageId === void 0) {
+      items.push({ kind: "message", key, message });
+      continue;
+    }
+    const state = draftStateOf(round, messageId, drafts);
+    const last = items[items.length - 1];
+    if (last !== void 0 && last.kind === "round" && last.runId === round.runId && last.round === round.round) {
+      last.items.push({ message, state });
+      if (state === "current") last.state = "current";
+      continue;
+    }
+    items.push({
+      kind: "round",
+      key: `${key}-round-${round.runId}`,
+      round: round.round,
+      runId: round.runId,
+      state,
+      items: [{ message, state }]
+    });
+  }
+  return items;
+}
+function draftRoundLabel(item) {
+  const prefix = `第 ${String(item.round)} 轮合参`;
+  if (item.state === "current") return `${prefix} · 当前采用稿`;
+  if (item.state === "rejected") return `${prefix} · 已否决（不列为当前）`;
+  if (item.state === "superseded") return `${prefix} · 已被后来的一份取代`;
+  return `${prefix} · 当前性未知`;
+}
+function draftBadgeLabel(state) {
+  if (state === "current") return "当前采用稿";
+  if (state === "rejected") return "已被否决 · 非当前";
+  if (state === "superseded") return "已被后一份取代 · 非当前";
+  return "当前性未知";
 }
 async function openConsultSession(options) {
   const { sessionId, refresh, open } = options;
@@ -1714,15 +1775,33 @@ function XsConsultHistoryList({
     /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "history-search-boundary", children: historyEmptyCopy.searchBoundary })
   ] });
 }
+function XsConsultMessageRow({ message, draft }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
+    "article",
+    {
+      className: `xs-consult__message xs-consult__message--${message.role}`,
+      "data-xuanshu-message": message.role,
+      ...draft === void 0 ? {} : { "data-xuanshu-draft": draft },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__role", children: roleLabel(message.role) }),
+        draft === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__badge", "data-xuanshu-draft-badge": draft, children: draftBadgeLabel(draft) }),
+        message.source === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("small", { className: "xs-consult__note", "data-xuanshu-source": message.source, children: `注入 · ${message.source}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__text", children: message.text })
+      ]
+    }
+  );
+}
 function XsConsultHistoryReader({
   session,
   messages,
+  drafts,
   loading = false,
   error,
   onBack,
   onContinue,
   onRetry
 }) {
+  const items = reviewTimeline(messages, drafts);
   return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "xs-consult__reader", "data-xuanshu-view": "reader", children: [
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__toolbar", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "back-list", onClick: onBack, children: "← 列表" }),
@@ -1740,18 +1819,25 @@ function XsConsultHistoryReader({
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "back-list", onClick: onBack, children: "返回列表" })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-consult__messages", children: messages.map((message, index) => /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
-      "article",
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-consult__messages", children: items.map((item) => item.kind === "message" ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(XsConsultMessageRow, { message: item.message }, item.key) : /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
+      "section",
       {
-        className: `xs-consult__message xs-consult__message--${message.role}`,
-        "data-xuanshu-message": message.role,
+        className: "xs-consult__round",
+        "data-xuanshu-round": String(item.round),
+        "data-xuanshu-round-state": item.state,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__role", children: roleLabel(message.role) }),
-          message.source === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("small", { className: "xs-consult__note", "data-xuanshu-source": message.source, children: `注入 · ${message.source}` }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__text", children: message.text })
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h4", { className: "xs-consult__round-head", "data-xuanshu-round-head": String(item.round), children: draftRoundLabel(item) }),
+          item.items.map((row, index) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+            XsConsultMessageRow,
+            {
+              message: row.message,
+              draft: row.state
+            },
+            `${item.key}-${String(index)}`
+          ))
         ]
       },
-      `${String(index)}-${message.role}`
+      item.key
     )) }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "reader-readonly", children: "回看是只读的：不改会话记录、不进会话、不追加任何事件。" })
   ] });
@@ -1954,7 +2040,7 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
     setView("history");
     setReader({ kind: "loading" });
     void api.read({ sessionId }).then((answer) => {
-      setReader({ kind: "ready", session: answer.session, messages: answer.messages });
+      setReader({ kind: "ready", session: answer.session, messages: answer.messages, drafts: answer.drafts });
     }).catch((error) => {
       setReader({ kind: "error", session: known, message: errorText(error) });
     });
@@ -2096,6 +2182,7 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
       {
         session: reader.session,
         messages: reader.kind === "ready" ? reader.messages : [],
+        drafts: reader.kind === "ready" ? reader.drafts : void 0,
         error: reader.kind === "error" ? reader.message : void 0,
         onBack: () => {
           setReader({ kind: "idle" });
@@ -2178,7 +2265,11 @@ function installConsultStyle() {
 .xs-consult__empty{text-align:left;padding:16px 0}
 .xs-consult__empty-why{font-weight:600;margin:0 0 6px}
 .xs-consult__messages{margin-top:12px}
+.xs-consult__round{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px;margin:12px 0}
+.xs-consult__round-head{font-size:.85rem;margin:0 0 4px;color:var(--xs-text-secondary)}
 .xs-consult__message{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:10px 0;border-bottom:1px solid var(--xs-edge-card)}
+/* 角色占第一列；徽标 / 来源 / 正文一律第二列（否则混合行会把正文挤进 44px 那一列）。 */
+.xs-consult__message>.xs-consult__badge,.xs-consult__message>.xs-consult__note,.xs-consult__message>.xs-consult__text{grid-column:2}
 .xs-consult__role{color:var(--xs-text-secondary);font-size:.85rem}
 .xs-consult__text{margin:0;line-height:1.7;white-space:pre-wrap}
 @media(max-width:1100px){.xs-consult{padding:16px}.xs-consult__row-hit{flex-direction:column;gap:2px}}
