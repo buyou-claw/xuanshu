@@ -1,6 +1,6 @@
-# Spec 001 开发进度
+# 开发进度（Spec 001 装配基座 / Spec 002 住进去）
 
-核对日期：2026-10-15。集成分支：`codex/spec-001-integration`（**已推 origin**）。
+核对日期：2026-10-15（Spec 001）/ 2026-10-17（Spec 002，见 §16）。集成分支：Spec 001 = `codex/spec-001-integration`（**已推 origin**）；Spec 002 = `feat/spec-002-integration`（票 #22–#31，见 §16）。
 
 GitHub issue/PR 的 open 状态不等于未实现，反之亦然：票 01–06 的代码在本地提交并由 stacked PR 承载（#2/#3/#4/#6/#7/#9 已**全部关闭且未合并**，其改动**全部已包含在集成分支**里、由 PR #20 覆盖取代）；票 07–16 已实现，其 issue 已在 GitHub 上关闭（#11–#19；票 04/06/07 的 #5/#8/#10 于 2026-10-15 晚补关闭，见 §10）。
 
@@ -687,3 +687,95 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 - **收尾两条命令**：`pnpm verify:all`（类型 + 产物同步 + 用例清单门）、`pnpm cleanup:worktrees`（先证明分支已并入，再存档，再删）。
 - **数字只从工具输出里抄**：用例计数抄 `pnpm test:inventory` 那一行，五 seam 抄 `pnpm verify:assembly` 的输出。README、台账、PR body 三处手抄过一次（992 vs 1020）——手抄的必然漂。
 - **合并方向的最后一棒**：分支并进集成分支之后，如果那条分支又提交、又并回一次集成分支，就必须**再并一次回去** —— 票 13 客户端两笔就是这么丢的（`cleanup:worktrees` 的「必须是 HEAD 祖先」正是拦这个的）。
+
+### 16. Spec 002「住进去」：10 张票全部实现（2026-10-17）
+
+规格 `docs/specs/002-reside-and-use.md`，父 issue [#21](https://github.com/buyou-claw/xuanshu/issues/21)，
+集成分支 **`feat/spec-002-integration`**（从 `main` 09951eb 起，10 张票各自 worktree/分支 → Lead 合并）。
+形态决策：ADR-0013（事记 = 底稿第四来源）、ADR-0014（玄枢自己的桌面壳与 home，与 DSH 桌面版零交集）。
+
+#### 16.1 票 → issue → 交付面
+
+| 票 | issue | 交付面（宿主 / 客户端 / 其他） |
+|---|---|---|
+| 01 独立 home 与隔离体检 | #22 | 解析唯一来源 `scripts/isolation/resolve.mjs`（产品 `~/.xuanshu` / 开发 `<repo>/.dsh-home`，`XUANSHU_DSH_HOME` 覆盖）；宿主新增 `lib/home.mjs` 收口 7 处 `~/.dsh` 兜底并**拒绝**写真实 home；`verify:isolation` 的 `home-isolated` 加「两档默认 home 都不是 `~/.dsh`」；新 runbook `docs/runbook/home.md` |
+| 02 桌面壳 | #23 | 新包 `packages/xuanshu-shell`（窗口 / 托盘 / 关窗隐藏 / 真退 / 单实例 / 子进程看护与重启 / 自启 / 通知端点 / 看门狗），14 个纯模块 + 唯一 `electron-adapter.mjs`；`docs/runbook/shell.md` |
+| 03 早间触达 | #24 | 日课 AI 段三态（`ai:{mode:'ok'\|'off'\|'failed'}`，确定性三键永不受影响）；`lib/notify/**` 回环通知 + `traffic.jsonl` 触达账；`rikke.status` 加性 `ai/unread/notify`；卡/面板两段式 + 设置两项开关 |
+| 04 晚间触达 | #25 | 晚省 `<dataDir>/wansheng/<date>.json`（**零模型调用**的确定性事实）+ 第三条 daily 21:30；补课（产物缺失 + 账缺失、回看 ≤7 天、启动与到点结算、`missed:true`、**不补推送**）；**修 `delivery.mjs` 用投递时刻算日期的 bug**（改取 `occurrence_at`，迟到 >30min 标补）；时刻可调（`rikkeTime`/`wanshengTime`）；晚省卡/面板（order 110）+ 投递历史 |
+| 05 事记账本 | #26 | `lib/shiji/**`：`shiji.jsonl`（`xuanshu/shiji@1`，一项目一条 / 依据指纹才重算摘要 / 源头消失冻结 / 删除墓碑永不再生）；扫描挂进 `refreshDigao()` 同一条管线；`shiji.*` 独立方法组（含 `fromSession` 人工确认） |
+| 06 底稿两段 | #27 | 底稿两段「最近在做什么 / 曾经做过什么」+ 四路来源标记（谱/工作区/工作流/事记）；`digao.read/status` 加性 `shiji.entries`（供删除动作）；客户端两段渲染 + 事记删除 + 会话内「存成今天的事记」 |
+| 07 多家合参 | #28 | 只读 `routes.list`（providers→models→keyConfigured，`'unknown'` 不冒充 false）；`bestof.run` 入参 `routes:[{provider,model}]`（2–4、`provider::model` 去重）+ `confirm:true`；`bestof.estimate`（金额恒 `'unknown'`）；异源判官（无则 `same-source` 如实降级）；有界并发 + 每路 AbortSignal/超时；单路失败不拖累 |
+| 08 接上 AI | #29 | 冷启动第 6 步「接上 AI」+ 问事入口只读门禁（三态：已接上 / 未接上带原因与去向 / 未知）；配置后 5s 轮询自动解除、无需重启；**零 provider 配置写入** |
+| 09 我的数据 | #30 | `data.overview()`（8 品类体积，`.credentials.yaml` 永不计入）；`data.backup()`（用户自选目录 + 每文件 sha256 清单，含会话/不含密钥）；设置 →「我的数据」页（`settings.section`，order 25）；runbook 备份/恢复/密钥迁移 |
+| 10 两处遗留缺陷 | #31 | 问事回看按轮标出**当前采用稿**（`consult.read` 加性 `drafts`，否决轮不当当前）；工作流挂载注入已导出的 `SKILL.md` 正文（未导出如实说明；预算/披露/交付账零改动） |
+
+#### 16.2 冻结契约（跨票并行前先落，`.scratch/notes/spec002/`，未入库）
+
+`contract-shell-notify.md`（壳↔宿主唯一 IPC：回环 JSON + 运行时状态文件 + 共享设置文件 + 触达账）、
+`contract-shiji-digao.md`（事记 schema / 扫描范围 / 摘要成本 / 底稿两段）、
+`contract-wansheng-missed.md`（晚省事实 / 补课判据 / occurrence 日期）、
+`contract-data-backup.md`（8 品类 / 清单 / 排除项）。四份契约都是「先定形状 → 两半边各自实现 → 契约夹测」。
+
+#### 16.3 验证（数字全部抄工具输出）
+
+```
+# pnpm test:inventory（profile 已装）
+[inventory] 用例 1676 条（基线 1676）/ 文件 155 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
+
+# pnpm verify:isolation
+结果：8/8 通过，exit 0（6790ms）
+启动器[home] PASS  隔离 home <repo>/.dsh-home（来源 --home）；真实 home ~/.dsh 不会被碰
+…（home 两档默认都不是真实 home；换 home 后两条派生路径两两不同）
+
+# pnpm verify:assembly
+[S2] PASS 192 行挂载；xuanshu-host/client state=2
+[S3] PASS 客户端产物 497430B；物化/注册/槽位自检全过
+[S4] PASS 基线 185 行全部命中
+[S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
+[S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
+结果：失败，exit 1（仅因 S1 及其连带的那条已知红）
+```
+
+2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门）exit 0；清单基线已按最终用例数 `--update`（1676 / 155）。
+
+#### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
+
+1. **`dsh --profile xuanshu --help` 这条无 LLM 检查路径会在树 mount 完之前请求退出**：玄枢插件行排在树
+   最后，于是 `apply()` 可能在 dispose 已开始之后才跑（实测 root `fiber.state=UNLOADING=5`，
+   `profileContext` 已随树拆除）。表现：S5 与隔离台 headless 探针从绿变红，**`report.ok=false` 但两包/两行都在**。
+   处置：`lib/index.js` 的 `buildReport` 增加关闭现场判据（`isShuttingDown`，root fiber ≥ UNLOADING）：
+   关闭期间如实写 `profile.teardown=true` 并把 home 来源退回 `DSH_HOME`，`ok` 仍要求两包解析 + 两行在树里；
+   **非关闭现场缺 `profileContext` 仍然判失败**（不收宽）。判据的会红对照在
+   `tests/assembly/assembly-report-teardown.test.mjs`（恒 false / 恒 true 各打红一条）。这是被
+   `#25` 的导入图变重后暴露出来的 race（**导入顺序/图深度会决定它落在关闭前还是关闭后**）。
+2. **隔离台的临时 home 在红的时候不会被清**：先红一次、再修好后重跑，会因上一次的
+   `tests/isolation/.tmp/dual-*` 残留而红在「现场回收干净」。处置：重跑前 `cmd /c rmdir /s /q tests\isolation\.tmp`
+   （**不要**用 `Remove-Item -Recurse`，本机有 pnpm junction）。
+3. **electron 二进制下载**：本机 `pnpm install` 在 postinstall 取 125MB 二进制时 `ECONNRESET`；
+   用 `ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install` 完成安装（模块层测试全绿），
+   真窗口/托盘/toast/自启**未真机验收**，手测清单在 `docs/runbook/shell.md`。
+4. **`profileContext` / settings 槽位这类「看起来在场」的东西要真机核**：`settings.section` 在钉版 rc.2
+   是**实装在**（`dsh-client-ui-settings/lib/types/client/contract/slots.d.ts:73`，declarer
+   `dsh-client-ui-settings-general`），本轮「我的数据」据此落成设置页而不是新面板。
+5. **改完自有包必须重跑 `node scripts/install-profile.mjs --home .dsh-home`**（旧陷阱，本轮又踩）：
+   S3 会红在「profile 里装的 client 与仓库不一致」；同步后恢复。
+
+#### 16.5 已知边界（如实登记）
+
+- **桌面壳只到模块层**：窗口 / 托盘 / 关窗隐藏 / 自启 / Windows toast / 点击唤出 / 硬杀看门狗的回收率
+  全部**未在真 Electron 窗口上验收**（二进制没装上）；`tests/shell` 134 条是纯模块 + 假适配层证据。
+  真机手测清单 10 步在 `docs/runbook/shell.md`。
+- **真多家 provider 未跑真机**：本机没有第二家 key，`routes.list` / 异源判官 / 并发超时的证据是
+  打桩 `ctx.llm` + 真 `installRpc`；真机 `listProviders/settings.describe/credentials.describe` 形状待核。
+- **真浏览器点击链 / 真 LLM 端到端**：客户端只有 `renderToStaticMarkup` 与纯函数断言（无 jsdom）；
+  日课 AI 段、事记摘要、晚省都只用 fake LLM 验过「调没调、三态对不对」。
+- **补课的时间语义**：`occurrence_at` 的正文形状按钉版实装（`reminders_json`）解析，真机正文未逐字抓；
+  `ctx.schedule` 停机后只补「最近一次」occurrence 的事实仍成立 —— 玄枢用「产物 + 自己的账」补齐中间日期。
+- **事记日期**：投影缓存缺席时回落到日志；缓存落后会让 `lastActiveAt` 偏旧（已如实写进代码注释）。
+- **壳的 `DSH_HOME` 义务**：任何起 `dsh` 子进程的入口都必须同时传 `DSH_HOME` 与 `XUANSHU_DSH_HOME`
+  （DSH 本体只认前者）；壳与启动器都已这么传，runbook 写明。
+- **`install-profile --home ~/.dsh` 仍是显式逃生舱**（等价 setup 的 `--install`）：显式要求才写真实 home；
+  默认路径已不会再落到 `~/.dsh`。
+
