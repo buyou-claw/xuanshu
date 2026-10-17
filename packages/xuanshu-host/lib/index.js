@@ -167,7 +167,8 @@ function softGet(ctx, serviceName) {
  * （root fiber=UNLOADING 才算关闭；ACTIVE 缺 profileContext 仍然必须判失败）。
  * @returns {boolean}
  */
-export function isShuttingDown(ctx) {  const stateOf = (value) => {
+export function isShuttingDown(ctx) {
+  const stateOf = (value) => {
     try {
       return typeof value?.fiber?.state === 'number' ? value.fiber.state : undefined;
     } catch {
