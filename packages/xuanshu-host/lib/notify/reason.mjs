@@ -12,10 +12,9 @@
  *
  * 与客户端 `notify.tsx::notifyFailureText()` 是**同一份文案的两侧实现**：跨包没有可共享的运行时
  * 模块（同 `xuanshu-shell/lib/contract.mjs` 的 §0 例外），所以两边各留一份、文案逐字对齐。
+ * 对齐由 `tests/notify/reason-parity.test.mjs` **对拍**（文案表逐键相等、识别正则 source/flags 相同、
+ * 同一组样例两侧结论相同）—— 两边各留一份的前提是有人盯着它们不许漂。
  */
-
-/** 壳侧允许的失败 token（与 `xuanshu-shell/lib/notify-server.mjs::FAILURE_REASONS` 同一词表）。 */
-export const NOTIFY_FAILURE_CODES = Object.freeze(['permission-denied', 'unsupported', 'failed'])
 
 /** token → 人话（含「去哪开」；权限缺失这一档是本票的正面要求）。 */
 export const NOTIFY_FAILURE_TEXT = Object.freeze({
@@ -24,8 +23,12 @@ export const NOTIFY_FAILURE_TEXT = Object.freeze({
   failed: '桌面壳没有弹出通知（壳没给细节）。',
 })
 
-/** 失败 token 在 reason 尾部（`桌面壳没有弹出通知：permission-denied` / 裸 token 都认）。 */
-const FAILURE_TOKEN_AT_END = /(permission-denied|unsupported|failed)\s*$/u
+/**
+ * 失败 token 在 reason 尾部（`桌面壳没有弹出通知：permission-denied` / 裸 token 都认）。
+ * 导出是为了与客户端 `notify.tsx` 的同名正则**对拍**（`tests/notify/reason-parity.test.mjs`）：
+ * 两侧各留一份文案时，识别规则也必须逐字一致，否则同一行账在宿主与界面会得出不同结论。
+ */
+export const NOTIFY_FAILURE_TOKEN = /(permission-denied|unsupported|failed)\s*$/u
 
 /**
  * 账行写入前的归一：认识的壳侧 token → 人话原因 + `reasonCode`；其余原样。
@@ -35,22 +38,7 @@ const FAILURE_TOKEN_AT_END = /(permission-denied|unsupported|failed)\s*$/u
  */
 export function normalizeNotifyFailure(reason) {
   if (typeof reason !== 'string' || reason === '') return { reason: null }
-  const match = FAILURE_TOKEN_AT_END.exec(reason)
+  const match = NOTIFY_FAILURE_TOKEN.exec(reason)
   if (match === null) return { reason }
   return { reason: NOTIFY_FAILURE_TEXT[match[1]], reasonCode: match[1] }
-}
-
-/**
- * 界面把 reason / reasonCode 翻成人话（老账行只有原始 token 时也认）。
- * @param {{reason?: string|null, reasonCode?: string}} [notify]
- * @returns {string | undefined}
- */
-export function readableNotifyFailure(notify = {}) {
-  const code = typeof notify.reasonCode === 'string' && notify.reasonCode !== ''
-    ? notify.reasonCode
-    : null
-  if (code !== null) return NOTIFY_FAILURE_TEXT[code] ?? undefined
-  const reason = typeof notify.reason === 'string' ? notify.reason : ''
-  const match = FAILURE_TOKEN_AT_END.exec(reason)
-  return match === null ? undefined : NOTIFY_FAILURE_TEXT[match[1]]
 }

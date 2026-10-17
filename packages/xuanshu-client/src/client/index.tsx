@@ -50,6 +50,7 @@ import { installDataSettings } from './data.js';
 import { createDigaoApi } from './digao-api.js';
 import { createDigaoUiController } from './digao-controller.js';
 import { installDigao } from './digao.js';
+import { createHomePathsWatch, primeHomePaths } from './home-paths.js';
 import { installMingpan } from './MingpanPanel.js';
 import { createMountsApi, createWorkspaceCatalog } from './mounts-api.js';
 import { createMountsController, installMounts, MountsSectionFor } from './mounts.js';
@@ -238,6 +239,16 @@ export function apply(ctx: Context): void {
   // 选目录复用藏库的 `cang.pickDirectory`（同一台机器上唯一一条原生目录选择器路径）。
   const data = createDataApi(rpc);
 
+  // R3（#35）· AC1：用户可见文案里的 home / dataDir **必须**来自宿主回传值。
+  // 宿主已把两个真值放在 `data.overview`（唯一一个同时回传 home 与 dataDir 的方法，见
+  // `packages/xuanshu-host/lib/data/service.mjs`），所以装配期读**一次**、写进这份订阅式注入面：
+  //   - 五个文案点（总览页眉 / 问事历史 / 命盘重录确认 / 沉淀草稿落点 / 沉淀写路径）共用同一份；
+  //   - 读不到（RPC 拒绝 / 没连接 / 形状不对）时是一份空快照 → 渲染层回中性占位，绝不猜路径；
+  //   - `void`：它不参与 apply 的同步语义，失败也不会把装配拖挂（`resolveHomePathsFromApi` 自己吞错）。
+  // 唯一代价：装配后会多一次只读的 `data.overview`（体积统计），换来的是六处文案里的真路径。
+  const homePaths = createHomePathsWatch();
+  void primeHomePaths(homePaths, data);
+
   const injected = (): OverviewInjected => ({
     navigate,
     mainPanels,
@@ -260,6 +271,8 @@ export function apply(ctx: Context): void {
     wanshengController,
     // #29：问事入口的门禁读这一份只读状态（与向导第 6 步同一个控制器）。
     aiStatus: aiReadiness,
+    // R3：宿主回传的 home / dataDir（概览页眉「数据都在本地 …」用它，不是占位）。
+    homePaths,
   });
 
   // ③ 主面板：keyed 槽按 key 分派；key 必须与侧栏行 id 相同。
@@ -302,7 +315,8 @@ export function apply(ctx: Context): void {
   installPuPanel(rpc);
   installCangClient(rpc);
   installOnboarding(rpc, baziDeps);
-  installMingpan(rpc, baziDeps);
+  // R3：命盘详情的「重录确认」也显示底座谱路径 —— 与概览同一份注入面（不另读一次）。
+  installMingpan(rpc, { ...baziDeps, homePaths });
   // ⑦ 票 10：问事门厅（`consult`，order 30 = S15 给「书房」预约的那一档）。
   //    票 12 的挂载区作为**插槽**进这门厅（S8 §1：门厅的挂载入口开同一个抽屉），
   //    所以门厅那边一行注册都不用改（`mountSlot` 缺席时退回票 10 的占位说明）。
@@ -311,6 +325,8 @@ export function apply(ctx: Context): void {
     navigate,
     openSession,
     refreshSessions,
+    // R3：历史页错误行那句「数据在本地 <home>/sessions/」读同一份注入面。
+    homePaths,
     mountSlot: (session) => h(MountsSectionFor, { controller: mountsController, session }),
   });
   // ⑨ 票 12：挂载账本抽屉（S8）——`shell.overlay` 上的**一个** cell（没有面板、没有侧栏行）。
@@ -332,7 +348,7 @@ export function apply(ctx: Context): void {
   // ⑩ 票 15：沉淀三处贡献（`conversation.composer.dock` 入口 / `conversation.chat.turnTail` 草稿卡 /
   // `shell.overlay` 通知）。**不新增 main key、不新增侧栏行** —— 沉淀是会话内区块，
   // 只在 DSH 原生 `conversation` 面板在屏时渲染（S10 §1 D5 / F1）。放在最后，纯加性。
-  installSediment(rpc, { api: sediment, controller: sedimentController, navigate });
+  installSediment(rpc, { api: sediment, controller: sedimentController, navigate, homePaths });
 
   // ⑪ 票 11：多 AI 合参（`shell.overlay` 浮层 + `settings.general.item` 开关行 + `/多模型` 命令
   //    与别名 `/合参` · `bestof` + 会话 composer 旁的触发按钮）。四条注册都是纯加性；

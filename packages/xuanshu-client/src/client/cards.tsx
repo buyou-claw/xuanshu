@@ -22,6 +22,7 @@ import type { DigaoUiController } from './digao-controller.js';
 import type { AiReadiness, AiReadinessController } from './ai-model.js';
 import { XsAiGate } from './ai-views.js';
 import { notifyFailureText, notifyReasonCode } from './notify.js';
+import type { HomePathsWatch } from './home-paths.js';
 import {
   ACTION_COPY,
   BADGE_DERIVED,
@@ -104,6 +105,12 @@ export interface OverviewInjected {
    * （DSH rc.2 没有公开的打开设置 API，见 `ai-views.tsx` 文件头）。
    */
   onOpenAiSettings?: () => void;
+  /**
+   * R3（#35 / AC1）· 宿主回传的 home / dataDir 注入面：**装配期**读一次 `data.overview`
+   * 写进来，概览页眉据此显示真实路径；缺席 = 没拿到 → 渲染层回中性占位。
+   * 订阅式是为了让晚到的值也能驱动同一棵树重渲染（SSR 下用快照当 server snapshot）。
+   */
+  homePaths?: HomePathsWatch;
 }
 
 /** 订阅 main 面板键（卡片渲染期判定 fail-soft）。 */

@@ -25,6 +25,12 @@ import { describe, expect, it } from 'vitest'
 
 import { CangPanel } from '../../packages/xuanshu-client/src/client/CangPanel.tsx'
 import { XsConsultHistoryList } from '../../packages/xuanshu-client/src/client/consult-views.tsx'
+import {
+  DATA_DIR_PLACEHOLDER,
+  HOME_PLACEHOLDER,
+  createHomePathsWatch,
+  resolveHomePathsFromApi,
+} from '../../packages/xuanshu-client/src/client/home-paths.ts'
 import { OverviewPanel } from '../../packages/xuanshu-client/src/client/OverviewPanel.tsx'
 import { puPaths } from '../../packages/xuanshu-client/src/client/sediment-model.ts'
 
@@ -226,5 +232,111 @@ describe('R3 · 宿主没回传路径时显示中性占位（不写死、不猜�
       summary: '玄枢数据目录/pus/事业与行业/summary.md',
       manifest: '玄枢数据目录/pus/事业与行业/manifest.md',
     })
+  })
+})
+
+/* ───────────────────────── ④ 装配期取一次：resolveHomePathsFromApi / watch ───────────────────────── */
+
+/**
+ * 假的数据面：只为 `resolveHomePathsFromApi` 提供 `overview()`。
+ * 这是**接线**的单测（不是组件 props 直传）：装配点拿到宿主回传值之后再注入。
+ */
+function fakeDataApi(answer) {
+  const calls = []
+  return {
+    calls,
+    overview: async (signal) => {
+      calls.push({ signal })
+      return typeof answer === 'function' ? answer() : answer
+    },
+  }
+}
+
+/** 一条宿主 `data.overview` 的回答（只列本组要用的字段，其余形状无关）。 */
+const overviewAnswer = (home, dataDir) => ({
+  schema: 'xuanshu/data@1',
+  home,
+  dataDir,
+  groups: [],
+  total: { bytes: 0, files: 0 },
+  excluded: [],
+  notes: [],
+})
+
+describe('R3 · 装配期只读一次 data.overview：home / dataDir 原样进注入面', () => {
+  it('产品档 / 开发档各一次：宿主给什么就注入什么，不吃占位', async () => {
+    for (const [home, dataDir] of [
+      [PRODUCT_HOME, PRODUCT_DATA_DIR],
+      [DEV_HOME, DEV_DATA_DIR],
+    ]) {
+      const api = fakeDataApi(overviewAnswer(home, dataDir))
+      await expect(resolveHomePathsFromApi(api)).resolves.toEqual({ home, dataDir })
+      expect(api.calls).toHaveLength(1)
+    }
+  })
+
+  it('空白 / 非字符串 / 缺席：一律按「没拿到」处理（不猜路径、不把空白当值）', async () => {
+    const blanks = [
+      { home: '   ', dataDir: '' },
+      { home: undefined, dataDir: 42 },
+      { home: null, dataDir: [] },
+      {},
+    ]
+    for (const answer of blanks) {
+      await expect(resolveHomePathsFromApi(fakeDataApi(answer))).resolves.toEqual({})
+    }
+  })
+
+  it('取数失败（reject 或同步抛）：装配层拿到空值、绝不把异常丢上去', async () => {
+    await expect(
+      resolveHomePathsFromApi(fakeDataApi(() => {
+        throw new Error('连接没起来')
+      })),
+    ).resolves.toEqual({})
+    await expect(
+      resolveHomePathsFromApi({
+        overview: async () => {
+          throw new Error('宿主拒绝了 data.overview')
+        },
+      }),
+    ).resolves.toEqual({})
+    // 假 ctx 没有 connection 时的真实形状：同步 TypeError
+    await expect(
+      resolveHomePathsFromApi({
+        overview: () => {
+          throw new TypeError("Cannot read properties of undefined (reading 'rpc')")
+        },
+      }),
+    ).resolves.toEqual({})
+  })
+
+  it('空值 → 渲染层仍是中性占位（占位常量就是那一句话，不是猜出来的目录）', () => {
+    expect(DATA_DIR_PLACEHOLDER).toBe('玄枢数据目录')
+    expect(HOME_PLACEHOLDER).toBe('玄枢 home')
+  })
+})
+
+describe('R3 · home/dataDir 的注入面是订阅式的（拿到值的那一刻，同一棵树就能重渲染）', () => {
+  it('初始为空快照；set 之后快照换引用并通知订阅者', () => {
+    const watch = createHomePathsWatch()
+    const initial = watch.getSnapshot()
+    expect(initial).toEqual({})
+    // 同一引用（useSyncExternalStore 的 Object.is 要求）
+    expect(watch.getSnapshot()).toBe(initial)
+
+    const seen = []
+    const unsubscribe = watch.subscribe(() => {
+      seen.push(watch.getSnapshot())
+    })
+    watch.set({ home: DEV_HOME, dataDir: DEV_DATA_DIR })
+    expect(seen).toEqual([{ home: DEV_HOME, dataDir: DEV_DATA_DIR }])
+    // 快照换引用但内容不变：订阅者仍被通知（值真的到了，不能静默）
+    watch.set({ home: DEV_HOME, dataDir: DEV_DATA_DIR })
+    expect(seen).toHaveLength(2)
+    expect(watch.getSnapshot()).not.toBe(seen[0])
+
+    unsubscribe()
+    watch.set({})
+    expect(seen).toHaveLength(2)
   })
 })
