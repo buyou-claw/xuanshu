@@ -7702,10 +7702,12 @@ var TRAFFIC_STATUS_TEXT = {
 };
 function XsDeliveryHistory({ status }) {
   const entries = Array.isArray(status.entries) ? status.entries : [];
+  const unread = typeof status.unread === "number" ? status.unread : void 0;
   return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "xs-touch__history", "data-xuanshu-history": "traffic", children: [
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("h2", { className: "xs-touch__history-title", children: "投递历史" }),
+    unread === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", role: "note", "data-xuanshu-note": "unread-unknown", children: "未读数未知（触达账存在但读不出来，不按 0 算）" }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", "data-xuanshu-note": "unread", children: `未读 ${unread} 条` }),
     status.lastFailure === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", role: "alert", "data-xuanshu-history-error": "last-failure", children: `最近一次失败：${status.lastFailure.kind === "wansheng" ? "晚省" : "日课"} · ${status.lastFailure.reason ?? "（没有给理由）"}` }),
-    entries.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", "data-xuanshu-history-empty": "true", children: "还没有投递记录。" }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("ul", { className: "xs-touch__history-list", children: entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+    entries.length === 0 ? unread === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", "data-xuanshu-history-empty": "unknown", children: "投递历史也读不出来（不是「没有记录」）。" }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-touch__note", "data-xuanshu-history-empty": "true", children: "还没有投递记录。" }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("ul", { className: "xs-touch__history-list", children: entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
       "li",
       {
         className: "xs-touch__history-row",
@@ -9045,10 +9047,14 @@ function installShiji(ctx, deps) {
 var SHIJI_SETTINGS_ID = "xuanshu.shiji";
 var SHIJI_SETTINGS_LABEL = "事记";
 var SHIJI_SETTINGS_ORDER = 26;
+function tombstonesOf(entries) {
+  return entries.filter((entry) => entry.excludedAt !== null && entry.excludedAt !== void 0);
+}
 function dayOf(iso) {
-  return typeof iso === "string" && iso.length >= 10 ? iso.slice(0, 10) : "日期未回传";
+  return typeof iso === "string" && iso.length >= 10 ? iso.slice(0, 10) : "日期未知";
 }
 function XsShijiSettingsSection({ state, actions }) {
+  const tombstones = tombstonesOf(state.entries);
   if (state.loading === true) {
     return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { className: "xs-shiji__settings", "data-xuanshu-section": "shiji", children: [
       /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("h2", { children: "事记" }),
@@ -9060,9 +9066,9 @@ function XsShijiSettingsSection({ state, actions }) {
     /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", children: "这里管理「曾经做过什么」里的事记：删掉的可以恢复；被排除的目录不参与自动扫描。" }),
     /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("section", { className: "xs-shiji__block", "data-xuanshu-block": "shiji-restore", children: [
       /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("h3", { children: "已删除的事记（可恢复）" }),
-      state.tombstones.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", "data-xuanshu-empty": "tombstones", children: "没有被删除的事记。" }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("ul", { className: "xs-shiji__list", children: state.tombstones.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("li", { className: "xs-shiji__row", "data-xuanshu-shiji": entry.id, children: [
+      tombstones.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", "data-xuanshu-empty": "tombstones", children: "没有被删除的事记。" }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("ul", { className: "xs-shiji__list", children: tombstones.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("li", { className: "xs-shiji__row", "data-xuanshu-shiji": entry.id, children: [
         /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { children: entry.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { className: "xs-shiji__note", children: `删除于 ${dayOf(entry.frozenAt)}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { className: "xs-shiji__note", children: `删除于 ${dayOf(entry.excludedAt)}` }),
         /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
           "button",
           {
@@ -9116,7 +9122,7 @@ function XsShijiSettingsSection({ state, actions }) {
 }
 function ShijiSettingsHost({ api }) {
   const [state, setState] = (0, import_react22.useState)({
-    tombstones: [],
+    entries: [],
     excludedDirs: [],
     draftDir: "",
     busy: false,
@@ -9128,7 +9134,8 @@ function ShijiSettingsHost({ api }) {
       setState((previous) => ({
         ...previous,
         loading: false,
-        tombstones: (Array.isArray(list.entries) ? list.entries : []).filter((entry) => entry.frozenAt !== null && entry.frozenAt !== void 0),
+        // 原样收下（墓碑与冻结都在里面）；筛「真实墓碑」是视图的事（`tombstonesOf`）。
+        entries: Array.isArray(list.entries) ? list.entries : [],
         excludedDirs: Array.isArray(settings.excludedDirs) ? settings.excludedDirs : []
       }));
     }).catch((reason) => {
@@ -9174,7 +9181,7 @@ function ShijiSettingsHost({ api }) {
           void api.restore({ id }).then(() => {
             setState((previous) => ({ ...previous, busy: false }));
             load();
-            setState((previous) => ({ ...previous, note: "已恢复这条事记：下一轮扫描会按在场源头重新出现。" }));
+            setState((previous) => ({ ...previous, note: "已恢复这条事记；下一轮扫描时，仍在的源头会重新记进来。" }));
           }).catch((reason) => {
             setState((previous) => ({ ...previous, busy: false, error: errorText12(reason) }));
           });

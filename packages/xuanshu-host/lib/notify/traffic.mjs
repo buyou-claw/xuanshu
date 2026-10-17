@@ -110,22 +110,30 @@ export function appendTraffic(dataDir, entry) {
 }
 
 /**
- * 读账（最新在前；坏行跳过；缺失 = 空账，不报错）。
+ * 读账（最新在前；坏行跳过）。
+ *
+ * 读面是**三态**，因为「文件不存在」与「文件在但读不出来」是两件事：
+ *   - `state:'missing'`    → 没投过 = 合法空账，`unread: 0` 是真话；
+ *   - `state:'unreadable'` → 账在但读失败 = **未知**，`unread: null`（调用方据此省略键，
+ *                            绝不写 0 冒充「都读过了」——ADR-0014:26 点名的那类静默失效）；
+ *   - `state:'ok'`         → 读到了，`unread` 是实数。
+ * `exists` 保留旧语义：只有**可读**的账才是 true（`rikke.status` / `wansheng.status` 据此省略 unread）。
  *
  * @param {string} dataDir
  * @param {{limit?: number}} [options] `limit` 只截 `entries`，`unread` 仍按全账算（界面 badge 不能用被截的页算）
- * @returns {{entries: object[], unread: number, exists: boolean, lastFailure?: {at: string, kind: string, reason: string|null}}}
+ * @returns {{state: 'missing'|'unreadable'|'ok', entries: object[], unread: number|null, exists: boolean,
+ *            lastFailure?: {at: string, kind: string, reason: string|null}}}
  */
 export function readTraffic(dataDir, { limit } = {}) {
   const file = trafficFile(dataDir)
-  if (!existsSync(file)) return { entries: [], unread: 0, exists: false }
+  if (!existsSync(file)) return { state: 'missing', entries: [], unread: 0, exists: false }
 
   let text
   try {
     text = readFileSync(file, 'utf8')
   } catch {
-    // 账读不出来 = 未知，不是空账；调用方据此省略 unread（不写 0 冒充「都读过了」）。
-    return { entries: [], unread: 0, exists: false }
+    // 账读不出来 = 未知，不是空账；`unread: null` 让调用方省略键（不写 0 冒充「都读过了」）。
+    return { state: 'unreadable', entries: [], unread: null, exists: false }
   }
 
   const rows = []
@@ -145,6 +153,7 @@ export function readTraffic(dataDir, { limit } = {}) {
   const unread = rows.filter((row) => row.notify.status === 'delivered' && row.read !== true).length
   const failed = rows.find((row) => row.notify.status === 'failed')
   const out = {
+    state: 'ok',
     entries: Number.isInteger(limit) && limit >= 0 ? rows.slice(0, limit) : rows,
     unread,
     exists: true,

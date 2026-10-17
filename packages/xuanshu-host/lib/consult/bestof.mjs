@@ -652,8 +652,10 @@ export function createBestOfMethods(ctx, config = {}) {
     try {
       result = await collectJudge({ route, question: record.question, body })
     } catch (error) {
+      // 调用本身抛错：这次判定**没有来源**。`mode` 记的是「判定是怎么来的」，
+      // 写成 'tool' 等于说一件没发生的事（ADR-0010 / spec 002:152 的 `failed` 档）。
       return {
-        mode: 'tool',
+        mode: 'failed',
         source: route.source,
         provider: route.provider,
         model: route.model,
@@ -664,10 +666,11 @@ export function createBestOfMethods(ctx, config = {}) {
     }
     account(record, { route, usage: result.usage })
     // judge 那一路自己的失败 finish（超时 / 限流 / 无 adapter）也是「判官不可用」，不是「模型没调工具」。
+    // 同样记 `failed`：这次判定没有来源，说成 `tool` 就是记录一件没发生的事（spec 002:152）。
     const failure = failureOf(result.finish)
     if (failure !== undefined) {
       return {
-        mode: 'tool',
+        mode: 'failed',
         source: route.source,
         provider: route.provider,
         model: route.model,

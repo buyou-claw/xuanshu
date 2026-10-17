@@ -28,10 +28,15 @@ export interface TrafficEntry {
   missed?: boolean;
 }
 
-/** `traffic.status` 的回答（`lastFailure` 只在账里真有 failed 时出现）。 */
+/**
+ * `traffic.status` 的回答（`lastFailure` 只在账里真有 failed 时出现）。
+ *
+ * `unread` 缺席 = **未知**（账本存在但读不出来）：宿主省略该键、不写 0 冒充「都读过了」，
+ * 界面要如实写「未读数未知」；`0` 是已知的真话（合法空账）。
+ */
 export interface TrafficStatus {
   entries: TrafficEntry[];
-  unread: number;
+  unread?: number;
   lastFailure?: { at: string; kind: string; reason: string | null };
 }
 
