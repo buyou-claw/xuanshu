@@ -270,8 +270,8 @@ describe('票 15 · 确认弹窗：目标谱 / diff / 字数 / 只读路径四�
     // ③ 字数变化（前 → 后 / 差值）
     expect(html).toMatch(/[\d,]+ → [\d,]+ 字/u)
     // ④ 写入路径（只读展示，界面不可改）
-    expect(html).toContain('~/.dsh/xuanshu/pus/事业与行业/content.md')
-    expect(html).toContain('~/.dsh/xuanshu/pus/事业与行业/summary.md')
+    expect(html).toContain('玄枢数据目录/pus/事业与行业/content.md')
+    expect(html).toContain('玄枢数据目录/pus/事业与行业/summary.md')
     // 第二道确认：文案把闸门写在脸上。
     expect(html).toContain('data-xuanshu-action="sediment-confirm"')
     expect(html).toContain('确认更新')
