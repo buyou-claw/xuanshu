@@ -745,8 +745,8 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 #### 16.3 验证（数字全部抄工具输出）
 
 ```
-# pnpm test:inventory（profile 已装；t32 复核修复轮之后）
-[inventory] 用例 1795 条（基线 1795）/ 文件 163 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+# pnpm test:inventory（profile 已装；t33 复核修复轮 + 两轴再复核修复之后）
+[inventory] 用例 1811 条（基线 1811）/ 文件 164 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -756,7 +756,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 519790B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 522070B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门）exit 0；清单基线已按最终用例数 `--update`（1795 / 163）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门）exit 0；清单基线已按最终用例数 `--update`（1811 / 164）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -845,4 +845,58 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
   `node scripts/setup.mjs --json`（默认档 + 干净临时用户）→ 再 spawn
   `<home>/profiles/xuanshu/node_modules/@deepseek-ai/dsh/lib/bin.js --profile xuanshu --help` 断言 exit 0；
   或加一个测试专用注入口（预置已完成装配的 profile 树）再补这条链。
+
+#### 16.6 第二轮两轴审查（`ae78c53`）与 t33 修复轮（2026-10-17）
+
+**审查**：固定点 `main` `09951eb`，审查对象 `ae78c53`；两个独立上下文（Standards / Spec，不合并排序），
+报告入库 `docs/reviews/spec002-ae78c53-standards.md` / `-spec.md`。共 15 条发现
+（Standards 9 = 1 硬违规 + 5 判断项 + 3 气味；Spec 6 = 3 缺失 + 3 做错）。
+
+**票据与工作方式**：拆成 9 张票 **#33–#41（R1–R9）**，7 张并行、2 张按依赖（R7←R2、R9←R4）；
+每票独立 worktree + 分支 + TDD（先红后绿留证据），完成后由合并者串行 `--no-ff` 并回
+`feat/spec-002-integration`（9 个合并提交，最终 tip `f7caa9a`）。
+
+| 发现（轴） | 票 | 落地 |
+|---|---|---|
+| C1 事记「已删除」筛 `frozenAt`（Spec·高） | #33 | 客户端按 `excludedAt` 判墓碑、删除日期取墓碑时间（缺失「日期未知」）、冻结不进列表；夹具同时含墓碑/冻结（旧实现必红） |
+| H1 触达账读失败报 `unread:0`（Standards·硬） | #34 | `readTraffic` 三态 `missing/unreadable/ok`；`traffic.status` 读失败省略 `unread`；界面「未读数未知」；EISDIR 注入用例 |
+| J2 6 处用户可见 `~/.dsh` 旧路径（Standards·P1） | #35 | 文案收口到 `home-paths`、由宿主 `data.overview` 注入；源码扫描用例禁 `~/.dsh`（注释白名单） |
+| C2 「home 只剩一份实现」只做一半（Spec·中） | #36 | cang→`resolveDataDir`、horosa→`resolveHostHome` + `pointsAtRealDshHome` 拒绝并回 note；`home-single-source` 覆盖全部服务组；§16.2 与代码一致 |
+| C3 判官失败记 `mode:'tool'`（Spec·低-中） | #37 | 两条失败路径改 `failed` 并带原因；`tool`/`same-source` 不变；用例断言 `mode` |
+| A1 事记摘要缺「会话内容」（Spec·中） | #38 | `sessionTexts`（只取人问句，有界 3 场×3 句×200 字）+ prompt 带上；读不到如实降级；§16.5 登记 |
+| A3 权限缺失只显示英文串（Spec·低） | #40 | 写账前 token→人话 + 加性 `reasonCode` 贯通 status/账/界面；其他 reason 逐字保留 |
+| J1/J3 契约副本与 `OVERVIEW_HASH` 各一份（Standards·P2） | #39 | 两侧 import 直接对拍（改任一侧即红）+ 握手闭环；壳契约副本登记为 §0 显式例外 |
+| J4/J5/A2 runbook 绝对路径、入口格式、setup 默认档证据（Standards·P3 + Spec·低） | #41 | runbook 改 `<repo>` 占位 + `rmdir` 写法；入口断行；setup 默认档**如实登记**为未验证（理由与关闭方式进 §16.5） |
+
+**修复后的第二轮 code-review**（固定点 `ae78c53`、对象 `397b4f0`）：Standards **通过**（3 判断项），
+Spec **不通过**（R3·AC1「按实际 home 渲染」只有组件层绿，装配点不传值）。同一轮 `ce64a13` 一次修掉 5 项：
+F1 生产接线（apply 期读一次 `data.overview` 注入 5 处路径；`overview-contract` 把占位当产品文案的断言一并纠正）、
+F2 host/client 失败文案表对拍 + 删两个零消费者导出、F3 恒真夹具补 `frozenAt`（证红后还原）、
+F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合并为 `f7caa9a`。
+
+**验证（数字抄工具输出，最终 tip `f7caa9a`）**
+
+```
+# pnpm test:inventory
+[inventory] 用例 1811 条（基线 1811）/ 文件 164 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
+
+# pnpm verify:isolation → 8/8 通过，exit 0
+# pnpm verify:assembly → S2/S3/S4/S5 PASS；S1 FAIL（钉版上游缺陷，Spec 001 起既有已知红）
+# tsc --noEmit exit 0；build-client --check in sync（522070B）
+```
+
+**这一轮的教训**
+
+1. **「按实际 X 渲染」必须在装配点验**：R3 两次出现同一形状——组件层直传 props 的绿与
+   「把占位当产品文案」的断言都不算数；AC 写「渲染」就要在 apply/装配面断言一次。
+2. **测试替身与实现同错会第二次发生**：R1 的旧夹具把冻结当墓碑（与 C1 同形），
+   修复必须先改夹具证红，再改实现。
+3. **复制表与死导出要每轮复核**：R7 的人话表两端各一份 + 两个零消费者导出；
+   现在有逐键/正则/样例对拍，且新增复制必须登记例外。
+4. **`--update` 的键序噪声**：基线文件按 vitest 报告序写会产生纯搬移 diff；已在写出处按 key 排序。
+
+**遗留边界（如实）**：setup 默认档端到端仍无证据（§16.5 登记，关闭方式写在那里）；`cang` 的拒绝是
+静默改判（无装配 notes 通道，§16.2 已登记）；R7 人话表仍两份（有对拍，跨包无共享运行时模块）；
+`apply` 期多一次只读 `data.overview`（含体积统计；失败降级为占位，代价写在代码注释里）。
 

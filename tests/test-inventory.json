@@ -1,6 +1,6 @@
 {
   "note": "用例清单基线：收集到的用例数（含 skip）。--update 刷新；knownRed 之外的失败 = 违规。",
-  "total": 1795,
+  "total": 1811,
   "files": {
     "tests/assembly/ai-readiness-api.test.mjs": 3,
     "tests/assembly/ai-readiness-controller.test.mjs": 8,
@@ -23,7 +23,7 @@
     "tests/assembly/digao-panel.test.mjs": 36,
     "tests/assembly/digao-rikke-cards.test.mjs": 19,
     "tests/assembly/digao-rikke-registry.test.mjs": 7,
-    "tests/assembly/home-copy.test.mjs": 11,
+    "tests/assembly/home-copy.test.mjs": 16,
     "tests/assembly/mounts-contract.test.mjs": 14,
     "tests/assembly/mounts-model.test.mjs": 14,
     "tests/assembly/mounts-views.test.mjs": 13,
@@ -31,7 +31,7 @@
     "tests/assembly/onboarding-contract.test.mjs": 12,
     "tests/assembly/onboarding-model.test.mjs": 16,
     "tests/assembly/onboarding-wizard.test.mjs": 30,
-    "tests/assembly/overview-contract.test.mjs": 25,
+    "tests/assembly/overview-contract.test.mjs": 29,
     "tests/assembly/overview-hash.test.mjs": 7,
     "tests/assembly/parsers.test.mjs": 13,
     "tests/assembly/pu-management.test.mjs": 6,
@@ -107,6 +107,7 @@
     "tests/lib/home-single-source.test.mjs": 24,
     "tests/lib/inventory-gate.test.mjs": 26,
     "tests/lib/sandbox-prune.test.mjs": 10,
+    "tests/notify/reason-parity.test.mjs": 7,
     "tests/notify/send.test.mjs": 13,
     "tests/rikke/ai-note.test.mjs": 9,
     "tests/rikke/content.test.mjs": 7,
