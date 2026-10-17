@@ -155,6 +155,33 @@ function softGet(ctx, serviceName) {
   }
 }
 
+/**
+ * 本进程是不是**已经在关闭**（cordis `FiberState.UNLOADING=5` / `DISPOSED=4`）。
+ *
+ * 为什么需要它：`dsh --profile xuanshu --help` 这条无 LLM 的启动路径里，
+ * `headless-startup` 行会解析 `--help` 并**立刻请求退出**；我们的插件行在树里排在最后，
+ * 于是它的 `apply()` 可能在 dispose 已经开始之后才跑（实测 root fiber.state=UNLOADING=5，
+ * `profileContext` 已被随树拆除）。那不是玄枢装配失败，而是「报告在关闭期间写成」。
+ * 装配报告必须把这件事**说出来**（`profile.teardown=true`），而不是把它报成「profileContext 缺失」。
+ *
+ * 真实服务（`dsh web` / 桌面壳的子进程）不会走到这里：进程活着、树是 ACTIVE。
+ * 导出给断言台：这条判据的「会红的对照」在 `tests/assembly/assembly-report-teardown.test.mjs`
+ * （root fiber=UNLOADING 才算关闭；ACTIVE 缺 profileContext 仍然必须判失败）。
+ * @returns {boolean}
+ */
+export function isShuttingDown(ctx) {  const stateOf = (value) => {
+    try {
+      return typeof value?.fiber?.state === 'number' ? value.fiber.state : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const root = stateOf(ctx?.root);
+  if (root !== undefined) return root >= 4;
+  const own = stateOf(ctx);
+  return own !== undefined && own >= 4;
+}
+
 /** 取一个带作用域名的 logger；宿主没装 logger 时返回静默替身。 */
 function namedLogger(ctx) {
   try {
@@ -299,9 +326,18 @@ function collectPatchRowIds(ctx) {
 function buildReport(ctx, config) {
   const notes = [];
 
+  // `dsh --help` 这条路径会在树 mount 完之前请求退出（见 `isShuttingDown` 的注释）：
+  // 那种现场里 profileContext 已经随树拆掉，报告**仍然**要写（它是 apply 真跑过的证据），
+  // 但要如实标注「本份写于关闭期间」，并把 home 的来源退回 DSH_HOME 推导。
+  const teardown = isShuttingDown(ctx);
   const profileCtx = softGet(ctx, 'profileContext');
   if (profileCtx === undefined) {
-    notes.push('profileContext 服务不可得：profile 名/目录按 DSH_HOME 与契约 §0 定值推导。');
+    notes.push(
+      teardown
+        ? '本进程正在关闭（root fiber 处于 UNLOADING/DISPOSED）：profileContext 已随树拆除，'
+          + '本份装配报告在关闭期间写成；home 按 DSH_HOME / 玄枢自己的兜底推导（见 profile.dshHomeSource）。'
+        : 'profileContext 服务不可得：profile 名/目录按 DSH_HOME 与契约 §0 定值推导。',
+    );
   }
   const profileName =
     typeof profileCtx?.name === 'string' && profileCtx.name !== '' ? profileCtx.name : FALLBACK_PROFILE_NAME;
@@ -356,7 +392,14 @@ function buildReport(ctx, config) {
     schema: REPORT_SCHEMA,
     generatedAt: new Date().toISOString(),
     ok: false,
-    profile: { name: profileName, dir: profileDir, dshHome, dshHomeSource: homeInfo.source },
+    profile: {
+      name: profileName,
+      dir: profileDir,
+      dshHome,
+      dshHomeSource: homeInfo.source,
+      // 只有「写于关闭期间」才出现这个键（加性；正常 web/桌面启动里它不存在）。
+      ...(teardown ? { teardown: true } : {}),
+    },
     dsh: { version: dshVersion },
     runtime: { node: process.version, platform: process.platform },
     plugins,
@@ -364,12 +407,14 @@ function buildReport(ctx, config) {
     notes,
   };
 
-  // ok = 本票装配的三项必查都过：profileContext 可得、两个插件包都解析到、两行 id 都在树里。
+  // ok = 本次 apply 真的在装配后的树里跑过：两个插件包都解析到、两行 id 都在树里、
+  // home 落点没有被拒绝。**profileContext 那一项**在正常服务里必须可得；只有在上面
+  // 如实标注的关闭现场（teardown）里才允许缺失 —— 那不是装配失败，是「树先拆了」。
   // （`specifiers` 天然是「本包名 + PEER_PACKAGE」两个键，不必再数长度。）
   const missingRows = specifiers.filter((specifier) => report.patchRowIds.includes(specifier) !== true);
   if (missingRows.length > 0) notes.push(`补丁行未出现在本进程树中：${missingRows.join(', ')}。`);
   const allProbed = specifiers.every((specifier) => plugins[specifier] !== undefined);
-  report.ok = profileCtx !== undefined && allProbed && missingRows.length === 0 && target.blocked === undefined;
+  report.ok = (profileCtx !== undefined || teardown) && allProbed && missingRows.length === 0 && target.blocked === undefined;
 
   return { report, dataDir: target.dataDir, homeInfo, blocked: target.blocked };
 }
