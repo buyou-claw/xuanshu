@@ -15,8 +15,14 @@
 import { streamText } from '../llm/text.mjs'
 
 /** 事记摘要的系统提示（与底稿的 `DIGEST_SYSTEM` 明确区分）。 */
-export const SHIJI_SUMMARY_SYSTEM = '你是玄枢的事记摘要器。把用户给的项目名、会话标题与项目说明文档压成一两句中文事记，'
-  + '只写材料里出现过的事实，不要推测、不要分点、不要标题，长度不超过 120 字。'
+export const SHIJI_SUMMARY_SYSTEM = '你是玄枢的事记摘要器。把用户给的项目名、会话标题、会话内容（人在会话里问过的话）'
+  + '与项目说明文档压成一两句中文事记，只写材料里出现过的事实，不要推测、不要分点、不要标题，长度不超过 120 字。'
+
+/**
+ * 素材范围的固定说明（#38）：摘要素材有会话内容，但**没有**代码正文。
+ * 写在 prompt 里而不是只写在注释里 —— 模型看得到才有约束力，测试也钉得住。
+ */
+export const SHIJI_MATERIAL_SCOPE = '（素材只来自会话标题、会话内容与项目说明文档；不读代码正文）'
 
 /** 会话「存成今天的事记」的摘要提示（素材是会话文本历史）。 */
 export const SHIJI_SESSION_SYSTEM = '你是玄枢的事记摘要器。把用户给的一场问事的文本历史压成一两句中文事记，'
@@ -67,14 +73,29 @@ function softLlm(ctx) {
   }
 }
 
-/** 把一条依据拼成摘要素材（只给「看过的东西」：标题 + 文档片段）。 */
+/**
+ * 把一条依据拼成摘要素材（只给「看过的东西」：标题 + 会话内容 + 文档片段）。
+ *
+ * 素材的三路顺序固定（会话标题 → 会话内容 → 文档正文）：同一份依据必须拼出同一段 prompt
+ * （用例钉着），否则「指纹不变 → 0 次摘要」的成本口径会在模型侧抖动。
+ * 会话内容缺席（日志读不出来 / 一场会话没人说话）时**不补、不编** —— 如实按标题 + 文档降级。
+ */
 export function summaryPrompt(item) {
   const lines = [
     `项目/工作流：${item?.name ?? ''}`,
     `依据：${basisText(item?.basis)}`,
+    SHIJI_MATERIAL_SCOPE,
   ]
   const titles = (Array.isArray(item?.material?.sessionTitles) ? item.material.sessionTitles : []).filter((title) => typeof title === 'string' && title !== '')
   if (titles.length > 0) lines.push(`会话标题：${titles.join('；')}`)
+  // 「会话内容」= 人在会话里问过的句子（首问在前，有界；采集侧已截断）。
+  for (const session of Array.isArray(item?.material?.sessionTexts) ? item.material.sessionTexts : []) {
+    const questions = (Array.isArray(session?.questions) ? session.questions : []).filter((question) => typeof question === 'string' && question !== '')
+    if (questions.length === 0) continue
+    const title = typeof session?.title === 'string' && session.title !== '' ? ` ${session.title}` : ''
+    lines.push(`【会话内容${title}】`)
+    for (const question of questions) lines.push(`问：${question}`)
+  }
   for (const doc of Array.isArray(item?.material?.docs) ? item.material.docs : []) {
     if (typeof doc?.text !== 'string' || doc.text.trim() === '') continue
     lines.push(`【文档 ${doc.relPath}】`, doc.text)

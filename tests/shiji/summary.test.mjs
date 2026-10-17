@@ -26,11 +26,20 @@ const ITEM = {
   },
 }
 
+/** #38：素材多了「会话内容」（人问过的句子），标题照旧保留。 */
+const ITEM_WITH_SESSION = {
+  ...ITEM,
+  material: {
+    ...ITEM.material,
+    sessionTexts: [{ sessionId: 's1', title: '事记怎么接', questions: ['事记怎么接？', '好。'] }],
+  },
+}
+
 describe('票05 · 摘要用注入的 LLM 桩（零真实模型）', () => {
   it('有 LLM：返回 llm 文本，素材含项目名/会话标题/文档正文，且 system 与底稿不同', async () => {
     const llm = fakeLlm({ text: '在做玄枢：把底稿与事记接上。' })
     const ctx = makeCtx({ services: { llm } })
-    const result = await summarizeShijiEvidence(ctx, ITEM)
+    const result = await summarizeShijiEvidence(ctx, ITEM_WITH_SESSION)
     expect(result).toEqual({ ok: true, text: '在做玄枢：把底稿与事记接上。', mode: 'llm', reason: null })
 
     const streams = llm.calls.filter((call) => call.method === 'stream')
@@ -43,6 +52,10 @@ describe('票05 · 摘要用注入的 LLM 桩（零真实模型）', () => {
     expect(prompt).toContain('事记怎么接')
     expect(prompt).toContain('底稿的第四个来源')
     expect(prompt).toContain('依据：会话 1 场 · 文档 2 份')
+    // #38 AC2：注桩 LLM 收到的素材里确实有「会话内容」，不是只有标题与文档。
+    expect(prompt).toContain('问：事记怎么接？')
+    expect(prompt).toContain('问：好。')
+    expect(prompt).toContain('不读代码正文')
   })
 
   it('没有 ctx.llm → skeleton：如实写「摘要未能生成（模型不可用）」+ 依据计数，不编内容', async () => {
@@ -64,10 +77,29 @@ describe('票05 · 摘要用注入的 LLM 桩（零真实模型）', () => {
     expect(result.text).toContain('摘要未能生成（模型不可用）')
   })
 
-  it('依据计数与素材拼装的确定性（同一份依据 → 同一段 prompt）', () => {
+  it('依据计数与素材拼装的确定性（同一份依据 → 同一段 prompt）：带会话内容 + 声明不读代码正文', () => {
     expect(basisText({ sessions: 3, docs: 2 })).toBe('会话 3 场 · 文档 2 份')
     expect(skeletonSummary({ sessions: 0, docs: 0 })).toBe('摘要未能生成（模型不可用）：依据 会话 0 场 · 文档 0 份。')
-    expect(summaryPrompt(ITEM)).toBe('项目/工作流：XuanShu\n依据：会话 1 场 · 文档 2 份\n会话标题：事记怎么接\n【文档 docs/shiji.md】\n事记 = 底稿的第四个来源，只可删不可改。')
+    expect(summaryPrompt(ITEM_WITH_SESSION)).toBe([
+      '项目/工作流：XuanShu',
+      '依据：会话 1 场 · 文档 2 份',
+      '（素材只来自会话标题、会话内容与项目说明文档；不读代码正文）',
+      '会话标题：事记怎么接',
+      '【会话内容 事记怎么接】',
+      '问：事记怎么接？',
+      '问：好。',
+      '【文档 docs/shiji.md】',
+      '事记 = 底稿的第四个来源，只可删不可改。',
+    ].join('\n'))
+    // 降级（没有会话内容）时素材就是标题 + 文档：不编会话里的事。
+    expect(summaryPrompt(ITEM)).toBe([
+      '项目/工作流：XuanShu',
+      '依据：会话 1 场 · 文档 2 份',
+      '（素材只来自会话标题、会话内容与项目说明文档；不读代码正文）',
+      '会话标题：事记怎么接',
+      '【文档 docs/shiji.md】',
+      '事记 = 底稿的第四个来源，只可删不可改。',
+    ].join('\n'))
   })
 })
 
