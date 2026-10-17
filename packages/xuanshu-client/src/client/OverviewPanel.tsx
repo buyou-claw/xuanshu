@@ -20,6 +20,7 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 
 import type { BaziApi, BaziStatus } from './bazi-api.js';
 import type { BaziUiController } from './bazi-controller.js';
+import { useAiReadiness } from './ai-views.js';
 import { XsDestinyCard, XsDigaoCard, XsQuickLinks, XsRikkeCard } from './cards.js';
 import type { DestinySnapshot, DigaoSummary, OverviewInjected, RikkeContent } from './cards.js';
 import type { DigaoApi, DigaoStatus } from './digao-api.js';
@@ -362,6 +363,8 @@ export function OverviewPanel({
   onGenerate,
   onRefresh,
   onRetry,
+  aiStatus,
+  onOpenAiSettings,
 }: OverviewPanelProps) {
   const date = today ?? localDate();
   // 命盘卡：票 08 起数据驱动（loading / empty / ready / error + 快照）。
@@ -381,6 +384,8 @@ export function OverviewPanel({
   });
   // 底座是否已立：命盘 ready 即已立（S1 §5 第 5 步：快捷入口与底稿卡空因据此分流）。
   const baseplate = baseplateReady ?? destiny.state === 'ready';
+  // #29：问事入口的门禁读「接上 AI」的只读状态（控制器缺席 → unknown，不静默禁用）。
+  const aiSnapshot = useAiReadiness(aiStatus);
 
   /**
    * 日课卡 `[立即生成]`：**人点**才走（`rikkeController.generate()` 是唯一调用点；
@@ -465,7 +470,15 @@ export function OverviewPanel({
           {...injected}
           onRetry={retryDigao}
         />
-        <XsQuickLinks baseplateReady={baseplate} navigate={navigate} mainPanels={mainPanels} />
+        <XsQuickLinks
+          baseplateReady={baseplate}
+          navigate={navigate}
+          mainPanels={mainPanels}
+          {...(aiSnapshot?.readiness === undefined ? {} : { aiReadiness: aiSnapshot.readiness })}
+          checking={aiSnapshot?.checking === true}
+          {...(aiStatus === undefined ? {} : { onRetryAi: () => { void aiStatus.refresh(); } })}
+          {...(onOpenAiSettings === undefined ? {} : { onOpenAiSettings })}
+        />
       </div>
     </div>
   );

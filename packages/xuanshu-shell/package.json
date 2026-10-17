@@ -1,0 +1,18 @@
+{
+  "name": "xuanshu-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "玄枢桌面壳（Electron）：看护 dsh --profile xuanshu 子进程、承载窗口、托盘/关窗/自启、接收宿主回环通知。不实现任何业务。",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "lib/main.mjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "38.2.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

@@ -19,6 +19,8 @@ import type { BaziApi } from './bazi-api.js';
 import type { BaziUiController } from './bazi-controller.js';
 import type { DigaoApi } from './digao-api.js';
 import type { DigaoUiController } from './digao-controller.js';
+import type { AiReadiness, AiReadinessController } from './ai-model.js';
+import { XsAiGate } from './ai-views.js';
 import {
   ACTION_COPY,
   BADGE_DERIVED,
@@ -85,6 +87,17 @@ export interface OverviewInjected {
   /** 底稿数据面与控制器（票 13）：`digao.status` 决定底稿卡四态，`refresh()` 是「人点 [刷新]」的落点。 */
   digao?: DigaoApi;
   digaoController?: DigaoUiController;
+  /**
+   * #29「接上 AI」的只读状态控制器：问事入口的门禁读它。
+   * 面板级注入（概览用它取一次、传给快捷入口卡），四卡里只有 `XsQuickLinks` 消费。
+   * 名字带 `Status` 是为了不与 `XsRikkeCardProps.ai`（日课卡的 AI 三段提示）撞名。
+   */
+  aiStatus?: AiReadinessController;
+  /**
+   * 打开 DSH「设置 → 模型」。**给不出就不传**：界面改显示逐字路径，绝不渲染死按钮
+   * （DSH rc.2 没有公开的打开设置 API，见 `ai-views.tsx` 文件头）。
+   */
+  onOpenAiSettings?: () => void;
 }
 
 /** 订阅 main 面板键（卡片渲染期判定 fail-soft）。 */
@@ -712,6 +725,12 @@ export function XsDigaoCard({
 export interface XsQuickLinksProps extends OverviewInjected {
   /** 底座是否已立（07 恒 false；票 08 起由取数决定问事格副标题）。 */
   baseplateReady?: boolean;
+  /** #29：AI 三态状态面（`undefined` = 这次没拿到 → 按「未知」处理，不静默禁用）。 */
+  aiReadiness?: AiReadiness;
+  /** #29：正在检测（只影响门禁行文案，不改变已渲染的三态）。 */
+  checking?: boolean;
+  /** #29：人工重试（未接上 / 未知时才有意义）。 */
+  onRetryAi?: () => void;
 }
 
 interface CellSpec {
@@ -728,8 +747,22 @@ export function XsQuickLinks({
   baseplateReady = false,
   navigate,
   mainPanels,
+  aiReadiness,
+  checking = false,
+  onRetryAi,
+  onOpenAiSettings,
 }: XsQuickLinksProps) {
   const available = useAvailable(mainPanels);
+  // #29：问事入口的门禁。`undefined` = 这次没拿到状态 → 未知（**不禁用**，但下面明说未知）。
+  const aiState = aiReadiness === undefined
+    ? (checking ? 'checking' : 'unknown')
+    : aiReadiness.configured === true
+      ? 'configured'
+      : aiReadiness.configured === 'unknown'
+        ? 'unknown'
+        : 'missing';
+  const consultAvailable = isAvailable(available, 'consult');
+  const consultDisabled = !consultAvailable || aiState === 'missing';
 
   const cells: CellSpec[] = [
     {
@@ -738,8 +771,9 @@ export function XsQuickLinks({
       title: QUICKLINK.consult.title,
       // 底座未立时问事格副标题换提示句，但格**仍可用**（S4 §3④）。
       subtitle: baseplateReady ? QUICKLINK.consult.subtitle : QUICKLINK_CONSULT_UNREADY,
-      disabled: !isAvailable(available, 'consult'),
-      reason: DISABLED_REASON.consult,
+      disabled: consultDisabled,
+      // 两条理由分开写：面板没装配 ≠ AI 没接上（修复去处不同）。
+      reason: consultAvailable ? DISABLED_REASON.consultAi : DISABLED_REASON.consult,
     },
     {
       target: 'conversation',
@@ -778,6 +812,13 @@ export function XsQuickLinks({
           </button>
         ))}
       </div>
+      {/* #29：门禁行（已接上时组件自己返回 null）。禁用理由必须**看得见**，不能只在 title 里。 */}
+      <XsAiGate
+        {...(aiReadiness === undefined ? {} : { readiness: aiReadiness })}
+        checking={checking}
+        {...(onRetryAi === undefined ? {} : { onRetry: onRetryAi })}
+        {...(onOpenAiSettings === undefined ? {} : { onOpenSettings: onOpenAiSettings })}
+      />
       <p className="xs-quicklinks__note" data-xuanshu-note="boundary">
         {QUICKLINKS_BOUNDARY}
       </p>

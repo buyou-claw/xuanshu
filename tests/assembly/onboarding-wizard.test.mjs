@@ -414,19 +414,27 @@ describe('票 08 · 向导根（main key onboarding）', () => {
     navigate: () => {},
   })
 
-  it('默认落在第 1 步：步骤条 1/5、标题、取消向导（无副作用退出）都在', () => {
+  it('默认落在第 1 步：步骤条 1/6、标题、取消向导（无副作用退出）都在', () => {
     const html = render(h(OnboardingPanel, { ...deps() }))
     expect(html).toContain('data-xuanshu-panel="onboarding"')
-    expect(html).toContain('第 1 / 5 步')
+    // #29：冷启动多了一步「接上 AI」（八字 → 接上 AI → 就绪），所以是 1/6。
+    expect(html).toContain('第 1 / 6 步')
     expect(html).toContain('出生日期与钟表时间')
     expect(html).toContain('data-xuanshu-action="cancel"')
     expect(html).toContain('data-xuanshu-action="next"')
   })
 
-  it('步骤条五格 + 当前步高亮（不需要会话绑定：main key ≠ conversation，F1）', () => {
+  it('步骤条六格 + 当前步高亮（不需要会话绑定：main key ≠ conversation，F1）', () => {
     const html = render(h(XsStepBar, { step: 3 }))
-    expect(html.match(/data-xuanshu-step="\d"/g)?.length).toBe(5)
+    expect(html.match(/data-xuanshu-step="\d"/g)?.length).toBe(6)
     expect(tagOf(html, 'data-xuanshu-step="3"')).toContain('data-xs-current="true"')
+  })
+
+  it('#29：最后一步是「接上 AI」，与「八字五步」在同一根步骤条上（不新增面板）', () => {
+    const html = render(h(XsStepBar, { step: 6 }))
+    expect(html).toContain('第 6 / 6 步')
+    expect(tagOf(html, 'data-xuanshu-step="6"')).toContain('data-xs-current="true"')
+    expect(html).toContain('接 AI')
   })
 
   it('预填重录：第 1 步直接带出旧值（S2 §5.4「五步全部预填现值」）', () => {
