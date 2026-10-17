@@ -11,7 +11,7 @@
  *   - 底座与底稿是**恒定在场项**，不进任何勾选集合（契约 §1：「它们是每场问事的前提，不是这次的选择」）；
  *   - 历史列表的权威是**旁挂清单**，搜索边界只有标题（S7 §3③：「不搜全文」）。
  */
-import type { ConsultSummary, MountRef, OptionalSource } from './consult-api.js';
+import type { ConsultDrafts, ConsultDraftRound, ConsultMessage, ConsultSummary, MountRef, OptionalSource } from './consult-api.js';
 
 /** 玄枢自铸的问事 sessionId 前缀（ADR-0009 §1；改它等于改数据格式）。 */
 export const CONSULT_SESSION_PREFIX = 'session-xs-consult-';
@@ -174,6 +174,119 @@ export function filterHistory(
 /** 阅读器里的角色标签（S7 §2.2：「你：…」/「AI：…」）。 */
 export function roleLabel(role: 'user' | 'assistant'): string {
   return role === 'user' ? '你' : 'AI';
+}
+
+/**
+ * 采用稿的 `source.kind`（与宿主 `message.mjs` 的 `BESTOF_ADOPTED_SOURCE_KIND` **逐字一致**）。
+ * 改它等于改数据格式：日志里的消息按这个 kind 认「这是一份被拍板的合参稿」。
+ */
+export const ADOPTED_DRAFT_SOURCE = 'xuanshu-bestof-adopted';
+
+/**
+ * 一份采用稿在**这一轮**里的处境（票 31）：
+ *   - `current`：这轮当前的采用稿；
+ *   - `rejected`：这一轮被否决，它不作数（「曾经采用过」不等于「现在是当前」）；
+ *   - `superseded`：同一轮里被后来改选的那一份取代；
+ *   - `unknown`：判不出来（老宿主 / 账本缺证据）—— 此时**不声称**任何一份被取代。
+ */
+export type DraftRoundState = 'current' | 'rejected' | 'superseded' | 'unknown';
+
+/** 轮次组里的一条采用稿（每条各有自己的处境；一轮可能先后投过两份）。 */
+export interface ReviewDraftItem {
+  message: ConsultMessage;
+  state: DraftRoundState;
+}
+
+/**
+ * 回看里的一项：普通消息，或一轮合参（按轮分组的采用稿）。
+ *
+ * 为什么按轮成组而不是平铺：Spec 002 的「当前采用稿」已经从**全场一份**变成**各轮各一份**，
+ * 平铺会让读者以为「最后一条就是唯一采用稿」；分组才看得见「第 1 轮采用了 A、第 3 轮否掉了」。
+ */
+export type ReviewItem =
+  | { kind: 'message'; key: string; message: ConsultMessage }
+  | { kind: 'round'; key: string; round: number; runId: string; state: DraftRoundState; items: ReviewDraftItem[] };
+
+/** 一份采用稿在这一轮里的处境（判不出来时不乱说）。 */
+function draftStateOf(round: ConsultDraftRound, messageId: string, drafts: ConsultDrafts): DraftRoundState {
+  if (drafts.resolved !== true) return 'unknown';
+  if (round.currentId === messageId) return 'current';
+  if (round.rejected) return 'rejected';
+  return round.currentId === undefined ? 'unknown' : 'superseded';
+}
+
+/**
+ * 回看时间线（票 31）：普通消息照旧平铺，采用稿按**轮**收成一组。
+ *
+ * 判据只来自宿主（`consult.read` 的 `drafts`）：客户端不重算「哪一份算当前」——
+ * 那套按轮语义在服务端已经落地（复核 R2/R3），两处各算一遍必然漂移。
+ *
+ * 三个保守口径：
+ *   - `drafts` 缺席（老宿主 / 没有合参记录）⇒ **全部按普通消息**渲染，老回看一个字符都不变；
+ *   - 采用稿对不上任何轮次（账本里没有它）⇒ 也当普通消息，**不声称**它是当前或被取代；
+ *   - 相邻的同轮采用稿才合成一组（不为了分组而打乱日志顺序）。
+ *
+ * @param messages 会话日志投影（顺序 = 日志顺序）
+ * @param drafts 宿主给的轮次表（可缺席）
+ * @returns 渲染项（`round` 组内保持日志顺序）
+ */
+export function reviewTimeline(
+  messages: readonly ConsultMessage[],
+  drafts: ConsultDrafts | undefined | null,
+): ReviewItem[] {
+  const byMessage = new Map<string, ConsultDraftRound>();
+  if (drafts !== undefined && drafts !== null) {
+    for (const round of drafts.rounds) {
+      for (const messageId of round.messageIds) byMessage.set(messageId, round);
+    }
+  }
+  const items: ReviewItem[] = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message === undefined) continue;
+    const key = `${String(index)}-${message.role}`;
+    const messageId = message.messageId;
+    const round = drafts === undefined || drafts === null || message.source !== ADOPTED_DRAFT_SOURCE || messageId === undefined
+      ? undefined
+      : byMessage.get(messageId);
+    if (round === undefined || drafts === undefined || drafts === null || messageId === undefined) {
+      items.push({ kind: 'message', key, message });
+      continue;
+    }
+    const state = draftStateOf(round, messageId, drafts);
+    const last = items[items.length - 1];
+    if (last !== undefined && last.kind === 'round' && last.runId === round.runId && last.round === round.round) {
+      last.items.push({ message, state });
+      if (state === 'current') last.state = 'current';
+      continue;
+    }
+    items.push({
+      kind: 'round',
+      key: `${key}-round-${round.runId}`,
+      round: round.round,
+      runId: round.runId,
+      state,
+      items: [{ message, state }],
+    });
+  }
+  return items;
+}
+
+/** 轮次组头（票 31；逐字断言的对象）：`第 2 轮合参 · 当前采用稿`。 */
+export function draftRoundLabel(item: { round: number; state: DraftRoundState }): string {
+  const prefix = `第 ${String(item.round)} 轮合参`;
+  if (item.state === 'current') return `${prefix} · 当前采用稿`;
+  if (item.state === 'rejected') return `${prefix} · 已否决（不列为当前）`;
+  if (item.state === 'superseded') return `${prefix} · 已被后来的一份取代`;
+  return `${prefix} · 当前性未知`;
+}
+
+/** 单条采用稿的徽标（与组头同口径，逐条说清它自己的处境）。 */
+export function draftBadgeLabel(state: DraftRoundState): string {
+  if (state === 'current') return '当前采用稿';
+  if (state === 'rejected') return '已被否决 · 非当前';
+  if (state === 'superseded') return '已被后一份取代 · 非当前';
+  return '当前性未知';
 }
 
 /** 打开会话的结果：`ok` 或一份**可读失败**（界面必须显示出来，不许静默）。 */

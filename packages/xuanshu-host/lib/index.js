@@ -457,7 +457,8 @@ export function apply(ctx, config) {
       // 票 10：问事容器（`consult.create/send/list/read/rename/defaults`）。
       // 会话走 `ctx.agents.create` + 自铸 id 前缀 + 专用 cwd（`<dataDir>/consult`），
       // 清单落旁挂文件；底座谱/可选谱的读面分别只走票 08 的 `bazi.basePu` 与票 09 的 `pu.*`。
-      ...createConsultMethods(ctx, { dataDir }),
+      // `dshHome` 是票 31 的挂载读面要用到的（工作流挂载读它导出的 `<dshHome>/skills/<name>/SKILL.md`）。
+      ...createConsultMethods(ctx, { dataDir, dshHome }),
       // 票 13：底稿（纯派生，没有 write/update）与日课（本地黄历 + 底座）。
       ...createDigaoMethods(ctx, { dataDir }),
       ...createRikkeMethods(ctx, { dataDir }),
@@ -471,13 +472,14 @@ export function apply(ctx, config) {
       // 票 11：多 AI 合参（`bestof.run/state/adopt`）。
       // 候选并发多路 `ctx.llm.stream()`、judge 走单字段工具（ADR-0010），
       // 记录落 `<dataDir>/consult/<sessionId>.bestof.json`；`consult.*` 的六个方法一字不动。
-      ...createBestOfMethods(ctx, { dataDir }),
+      // `dshHome` 与 consult 同源：候选流的材料快照里也可能带工作流挂载（票 31）。
+      ...createBestOfMethods(ctx, { dataDir, dshHome }),
     });
     // 票 10/12 的**统一发问边界**（评审 R2/R3/R4）：底座谱 / 底稿 / 勾选谱 / 临时挂载在
     // `agent/pre-step` 处按当前状态现算并并进每一步的模型输入 —— 谁发起的那一轮都一样
     // （门厅 composer / 原生 composer / 沉淀的 followup / 重启后恢复），且**不靠 inbox 排队**
     // （`dispose()` 会把待消费的消息撤掉）。细节与三条门写在 `lib/consult/boundary.mjs`。
-    installConsultBoundary(ctx, { dataDir });
+    installConsultBoundary(ctx, { dataDir, dshHome });
   } catch (error) {
     log.warn('谱 / 藏 / 八字 / 底稿 / 日课 / 工作流 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
   }
