@@ -55,22 +55,38 @@ export const TRAFFIC_STATUS_TEXT = {
  * 投递历史（只读账本投影；#25 契约 §3「设置里能看到投递历史」）。
  *
  * 一行一次投递尝试：`日期 · 哪一类（日课/晚省）· 状态 · 原因 · 是否补`。
- * 账本读不到时**不编空表**：由宿主 `DeliveryHistoryHost` 把理由显示出来。
+ * 账本读面是三态的：`unread` 缺席 = **未知**（账存在但读不出来），此时写「未读数未知」
+ * 且不谎称空历史；`unread: 0` 是已知的真话（合法空账），与「未知」必须可区分。
  */
 export function XsDeliveryHistory({ status }: { status: TrafficStatus }) {
   const entries = Array.isArray(status.entries) ? status.entries : [];
+  // 宿主只在账本**可读**时给 `unread`；缺席不是 0，是「读不出来」。
+  const unread = typeof status.unread === 'number' ? status.unread : undefined;
   return (
     <section className="xs-touch__history" data-xuanshu-history="traffic">
       <h2 className="xs-touch__history-title">投递历史</h2>
+      {unread === undefined ? (
+        <p className="xs-touch__note" role="note" data-xuanshu-note="unread-unknown">
+          未读数未知（触达账存在但读不出来，不按 0 算）
+        </p>
+      ) : (
+        <p className="xs-touch__note" data-xuanshu-note="unread">{`未读 ${unread} 条`}</p>
+      )}
       {status.lastFailure === undefined ? null : (
         <p className="xs-touch__note" role="alert" data-xuanshu-history-error="last-failure">
           {`最近一次失败：${status.lastFailure.kind === 'wansheng' ? '晚省' : '日课'} · ${status.lastFailure.reason ?? '（没有给理由）'}`}
         </p>
       )}
       {entries.length === 0 ? (
-        <p className="xs-touch__note" data-xuanshu-history-empty="true">
-          还没有投递记录。
-        </p>
+        unread === undefined ? (
+          <p className="xs-touch__note" data-xuanshu-history-empty="unknown">
+            投递历史也读不出来（不是「没有记录」）。
+          </p>
+        ) : (
+          <p className="xs-touch__note" data-xuanshu-history-empty="true">
+            还没有投递记录。
+          </p>
+        )
       ) : (
         <ul className="xs-touch__history-list">
           {entries.map((entry) => (

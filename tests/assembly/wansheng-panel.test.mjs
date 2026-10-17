@@ -271,10 +271,19 @@ describe('#25 · 设置里能看到投递历史（traffic.status 的读面）', 
     expect(html).toContain('补生成：不补推送（界面标「补」）')
   })
 
-  it('账本空 → 「还没有投递记录。」（不编一行假记录）', () => {
+  it('账本空 → 「还没有投递记录。」（不编一行假记录）；未读 0 明确写成「未读 0 条」', () => {
     const html = render(h(XsDeliveryHistory, { status: { entries: [], unread: 0 } }))
     expect(html).toContain('还没有投递记录。')
+    expect(html).toContain('未读 0 条')
     expect(html).not.toContain('data-xuanshu-history-row=')
+  })
+
+  it('账读不出来（unread 缺席）→ 写「未读数未知」，不谎称 0 条未读、也不谎称空历史', () => {
+    const html = render(h(XsDeliveryHistory, { status: { entries: [] } }))
+    expect(html).toContain('data-xuanshu-note="unread-unknown"')
+    expect(html).toContain('未读数未知')
+    expect(html).not.toContain('未读 0 条')
+    expect(html).not.toContain('还没有投递记录。')
   })
 })
 

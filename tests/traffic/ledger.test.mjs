@@ -9,6 +9,8 @@
  *   3. `markRead({ids})` 只改 `read`，**不动别的行、不重排、不丢坏行**；
  *   4. 文件缺失不是错误（没投过 = 空账），且**不写 `lastFailure`**（不编 0/false 冒充）。
  */
+import { mkdirSync } from 'node:fs'
+
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -84,6 +86,7 @@ describe('#24 · 触达账读面：最新在前 + 未读 + 最近失败', () => 
     }))
     const ledger = readTraffic(scratch.dataDir)
     expect(ledger.exists).toBe(true)
+    expect(ledger.state).toBe('ok')
     expect(ledger.entries.map((row) => row.date)).toEqual(['2026-10-18', '2026-10-17'])
     expect(ledger.unread).toBe(1) // 昨天那条 delivered 未读；今天这条 skipped 不算
     expect(ledger).not.toHaveProperty('lastFailure')
@@ -111,10 +114,19 @@ describe('#24 · 触达账读面：最新在前 + 未读 + 最近失败', () => 
     expect(limited.unread).toBe(2)
   })
 
-  it('账本不存在 → {entries:[], unread:0, exists:false}（不编 lastFailure）', () => {
+  it('账本不存在 → {entries:[], unread:0, exists:false, state:missing}（合法空账，不编 lastFailure）', () => {
     const scratch = box()
     const ledger = readTraffic(scratch.dataDir)
-    expect(ledger).toEqual({ entries: [], unread: 0, exists: false })
+    expect(ledger).toEqual({ entries: [], unread: 0, exists: false, state: 'missing' })
+  })
+
+  it('文件存在但读不出来（EISDIR）→ state:unreadable + unread:null（未知不是空账，不许报 0）', () => {
+    const scratch = box()
+    // 技巧：让 `<dataDir>/traffic.jsonl` 是个目录 → readFileSync 抛 EISDIR（文件「存在」但读不出）。
+    mkdirSync(scratch.path('traffic.jsonl'), { recursive: true })
+    const ledger = readTraffic(scratch.dataDir)
+    expect(ledger).toEqual({ entries: [], unread: null, exists: false, state: 'unreadable' })
+    expect(ledger).not.toHaveProperty('lastFailure')
   })
 
   it('markRead({ids}) 只改 read：命中几条报几条，别的行原样（坏行也原样留着）', () => {

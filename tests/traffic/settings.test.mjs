@@ -8,6 +8,8 @@
  *   3. `notifySummary` 是宿主决定「通知正文带不带一句短句」的唯一开关；
  *   4. 非法值**抛**（写操作不许静默）；`traffic.settings.set` 只认 `notifySummary`（#24 的范围）。
  */
+import { mkdirSync } from 'node:fs'
+
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -202,6 +204,16 @@ describe('#24 · traffic.status / traffic.markRead 两个 RPC', () => {
     const empty = await methods['traffic.status']({})
     expect(empty).toEqual({ entries: [], unread: 0 })
     expect(await methods['traffic.markRead']({ ids: [] })).toEqual({ ok: true, updated: 0 })
+  })
+
+  it('账本存在但读不出来 → 不返回 unread / lastFailure（未知不报成「0 条未读」）', async () => {
+    const { box, methods } = scene()
+    // EISDIR：`traffic.jsonl` 是个目录 —— 文件「在」但读面拿不到内容。
+    mkdirSync(box.path('traffic.jsonl'), { recursive: true })
+    const answered = await methods['traffic.status']({})
+    expect(answered).toEqual({ entries: [] })
+    expect(Object.hasOwn(answered, 'unread')).toBe(false)
+    expect(Object.hasOwn(answered, 'lastFailure')).toBe(false)
   })
 
   it('limit 透传到读面（entries 截断，unread 不变）', async () => {
