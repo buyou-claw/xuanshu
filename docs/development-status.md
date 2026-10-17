@@ -790,7 +790,9 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 6. **`tests/setup/setup-cli.test.mjs` 的「连跑两次全绿」在满载时偶发红**：本轮两次全量 `verify:all` 里
    有一次红在这一条（第一次真下载 + 第二次零下载 + 新报告），单跑该文件 14/14 绿、复跑全量也绿。
    判为环境/时序抖动（它真起本地 HTTP fixture 并真跑两遍 setup），**不是**本轮改动引入（本轮只动了
-   setup 的 home 默认与文档串）；遇上了先单跑该文件再判，别放宽清单门。
+   setup 的 home 默认与文档串）；遇上了先单跑该文件再判，别放宽清单门。同族：`tests/setup/selfcheck-branches.test.mjs`
+   的「两处都有信封」用例在 2026-10-17 环境加固轮的全量 `verify:all` 里红过一次（单跑 3/3 绿、复跑全量绿）——
+   同一类本地 HTTP fixture 时序抖动，处置同上。
 7. **`git worktree remove` 会跟穿 `node_modules` junction，清空主仓依赖**（2026-10-17 t33 实测事故）：
    实现者为了在 worktree 里能 build/跑测试，会 `mklink /J node_modules <主仓>/node_modules`（也可能在
    `packages/*/node_modules`）。`scripts/cleanup-worktrees.mjs` 先跑 `git worktree remove` —— git for Windows
