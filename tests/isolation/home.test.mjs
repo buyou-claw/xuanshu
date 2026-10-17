@@ -371,4 +371,26 @@ describe('票 22 · 宿主插件：解析到真实 ~/.dsh 就拒绝写，兜底�
       rmSync(fakeHome, { recursive: true, force: true })
     }
   })
+
+  it('进程内装配（显式 dataDir）时：环境里的 DSH_HOME=~/.dsh 不会让它罢工，落点就是那个 dataDir', () => {
+    // 这一条钉的是**判据的方向**：拒绝的依据是「写到哪里」，不是「home 变量长什么样」。
+    // `tests/*/wiring.test.mjs` 就是这种形态（真 `apply()` + 假 ctx + 显式 dataDir）；
+    // 若按 home 变量拒绝，那些用例会在 DSH 会话里（环境天然带 DSH_HOME=~/.dsh）整组红。
+    const fakeHome = makeOutsideDir('host-inprocess')
+    const dataDir = join(fakeHome, 'explicit-data-dir')
+    const warns = []
+    try {
+      withProcessEnv({
+        USERPROFILE: fakeHome, HOME: fakeHome, DSH_HOME: join(fakeHome, '.dsh'),
+        XUANSHU_DSH_HOME: undefined, XUANSHU_HOROSA_AUTOSTART: '0',
+      }, () => {
+        applyHost(makeHostCtx({ warns }), { dataDir, autoStart: false })
+        expect(existsSync(join(dataDir, 'assembly-report.json')), `显式 dataDir 下没写出报告（warns: ${warns.join(' / ')}）`).toBe(true)
+        expect(existsSync(join(fakeHome, '.dsh')), '往真实 ~/.dsh 写了东西').toBe(false)
+        expect(warns.join('\n')).not.toContain('拒绝把玄枢的数据写进')
+      })
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true })
+    }
+  })
 })
