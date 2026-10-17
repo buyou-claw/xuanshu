@@ -7,8 +7,10 @@
  *     适配器接进来 —— 测试里用假适配器，真机上是 Electron `Notification`；
  *   - **delivered 的语义 = 「构造并 show() 没抛」**（契约 §2 原文）。没弹出来时 **HTTP 仍是 200**，
  *     只把 `delivered:false` + 可读 `reason` 如实带回；绝不把「没推成」显示成「推过了」；
- *   - **点击只唤出窗口**：前端没有路由，「今日视图」= 首页；`target` 原样交给调用方，
- *     壳不假装「点了哪条进哪页」。
+ *   - **点击回调交给调用方**：本模块只把 `onClick` 接到系统通知上，**不**决定点完停在哪一屏。
+ *     壳的接线（`main.mjs` → `main-flow.mjs::createNotificationClickHandler`）负责
+ *     「唤出窗口 + 把页面带到 overview（`#xuanshu-overview`）」；`target` 原样交给调用方，
+ *     `consult` 没有深链时同样落到 overview（契约 §2 的 `target` 是**建议**，不假装点了哪条进哪页）。
  *
  * 仅使用 Node 内置模块，无第三方依赖。ESM。
  */

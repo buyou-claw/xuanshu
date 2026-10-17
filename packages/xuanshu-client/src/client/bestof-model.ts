@@ -51,7 +51,15 @@ export interface CatalogRouteOption {
   providerName: string | null;
   label: string;
   keyConfigured: boolean | 'unknown';
-  isDefault: boolean;
+  /** 三态：`true` / `false` / `null`（默认路由读不到 = 未知，不降成 false）。 */
+  isDefault: boolean | null;
+}
+
+/** 三态合取：任一层未知 → 未知（`null`）；两层都明确 → 与。 */
+function defaultOfRoute(providerDefault: boolean | null | undefined, modelDefault: boolean | null | undefined): boolean | null {
+  if (providerDefault === null || providerDefault === undefined) return null;
+  if (modelDefault === null || modelDefault === undefined) return null;
+  return providerDefault === true && modelDefault === true;
 }
 
 /** 把路由目录摊平成「可选路由」列表；可配置但未注册的家没有 model，不能当候选。 */
@@ -67,7 +75,7 @@ export function flattenCatalogRoutes(catalog: RouteCatalog | undefined): Catalog
         providerName: provider.name ?? null,
         label: `${provider.id} · ${modelName ?? model.id}`,
         keyConfigured: provider.keyConfigured,
-        isDefault: provider.isDefault && model.isDefault,
+        isDefault: defaultOfRoute(provider.isDefault, model.isDefault),
       });
     }
   }
@@ -81,7 +89,7 @@ export function flattenCatalogRoutes(catalog: RouteCatalog | undefined): Catalog
 export function defaultRouteSelection(catalog: RouteCatalog | undefined, { min = BESTOF_MIN_ROUTES, max = BESTOF_MAX_ROUTES } = {}): BestofRoute[] {
   const options = flattenCatalogRoutes(catalog);
   if (options.length === 0) return [];
-  const preferred = options.find((option) => option.isDefault) ?? options[0];
+  const preferred = options.find((option) => option.isDefault === true) ?? options[0];
   if (preferred === undefined) return [];
   const preferredProvider = preferred.provider;
   const picked: CatalogRouteOption[] = [];

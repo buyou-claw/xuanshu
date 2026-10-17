@@ -1,22 +1,48 @@
 /**
- * #24 · 触达的两项设置行（`settings.general.item`，先例 `bestof.tsx:100-102`）：
+ * #24 · 触达的四项设置行（`settings.general.item`，先例 `bestof.tsx:100-102`）：
  *   - **AI 建议段**（`rikke.settings.*` → `<dataDir>/rikke-settings.json`）：关掉后日课只留确定性骨架；
  *   - **通知摘要**（`traffic.settings.*` → 共享的 `<dataDir>/shell-settings.json`）：打开后系统通知
- *     才带一句泛化短句（默认只有「今日日课已生成」，锁屏不露内容）。
+ *     才带一句泛化短句（默认只有「今日日课已生成」，锁屏不露内容）；
+ *   - P1（复核 #23）· **关窗口行为 / 开机自启**（`shell.settings.*` → 同一份共享设置）：两个开关
+ *     写进设置文件，壳 `fs.watch` 重读即生效；行下另有一句**实际生效方式**（登录项 / 启动文件夹
+ *     快捷方式 / 不支持），它来自壳写的 `runtime/shell-status.json`，不是设置里的「想要」。
  *
- * 两项都**不**在这里发明默认值：默认值由宿主决定（文件缺失 = AI 开 / 摘要关）。设置行只做两件事
- * ——把宿主的当前值显示出来、把人的点击写回去；写失败就把原因显示在行上（写操作不许静默）。
+ * 四项都**不**在这里发明默认值：默认值由宿主决定（文件缺失 = AI 开 / 摘要关 / 关窗隐藏 / 自启关）。
+ * 设置行只做两件事 —— 把宿主的当前值显示出来、把人的点击写回去；写失败就把原因显示在行上
+ * （写操作不许静默）。读不到壳设置时那两行**禁用**并给理由，不拿默认值冒充当前值。
  *
  * 装配纪律：`installTouchSettings` 只注册一行；apply 期**不发请求**（取数在组件挂载后的 effect 里）。
  */
 import { useEffect, useState } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 
-import type { NotifyApi, TrafficStatus } from './notify-api.js';
+import type {
+  AutostartMethod, NotifyApi, ShellEffective, ShellSettingsAnswer, TrafficStatus,
+} from './notify-api.js';
+import { SHELL_SETTINGS_ENDPOINTS } from './notify-api.js';
 import type { RikkeApi } from './rikke-api.js';
 
 /** 设置行的槽位 id（`settings.general.item` 由 ui-settings-general 声明；不在场时不抛）。 */
 export const TOUCH_SETTINGS_ID = 'xuanshu.touch';
+
+/** P1（复核 #23）：壳那半边的两个方法名（与宿主 `notify/service.mjs` 逐字对齐）。 */
+export { SHELL_SETTINGS_ENDPOINTS };
+
+/** 开机自启实际生效方式 → 人话（唯一一份；托盘与设置页同源）。 */
+export const AUTOSTART_METHOD_TEXT: Record<AutostartMethod, string> = {
+  'login-item': '登录项',
+  shortcut: '启动文件夹快捷方式',
+  unsupported: '不支持（本平台无法注册）',
+};
+
+/**
+ * 自启方式的人话；`undefined` = **未知**（壳没在跑 / 读不到状态），不是「没开」。
+ * @param method - 宿主回的 `effective.autostart.method`
+ */
+export function autostartMethodText(method?: AutostartMethod): string {
+  if (method === undefined) return '未知（桌面壳未运行）';
+  return AUTOSTART_METHOD_TEXT[method] ?? '未知（桌面壳未运行）';
+}
 
 /** 投递状态的人话（#25 契约 §3：成功 / 失败 / 跳过 + 原因 + 时间 + 是否补，都能查）。 */
 export const TRAFFIC_STATUS_TEXT = {
@@ -105,24 +131,71 @@ export function DeliveryHistoryHost({ notify, preloaded }: { notify?: NotifyApi;
   return <XsDeliveryHistory status={status} />;
 }
 
-/** 两项开关的当前值。 */
+/** 壳那两行的当前值（`shell` 缺席 = 这次读不到，不许拿默认值冒充）。 */
+export interface ShellSettingsState {
+  closeBehavior: 'hide' | 'quit';
+  autostart: boolean;
+  /** 实际生效状态（壳在跑才有）；缺席 = 未知。 */
+  effective?: ShellEffective;
+}
+
+/** 四项开关的当前值。 */
 export interface TouchSettingsState {
   aiEnabled: boolean;
   notifySummary: boolean;
+  /** P1：关窗行为 / 开机自启（+ 实际生效方式）。 */
+  shell?: ShellSettingsState;
+  /** P1：读不到壳设置时的可读理由（那两行禁用，其余照常）。 */
+  shellError?: string;
 }
 
-/** 两项开关的人点动作。 */
+/** 四项开关的人点动作。 */
 export interface TouchSettingsActions {
   onToggleAi(enabled: boolean): void;
   onToggleSummary(enabled: boolean): void;
+  /** 传 `true` = 关窗即退出，`false` = 收进托盘（默认）。 */
+  onToggleCloseBehavior(quit: boolean): void;
+  onToggleAutostart(enabled: boolean): void;
+}
+
+/**
+ * P1（复核 #23）：写壳设置（`closeBehavior` / `autostart`）的**唯一**写路径。
+ *
+ * 成功把宿主**回读后的答案**交给 `onChanged`（含 `effective`）；失败把可读理由交给 `onError`
+ * 且**不外抛**（设置行不该把界面打挂）。两条都由调用方决定回滚 / 显示。
+ *
+ * @param options - 数据面与两个回调。
+ */
+export function createShellSettingsWriter({
+  api,
+  onChanged,
+  onError,
+}: {
+  api: Pick<NotifyApi, 'setShellSettings'>;
+  onChanged?: (answer: ShellSettingsAnswer) => void;
+  onError?: (message: string) => void;
+}): (patch: { closeBehavior?: 'hide' | 'quit'; autostart?: boolean }) => Promise<ShellSettingsAnswer | undefined> {
+  return async (patch) => {
+    try {
+      const answer = await api.setShellSettings(patch);
+      onChanged?.(answer);
+      return answer;
+    } catch (reason: unknown) {
+      onError?.(`设置没写成：${reason instanceof Error ? reason.message : String(reason)}`);
+      return undefined;
+    }
+  };
 }
 
 /**
  * 设置行（静态可渲染；不带任何取数逻辑）。
- * @param props - 当前值与两个 onChange。
- * @returns 一行两开关的节点。
+ * @param props - 当前值与 onChange。
+ * @returns 四行开关的节点。
  */
 export function XsTouchSettingsRow({ state, actions }: { state: TouchSettingsState; actions: TouchSettingsActions }) {
+  const shell = state.shell;
+  const shellKnown = shell !== undefined;
+  const effective = shell?.effective;
   return (
     <div className="xs-touch__settings" data-xs-touch="settings">
       <div className="xs-touch__row" data-xuanshu-setting="ai">
@@ -159,6 +232,62 @@ export function XsTouchSettingsRow({ state, actions }: { state: TouchSettingsSta
           <span className="xs-touch__note">{state.notifySummary ? '开' : '关'}</span>
         </label>
       </div>
+
+      {/* P1（复核 #23）：关窗行为 / 开机自启 —— 写的是共享设置文件，壳下次重读即生效。 */}
+      {state.shellError === undefined ? null : (
+        <p className="xs-touch__note" role="alert" data-xuanshu-setting-error="shell">
+          {state.shellError}
+        </p>
+      )}
+      <div className="xs-touch__row" data-xuanshu-setting="close-behavior">
+        <div>
+          <strong>关窗口行为</strong>
+          <p className="xs-touch__note">
+            勾上 = 点 × 直接退出（先停 DSH 子进程再退壳）；不勾 = 收进托盘继续跑，日课与晚省仍会到点。
+            这个开关写进共享设置，壳下次重读即生效。
+          </p>
+        </div>
+        <label>
+          <input
+            type="checkbox"
+            checked={shellKnown && shell.closeBehavior === 'quit'}
+            disabled={!shellKnown}
+            onChange={(event) => actions.onToggleCloseBehavior((event.target as HTMLInputElement).checked)}
+          />
+          <span className="xs-touch__note">
+            {shellKnown ? (shell.closeBehavior === 'quit' ? '关窗即退出' : '收进托盘') : '未知'}
+          </span>
+        </label>
+      </div>
+      <div className="xs-touch__row" data-xuanshu-setting="autostart">
+        <div>
+          <strong>开机自启</strong>
+          <p className="xs-touch__note">
+            登录项优先，其次启动文件夹快捷方式；两条路都不可用时如实显示「不支持」。
+            下面那行显示的是**这台机器上实际生效**的方式，不是这里勾的值。
+          </p>
+        </div>
+        <label>
+          <input
+            type="checkbox"
+            checked={shellKnown && shell.autostart === true}
+            disabled={!shellKnown}
+            onChange={(event) => actions.onToggleAutostart((event.target as HTMLInputElement).checked)}
+          />
+          <span className="xs-touch__note">{shellKnown ? (shell.autostart ? '开' : '关') : '未知'}</span>
+        </label>
+      </div>
+      <p
+        className="xs-touch__note"
+        data-xuanshu-effective="autostart"
+        data-xuanshu-effective-known={effective === undefined ? 'false' : 'true'}
+      >
+        {effective === undefined
+          ? '实际生效方式：未知（桌面壳未运行）—— 这里的开关会写进共享设置，下次桌面壳启动时生效。'
+          : `实际生效：${autostartMethodText(effective.autostart.method)}（${effective.autostart.enabled ? '已开' : '已关'}）`
+            + ` · 关窗：${effective.closeBehavior === 'quit' ? '退出' : '收进托盘'}`
+            + `${effective.autostart.enabled === shell?.autostart ? '' : '（注意：设置里的开关与实际生效不一致，可能是系统启动项被拦下了）'}`}
+      </p>
     </div>
   );
 }
@@ -178,6 +307,29 @@ export function TouchSettingsHost({ rikke, notify }: { rikke: RikkeApi; notify: 
       .then(([rikkeSettings, notifySettings]) => {
         if (!alive) return;
         setState({ aiEnabled: rikkeSettings.aiEnabled, notifySummary: notifySettings.notifySummary });
+        // P1（复核 #23）：壳的三项单独读 —— 老宿主没有 `shell.settings.get` 时，
+        // 上面两行仍然可用；失败只把壳那两行标成「读不到」，不拿默认值冒充当前值。
+        void notify
+          .getShellSettings()
+          .then((answer) => {
+            if (!alive) return;
+            setState((previous) => previous === undefined
+              ? previous
+              : {
+                ...previous,
+                shell: {
+                  closeBehavior: answer.settings.closeBehavior,
+                  autostart: answer.settings.autostart === true,
+                  ...(answer.effective === undefined ? {} : { effective: answer.effective }),
+                },
+              });
+          })
+          .catch((reason: unknown) => {
+            if (!alive) return;
+            setState((previous) => previous === undefined
+              ? previous
+              : { ...previous, shellError: `读不到壳设置：${reason instanceof Error ? reason.message : String(reason)}` });
+          });
       })
       .catch((reason: unknown) => {
         if (!alive) return;
@@ -194,6 +346,40 @@ export function TouchSettingsHost({ rikke, notify }: { rikke: RikkeApi; notify: 
       ? null
       : <p className="xs-touch__note" role="alert" data-xuanshu-setting-error="read">{error}</p>;
   }
+
+  /** P1：写壳设置；失败回滚成写之前的值（界面不显示一个没写进去的开关）。 */
+  const writeShell = (patch: { closeBehavior?: 'hide' | 'quit'; autostart?: boolean }): void => {
+    const before = state.shell;
+    const optimistic: ShellSettingsState | undefined = before === undefined
+      ? before
+      : {
+        ...before,
+        ...(patch.closeBehavior === undefined ? {} : { closeBehavior: patch.closeBehavior }),
+        ...(patch.autostart === undefined ? {} : { autostart: patch.autostart }),
+      };
+    setState({ ...state, shell: optimistic, shellError: undefined });
+    setError(undefined);
+    void createShellSettingsWriter({
+      api: notify,
+      onChanged: (answer) => {
+        setState((previous) => previous === undefined
+          ? previous
+          : {
+            ...previous,
+            shellError: undefined,
+            shell: {
+              closeBehavior: answer.settings.closeBehavior,
+              autostart: answer.settings.autostart === true,
+              ...(answer.effective === undefined ? {} : { effective: answer.effective }),
+            },
+          });
+      },
+      onError: (message) => {
+        setState({ ...state, shell: before, shellError: undefined });
+        setError(message);
+      },
+    })(patch);
+  };
 
   return (
     <>
@@ -215,6 +401,12 @@ export function TouchSettingsHost({ rikke, notify }: { rikke: RikkeApi; notify: 
               setState({ ...state, notifySummary: !enabled });
               setError(`通知摘要开关没写成：${reason instanceof Error ? reason.message : String(reason)}`);
             });
+          },
+          onToggleCloseBehavior: (quit) => {
+            writeShell({ closeBehavior: quit ? 'quit' : 'hide' });
+          },
+          onToggleAutostart: (enabled) => {
+            writeShell({ autostart: enabled });
           },
         }}
       />

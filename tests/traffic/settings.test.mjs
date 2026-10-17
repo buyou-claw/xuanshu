@@ -14,16 +14,23 @@ import {
   DEFAULT_SHELL_SETTINGS, DEFAULT_TOUCH_TIMES, SHELL_SETTINGS_SCHEMA,
   readShellSettings, readTouchTimes, shellSettingsFile, writeShellSettings,
 } from '../../packages/xuanshu-host/lib/notify/settings.mjs'
+import { NOTIFY_STATE_ENV } from '../../packages/xuanshu-host/lib/notify/target.mjs'
 import { createTrafficMethods } from '../../packages/xuanshu-host/lib/notify/service.mjs'
-import { makeScratch } from '../notify/lib/sandbox.mjs'
+import { makeScratch, notifyStatePath } from '../notify/lib/sandbox.mjs'
 
 const boxes = []
 afterEach(() => boxes.splice(0).forEach((box) => box.cleanup()))
 
-function scene() {
+function scene({ env } = {}) {
   const box = makeScratch('traffic-settings')
   boxes.push(box)
-  return { box, methods: createTrafficMethods({}, { dataDir: box.dataDir }) }
+  return { box, methods: createTrafficMethods({}, { dataDir: box.dataDir, ...(env === undefined ? {} : { env }) }) }
+}
+
+/** 壳在跑时的运行时状态文件（P1：`<dataDir>/runtime/shell-status.json`）。 */
+function writeShellStatus(box, status) {
+  box.write('runtime/shell-status.json', `${JSON.stringify(status, null, 2)}\n`)
+  return box.path('runtime', 'shell-status.json')
 }
 
 /* ───────────────────────── 1. 设置文件本身 ───────────────────────── */
@@ -111,19 +118,79 @@ describe('#24 · traffic.settings.*：#24 摘要 + #25 两个时刻（加性）'
   })
 })
 
-describe('#24 · shell.settings.*：契约 §5 点名的宿主半边（壳的三键；与 #23 本地副本同判）', () => {
+describe('#24 · shell.settings.get / set（契约 §5 点名的宿主半边；P1 复核 #23 加 effective）', () => {
+  /** 壳在跑：notify 状态文件的路径由 env 注入，settings 状态文件是它的同目录兄弟。 */
+  const shellEnv = (box) => ({ [NOTIFY_STATE_ENV]: notifyStatePath(box.dataDir) })
+
+  it('壳不在场（env 缺席 / 状态文件缺失 / 坏文件）→ get 只回 {settings}，**不出现** effective 键', async () => {
+    for (const env of [undefined, {}, { [NOTIFY_STATE_ENV]: '' }]) {
+      const { methods } = scene({ env })
+      expect(await methods['shell.settings.get']({})).toEqual({
+        settings: { closeBehavior: 'hide', autostart: false, notifySummary: false },
+      })
+    }
+    // 壳在跑（env 有路径）但状态文件还没写（旧版壳 / 刚起）→ 同样不编 effective。
+    const box = makeScratch('traffic-settings')
+    boxes.push(box)
+    const withEnv = createTrafficMethods({}, { dataDir: box.dataDir, env: shellEnv(box) })
+    expect(await withEnv['shell.settings.get']({})).toEqual({
+      settings: { closeBehavior: 'hide', autostart: false, notifySummary: false },
+    })
+    expect(box.exists('runtime', 'shell-status.json')).toBe(false)
+  })
+
+  it('壳在跑 → effective 带**实际生效**的自启方式与关窗行为（来自壳写的状态文件）', async () => {
+    const { box } = scene()
+    const env = shellEnv(box)
+    box.write('shell-settings.json', JSON.stringify({
+      schema: 'xuanshu/shell-settings@1', closeBehavior: 'quit', autostart: true, notifySummary: false,
+    }))
+    writeShellStatus(box, {
+      schema: 'xuanshu/shell-status@1',
+      pid: 4321,
+      updatedAt: '2026-10-17T00:00:00.000Z',
+      autostart: { enabled: true, method: 'shortcut' },
+      closeBehavior: 'quit',
+    })
+    const methods = createTrafficMethods({}, { dataDir: box.dataDir, env })
+    expect(await methods['shell.settings.get']({})).toEqual({
+      // 文件里的值是唯一权威（这里刻意写成和默认值不同）。
+      settings: { closeBehavior: 'quit', autostart: true, notifySummary: false },
+      effective: {
+        autostart: { enabled: true, method: 'shortcut' },
+        closeBehavior: 'quit',
+      },
+    })
+  })
+
+  it('状态文件写了不认识的 schema / 方法 → 当作未知：省略 effective（不把坏文件当真）', async () => {
+    const cases = [
+      { schema: 'xuanshu/shell-status@0', pid: 1, autostart: { enabled: true, method: 'shortcut' }, closeBehavior: 'quit' },
+      { schema: 'xuanshu/shell-status@1', pid: 1, autostart: { enabled: true, method: 'registry' }, closeBehavior: 'quit' },
+      { schema: 'xuanshu/shell-status@1', pid: 1, autostart: { enabled: 'yes', method: 'shortcut' }, closeBehavior: 'quit' },
+      { schema: 'xuanshu/shell-status@1', pid: 1, autostart: { enabled: true, method: 'shortcut' }, closeBehavior: 'minimize' },
+      'not json',
+    ]
+    for (const status of cases) {
+      const { box } = scene()
+      box.write('runtime/shell-status.json', typeof status === 'string' ? status : JSON.stringify(status))
+      const methods = createTrafficMethods({}, { dataDir: box.dataDir, env: shellEnv(box) })
+      const answer = await methods['shell.settings.get']({})
+      expect(Object.hasOwn(answer, 'effective'), JSON.stringify(status)).toBe(false)
+    }
+  })
+
   it('get / set 只回壳的三个键（时刻走 traffic.settings），且写的是同一个文件', async () => {
     const { box, methods } = scene()
-    expect(await methods['shell.settings.get']({})).toEqual({
-      closeBehavior: 'hide', autostart: false, notifySummary: false,
-    })
     expect(await methods['shell.settings.set']({ closeBehavior: 'quit', autostart: true, notifySummary: false })).toEqual({
-      closeBehavior: 'quit',
-      autostart: true,
-      notifySummary: false,
+      settings: {
+        closeBehavior: 'quit',
+        autostart: true,
+        notifySummary: false,
+      },
     })
     expect(box.readJson('shell-settings.json')).toMatchObject({ closeBehavior: 'quit', autostart: true })
-    expect((await methods['shell.settings.get']({})).closeBehavior).toBe('quit')
+    expect((await methods['shell.settings.get']({})).settings.closeBehavior).toBe('quit')
     // #25 的两个时刻仍在同一份文件里（只是不走 shell 的读面）。
     expect(readTouchTimes(box.dataDir)).toEqual({ rikkeTime: '07:30', wanshengTime: '21:30' })
   })

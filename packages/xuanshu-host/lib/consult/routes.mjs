@@ -152,17 +152,19 @@ export async function listRoutes(ctx) {
     if (id === '') continue
     const configurable = configurableEntries.find((candidate) => candidate?.provider === id)
     const { modelsKnown, models } = await modelsOf(llm, id, failures)
+    // S7（复核）：默认路由**读不到**（`defaultRoute === null`）时 `isDefault` 是 `null`（未知），
+    // 不是 `false` —— `false` 会被界面读成「这些都不是默认的」，那是编的（与 keyConfigured 的三态同一条纪律）。
     providers.push({
       id,
       name: typeof entry?.name === 'string' && entry.name !== '' ? entry.name : (configurable?.displayName ?? null),
       registered: true,
       keyConfigured: await keyConfiguredOf(ctx, configurable, namespaces),
-      isDefault: defaultRoute?.provider === id,
+      isDefault: defaultRoute === null ? null : defaultRoute.provider === id,
       modelsKnown,
       models: models.map((model) => ({
         id: model.id,
         name: typeof model.name === 'string' && model.name !== '' ? model.name : null,
-        isDefault: defaultRoute?.provider === id && defaultRoute?.model === model.id,
+        isDefault: defaultRoute === null ? null : (defaultRoute.provider === id && defaultRoute.model === model.id),
       })),
     })
   }

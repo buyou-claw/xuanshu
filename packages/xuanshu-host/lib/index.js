@@ -82,7 +82,7 @@ import { createConsultMethods } from './consult/service.mjs';
 // home / dataDir 由下面 apply 里已经算好的那一份传入，本组**不重算**（#22 的解析结果是唯一来源）。
 import { createDataMethods } from './data/service.mjs';
 import { createDigaoMethods } from './digao/service.mjs';
-import { pointsAtRealDshHome, realDshHome, resolveHostHome, XUANSHU_HOME_ENV } from './home.mjs';
+import { dataDirFor, DATA_DIR_NAME, pointsAtRealDshHome, realDshHome, resolveHostHome, XUANSHU_HOME_ENV } from './home.mjs';
 import { installHorosa } from './horosa/service.mjs';
 import { createTrafficMethods } from './notify/service.mjs';
 // #25：晚省的四个 RPC（确定性事实，不调模型）。
@@ -110,8 +110,6 @@ export const inject = [];
 
 /** 报告 schema 标识（契约 §0/§3.1 定值）。 */
 const REPORT_SCHEMA = 'xuanshu/assembly-report@1';
-/** 数据目录名：`$DSH_HOME/xuanshu/`（契约 §0）。 */
-const DATA_DIR_NAME = 'xuanshu';
 /** 装配报告文件名（契约 §0）。 */
 const REPORT_FILENAME = 'assembly-report.json';
 /** profile 名兜底值：契约 §0 定值，仅在 profileContext 不可得时使用。 */
@@ -262,13 +260,13 @@ function resolveDshHome(profileCtx, notes) {
 
 /**
  * 解析数据目录：`config.dataDir` 覆盖优先（测试 / 嵌入方的注入口），否则 `<dshHome>/xuanshu`。
- * 装配报告与「谱 / 藏」能力**共用这一份**——两处各算一遍就会出现
+ *
+ * **join 口径只有一份**（`home.mjs::dataDirFor`，复核 S2）：本文件不再自己写一遍 `join(home, 'xuanshu')`。
+ * 装配报告与「谱 / 藏」能力**共用这一份** —— 两处各算一遍就会出现
  * 「报告写在 A、谱落在 B」这种最难查的错位。
  */
 function resolveDataDir(dshHome, config) {
-  return typeof config?.dataDir === 'string' && config.dataDir !== ''
-    ? config.dataDir
-    : join(dshHome, DATA_DIR_NAME);
+  return dataDirFor(dshHome, config);
 }
 
 /**
@@ -410,13 +408,46 @@ function buildReport(ctx, config) {
   // ok = 本次 apply 真的在装配后的树里跑过：两个插件包都解析到、两行 id 都在树里、
   // home 落点没有被拒绝。**profileContext 那一项**在正常服务里必须可得；只有在上面
   // 如实标注的关闭现场（teardown）里才允许缺失 —— 那不是装配失败，是「树先拆了」。
+  //
+  // N2（复核 2026-10-17）：这里对 teardown 的放宽是**刻意且窄的** —— 只放宽 profileContext
+  // 一项（DSH `--help` 的关闭竞态是真实存在的：树先拆了，报告仍要写出来）。关闭期间
+  // 缺插件包 / 缺补丁行 / 落点落在真实 ~/.dsh 里，**仍然必须判失败**。判据收在
+  // `reportIsOk()` 里并有会红的对照（`tests/assembly/assembly-report-teardown.test.mjs`）：
+  // 谁把括号放成整条 `|| teardown`，那组用例立刻红。
   // （`specifiers` 天然是「本包名 + PEER_PACKAGE」两个键，不必再数长度。）
   const missingRows = specifiers.filter((specifier) => report.patchRowIds.includes(specifier) !== true);
   if (missingRows.length > 0) notes.push(`补丁行未出现在本进程树中：${missingRows.join(', ')}。`);
   const allProbed = specifiers.every((specifier) => plugins[specifier] !== undefined);
-  report.ok = (profileCtx !== undefined || teardown) && allProbed && missingRows.length === 0 && target.blocked === undefined;
+  report.ok = reportIsOk({
+    profileContextAvailable: profileCtx !== undefined,
+    teardown,
+    allProbed,
+    missingRows,
+    blocked: target.blocked,
+  });
 
   return { report, dataDir: target.dataDir, homeInfo, blocked: target.blocked };
+}
+
+/**
+ * 装配报告的 `ok` 判据（**唯一一处**；N2 复核把它从内联表达式提出来，好让「放宽有多窄」可断言）。
+ *
+ * `teardown === true`（root fiber 已在关闭）**只**放宽 `profileContext` 这一项：
+ * `dsh --profile xuanshu --help` 会在树开始 dispose 之后才跑到本行，profileContext 已随树拆除 ——
+ * 那不是装配失败。其余三项（两个插件包都解析到 / 两行 id 都在树里 / home 落点未被拒）在关闭期间
+ * 照样必须成立。把括号写成整条 `|| teardown` 会把「关闭期间插件没装上」也报成 ok。
+ *
+ * @param {{profileContextAvailable: boolean, teardown: boolean, allProbed: boolean,
+ *          missingRows: string[], blocked: string|undefined}} facts
+ * @returns {boolean}
+ */
+export function reportIsOk({ profileContextAvailable, teardown, allProbed, missingRows, blocked }) {
+  const profileOk = profileContextAvailable === true || teardown === true;
+  return profileOk
+    && allProbed === true
+    && Array.isArray(missingRows)
+    && missingRows.length === 0
+    && blocked === undefined;
 }
 
 /** 临时文件名序号：同一进程内多次写报告也不会撞名。 */
@@ -609,7 +640,8 @@ export function apply(ctx, config) {
       ...createWanshengMethods(ctx, { dataDir, env: process.env }),
       // #24：触达账 / 共享设置（`traffic.status` / `traffic.markRead` / `traffic.settings.*` /
       // `shell.settings.*`）。账本与设置都在 `<dataDir>/` 下，与日课产物同源。
-      ...createTrafficMethods(ctx, { dataDir }),
+      // `env` 给 `shell.settings.get` 的 `effective` 用（P1）：壳的运行时状态文件路径由它注入。
+      ...createTrafficMethods(ctx, { dataDir, env: process.env }),
       // 票 16：工作流创建向导（新会话 + seed 自动调 `/writing-skills`；导出 skill 落
       // `<dshHome>/skills/<kebab>/SKILL.md`）。`dshHome` 与数据目录同源，skill 才落对地方。
       ...createWorkflowMethods(ctx, { dataDir, dshHome }),

@@ -6,15 +6,18 @@
  *   - `traffic.markRead({ids})`   → `{ok:true, updated}`
  *   - `traffic.settings.get()`    → `{notifySummary}`
  *   - `traffic.settings.set({notifySummary})` → `{notifySummary}`
- *   - `shell.settings.get()`      → `{closeBehavior, autostart, notifySummary}`（契约 §5 点名的宿主半边）
- *   - `shell.settings.set({...})` → 改完回读后的完整设置
+ *   - `shell.settings.get()`      → `{settings, effective?}`（契约 §5 点名的宿主半边；
+ *     `effective` 只在壳在跑时出现 —— P1 复核 #23 的加性扩展）
+ *   - `shell.settings.set({...})` → `{settings}`（改完回读；写失败抛）
  *
  * 加性纪律（与 `rikke/service.mjs:16-18` 同款）：**拿不到就省略键**，不写 false/0 冒充已读。
- * `traffic.status` 的 `lastFailure` 只在账里真有 failed 时才出现。
+ * `traffic.status` 的 `lastFailure` 只在账里真有 failed 时才出现；`shell.settings.get` 的
+ * `effective` 只在壳写了运行时状态文件时才出现（读不到 ≠ 自启没生效）。
  */
 
-import { resolveDataDir } from '../bazi/service.mjs'
+import { resolveDataDir } from '../home.mjs'
 import { readShellSettings, readTouchTimes, writeShellSettings } from './settings.mjs'
+import { resolveShellStatus } from './shell-status.mjs'
 import { markTrafficRead, readTraffic } from './traffic.mjs'
 
 /** 请求对象兜底（非对象一律当空请求）。 */
@@ -25,11 +28,14 @@ function requestOf(value) {
 /**
  * 建触达环的方法组。
  * @param {object} ctx cordis 宿主上下文（裸 `{}` 也要活）
- * @param {{dataDir?: string}} [config] 数据目录（缺省按 DSH_HOME 推导，与 `rikke.*` 同源）
+ * @param {{dataDir?: string, env?: Record<string, string|undefined>}} [config] 数据目录与壳的运行时
+ *        状态文件来源（生产 `env: process.env`；断言台注入假壳路径 —— 缺省 `{}` = 没有壳）
  * @returns {Record<string, Function>} 六个方法
  */
 export function createTrafficMethods(ctx, config = {}) {
   const dataDir = resolveDataDir(ctx, config)
+  // P1（复核 #23）：壳的实际生效状态从 env 指到的那个 runtime 目录读；缺省 {} = 没有壳。
+  const env = config.env
 
   return {
     /** 账本读面（最新在前）。`unread` 按全账算：badge 不能用被截断的那一页算。 */
@@ -69,8 +75,19 @@ export function createTrafficMethods(ctx, config = {}) {
       return { notifySummary: saved.notifySummary, ...readTouchTimes(dataDir) }
     },
 
-    /** 契约 §5 点名的宿主半边（壳读同一份文件；只回壳关心的三项，与 #23 的本地副本逐字对拍）。 */
-    'shell.settings.get': async () => readShellSettings(dataDir),
-    'shell.settings.set': async (request) => writeShellSettings(dataDir, requestOf(request)),
+    /**
+     * 契约 §5 点名的宿主半边（壳读同一份文件）。
+     *
+     * P1（复核 #23）：返回 `{settings, effective?}` —— `effective` 是壳**实际生效**的自启方式与
+     * 关窗行为，只在壳写了运行时状态文件时才出现。读不到就**省略这个键**：把「读不到」写成
+     * `autostart.enabled:false` 会被用户读成「开机自启没开」，那是编的。
+     */
+    'shell.settings.get': async () => {
+      const settings = readShellSettings(dataDir)
+      const resolved = resolveShellStatus({ env })
+      return resolved.ok ? { settings, effective: resolved.status } : { settings }
+    },
+    /** 写设置（校验 + 原子写 + 回读；失败**抛**）。壳通过 `fs.watch` 重读并重写自己的生效状态。 */
+    'shell.settings.set': async (request) => ({ settings: writeShellSettings(dataDir, requestOf(request)) }),
   }
 }

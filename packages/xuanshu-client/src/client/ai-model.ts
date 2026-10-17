@@ -71,8 +71,8 @@ export interface AiProviderLine {
   modelsKnown: boolean
   modelCount: number
   models: Array<{ id: string; name: string | null }>
-  /** 这家是不是默认模型所在的那家。 */
-  isDefaultProvider: boolean
+  /** 这家是不是默认模型所在的那家：`true` / `false` / `null`（默认路由读不到 = 未知）。 */
+  isDefaultProvider: boolean | null
   /** 按上面的 `usable()` 判据算出来的可用性（唯一给它赋值的地方）。 */
   usable: boolean
 }
@@ -130,8 +130,11 @@ function textOf(value: unknown): string | undefined {
 /** 逐字路径 + 下一步的共同尾巴。 */
 const NEXT_TO_SETTINGS = `打开 DSH「${AI_SETTINGS_PATH}」添加 / 选择。`
 
-/** 把一家 provider 投影成界面行（`usable` 是唯一判据，别处不许再算一遍）。 */
-function providerLine(entry: Record<string, unknown>, defaultProvider: string | undefined): AiProviderLine {
+/**
+ * 把一家 provider 投影成界面行（`usable` 是唯一判据，别处不许再算一遍）。
+ * `defaultProvider === null` = 默认路由**读不到**：`isDefaultProvider` 留 `null`，不写成 `false`。
+ */
+function providerLine(entry: Record<string, unknown>, defaultProvider: string | null | undefined): AiProviderLine {
   const keyConfigured = entry.keyConfigured === true || entry.keyConfigured === false ? entry.keyConfigured : 'unknown'
   const modelsKnown = entry.modelsKnown === true
   const models = Array.isArray(entry.models)
@@ -149,7 +152,7 @@ function providerLine(entry: Record<string, unknown>, defaultProvider: string | 
     modelsKnown,
     modelCount: models.length,
     models,
-    isDefaultProvider: defaultProvider !== undefined && defaultProvider === id,
+    isDefaultProvider: defaultProvider === null || defaultProvider === undefined ? null : defaultProvider === id,
     usable: entry.registered === true && keyConfigured !== false && modelsKnown && models.length > 0,
   }
 }

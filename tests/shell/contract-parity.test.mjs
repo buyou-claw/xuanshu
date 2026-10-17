@@ -71,6 +71,20 @@ describe('#23 · 契约常量：壳的本地副本 == 宿主 / 隔离启动器�
     expect(shellContract.NOTIFY_STATE_ENV).toBe('XUANSHU_SHELL_NOTIFY_STATE')
     expect(shellContract.SHELL_PID_ENV).toBe('XUANSHU_SHELL_PID')
   })
+
+  it('P1（复核 #23）：运行时状态文件（shell-status）两侧逐字同源', () => {
+    expect(shellContract.SHELL_STATUS_SCHEMA).toBe(hostContract.SHELL_STATUS_SCHEMA)
+    expect(shellContract.SHELL_STATUS_SCHEMA).toBe('xuanshu/shell-status@1')
+    expect(shellContract.SHELL_STATUS_FILE).toBe(hostContract.SHELL_STATUS_FILE)
+    expect(shellContract.SHELL_STATUS_FILE).toBe('shell-status.json')
+    // 自启方式与关窗行为的取值域：壳写、宿主读，漂移会表现为「状态永远 unknown」。
+    expect([...shellContract.AUTOSTART_METHODS]).toEqual([...hostContract.AUTOSTART_METHODS])
+    expect([...shellContract.AUTOSTART_METHODS]).toEqual(['login-item', 'shortcut', 'unsupported'])
+    expect([...shellContract.CLOSE_BEHAVIORS]).toEqual(['hide', 'quit'])
+    // 「现在这个壳」的判据：状态文件里的 pid 要与子进程 env 里的壳 pid 对得上。
+    expect(shellContract.SHELL_PID_ENV).toBe(hostContract.SHELL_PID_ENV)
+    expect(hostContract.SHELL_PID_ENV).toBe('XUANSHU_SHELL_PID')
+  })
 })
 
 describe('#23 · 载荷校验：壳的拒收判据 == 宿主的发送前校验', () => {

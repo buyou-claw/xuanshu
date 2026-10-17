@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { isShuttingDown } from '../../packages/xuanshu-host/lib/index.js'
+import { isShuttingDown, reportIsOk } from '../../packages/xuanshu-host/lib/index.js'
 
 /** 造一个只带 `fiber.state` 的最小 ctx。 */
 const ctxWith = (state, { rootState } = {}) => {
@@ -39,5 +39,38 @@ describe('装配报告 · 关闭现场判据（FiberState：ACTIVE=2 / DISPOSED=
     expect(isShuttingDown(undefined)).toBe(false)
     expect(isShuttingDown({})).toBe(false)
     expect(isShuttingDown({ fiber: { state: 'x' } })).toBe(false)
+  })
+})
+
+/**
+ * N2（复核 2026-10-17）· `ok` 的放宽是**一条**、**有理由**的：
+ *
+ * `report.ok = (profileContext 可得 || teardown) && 两个插件包都解析到 && 两行 id 都在树里 && home 未被拒`
+ * 里的 `|| teardown` 修的是 DSH `--help` 关闭竞态（上面那条用例的现场）。它**只**放宽
+ * profileContext 一项：关闭期间缺插件包 / 缺补丁行 / 落点被拒，仍然必须判失败。
+ * 这条用例把「窄」钉住 —— 谁把括号放宽成整条 `|| teardown`，下面三行立刻红。
+ */
+describe('装配报告 · teardown 对 ok 的放宽是刻意且窄的（N2）', () => {
+  const base = {
+    profileContextAvailable: true,
+    teardown: false,
+    allProbed: true,
+    missingRows: [],
+    blocked: undefined,
+  }
+
+  it('正常现场：四项都对才 ok', () => {
+    expect(reportIsOk(base)).toBe(true)
+    expect(reportIsOk({ ...base, profileContextAvailable: false })).toBe(false)
+    expect(reportIsOk({ ...base, allProbed: false })).toBe(false)
+    expect(reportIsOk({ ...base, missingRows: ['xuanshu-host'] })).toBe(false)
+    expect(reportIsOk({ ...base, blocked: '落在 ~/.dsh' })).toBe(false)
+  })
+
+  it('teardown 只放宽 profileContext 一项：其余三项照样能把它判红', () => {
+    expect(reportIsOk({ ...base, profileContextAvailable: false, teardown: true })).toBe(true)
+    expect(reportIsOk({ ...base, profileContextAvailable: false, teardown: true, allProbed: false })).toBe(false)
+    expect(reportIsOk({ ...base, profileContextAvailable: false, teardown: true, missingRows: ['xuanshu-host'] })).toBe(false)
+    expect(reportIsOk({ ...base, profileContextAvailable: false, teardown: true, blocked: '落在 ~/.dsh' })).toBe(false)
   })
 })

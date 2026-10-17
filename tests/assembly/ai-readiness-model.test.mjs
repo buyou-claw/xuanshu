@@ -124,6 +124,9 @@ describe('票 29 · AI 状态面 · 未接上（configured === false，每个都
     expect(readiness.reason.code).toBe('no-default-model')
     expect(readiness.reason.text).toContain('默认模型')
     expect(readiness.reason.next).toContain(AI_SETTINGS_PATH)
+    // S7（复核）：默认路由**读不到**时，逐家的 isDefaultProvider 不许写成 false（那是编的）；
+    // 三态里「未知」必须留成未知（这里是 `null`）。
+    expect(readiness.providers[0].isDefaultProvider).toBeNull()
   })
 
   it('默认 provider 的 key 明确是 false → missing-key（不是「未知」）', () => {

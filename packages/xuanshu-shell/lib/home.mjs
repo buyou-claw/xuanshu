@@ -31,6 +31,7 @@ import {
   RUNTIME_DIR_NAME,
   SHELL_NOTIFY_STATE_FILE,
   SHELL_SETTINGS_FILE,
+  SHELL_STATUS_FILE,
 } from './contract.mjs'
 
 const CASE_INSENSITIVE = process.platform === 'win32'
@@ -199,6 +200,8 @@ export function shellPaths(home) {
     dataDir,
     runtimeDir,
     notifyStateFile: join(runtimeDir, SHELL_NOTIFY_STATE_FILE),
+    // P1（复核 #23）：壳的实际生效状态（自启方式 / 关窗行为），宿主从 notify 状态文件的同目录兄弟读。
+    statusFile: join(runtimeDir, SHELL_STATUS_FILE),
     settingsFile: join(dataDir, SHELL_SETTINGS_FILE),
     profileDir: join(home, 'profiles', DEFAULT_PROFILE),
   }
