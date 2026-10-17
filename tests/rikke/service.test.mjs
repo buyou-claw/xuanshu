@@ -111,6 +111,9 @@ describe('票13 · rikke.generate（人点 [立即生成]）', () => {
         ji: '伐木、行丧、破土、嫁娶、安葬、开渠',
         liuri: '壬戌日 · 土',
       },
+      // #24：人点生成也带 AI 段；这个现场没有 `ctx.llm` → 三态里的 failed（可读理由），
+      // 骨架（上面三键）照旧 —— 「AI 不可得也照样出日课」。
+      ai: { mode: 'failed', reason: 'ctx.llm 不可得（宿主没装 LLM 服务）' },
     })
 
     expect(horosa.calls).toHaveLength(1)

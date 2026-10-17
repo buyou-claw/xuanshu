@@ -46,8 +46,9 @@ import {
 } from './glyphs.js';
 import type { MainPanelsWatch } from './watch.js';
 import { useMainPanels } from './watch.js';
-import type { RikkeApi } from './rikke-api.js';
+import type { RikkeAiNote, RikkeApi, RikkeNotify } from './rikke-api.js';
 import type { RikkeUiController } from './rikke-controller.js';
+import { rikkeAiView } from './rikke-model.js';
 
 /* ───────────────────────── 共用：导航与可用性 ───────────────────────── */
 
@@ -374,6 +375,42 @@ export interface XsRikkeCardProps extends OverviewInjected {
   content?: RikkeContent;
   /** 失败理由（票 13：生成失败 / 底座未立时必须看得见，不许静默）。 */
   reason?: string;
+  /** #24：AI 段三态（缺 = 旧产物，不渲染这一段）。 */
+  ai?: RikkeAiNote;
+  /** #24：未读条数（>0 才出徽标；缺 = 账本没读到，不出徽标而不是显示 0）。 */
+  unread?: number;
+  /** #24：最近一次触达（failed 才在卡内给 role=alert 行与可读原因）。 */
+  notify?: RikkeNotify;
+}
+
+/** 未读徽标（#24：`delivered && !read` 的条数；非控件、不可关闭）。 */
+export function XsUnreadBadge({ count }: { count: number }) {
+  return (
+    <span className="xs-badge xs-badge--unread" data-xuanshu-badge="unread">
+      {`未读 ${count}`}
+    </span>
+  );
+}
+
+/** AI 段一行（三态文案的唯一来源是 `rikke-model.ts` 的 `rikkeAiView`）。 */
+function RikkeAiLine({ ai }: { ai?: RikkeAiNote }) {
+  const view = rikkeAiView(ai);
+  if (view.kind === 'none') return null;
+  return (
+    <p className="xs-card__note" data-xuanshu-ai={view.kind}>
+      {view.text}
+    </p>
+  );
+}
+
+/** 最近一次通知失败的原因行（#24：通知失败要在界面看得见，但**不影响**日课内容）。 */
+function RikkeNotifyLine({ notify }: { notify?: RikkeNotify }) {
+  if (notify?.status !== 'failed') return null;
+  return (
+    <p className="xs-card__note" role="alert" data-xuanshu-notify="failed">
+      {`通知没发出去：${notify.reason ?? '（没有给理由）'}`}
+    </p>
+  );
 }
 
 /** 宜 / 忌 / 流日三行（ready 与 error 两态共用：失败时已有内容照常可读）。 */
@@ -402,6 +439,9 @@ export function XsRikkeCard({
   today,
   content,
   reason,
+  ai,
+  unread,
+  notify,
   navigate,
   mainPanels,
   onGenerate,
@@ -419,6 +459,7 @@ export function XsRikkeCard({
       title={`${CARD_TITLE.rike} · 今天 ${today}`}
       state={state}
       icon={<GlyphCardRike className="xs-card__icon" />}
+      badge={unread !== undefined && unread > 0 ? <XsUnreadBadge count={unread} /> : undefined}
     >
       {state === 'loading' ? <XsSkeleton lines={3} /> : null}
       {state === 'empty' ? (
@@ -478,6 +519,9 @@ export function XsRikkeCard({
       {state === 'ready' ? (
         <div className="xs-card__body" data-xuanshu-ready="rike">
           <RikkeLines content={content} />
+          {/* #24：两段式 —— 骨架三行永远在，AI 段按三态追加（关闭 / 失败都有逐字文案）。 */}
+          <RikkeAiLine ai={ai} />
+          <RikkeNotifyLine notify={notify} />
           <div className="xs-card__actions">
             {/* [看完整日课 ->] 进票 13 的 `rikke` main 面板（S14 日课与定时任务）。 */}
             <NavLink

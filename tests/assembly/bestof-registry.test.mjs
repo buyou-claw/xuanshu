@@ -22,6 +22,7 @@ import { DSH_MAIN_KEYS, DSH_SIDEBAR_IDS, expectedCells } from './lib/panel-surfa
 import { createBestofApi } from '../../packages/xuanshu-client/src/client/bestof-api.ts'
 import { BESTOF_COMMAND_NAMES, createBestofController } from '../../packages/xuanshu-client/src/client/bestof-model.ts'
 import { BESTOF_OVERLAY_ID, BESTOF_SETTINGS_ID, BESTOF_TRIGGER_ID, installBestOf } from '../../packages/xuanshu-client/src/client/bestof.tsx'
+import { TOUCH_SETTINGS_ID } from '../../packages/xuanshu-client/src/client/notify.tsx'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..', '..')
@@ -125,7 +126,9 @@ describe('票 11 · 产物（lib/client.js）与注册面', () => {
 
     expect(overlay).toContain(BESTOF_OVERLAY_ID)
     expect(BESTOF_OVERLAY_ID).toBe('xuanshu-bestof-overlay')
-    expect(settings).toEqual([BESTOF_SETTINGS_ID])
+    // #24 起 `settings.general.item` 上不止一行：触达的两项开关（AI 建议段 / 通知摘要）排在合参前面
+    // （`installTouchSettings` 紧跟 `installRikke`，而合参是最后一个 install）。
+    expect(settings).toEqual([TOUCH_SETTINGS_ID, BESTOF_SETTINGS_ID])
     expect(BESTOF_SETTINGS_ID).toBe('xuanshu.bestof')
     // `conversation.composer.dock` 是**共享槽**：票 15 的沉淀入口条也注册在那里。
     // 所以这里断言「我们那一格在里面」，而**不是**「这个槽只有我们一格」——

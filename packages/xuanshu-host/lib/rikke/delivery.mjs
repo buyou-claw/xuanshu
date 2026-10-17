@@ -31,6 +31,9 @@
  *
  * 纪律：**永不抛**（catch 住只记日志）—— 生成失败不该把那一轮问答弄挂，下一次投递再试。
  *
+ * #24：日课生成成功之后，经壳的回环端点发**一条系统通知**，并把这次投递记进触达账
+ * （`touch.mjs`）。通知失败只记日志 + 账里落 `failed`，**不改产物、不挡生成**（契约 §3 原文）。
+ *
  * 解环相关（task-3）：本文件 import `../digao/generate.mjs`，因此 `digao/generate.mjs`
  * **不许**反过来 import `rikke/**`（那会成环）。完整说明写在 `../digao/tasks.mjs` 的文件头。
  */
@@ -39,6 +42,7 @@ import { refreshDigao } from '../digao/generate.mjs'
 import { DIGAO_SESSION_PREFIX, RIKKE_SESSION_PREFIX } from '../digao/tasks.mjs'
 import { generateRikke, zoneFor } from './generate.mjs'
 import { dateInZone } from './store.mjs'
+import { deliverRikkeTouch } from './touch.mjs'
 
 /** 注册的事件名（DSH 的 pre-step waterfall；随包 `dsh-time-context` 同款）。 */
 export const PRE_STEP_EVENT = 'agent/pre-step'
@@ -77,18 +81,19 @@ function namedLogger(ctx) {
  * 把「到点 → 生成链」接到 `agent/pre-step` 边界上（两条 daily 任务共用一条边界）。
  *
  * @param {object} ctx cordis 宿主上下文（需要 `ctx.on`）
- * @param {{dataDir: string, timeZone?: string, now?: () => Date}} config
- *        `timeZone`：底座快照不可得时的兜底（装配期那一份）；`now` 只为断言台留
+ * @param {{dataDir: string, timeZone?: string, now?: () => Date, env?: Record<string, string|undefined>}} config
+ *        `timeZone`：底座快照不可得时的兜底（装配期那一份）；`now` 只为断言台留；
+ *        `env`：壳的运行时状态文件从哪读（生产传 `process.env`；断言台注入假壳端点）
  * @returns {{ok: boolean, reason: string|null, dispose: Function}} **永不抛**
  */
-export function installDailyDelivery(ctx, { dataDir, timeZone, now } = {}) {
+export function installDailyDelivery(ctx, { dataDir, timeZone, now, env } = {}) {
   if (typeof ctx?.on !== 'function') {
     return { ok: false, reason: 'ctx.on 不可得：装不上 `agent/pre-step` 边界，定时到点不会跑生成链。', dispose: () => {} }
   }
   const logger = namedLogger(ctx)
   const at = () => (typeof now === 'function' ? now() : new Date())
 
-  /** 日课那条链（底座快照 + 本地黄历 → `<dataDir>/rikke/<日期>.json`）。 */
+  /** 日课那条链（底座快照 + 本地黄历 → `<dataDir>/rikke/<日期>.json` → 系统通知）。 */
   async function runRikke(moment) {
     try {
       const zone = zoneFor(dataDir, timeZone)
@@ -102,6 +107,12 @@ export function installDailyDelivery(ctx, { dataDir, timeZone, now } = {}) {
       })
       if (generated.ok) {
         logger.info('定时任务到点：日课 %s 已生成（manual=false）', generated.date)
+        // #24：定时那份才发系统通知（人点那份界面自己会显示）。通知的任何失败都只落账/记日志。
+        const touch = await deliverRikkeTouch({ dataDir, date: generated.date, at: moment, manual: false, env })
+        if (touch.ledgerError !== null) logger.warn('日课已生成，但触达账没记上：%s', touch.ledgerError)
+        if (touch.notify.status === 'failed') {
+          logger.warn('日课已生成，但系统通知没发出去（%s）：%s', touch.notify.status, touch.notify.reason)
+        }
       } else {
         // 如实记，不假装成了：界面那边看到的是「今天还没有日课」+ 可重试，下一次投递会再来一遍。
         logger.warn('日课到点没生成（%s）：%s', generated.date, generated.reason)
