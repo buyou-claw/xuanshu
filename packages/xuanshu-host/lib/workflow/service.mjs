@@ -22,12 +22,12 @@
  */
 
 import { mkdirSync, rmSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 
 import { resolveDataDir } from '../bazi/service.mjs'
 import { consultAgentCapability, createConsultAgent } from '../consult/agent.mjs'
 import { loadCreateUserMessage } from '../consult/message.mjs'
+import { fallbackXuanshuHome } from '../home.mjs'
 import { exportSkillFile, skillDir, verifySkillRegistered } from './skill-export.mjs'
 import {
   WORKFLOW_SCHEMA, isWorkflowSessionId, listWorkflows, nameFromSeed, newWorkflowSessionId,
@@ -71,7 +71,9 @@ export function resolveDshHome(ctx, config, dataDir) {
   // 目录名对不上时不瞎猜（用户可能把 dataDir 指到别处），继续往后看环境变量。
   if (typeof dataDir === 'string' && dataDir !== '' && basename(dataDir) === 'xuanshu') return dirname(dataDir)
   if (typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME !== '') return process.env.DSH_HOME
-  return join(homedir(), '.dsh')
+  // 兜底是**玄枢自己的 home**（`XUANSHU_DSH_HOME` ＞ `~/.xuanshu`），不是 `~/.dsh`（ADR-0014）：
+  // skill 的落地根绝不能落到用户真实 DSH home 里。
+  return fallbackXuanshuHome({ env: process.env }).home
 }
 
 /**

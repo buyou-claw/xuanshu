@@ -29,10 +29,11 @@
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
+
+import { pointsAtRealDshHome, realDshHome, resolveHomeWithSource } from './isolation/resolve.mjs'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DEFAULT_BASELINE = join(REPO_ROOT, 'tests', 'assembly', 'baseline', 'patch-rows.json')
@@ -69,7 +70,11 @@ function printHelp() {
 
 function parseArgs(argv) {
   const opts = {
-    dshHome: process.env.XUANSHU_DSH_HOME ?? join(REPO_ROOT, '.dsh-home'),
+    // 默认 home 与启动器 / setup / 验收台**同源**（`resolveHomeWithSource`）：`XUANSHU_DSH_HOME` ＞
+    // 环境里的 `$DSH_HOME`（仅当不指向真实 ~/.dsh）＞ dev 默认 `<repo>/.dsh-home`。
+    // 过去是 `process.env.XUANSHU_DSH_HOME ?? join(REPO_ROOT,'.dsh-home')`：不认 `$DSH_HOME`，
+    // 也不认识产品档（`~/.xuanshu`）。
+    dshHome: resolveHomeWithSource({ env: process.env, repoRoot: REPO_ROOT }).home,
     profile: 'xuanshu',
     profileDir: undefined,
     dshBin: process.env.DSH_BIN,
@@ -112,13 +117,19 @@ function parseArgs(argv) {
 
 const samePath = (a, b) => resolve(a).toLowerCase() === resolve(b).toLowerCase()
 
-/** 隔离卫生：真实 DSH home 一律不碰。 */
+/**
+ * 隔离卫生：真实 DSH home 一律不碰。
+ *
+ * 判据用**唯一那一份**（`resolve.pointsAtRealDshHome`：等于**或落在**它里面都算）——
+ * 本文件过去只拒「等于」，于是 `--dsh-home ~/.dsh/profiles/xuanshu` 这种更危险的用法反而放行，
+ * 而它下面还有 `rmSync(<home>/xuanshu/assembly-report.json)`（S5 跑前清场）—— 那是真的会删文件。
+ */
 function assertIsolatedHome(opts) {
-  const real = join(homedir(), '.dsh')
-  if (samePath(opts.dshHome, real) && !opts.allowRealHome) {
+  const real = realDshHome()
+  if (pointsAtRealDshHome(opts.dshHome, { realHome: real }) && !opts.allowRealHome) {
     throw new Error(
       `refusing to run against the user's real DSH home (${real}).\n`
-      + '  Use an isolated home, e.g. --dsh-home <repo>/.dsh-home\n'
+      + `  Use XuanShu's own home instead, e.g. <repo>/.dsh-home (dev) or ~/.xuanshu (product).\n`
       + '  (add --allow-real-home only if you really mean it)',
     )
   }
@@ -175,7 +186,10 @@ function resolveCli(opts) {
     consider(dirname(dirname(binJs)), 'explicit (--dsh-bin/DSH_BIN)')
   }
   consider(join(opts.profileDir, 'node_modules', '@deepseek-ai', 'dsh'), 'profile node_modules')
-  for (const home of [opts.dshHome, join(homedir(), '.dsh')]) {
+  // 兄弟 profile 只在**本次的 home** 里找。过去这里还扫了用户真实 `~/.dsh/profiles/*`
+  // （读它的 package.json 找 CLI）—— 那是「玄枢从不读 ~/.dsh」这条验收的直接反例。
+  // 找不到 CLI 时报错信息已经点名 `--dsh-bin`，不需要拿真实 home 兜底。
+  for (const home of [opts.dshHome]) {
     const profilesDir = join(home, 'profiles')
     if (!existsSync(profilesDir)) continue
     for (const entry of readdirSync(profilesDir, { withFileTypes: true })) {

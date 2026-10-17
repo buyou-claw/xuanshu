@@ -64,7 +64,6 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -74,6 +73,7 @@ import { installConsultBoundary } from './consult/boundary.mjs';
 import { createCangMethods } from './cang/service.mjs';
 import { createConsultMethods } from './consult/service.mjs';
 import { createDigaoMethods } from './digao/service.mjs';
+import { resolveHostHome, XUANSHU_HOME_ENV } from './home.mjs';
 import { installHorosa } from './horosa/service.mjs';
 import { createPuMethods, installPuSkill } from './pu/service.mjs';
 import { DEFAULT_TIME_ZONE, installDailyTasks } from './rikke/daily-tasks.mjs';
@@ -193,13 +193,29 @@ function resolveInstalledManifest(specifier, searchDirs) {
   return undefined;
 }
 
-/** 解析 DSH home：profileContext.home → `$DSH_HOME` → `~/.dsh`（官方默认口径）。 */
+/**
+ * 解析 DSH home 并**说明它是怎么来的**（ADR-0014：玄枢有自己的 home，与 DSH 桌面版零交集）。
+ *
+ * 顺序：`profileContext.home` → `$DSH_HOME` → 玄枢自己的兜底（`XUANSHU_DSH_HOME` ＞ `~/.xuanshu`）。
+ * 本函数过去最后一档是 `join(homedir(), '.dsh')` —— 那是**用户真实**的 DSH 桌面版 home，
+ * 一旦这个兜底生效（手敲 `dsh --profile xuanshu` 且环境里没有 `DSH_HOME`），插件就会往那里写
+ * `<home>/xuanshu/`，这正是本票要消灭的路径。
+ *
+ * 返回的 `realDsh` 为真 = 解析结果指向真实 `~/.dsh`：`apply()` 据此**拒绝写任何东西**。
+ * 报告里的 note 必须写清来源 —— 「这个路径是谁定的」是排障第一句话。
+ */
 function resolveDshHome(profileCtx, notes) {
-  if (typeof profileCtx?.home === 'string' && profileCtx.home !== '') return profileCtx.home;
-  const fromEnv = process.env.DSH_HOME;
-  if (typeof fromEnv === 'string' && fromEnv !== '') return fromEnv;
-  notes.push('DSH_HOME 未设置且 profileContext 不可得：数据目录按官方默认回退到 <home>/.dsh。');
-  return join(homedir(), '.dsh');
+  const resolved = resolveHostHome({ profileContext: profileCtx });
+  if (resolved.realDsh) {
+    notes.push(
+      `DSH home 解析到了用户真实的 DSH 桌面版 home（${resolved.home}，来源 ${resolved.source}）：`
+      + `玄枢与 DSH 桌面版零交集，绝不读写它 —— 本次不写装配报告、不建数据目录。`
+      + `改法：让 DSH 用玄枢自己的 home 启动（DSH_HOME=<玄枢 home>，或设 ${XUANSHU_HOME_ENV}）。`,
+    );
+  } else {
+    notes.push(`DSH home：${resolved.home}（来源 ${resolved.source}；玄枢的 home，绝不是 ~/.dsh）`);
+  }
+  return resolved;
 }
 
 /**
@@ -251,7 +267,8 @@ function buildReport(ctx, config) {
   }
   const profileName =
     typeof profileCtx?.name === 'string' && profileCtx.name !== '' ? profileCtx.name : FALLBACK_PROFILE_NAME;
-  const dshHome = resolveDshHome(profileCtx, notes);
+  const homeInfo = resolveDshHome(profileCtx, notes);
+  const dshHome = homeInfo.home;
   const profileDir =
     typeof profileCtx?.dir === 'string' && profileCtx.dir !== '' ? profileCtx.dir : join(dshHome, 'profiles', profileName);
 
@@ -300,7 +317,7 @@ function buildReport(ctx, config) {
     schema: REPORT_SCHEMA,
     generatedAt: new Date().toISOString(),
     ok: false,
-    profile: { name: profileName, dir: profileDir, dshHome },
+    profile: { name: profileName, dir: profileDir, dshHome, dshHomeSource: homeInfo.source },
     dsh: { version: dshVersion },
     runtime: { node: process.version, platform: process.platform },
     plugins,
@@ -313,9 +330,9 @@ function buildReport(ctx, config) {
   const missingRows = specifiers.filter((specifier) => report.patchRowIds.includes(specifier) !== true);
   if (missingRows.length > 0) notes.push(`补丁行未出现在本进程树中：${missingRows.join(', ')}。`);
   const allProbed = specifiers.every((specifier) => plugins[specifier] !== undefined);
-  report.ok = profileCtx !== undefined && allProbed && missingRows.length === 0;
+  report.ok = profileCtx !== undefined && allProbed && missingRows.length === 0 && !homeInfo.realDsh;
 
-  return { report, dataDir };
+  return { report, dataDir, homeInfo };
 }
 
 /** 临时文件名序号：同一进程内多次写报告也不会撞名。 */
@@ -341,9 +358,23 @@ function writeReportFile(dataDir, report) {
   return target;
 }
 
-/** 采集 + 落盘一次（命令处理器复用同一路径，保证「探到的」和「写下的」同源）。 */
+/**
+ * 采集 + 落盘一次（命令处理器复用同一路径，保证「探到的」和「写下的」同源）。
+ *
+ * 解析结果指向真实 `~/.dsh` 时**抛错不落盘**（拒绝写），错误文案就是给人看的处置说明。
+ * 这是「玄枢从不读写 ~/.dsh」在运行时的唯一硬门：脚本侧的 home 门拦不住
+ * 「用户手敲 `dsh --profile xuanshu`、环境里没有 `DSH_HOME`」这条路径。
+ */
 function probeAndWrite(ctx, config) {
-  const { report, dataDir } = buildReport(ctx, config);
+  const { report, dataDir, homeInfo } = buildReport(ctx, config);
+  if (homeInfo.realDsh) {
+    const error = new Error(
+      `拒绝把玄枢的数据写进用户真实 DSH home（${homeInfo.home}，来源 ${homeInfo.source}）：`
+      + `玄枢与 DSH 桌面版零交集。用 DSH_HOME=<玄枢自己的 home> 启动，或设 ${XUANSHU_HOME_ENV}。`,
+    );
+    error.code = 'XUANSHU_REFUSES_REAL_DSH_HOME';
+    throw error;
+  }
   const file = writeReportFile(dataDir, report);
   return { report, file };
 }
@@ -357,7 +388,9 @@ function summarize(report, file) {
     `ok=${report.ok}`,
     `报告：${file}`,
     `profile：${report.profile.name}（${report.profile.dir}）`,
-    `数据目录：${report.profile.dshHome}`,
+    // 「home」与「数据目录」是两件事（home 的父目录才是家；数据目录是它下面的 xuanshu/）。
+    `home：${report.profile.dshHome}（来源 ${report.profile.dshHomeSource ?? '未记录'}）`,
+    `数据目录：${join(report.profile.dshHome, DATA_DIR_NAME)}`,
     `插件：${versions === '' ? '（未探测到）' : versions}`,
     `补丁行：${report.patchRowIds.length} 条`,
   ].join(' | ');
@@ -409,6 +442,25 @@ function registerReportCommand(ctx, config) {
  */
 export function apply(ctx, config) {
   const log = namedLogger(ctx);
+  // 第一件事：解析 home 并**判断能不能用**。解析结果指向用户真实 ~/.dsh 时，这里直接收工 ——
+  // 不写报告、不建数据目录、不装 horosa、不注册 RPC。理由（ADR-0014）：玄枢与 DSH 桌面版零交集，
+  // 往 ~/.dsh 写东西会改掉用户正在用的桌面实例。绝不抛：装配失败不该把整个 profile 拖垮。
+  let homeInfo;
+  try {
+    homeInfo = resolveDshHome(softGet(ctx, 'profileContext'), []);
+  } catch (error) {
+    log.warn('DSH home 解析失败（已兜住，不写任何东西）：%C', String(error?.message ?? error));
+    return;
+  }
+  if (homeInfo.realDsh) {
+    log.warn(
+      '拒绝在用户真实 DSH home 上运行：%C —— 本次不写装配报告、不建数据目录、不装 horosa。'
+      + `用 DSH_HOME=<玄枢自己的 home>（产品 ~/.xuanshu / 开发 <repo>/.dsh-home）启动，或设 ${XUANSHU_HOME_ENV}。`,
+      homeInfo.home,
+    );
+    return;
+  }
+
   let written;
   try {
     written = probeAndWrite(ctx, config);
@@ -441,7 +493,9 @@ export function apply(ctx, config) {
   let dataDir;
   let dshHome;
   try {
-    dshHome = resolveDshHome(softGet(ctx, 'profileContext'), []);
+    // 同一次 `apply` 里也算一遍（上面的 homeInfo 在早退分支之后就不能再用了）：
+    // 数据目录与装配报告同源，报告与数据各写一处是最难查的一类错位。
+    dshHome = homeInfo.home;
     dataDir = resolveDataDir(dshHome, config);
     installPuSkill(ctx);
     // 票 15：内置 skill `xuanshu:sediment`（把一场问事汇成「更新到谱」的草稿）。

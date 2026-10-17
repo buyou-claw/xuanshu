@@ -38,12 +38,18 @@
  * 变了就刷新拷贝（实测会打印 `Lockfile is up to date` + `reused`，留下旧代码）。见 syncOwnPackages。
  *
  * 用法：
- *   node scripts/install-profile.mjs                    # link 模式，装到 ~/.dsh/profiles/xuanshu
+ *   node scripts/install-profile.mjs                    # link 模式，装到玄枢自己的 home（dev = <repo>/.dsh-home）
  *   node scripts/install-profile.mjs --copy             # copy 模式
- *   node scripts/install-profile.mjs --home <dir>       # 换 DSH_HOME（测试隔离用）
+ *   node scripts/install-profile.mjs --home <dir>       # 换 home（产品机是 ~/.xuanshu；测试用临时目录）
  *   node scripts/install-profile.mjs --profile <name>   # 换 profile 名（默认 xuanshu）
  *   node scripts/install-profile.mjs --skip-install     # 只做目录装配，不跑 pnpm
  *   node scripts/install-profile.mjs --force            # 目标是被丢弃得起的 profile 骨架时也覆盖
+ *
+ * home 的解析**只有一份**（`scripts/isolation/resolve.mjs::resolveHomeWithSource`），与启动器 /
+ * setup / 验收台同源：`--home` ＞ `XUANSHU_DSH_HOME` ＞ 环境里的 `$DSH_HOME`（仅在它不指向真实
+ * `~/.dsh` 时）＞ 默认（dev `<repo>/.dsh-home` / product `~/.xuanshu`）。**默认值绝不是 `~/.dsh`**
+ * —— 本脚本过去写的是 `process.env.DSH_HOME || ~/.dsh`，于是「裸跑一条命令」会把 profile 装进
+ * 用户真实 home（ADR-0014 要消灭的正是这件事）。
  *
  * 安全：绝不递归删除真实目录内容。`--force` 只允许清掉「没有 node_modules 的
  * DSH profile 骨架」，其余情况一律报错并打印你该手工执行的命令。
@@ -53,9 +59,10 @@ import { spawnSync } from 'node:child_process'
 import {
   cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmdirSync, symlinkSync, unlinkSync, writeFileSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { resolveHomeWithSource } from './isolation/resolve.mjs'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SOURCE_PROFILE = join(REPO_ROOT, 'profile')
@@ -80,7 +87,9 @@ function printHelp() {
 function parseArgs(argv) {
   const opts = {
     mode: 'link',
-    home: process.env.DSH_HOME || join(homedir(), '.dsh'),
+    // home 的默认值**不在这里造**：唯一一份在 resolve.mjs（`resolveHomeWithSource`）。
+    // 这里只留「有没有显式给过」这一位，命令行解析完再统一解析。
+    home: undefined,
     profile: 'xuanshu',
     install: true,
     force: false,
@@ -96,9 +105,15 @@ function parseArgs(argv) {
     else if (arg === '-h' || arg === '--help') { printHelp(); process.exit(0) }
     else throw new Error(`unknown argument: ${arg}`)
   }
+  // `--home` 没给 → 走同源解析（含 R16 对「环境里的 $DSH_HOME 指向真实 ~/.dsh」的忽略）。
+  // **不传 repoRoot**：档位按「当前目录是不是仓库检出」判（resolveHomeMode）。
+  // 在仓库里跑 = 开发档 `<repo>/.dsh-home`；不在仓库里跑（产品机上从别处调本脚本）= 产品档 `~/.xuanshu`。
+  const resolved = resolveHomeWithSource({ home: opts.home, env: process.env })
+  opts.homeSource = resolved.source
+  for (const note of resolved.ignored) process.stderr.write(`[install-profile] ${note}\n`)
+  opts.home = resolve(resolved.home)
   if (!opts.home || !opts.profile) throw new Error('--home and --profile need a value')
   if (opts.profile === '.' || opts.profile === '..' || /[\\/]/.test(opts.profile)) throw new Error(`invalid profile name: ${opts.profile}`)
-  opts.home = resolve(opts.home)
   return opts
 }
 

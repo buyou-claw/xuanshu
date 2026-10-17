@@ -26,7 +26,7 @@ node scripts/setup.mjs -h              # 参数表（文件头注释块）
 | 1 | 取件（缓存命中 / 下载 / 离线件） | `<cache>/`（大文件唯一允许的落点之一） |
 | 2 | 校验 SHA256（+ 大小） | 不匹配就删掉、退出 2、不装 |
 | 3 | 装 runtime（上游 `install --archive`，不自己解压） | Windows 根 `C:\horosa`（**必须纯 ASCII**） |
-| 4 | 装配 profile + `pnpm install` | `<dsh-home>/profiles/xuanshu` |
+| 4 | 装配 profile + `pnpm install` | `<dsh-home>/profiles/xuanshu`（home 两档见 [home.md](home.md)：开发 `<repo>/.dsh-home` / 产品 `~/.xuanshu`） |
 | 5 | 三项自检（装配 / 8765 / 八字） | 结论写 `<dsh-home>/xuanshu/setup-report.json`（**成败都写**，失败报告正是排障第一手材料） |
 
 **钉版值**（本机 win32-x64，文字与 `horosa-pin.json` 逐字一致）：
@@ -44,7 +44,7 @@ node scripts/setup.mjs -h              # 参数表（文件头注释块）
 1. **直连 GitHub 慢到不可用**：本机实测（**2026-10-12**）直连 `objects.githubusercontent.com` 只有 **12–24 KB/s** —— 719 MB 的 runtime 要 **8–16 小时**。加 `--mirror` 后实测 `https://gh-proxy.com/https://github.com` **21.9 MB/s**（719 MB **29.6 秒**下完，SHA256 与 pin 一致）、`https://ghfast.top/https://github.com` **19.3 MB/s**（≈33 秒）。开发机一律带 mirror。证据：`.scratch/assembly-foundation/captures/setup-e2e-groundtruth.md`。
 2. **镜像只换传输，SHA256 门不变**：第三方代理正是需要校验的理由；报告的 `pin.*.url` 记下**实际用过**的 URL，可追查。
 3. **Windows 的 runtime 根必须纯 ASCII**：上游 `runtime.path_not_ascii`（读清单/下载之前就拒），中文路径会挂。默认 `C:\horosa`，需要换根先设 `setx HOROSA_RUNTIME_ROOT C:\horosa`。
-4. **默认绝不写真实 `~/.dsh`**：`--dsh-home` 解析结果**等于**真实 `~/.dsh`、或**落在它里面**（`~/.dsh/profiles/xuanshu` 这种更危险）时，**必须**显式 `--install` 才继续，否则退出码 3 并打印你该跑的命令。默认 home 是 `<repo>/.dsh-home`（已 gitignore）。**同款守卫也在数据目录上**：环境里带的 `HOROSA_SKILL_DATA_DIR` 指向真实 `~/.horosa`（或它的子路径）时**忽略并记一条 note**，数据目录回到 `<dsh-home>/xuanshu/horosa`（与票 04 对 `$DSH_HOME` 的 R16 裁决同款：环境里带的不算你的意图，`--dsh-home` 那种显式意图才走硬门）。
+4. **默认绝不写真实 `~/.dsh`**：`--dsh-home` 解析结果**等于**真实 `~/.dsh`、或**落在它里面**（`~/.dsh/profiles/xuanshu` 这种更危险）时，**必须**显式 `--install` 才继续，否则退出码 3 并打印你该跑的命令。默认 home 是**玄枢自己的**：开发档 `<repo>/.dsh-home`（已 gitignore）、产品档 `~/.xuanshu`（ADR-0014；`--dsh-home` / `XUANSHU_DSH_HOME` 都能覆盖，见 [home.md](home.md)）。**同款守卫也在数据目录上**：环境里带的 `HOROSA_SKILL_DATA_DIR` 指向真实 `~/.horosa`（或它的子路径）时**忽略并记一条 note**，数据目录回到 `<dsh-home>/xuanshu/horosa`（与票 04 对 `$DSH_HOME` 的 R16 裁决同款：环境里带的不算你的意图，`--dsh-home` 那种显式意图才走硬门）。
 5. **平台回退不静默**：pin 里没有当前平台一律**退出码 2** 并列出支持的平台；唯一例外是上游自己认可的仿真组合（Windows on ARM → `win32-x64` 载荷），命中时报告里写 `pin.runtime.platformFallback: {from, to}` 并留一条 note —— 不写就没人知道装的是哪份载荷。本机（win32-x64）是**直接命中**，这个字段是 `null`。
 
 ## 3. 参数族
@@ -70,7 +70,7 @@ node scripts/setup.mjs -h              # 参数表（文件头注释块）
 | `--recheck` | 强制重算缓存大文件的 SHA256（默认只比 sidecar） | 关 |
 | `--cache <dir>` | 工件缓存目录 | `$XUANSHU_CACHE` ＞ win32 `%LOCALAPPDATA%\xuanshu\cache` ＞ `~/.cache/xuanshu` |
 | `--runtime-root <dir>` | `HOROSA_RUNTIME_ROOT` | win32 `C:\horosa`；posix `~/.horosa/runtime` |
-| `--dsh-home <dir>` | DSH home（profile 装配目标 + 数据目录根） | `$XUANSHU_DSH_HOME` ＞ `$DSH_HOME` ＞ `<repo>/.dsh-home` |
+| `--dsh-home <dir>` | DSH home（profile 装配目标 + 数据目录根） | `$XUANSHU_DSH_HOME` ＞ `$DSH_HOME`（仅当不指向真实 `~/.dsh`）＞ 默认两档：开发 `<repo>/.dsh-home` / 产品 `~/.xuanshu` |
 | `--horosa-port <n>` | horosa MCP 端口（票 04 的既有旋钮，取值 `1..65535`） | `$XUANSHU_HOROSA_PORT` ＞ `$HOROSA_SKILL_PORT` ＞ `8765` |
 | `--install` | 显式允许写**真实** `~/.dsh`（不给就拒绝） | 关 |
 | `--profile <name>` | profile 名 | `xuanshu` |
@@ -228,5 +228,6 @@ Remove-Item -Recurse -Force E:\ai_project\XuanShu\.dsh-home   #    粗暴版：�
 
 - `docs/adr/0007-setup-one-command.md` —— 为什么是一条命令 + 钉版 pin + SHA256 硬门 + 三项真实自检。
 - `docs/adr/0004-pin-upstream-versions.md` —— 钉版决策与上游升级清单。
+- [home.md](home.md) —— 玄枢的 home（产品 `~/.xuanshu` / 开发 `<repo>/.dsh-home`）：在哪、怎么换、怎么迁移、为什么与 DSH 桌面版互不影响。
 - `docs/runbook/dual-instance.md` —— 开发期双实例隔离（`$DSH_HOME` / 端口 / `8765` 四态守卫 / 回滚）。
 - `docs/specs/001-assembly-foundation.md` —— 装配基座 spec（User Stories 1–4）。
