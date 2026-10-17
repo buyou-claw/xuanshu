@@ -222,9 +222,10 @@ export function parseDigaoMarkdown(markdown: string): DigaoGroup[] {
   for (const rawLine of markdown.replace(/\r\n?/g, '\n').split('\n')) {
     const trimmed = rawLine.trim();
 
-    if (SECTION_RE.exec(trimmed) !== null) {
+    const sectionHeading = SECTION_RE.exec(trimmed);
+    if (sectionHeading !== null) {
       closeSegment();
-      section = SECTION_BY_HEADING[SECTION_RE.exec(trimmed)?.[1] ?? ''];
+      section = SECTION_BY_HEADING[sectionHeading[1] ?? ''];
       group = undefined;
       continue;
     }
