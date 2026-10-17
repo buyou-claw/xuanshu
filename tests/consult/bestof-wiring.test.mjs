@@ -110,4 +110,39 @@ describe('票 11 · 三个方法挂在同一条 /xuanshu 通道上（契约 §1�
       expect(response.error.message, `${method} 像是没挂上`).not.toMatch(/未知玄枢操作/u)
     }
   })
+
+  it('票 28：routes.list / bestof.estimate 也挂上同一条通道，needs-confirmation 带回 estimate', async () => {
+    const { route } = assemble()
+    const created = await call(route, 'consult.create', { pus: [] })
+    const sessionId = created.value.session.sessionId
+
+    // 只读路由清单：数据不可得（假宿主没有 settings / credentials）→ keyConfigured 一律 unknown。
+    const routes = await call(route, 'routes.list', {})
+    expect(routes.ok, JSON.stringify(routes)).toBe(true)
+    expect(routes.value.schema).toBe('xuanshu/routes@1')
+    expect(routes.value.providers.map((provider) => provider.id)).toEqual(['deepseek', 'pi-ai'])
+    expect(routes.value.providers.every((provider) => provider.keyConfigured === 'unknown')).toBe(true)
+    expect(routes.value.default).toEqual({ provider: 'deepseek', model: 'deepseek-chat' })
+
+    // 跑前估算：纯只读，金额恒为未知。
+    const estimate = await call(route, 'bestof.estimate', {
+      sessionId,
+      question: QUESTION,
+      routes: [{ provider: 'deepseek' }, { provider: 'pi-ai' }],
+    })
+    expect(estimate.ok, JSON.stringify(estimate)).toBe(true)
+    expect(estimate.value.price).toBe('unknown')
+    expect(estimate.value.routes.map((entry) => entry.provider)).toEqual(['deepseek', 'pi-ai'])
+
+    // 未确认 → 可读错误码 + estimate（RPC 层原样带回，不被折成 xuanshu/invalid）。
+    const refused = await call(route, 'bestof.run', {
+      sessionId,
+      question: QUESTION,
+      routes: [{ provider: 'deepseek' }, { provider: 'pi-ai' }],
+    })
+    expect(refused.ok).toBe(false)
+    expect(refused.error.code).toBe('needs-confirmation')
+    expect(refused.error.details.estimate.price).toBe('unknown')
+    expect(refused.error.message).toMatch(/needs-confirmation/u)
+  })
 })

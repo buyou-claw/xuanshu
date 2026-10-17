@@ -70,6 +70,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createBaziMethods } from './bazi/service.mjs';
 import { createBestOfMethods } from './consult/bestof.mjs';
+import { createRouteMethods } from './consult/routes.mjs';
 import { installConsultBoundary } from './consult/boundary.mjs';
 import { createCangMethods } from './cang/service.mjs';
 import { createConsultMethods } from './consult/service.mjs';
@@ -472,6 +473,9 @@ export function apply(ctx, config) {
       // 候选并发多路 `ctx.llm.stream()`、judge 走单字段工具（ADR-0010），
       // 记录落 `<dataDir>/consult/<sessionId>.bestof.json`；`consult.*` 的六个方法一字不动。
       ...createBestOfMethods(ctx, { dataDir }),
+      // 票 28：只读路由清单（`routes.list`）—— providers → models → keyConfigured、默认路由、
+      // 可配置但未注册的家。**只读**：玄枢不写 provider 配置与密钥（那是 DSH「设置 → 模型」的职责）。
+      ...createRouteMethods(ctx),
     });
     // 票 10/12 的**统一发问边界**（评审 R2/R3/R4）：底座谱 / 底稿 / 勾选谱 / 临时挂载在
     // `agent/pre-step` 处按当前状态现算并并进每一步的模型输入 —— 谁发起的那一轮都一样

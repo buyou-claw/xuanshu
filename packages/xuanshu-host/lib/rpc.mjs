@@ -7,7 +7,20 @@ export function installRpc(ctx, methods) {
         if (!Object.hasOwn(methods, endpoint)) throw new Error(`未知玄枢操作：${endpoint}`);
         return { ok: true, value: await methods[endpoint](payload ?? {}, signal) };
       } catch (error) {
-        return { ok: false, error: { code: signal.aborted ? 'cancelled' : 'xuanshu/invalid', message: String(error?.message ?? error), details: {} } };
+        // 票 28 起，方法可以带一个**受控**错误码（`error.xuanshuCode`）与结构化详情：
+        // `bestof.run` 的 `needs-confirmation` 要把 estimate 原样带回给界面。
+        // 只认这个显式字段，不把任意 `error.code`（如 fs 的 ENOENT）漏成 RPC 错误码。
+        const code = typeof error?.xuanshuCode === 'string' && error.xuanshuCode !== ''
+          ? error.xuanshuCode
+          : signal.aborted ? 'cancelled' : 'xuanshu/invalid';
+        return {
+          ok: false,
+          error: {
+            code,
+            message: String(error?.message ?? error),
+            details: error?.details !== null && typeof error?.details === 'object' ? error.details : {},
+          },
+        };
       }
     }), 'xuanshu RPC');
   });

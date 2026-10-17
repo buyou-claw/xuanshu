@@ -32,10 +32,13 @@ export interface BestofCandidate {
 /**
  * 判官结论。`mode` 记的是**这次判定是怎么来的**：
  * `tool` 工具调用 / `prompt-json` 提示词 JSON 降级 / `skipped` 没跑（只有一份候选或被人停下）/
- * `failed` 整次执行失败 / `pending` 还在跑。
+ * `failed` 整次执行失败 / `pending` 还在跑 /
+ * `same-source` 候选已经覆盖了所有已注册 provider（没有异源判官，按完成顺序排前）。
  */
 export interface BestofJudge {
-  mode: 'pending' | 'tool' | 'prompt-json' | 'skipped' | 'failed';
+  mode: 'pending' | 'tool' | 'prompt-json' | 'skipped' | 'failed' | 'same-source';
+  /** 判官来源（票 28）：`cross-source` = 确实不在候选 provider 集合里；`same-source` = 如实降级。 */
+  source?: 'cross-source' | 'same-source';
   /** **判官眼里**排第一的那一份；采用与否仍由人点（C9）。 */
   adoptedId: string | null;
   ranking: string[];
@@ -45,6 +48,51 @@ export interface BestofJudge {
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   provider?: string;
   model?: string;
+}
+
+/** 一路候选的路由（票 28 的 `routes` 入参）。`model` 缺省时宿主回落该家第一个模型。 */
+export interface BestofRoute {
+  provider: string;
+  model?: string;
+}
+
+/** 跑前估算（票 28）：N 路 × 每家 model × 本次输入规模；**金额恒为未知**（钉版没有价表）。 */
+export interface BestofEstimate {
+  routes: Array<{ provider: string; model: string; modelName: string | null }>;
+  /** 每路的输入规模估算（字数 ÷ 1.5 向上取整）——界面必须标「估算」。 */
+  inputTokens: number;
+  price: 'unknown';
+}
+
+/** 一家已注册 provider（`routes.list` 的 provider 项）。 */
+export interface RouteCatalogProvider {
+  id: string;
+  name: string | null;
+  registered: boolean;
+  /** 三态：`true` 已配 / `false` 缺 key / `'unknown'` 读不到（服务缺席或登录型）。 */
+  keyConfigured: boolean | 'unknown';
+  isDefault: boolean;
+  /** `false` = 这家列模型失败，`models` 为空不代表「没有模型」。 */
+  modelsKnown: boolean;
+  models: Array<{ id: string; name: string | null; isDefault: boolean }>;
+}
+
+/** 可配置但**未注册**的一家（只能去 DSH「设置 → 模型」里加；玄枢只读）。 */
+export interface RouteCatalogConfigurable {
+  id: string;
+  name: string | null;
+  keyConfigured: boolean | 'unknown';
+}
+
+/** `routes.list` 的响应（票 28 冻结；#29 消费同一份形状）。 */
+export interface RouteCatalog {
+  schema: 'xuanshu/routes@1';
+  ok: boolean;
+  reason?: string;
+  default: { provider: string; model: string } | null;
+  providers: RouteCatalogProvider[];
+  configurable: RouteCatalogConfigurable[];
+  failures: Array<{ provider: string; reason: string }>;
 }
 
 /** `bestof.run` / `bestof.state` 的响应（契约 §1 的 `{runId, candidates, judge}` + 界面要用的采用态与费用）。 */
@@ -94,12 +142,16 @@ export interface BestofAdoptResult {
   delivery?: BestofDelivery;
 }
 
-/** `bestof.*` 的方法名（逐字对齐契约 §1；改这里等于改接口面）。 */
+/** `bestof.*` / `routes.*` 的方法名（逐字对齐契约；改这里等于改接口面）。 */
 export const BESTOF_ENDPOINTS = {
   run: 'bestof.run',
   state: 'bestof.state',
   adopt: 'bestof.adopt',
   cancel: 'bestof.cancel',
+  /** 票 28：只读路由清单（providers → models → keyConfigured、默认路由、可配置未注册）。 */
+  routes: 'routes.list',
+  /** 票 28：跑前估算（N 路 × model × 输入规模 + price:'unknown'），纯只读。 */
+  estimate: 'bestof.estimate',
 } as const;
 
 export type BestofDecision = 'adopt' | 'merge' | 'reject';
@@ -107,13 +159,26 @@ export type BestofDecision = 'adopt' | 'merge' | 'reject';
 /** 合参数据面的形状（浮层与设置行共用一份）。 */
 export interface BestofApi {
   /** 开一次合参：**受理即回**（候选先是 `running`），之后按 `state` 轮询。 */
-  run(payload: { sessionId: string; question: string; angles?: string[]; profileIds?: string[] }, signal?: AbortSignal): Promise<BestofView>;
+  run(payload: {
+    sessionId: string;
+    question: string;
+    angles?: string[];
+    /** legacy：只给 provider id（每家第一个模型）。 */
+    profileIds?: string[];
+    /** 票 28：显式路由（2–4，按 provider::model 去重）；带它时必须 `confirm: true`。 */
+    routes?: BestofRoute[];
+    confirm?: boolean;
+  }, signal?: AbortSignal): Promise<BestofView>;
   /** 轮询 / 回看（进程重启后也能按 runId 读回来）。 */
   state(payload: { runId: string }, signal?: AbortSignal): Promise<BestofView>;
   /** 拍板：三个动作都要人点（C9）；`delivery` 是「采用稿有没有写进会话」的回执。 */
   adopt(payload: { runId: string; decision: BestofDecision; adoptedId?: string; mergedText?: string }, signal?: AbortSignal): Promise<BestofAdoptResult>;
   /** 「停止全部」：真的 abort 那 N 路流；已产出的正文保留。 */
   cancel(payload: { runId: string }, signal?: AbortSignal): Promise<{ bestOf: BestofView }>;
+  /** 只读路由清单（老宿主没有这个方法时按「未知」降级）。 */
+  listRoutes(signal?: AbortSignal): Promise<RouteCatalog>;
+  /** 跑前估算（老宿主没有这个方法时退回不带 routes 的 legacy 载荷）。 */
+  estimate(payload: { sessionId: string; question: string; routes?: BestofRoute[]; angles?: string[]; profileIds?: string[] }, signal?: AbortSignal): Promise<BestofEstimate>;
 }
 
 /**
@@ -126,5 +191,7 @@ export function createBestofApi(ctx: RpcContext): BestofApi {
     state: (payload, signal) => rpcCall<BestofView>(ctx, BESTOF_ENDPOINTS.state, payload, signal),
     adopt: (payload, signal) => rpcCall<BestofAdoptResult>(ctx, BESTOF_ENDPOINTS.adopt, payload, signal),
     cancel: (payload, signal) => rpcCall<{ bestOf: BestofView }>(ctx, BESTOF_ENDPOINTS.cancel, payload, signal),
+    listRoutes: (signal) => rpcCall<RouteCatalog>(ctx, BESTOF_ENDPOINTS.routes, {}, signal),
+    estimate: (payload, signal) => rpcCall<BestofEstimate>(ctx, BESTOF_ENDPOINTS.estimate, payload, signal),
   };
 }
