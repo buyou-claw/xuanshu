@@ -121,8 +121,28 @@ describe('judge 路由 · 不在候选 provider 集合里', () => {
       plans: [{ text: '甲。' }, { text: '乙。' }, { text: '', finish: { kind: 'error', failure: { code: 'RATE_LIMIT' } } }],
     })
     const state = await runToEnd(bestof, { sessionId: session.sessionId, question: QUESTION })
+    expect(state.judge.mode).toBe('failed')
     expect(state.judge.source).toBe('cross-source')
     expect(state.judge.provider).toBe('pi-ai')
     expect(state.judge.error).toMatch(/判官调用失败/u)
+  })
+
+  it('判官调用本身抛错 → mode=failed（不是 tool）、带原因、排序回落完成顺序', async () => {
+    // 剧本按调用次序：c1 / c2 正常返回，第 3 次（判官）直接抛 —— 走 `collectJudge` 的 catch 路径。
+    const throwOnJudge = (options, index) => {
+      if (index === 2) throw new Error('adapter 连接被断开')
+      return { text: index === 0 ? '甲。' : '乙。' }
+    }
+    const { bestof, session } = await scene({ plans: throwOnJudge })
+    const state = await runToEnd(bestof, { sessionId: session.sessionId, question: QUESTION })
+
+    // `mode` 记的是「这次判定是怎么来的」：一次抛错的调用没走过工具判定，不能报 'tool'。
+    expect(state.judge.mode).toBe('failed')
+    expect(state.judge.source).toBe('cross-source')
+    expect(state.judge.provider).toBe('pi-ai')
+    expect(state.judge.error).toMatch(/判官调用失败/u)
+    expect(state.judge.error).toMatch(/adapter 连接被断开/u)
+    expect(state.judge.ranking).toEqual(['c1', 'c2'])
+    expect(state.judge.adoptedId).toBe('c1')
   })
 })

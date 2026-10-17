@@ -178,8 +178,13 @@ export function installShiji(ctx: Context, deps: ShijiInstallDeps): void {
  *
  * 为什么在这里：底稿面板承诺「删除后可以在设置里恢复」，但复核时设置里没有入口 ——
  * `shiji.restore` / `shiji.settings.get|set` 只到 RPC 面。这个分区把两件事摆到界面上：
- *   - **已删除的事记**（墓碑，`frozenAt` 非空）逐条列出 + [恢复]；
+ *   - **已删除的事记**（真实墓碑：`excludedAt` 非空 —— 人点 [删除] 时宿主写的就是它，`ledger.mjs:90-95`）
+ *     逐条列出 + [恢复]，删除日期也取 `excludedAt`；
  *   - **不参与自动扫描的目录**（相对项目根）逐条列出 + [移除]，输入框 + [添加]。
+ *
+ * ⚠ 墓碑 ≠ 冻结（C1 的教训）：`frozenAt` 非空只表示**源头消失**（`ledger.mjs:233-239`），没删过；
+ * 把它列成「已删除（可恢复）」会让 [恢复] 落在「没删过：幂等」上（`ledger.mjs:105`），
+ * 界面说一句没发生的事。所以本分区只认 `excludedAt`，`frozenAt` 不参与判据。
  *
  * 落位：`settings.section`（与票 30「我的数据」同一个 list 槽；纯加性 —— 不新增 main key / 侧栏行）。
  * 纪律：apply / 静态渲染期不发请求（取数在挂载后的 effect 里）；写失败的理由显示在分区里。
@@ -189,10 +194,32 @@ export const SHIJI_SETTINGS_LABEL = '事记';
 /** 既有分区：account -10 / general 0 / models 10 / plugins 15 / agent-presets 20 / 我的数据 25。 */
 export const SHIJI_SETTINGS_ORDER = 26;
 
+/**
+ * 设置页要读的条目形状：`shiji.list({includeDeleted:true})` 把账本行**原样**返回
+ * （含墓碑时间 `excludedAt`，宿主 `store.mjs:105` 归一为 `null` 或 ISO）；
+ * 客户端数据面的 `ShijiEntry` 只列界面常用字段，这里就地补上本分区要用的那一个。
+ */
+export interface ShijiLedgerEntry extends ShijiEntry {
+  /** 删除动作的时间（墓碑）；`null` = 人没删过。与 `frozenAt`（源头消失）是两件事。 */
+  excludedAt?: string | null;
+}
+
+/**
+ * 真实墓碑的判据：`excludedAt` 非空。只写墓碑、源头还在的条目（最常见的删除）靠它被列出来；
+ * 仅 `frozenAt` 非空的冻结条目不满足（`ledger.mjs:63` 的 `includeDeleted` 只是把它们一起带出来）。
+ * @param entries - `shiji.list({includeDeleted:true})` 的条目
+ * @returns 人真的删过的条目（顺序沿用入参，宿主已按 `lastActiveAt` 倒序）
+ */
+function tombstonesOf(entries: readonly ShijiLedgerEntry[]): ShijiLedgerEntry[] {
+  return entries.filter((entry) => entry.excludedAt !== null && entry.excludedAt !== undefined);
+}
 /** 分区的全部状态（纯渲染组件的唯一输入）。 */
 export interface ShijiSettingsState {
-  /** 墓碑（`frozenAt` 非空）。 */
-  tombstones: ShijiEntry[];
+  /**
+   * `shiji.list({includeDeleted:true})` 的原样条目（墓碑与冻结都在里面，宿主默认不返回墓碑）。
+   * **判据在视图里做**（`tombstonesOf`）：只把 `excludedAt` 非空的当「已删除」。
+   */
+  entries: ShijiLedgerEntry[];
   excludedDirs: string[];
   /** 输入框里还没提交的目录。 */
   draftDir: string;
@@ -210,9 +237,12 @@ export interface ShijiSettingsActions {
   onRestore(id: string): void;
 }
 
-/** ISO 时间 → `YYYY-MM-DD`（只显示日期；没值就如实说未回传）。 */
+/**
+ * ISO 时间 → `YYYY-MM-DD`（只显示日期；没值/不可读就如实说「日期未知」，不猜、不拿别的字段顶替）。
+ * 调用点只传 `excludedAt`（删除动作的时间）—— 绝不传 `frozenAt`。
+ */
 function dayOf(iso: string | null | undefined): string {
-  return typeof iso === 'string' && iso.length >= 10 ? iso.slice(0, 10) : '日期未回传';
+  return typeof iso === 'string' && iso.length >= 10 ? iso.slice(0, 10) : '日期未知';
 }
 
 /**
@@ -220,6 +250,8 @@ function dayOf(iso: string | null | undefined): string {
  * @param props - 当前状态与四个动作。
  */
 export function XsShijiSettingsSection({ state, actions }: { state: ShijiSettingsState; actions: ShijiSettingsActions }) {
+  // 真实墓碑（`excludedAt` 非空）；冻结（`frozenAt`）不是删除，不进这个列表。
+  const tombstones = tombstonesOf(state.entries);
   if (state.loading === true) {
     return (
       <div className="xs-shiji__settings" data-xuanshu-section="shiji">
@@ -237,14 +269,14 @@ export function XsShijiSettingsSection({ state, actions }: { state: ShijiSetting
 
       <section className="xs-shiji__block" data-xuanshu-block="shiji-restore">
         <h3>已删除的事记（可恢复）</h3>
-        {state.tombstones.length === 0 ? (
+        {tombstones.length === 0 ? (
           <p className="xs-shiji__note" data-xuanshu-empty="tombstones">没有被删除的事记。</p>
         ) : (
           <ul className="xs-shiji__list">
-            {state.tombstones.map((entry) => (
+            {tombstones.map((entry) => (
               <li key={entry.id} className="xs-shiji__row" data-xuanshu-shiji={entry.id}>
                 <span>{entry.name}</span>
-                <span className="xs-shiji__note">{`删除于 ${dayOf(entry.frozenAt)}`}</span>
+                <span className="xs-shiji__note">{`删除于 ${dayOf(entry.excludedAt)}`}</span>
                 <button
                   type="button"
                   data-xuanshu-action="restore-shiji"
@@ -317,7 +349,7 @@ export function XsShijiSettingsSection({ state, actions }: { state: ShijiSetting
  */
 export function ShijiSettingsHost({ api }: { api: ShijiApi }) {
   const [state, setState] = useState<ShijiSettingsState>({
-    tombstones: [], excludedDirs: [], draftDir: '', busy: false, loading: true,
+    entries: [], excludedDirs: [], draftDir: '', busy: false, loading: true,
   });
 
   const load = (): void => {
@@ -327,7 +359,8 @@ export function ShijiSettingsHost({ api }: { api: ShijiApi }) {
         setState((previous) => ({
           ...previous,
           loading: false,
-          tombstones: (Array.isArray(list.entries) ? list.entries : []).filter((entry) => entry.frozenAt !== null && entry.frozenAt !== undefined),
+          // 原样收下（墓碑与冻结都在里面）；筛「真实墓碑」是视图的事（`tombstonesOf`）。
+          entries: Array.isArray(list.entries) ? list.entries : [],
           excludedDirs: Array.isArray(settings.excludedDirs) ? settings.excludedDirs : [],
         }));
       })
@@ -384,7 +417,9 @@ export function ShijiSettingsHost({ api }: { api: ShijiApi }) {
             .then(() => {
               setState((previous) => ({ ...previous, busy: false }));
               load();
-              setState((previous) => ({ ...previous, note: '已恢复这条事记：下一轮扫描会按在场源头重新出现。' }));
+              // 只有真实墓碑会出现在列表里，所以这句「已恢复」一定对应一次真的清墓碑；
+              // 会不会重新长回来取决于源头还在不在 —— 如实带条件，不承诺没发生的事。
+              setState((previous) => ({ ...previous, note: '已恢复这条事记；下一轮扫描时，仍在的源头会重新记进来。' }));
             })
             .catch((reason: unknown) => {
               setState((previous) => ({ ...previous, busy: false, error: errorText(reason) }));
