@@ -16,7 +16,7 @@
  */
 
 /** 玄枢面板的 main key，**顺序 = `index.tsx` 里 install 的调用顺序**（`overview` 恒第一）。 */
-export const PANEL_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', 'consult', 'digao', 'rikke', 'workflow']
+export const PANEL_KEYS = ['overview', 'pus', 'cang', 'onboarding', 'mingpan', 'consult', 'digao', 'rikke', 'workflow', 'wansheng']
 
 /**
  * 不是「main + sidebar 一对」的额外注册。

@@ -49,6 +49,8 @@ import { useMainPanels } from './watch.js';
 import type { RikkeAiNote, RikkeApi, RikkeNotify } from './rikke-api.js';
 import type { RikkeUiController } from './rikke-controller.js';
 import { rikkeAiView } from './rikke-model.js';
+import type { WanshengApi, WanshengFacts } from './wansheng-api.js';
+import type { WanshengUiController } from './wansheng-controller.js';
 
 /* ───────────────────────── 共用：导航与可用性 ───────────────────────── */
 
@@ -85,6 +87,9 @@ export interface OverviewInjected {
   /** 底稿数据面与控制器（票 13）：`digao.status` 决定底稿卡四态，`refresh()` 是「人点 [刷新]」的落点。 */
   digao?: DigaoApi;
   digaoController?: DigaoUiController;
+  /** #25：晚省数据面与控制器（`wansheng.status` 决定晚省卡四态；**面板级**注入，卡本身不消费）。 */
+  wansheng?: WanshengApi;
+  wanshengController?: WanshengUiController;
 }
 
 /** 订阅 main 面板键（卡片渲染期判定 fail-soft）。 */
@@ -781,6 +786,217 @@ export function XsQuickLinks({
       <p className="xs-quicklinks__note" data-xuanshu-note="boundary">
         {QUICKLINKS_BOUNDARY}
       </p>
+    </XsCardShell>
+  );
+}
+
+/* ───────────────────────── ⑤ 晚省卡（#25） ───────────────────────── */
+
+/**
+ * 「补」徽标（#25 契约 §4）：补生成的那一份用 `data-xuanshu-badge="missed"` 标出来，
+ * 让用户一眼看出「这是过去的，不是今天的」。非控件、不可关闭。
+ */
+export function XsMissedBadge() {
+  return (
+    <span className="xs-badge xs-badge--missed" data-xuanshu-badge="missed">
+      补
+    </span>
+  );
+}
+
+export interface XsWanshengCardProps extends OverviewInjected {
+  state?: CardState;
+  /** 当日日期（YYYY-MM-DD）；缺省由面板注入本机日期。 */
+  today: string;
+  /** 当天事实（拿不到的键整键不出现 → 卡面写「未知」，不写 0）。 */
+  facts?: WanshengFacts;
+  /** 这一份是补生成的（卡头出「补」徽标）。 */
+  missed?: boolean;
+  /** 未读条数（>0 才出徽标；缺 = 账本没读到）。 */
+  unread?: number;
+  /** 最近一次触达（failed 才在卡内给 role=alert 行）。 */
+  notify?: RikkeNotify;
+  /** 失败理由（人点生成失败 / 读不出来）。 */
+  reason?: string;
+}
+
+/** 「今天几场问事」这一行（事实缺失 → 未知，不写 0）。 */
+function WanshengConsultLine({ facts }: { facts?: WanshengFacts }) {
+  const sessions = facts?.consultSessions;
+  return (
+    <p className="xs-line" data-xuanshu-fact="consult">
+      <span className="xs-line__label">问事</span>
+      <span className="xs-line__value">
+        {sessions === undefined ? '今天几场问事：未知（宿主没回传）' : `今天 ${sessions.count} 场问事`}
+      </span>
+    </p>
+  );
+}
+
+/** 「哪些项目有活动」这一行（事实缺失 → 未知）。 */
+function WanshengWorkspaceLine({ facts }: { facts?: WanshengFacts }) {
+  const workspaces = facts?.activeWorkspaces;
+  return (
+    <p className="xs-line" data-xuanshu-fact="workspaces">
+      <span className="xs-line__label">项目</span>
+      <span className="xs-line__value">
+        {workspaces === undefined ? '哪些项目有活动：未知（宿主没回传）' : `今天 ${workspaces.length} 个项目有活动`}
+      </span>
+    </p>
+  );
+}
+
+/** 「底稿 / 日课何时动过」这一行（缺项整行不编）。 */
+function WanshengArtifactLines({ facts }: { facts?: WanshengFacts }) {
+  const lines: ReactNode[] = [];
+  if (facts?.rikke?.generatedAt !== undefined) {
+    lines.push(
+      <p key="rikke" className="xs-line" data-xuanshu-fact="rikke">
+        <span className="xs-line__label">日课</span>
+        <span className="xs-line__value">{`${facts.rikke.generatedAt} 生成`}</span>
+      </p>,
+    );
+  }
+  if (facts?.digao?.generatedAt !== undefined) {
+    lines.push(
+      <p key="digao" className="xs-line" data-xuanshu-fact="digao">
+        <span className="xs-line__label">底稿</span>
+        <span className="xs-line__value">{`${facts.digao.generatedAt} 刷新过`}</span>
+      </p>,
+    );
+  }
+  if (facts?.shiji?.updatedAt !== undefined) {
+    lines.push(
+      <p key="shiji" className="xs-line" data-xuanshu-fact="shiji">
+        <span className="xs-line__label">事记</span>
+        <span className="xs-line__value">{`${facts.shiji.updatedAt} 有更新`}</span>
+      </p>,
+    );
+  }
+  return <>{lines}</>;
+}
+
+/**
+ * 晚省卡（首页第 5 张）：当天事实三行 + 「去问事 / 看完整晚省 / 立即生成」。
+ *
+ * 「点开进问事」是这张卡的**主行动**（spec 002 用户故事 15）：`[去问事 ->]` 走
+ * `navigate('consult')`；`[看完整晚省 ->]` 才进晚省面板。补生成的那一份在卡头标「补」。
+ */
+export function XsWanshengCard({
+  state = 'empty',
+  today,
+  facts,
+  missed = false,
+  unread,
+  notify,
+  reason,
+  navigate,
+  mainPanels,
+  onGenerate,
+  onRetry,
+}: XsWanshengCardProps) {
+  const available = useAvailable(mainPanels);
+  const consultReady = isAvailable(available, 'consult');
+  const wanshengReady = isAvailable(available, 'wansheng');
+  const schedulesReady = isAvailable(available, 'schedules');
+  const generateDisabled = onGenerate === undefined;
+  const retryDisabled = onRetry === undefined;
+  const badge = missed
+    ? <XsMissedBadge />
+    : unread !== undefined && unread > 0
+      ? <XsUnreadBadge count={unread} />
+      : undefined;
+
+  return (
+    <XsCardShell
+      card="wansheng"
+      title={`${CARD_TITLE.wansheng} · 今天 ${today}`}
+      state={state}
+      icon={<GlyphCardRike className="xs-card__icon" />}
+      badge={badge}
+    >
+      {state === 'loading' ? <XsSkeleton lines={3} /> : null}
+      {state === 'empty' ? (
+        <XsEmptyBlock
+          illus={<IllusRikeEmpty />}
+          why={EMPTY_COPY.wansheng.why}
+          sub={EMPTY_COPY.wansheng.sub}
+          actions={
+            <>
+              <ActionButton
+                action="generate-wansheng"
+                disabled={generateDisabled}
+                reason={DISABLED_REASON.generateWansheng}
+                onClick={onGenerate}
+              >
+                {ACTION_COPY.generateWansheng}
+              </ActionButton>
+              <NavLink
+                target="schedules"
+                disabled={!schedulesReady}
+                reason={DISABLED_REASON.retry}
+                onClick={() => navigate('schedules')}
+              >
+                {ACTION_COPY.changeTime}
+              </NavLink>
+            </>
+          }
+        />
+      ) : null}
+      {state === 'error' ? (
+        <XsEmptyBlock
+          variant="error"
+          illus={<IllusCardsError />}
+          why={ERROR_COPY.wansheng}
+          sub={reason}
+          actions={
+            <ActionButton
+              action="retry"
+              disabled={retryDisabled}
+              reason={DISABLED_REASON.retry}
+              onClick={onRetry}
+            >
+              {ACTION_COPY.retry}
+            </ActionButton>
+          }
+        />
+      ) : null}
+      {state === 'ready' ? (
+        <div className="xs-card__body" data-xuanshu-ready="wansheng">
+          <div className="xs-lines">
+            <WanshengConsultLine facts={facts} />
+            <WanshengWorkspaceLine facts={facts} />
+            <WanshengArtifactLines facts={facts} />
+          </div>
+          <RikkeNotifyLine notify={notify} />
+          <div className="xs-card__actions">
+            <NavLink
+              target="consult"
+              disabled={!consultReady}
+              reason={DISABLED_REASON.consult}
+              onClick={() => navigate('consult')}
+            >
+              {ACTION_COPY.goConsult}
+            </NavLink>
+            <NavLink
+              target="wansheng"
+              disabled={!wanshengReady}
+              reason={DISABLED_REASON.wansheng}
+              onClick={() => navigate('wansheng')}
+            >
+              {ACTION_COPY.watchWansheng}
+            </NavLink>
+            <ActionButton
+              action="generate-wansheng"
+              disabled={generateDisabled}
+              reason={DISABLED_REASON.generateWansheng}
+              onClick={onGenerate}
+            >
+              {ACTION_COPY.generateWansheng}
+            </ActionButton>
+          </div>
+        </div>
+      ) : null}
     </XsCardShell>
   );
 }

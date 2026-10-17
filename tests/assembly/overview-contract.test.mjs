@@ -316,9 +316,9 @@ describe('票 07 · 槽位遮蔽不 fail-loud（加性注册）', () => {
   })
 })
 
-/* ───────────────────────── 3. 四卡渲染（冷启动） ───────────────────────── */
+/* ───────────────────────── 3. 五卡渲染（冷启动） ───────────────────────── */
 
-describe('票 07 · 四卡渲染（冷启动空态）', () => {
+describe('票 07 · 五卡渲染（冷启动空态；#25 加第 5 张晚省）', () => {
   const html = render(h(OverviewPanel, { ...injected(), today: '2026-10-13' }))
 
   it('面板壳与页头：overview 根、家 · 自我总览、本地数据路径（C11）', () => {
@@ -328,8 +328,8 @@ describe('票 07 · 四卡渲染（冷启动空态）', () => {
     expect(html).toContain('数据都在本地 ~/.dsh/xuanshu/')
   })
 
-  it('四卡齐备且 DOM 顺序 = D3 读序（命盘 → 日课 → 底稿 → 快捷入口）', () => {
-    const order = ['mingpan', 'rike', 'digao', 'quicklinks'].map((name) => html.indexOf(`data-xuanshu-card="${name}"`))
+  it('五卡齐备且 DOM 顺序 = D3 读序（命盘 → 日课 → 底稿 → 快捷入口 → 晚省）', () => {
+    const order = ['mingpan', 'rike', 'digao', 'quicklinks', 'wansheng'].map((name) => html.indexOf(`data-xuanshu-card="${name}"`))
     expect(order.every((index) => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
   })
@@ -391,6 +391,19 @@ describe('票 07 · 四卡渲染（冷启动空态）', () => {
     const workspaceStart = card.indexOf('data-xuanshu-nav="conversation"')
     const workspaceTag = card.slice(workspaceStart, card.indexOf('>', workspaceStart))
     expect(workspaceTag).not.toContain('disabled')
+  })
+
+  it('⑤ 晚省卡（#25）：默认 21:30 的空态文案、[立即生成] 与 [改时间]；点开进问事（卡上给出口）', () => {
+    const card = cardOf(html, 'wansheng')
+    expect(card).toContain('data-xs-state="empty"')
+    expect(card).toContain('晚省 · 今天 2026-10-13')
+    expect(card).toContain('今天还没有晚省。晚省默认每天 21:30 生成。')
+    expect(card).toContain('（它只摆事实、不替你下结论；点开进问事）')
+    expect(card).toContain('data-xuanshu-action="generate-wansheng"')
+    expect(card).toContain('晚省生成还没接上（属票 04 · 晚间触达）')
+    expect(card).toContain('data-xuanshu-nav="schedules"')
+    // 「补」徽标是 ready 态的事实，不在空态出现（不冒充生成过）。
+    expect(card).not.toContain('data-xuanshu-badge="missed"')
   })
 
   it('fail-soft 是结构性的：目标装配后（快照含 consult/workflow）两格自动点亮', () => {

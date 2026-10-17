@@ -20,6 +20,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createDigaoMethods } from '../../packages/xuanshu-host/lib/digao/service.mjs'
 import {
   DIGAO_DEFAULT_TIME, DIGAO_TASK_TITLE, RIKKE_DEFAULT_TIME, RIKKE_TASK_TITLE,
+  WANSHENG_DEFAULT_TIME, WANSHENG_TASK_TITLE,
   ensureDailyTask, installDailyTasks,
 } from '../../packages/xuanshu-host/lib/rikke/daily-tasks.mjs'
 import { fakeAgents, fakeSchedule, makeCtx, makeSandbox } from '../digao/lib/sandbox.mjs'
@@ -37,15 +38,16 @@ function scene({ catalog = [], schedule = true } = {}) {
   return { sandbox, ctx: makeCtx({ services }), schedule: fake, agents }
 }
 
-describe('票13 · 装配两条 daily 任务（契约 §1/§2）', () => {
-  it('时间与标题按契约：日课 07:30、底稿刷新 03:30，且都建在 daily 上', async () => {
+describe('票13 · 装配两条 daily 任务（契约 §1/§2；#25 加第三条「晚省」）', () => {
+  it('时间与标题按契约：日课 07:30、底稿刷新 03:30、晚省 21:30，且都建在 daily 上', async () => {
     const { sandbox, ctx, schedule } = scene()
     const result = await installDailyTasks({ ctx, dataDir: sandbox.dataDir, timeZone: 'Asia/Shanghai' })
 
     expect(result.rikke.ok).toBe(true)
     expect(result.digao.ok).toBe(true)
+    expect(result.wansheng.ok).toBe(true)
     expect(result.notes).toEqual([])
-    expect(schedule.calls.filter((call) => call.method === 'create')).toHaveLength(2)
+    expect(schedule.calls.filter((call) => call.method === 'create')).toHaveLength(3)
 
     const creates = schedule.calls.filter((call) => call.method === 'create')
     const rikke = creates.find((call) => call.request.title === RIKKE_TASK_TITLE)
@@ -54,19 +56,21 @@ describe('票13 · 装配两条 daily 任务（契约 §1/§2）', () => {
     const digao = creates.find((call) => call.request.title === DIGAO_TASK_TITLE)
     expect(digao.request.daily).toEqual({ time: DIGAO_DEFAULT_TIME, time_zone: 'Asia/Shanghai' })
     expect(digao.request.prompt).toMatch(/底稿/u)
+    const wansheng = creates.find((call) => call.request.title === WANSHENG_TASK_TITLE)
+    expect(wansheng.request.daily).toEqual({ time: WANSHENG_DEFAULT_TIME, time_zone: 'Asia/Shanghai' })
+    expect(wansheng.request.prompt).toMatch(/晚省/u)
   })
 
   it('会话 id 用玄枢自铸前缀，cwd 是专用目录且**目录已建出来**（不是 workspace）', async () => {
     const { sandbox, ctx, agents } = scene()
     await installDailyTasks({ ctx, dataDir: sandbox.dataDir })
 
-    expect(agents.calls).toHaveLength(2)
-    const rikke = agents.calls.find((call) => call.sessionId.startsWith('session-xs-rikke-'))
-    const digao = agents.calls.find((call) => call.sessionId.startsWith('session-xs-digao-'))
-    expect(rikke).toBeDefined()
-    expect(digao).toBeDefined()
+    expect(agents.calls).toHaveLength(3)
+    const kinds = agents.calls.map((call) => call.sessionId.split('-')[2]).sort()
+    expect(kinds).toEqual(['digao', 'rikke', 'wansheng'])
     for (const call of agents.calls) {
-      expect(call.meta.cwd).toBe(`${sandbox.dataDir}\\${call.sessionId.includes('-rikke-') ? 'rikke' : 'digao'}`)
+      const kind = call.sessionId.split('-')[2]
+      expect(call.meta.cwd).toBe(`${sandbox.dataDir}\\${kind}`)
       expect(existsSync(call.meta.cwd)).toBe(true)
     }
     // 三个载体里没有 workspace：会话不进任何工作区（ADR-0009 第 3 条）。
@@ -84,9 +88,10 @@ describe('票13 · 装配两条 daily 任务（契约 §1/§2）', () => {
     expect(result.rikke.ok).toBe(true)
     expect(result.rikke.reused).toBe(true)
     expect(result.rikke.task.id).toBe('sched-1')
-    expect(schedule.calls.filter((call) => call.method === 'create')).toHaveLength(1) // 只剩底稿那条
-    expect(agents.calls).toHaveLength(1)
-    expect(agents.calls[0].sessionId.startsWith('session-xs-digao-')).toBe(true)
+    // 只剩底稿与晚省两条要建。
+    expect(schedule.calls.filter((call) => call.method === 'create')).toHaveLength(2)
+    expect(agents.calls).toHaveLength(2)
+    expect(agents.calls.map((call) => call.sessionId.split('-')[2]).sort()).toEqual(['digao', 'wansheng'])
   })
 
   it('ctx.schedule 不可得（bundle 没启用）→ 可读理由点到 bundle 与 install-profile，且不抛', async () => {
@@ -96,7 +101,7 @@ describe('票13 · 装配两条 daily 任务（契约 §1/§2）', () => {
     expect(result.rikke.reason).toContain('schedule')
     expect(result.rikke.reason).toContain('experimental-schedule-bundle')
     expect(result.rikke.reason).toContain('install-profile')
-    expect(result.notes.length).toBe(2)
+    expect(result.notes.length).toBe(3)
   })
 
   it('ctx.agents 不可得 → 不建任务，理由点名 agents（不静默建一条没有会话的任务）', async () => {

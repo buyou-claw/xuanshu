@@ -27,12 +27,37 @@ export const SHELL_SETTINGS_FILE = 'shell-settings.json'
 /** 关窗行为（契约 §5：`hide` 默认 / `quit`）。 */
 export const CLOSE_BEHAVIORS = Object.freeze(['hide', 'quit'])
 
-/** 缺文件 / 缺键时的默认值（契约 §5 的 JSON 就是它）。 */
+/**
+ * 两条触达的计划时刻（#25 契约 §2/§4 的加性键）：`HH:mm`，缺省 07:30 / 21:30。
+ *
+ * **语义分工**：`ctx.schedule` 里那条 daily 任务才是「实际生效」的权威；这两个键是
+ * 「下次安装 / 界面显示」的**期望值**。`rikke.setTime` / `wansheng.setTime` 会两边一起写，
+ * 所以改完下一次到点就按新时刻走（不需要重装）。
+ */
+export const TOUCH_TIME_KEYS = Object.freeze({ rikkeTime: '07:30', wanshengTime: '21:30' })
+
+/** 缺文件 / 缺键时的默认值（契约 §5 的 JSON 就是它，外加 #25 的两个时刻）。 */
 export const DEFAULT_SHELL_SETTINGS = Object.freeze({
   closeBehavior: 'hide',
   autostart: false,
   notifySummary: false,
+  rikkeTime: TOUCH_TIME_KEYS.rikkeTime,
+  wanshengTime: TOUCH_TIME_KEYS.wanshengTime,
 })
+
+/**
+ * `'H:mm'` / `'HH:mm'` / `'HH:mm:ss'` → `'HH:mm'`；非法 → null（设置面只显示到分钟）。
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+export function normalizeClockTime(value) {
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d{1,3})?)?$/u.exec(String(value ?? '').trim())
+  if (!match) return null
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  if (hour > 23 || minute > 59) return null
+  return `${String(hour).padStart(2, '0')}:${match[2]}`
+}
 
 /** `<dataDir>/shell-settings.json`。 */
 export function shellSettingsFile(dataDir) {
@@ -58,6 +83,9 @@ export function readShellSettings(dataDir) {
     closeBehavior: CLOSE_BEHAVIORS.includes(parsed.closeBehavior) ? parsed.closeBehavior : DEFAULT_SHELL_SETTINGS.closeBehavior,
     autostart: typeof parsed.autostart === 'boolean' ? parsed.autostart : DEFAULT_SHELL_SETTINGS.autostart,
     notifySummary: typeof parsed.notifySummary === 'boolean' ? parsed.notifySummary : DEFAULT_SHELL_SETTINGS.notifySummary,
+    // #25：两个时刻缺失 / 坏形状 → 回落缺省（坏设置不该让安装或到点链失败）。
+    rikkeTime: normalizeClockTime(parsed.rikkeTime) ?? DEFAULT_SHELL_SETTINGS.rikkeTime,
+    wanshengTime: normalizeClockTime(parsed.wanshengTime) ?? DEFAULT_SHELL_SETTINGS.wanshengTime,
   }
 }
 
@@ -65,8 +93,10 @@ export function readShellSettings(dataDir) {
  * 改设置（部分更新；**校验 + 原子写 + 回读**）。
  *
  * @param {string} dataDir
- * @param {{closeBehavior?: 'hide'|'quit', autostart?: boolean, notifySummary?: boolean}} patch
- * @returns {{closeBehavior: 'hide'|'quit', autostart: boolean, notifySummary: boolean}} 回读后的完整设置
+ * @param {{closeBehavior?: 'hide'|'quit', autostart?: boolean, notifySummary?: boolean,
+ *          rikkeTime?: string, wanshengTime?: string}} patch
+ * @returns {{closeBehavior: 'hide'|'quit', autostart: boolean, notifySummary: boolean,
+ *            rikkeTime: string, wanshengTime: string}} 回读后的完整设置
  */
 export function writeShellSettings(dataDir, patch = {}) {
   const source = patch !== null && typeof patch === 'object' && !Array.isArray(patch) ? patch : {}
@@ -84,8 +114,19 @@ export function writeShellSettings(dataDir, patch = {}) {
   if (source.notifySummary !== undefined && typeof source.notifySummary !== 'boolean') {
     throw new Error(`notifySummary 必须是 boolean（拿到 ${typeof source.notifySummary}）`)
   }
+  for (const key of Object.keys(TOUCH_TIME_KEYS)) {
+    if (source[key] === undefined) continue
+    if (normalizeClockTime(source[key]) === null) {
+      throw new Error(`${key} 必须是 HH:mm（拿到 ${JSON.stringify(source[key])}）`)
+    }
+  }
 
-  const merged = { ...readShellSettings(dataDir), ...source }
+  // 时刻写盘前归一（'7:05' → '07:05'），回读断言才对得上。
+  const normalized = { ...source }
+  for (const key of Object.keys(TOUCH_TIME_KEYS)) {
+    if (normalized[key] !== undefined) normalized[key] = normalizeClockTime(normalized[key])
+  }
+  const merged = { ...readShellSettings(dataDir), ...normalized }
   const file = shellSettingsFile(dataDir)
   writeAtomic(file, `${JSON.stringify({ schema: SHELL_SETTINGS_SCHEMA, ...merged }, null, 2)}\n`)
 
@@ -98,4 +139,27 @@ export function writeShellSettings(dataDir, patch = {}) {
   }
   if (!existsSync(file)) throw new Error(`设置文件写完之后不在了：${file}`)
   return readBack
+}
+
+/**
+ * 把改好的触达时刻同步进共享设置（#25 契约 §2：schedule 是实际生效的权威，设置文件是期望值）。
+ *
+ * `ctx.schedule.update` 成功之后才调它；这里失败要说清「时刻已经生效了，只是期望值没落盘」——
+ * 静默吞掉会让界面显示旧值，用户以为没改成。
+ *
+ * @param {string} dataDir
+ * @param {'rikkeTime'|'wanshengTime'} key
+ * @param {string} time `HH:mm` 或 `HH:mm:ss`
+ * @returns {string} 写进去的 `HH:mm`
+ */
+export function syncTouchTimeSettings(dataDir, key, time) {
+  if (!Object.hasOwn(TOUCH_TIME_KEYS, key)) throw new Error(`不认识的触达时刻键：${JSON.stringify(key)}`)
+  const normalized = normalizeClockTime(time)
+  if (normalized === null) throw new Error(`${key} 必须是 HH:mm（拿到 ${JSON.stringify(time)}）`)
+  try {
+    writeShellSettings(dataDir, { [key]: normalized })
+  } catch (error) {
+    throw new Error(`时刻已生效（schedule 已改），但设置文件没写成：${String(error?.message ?? error)}`)
+  }
+  return normalized
 }

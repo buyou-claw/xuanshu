@@ -67,11 +67,11 @@ async function assemble({ withSchedule = true } = {}) {
   // autoStart:false：本用例不验 horosa 的 serve 生命周期（票 06 的事），只验接线。
   apply(host, { dataDir: sandbox.dataDir, autoStart: false })
   expect(routes).toHaveLength(1)
-  // 两条 daily 任务是**异步**注册的（`ctx.inject(['schedule'], …)` 的回调里跑两位 Promise 面），
+  // 三条 daily 任务是**异步**注册的（`ctx.inject(['schedule'], …)` 的回调里跑三位 Promise 面），
   // 装配返回时可能还在飞；等它们落地再断言（等价于界面上「装配完成后看得到任务」）。
   await waitFor(
-    () => (withSchedule ? schedule.calls.filter((entry) => entry.method === 'create').length === 2 : true),
-    { describe: '两条 daily 任务注册' },
+    () => (withSchedule ? schedule.calls.filter((entry) => entry.method === 'create').length === 3 : true),
+    { describe: '三条 daily 任务注册' },
   )
   return { sandbox, route: routes[0], schedule, agents }
 }
@@ -89,6 +89,14 @@ describe('票13 · 六个方法挂在同一条 /xuanshu 通道上（契约 §1/�
       const response = await call(route, method, {})
       expect(response.ok, `${method} 没挂上通道：${JSON.stringify(response)}`).toBe(true)
     }
+    // #25：晚省四个方法也挂在同一条通道上（确定性事实，不调模型）。
+    for (const method of ['wansheng.status', 'wansheng.read', 'wansheng.generate']) {
+      const response = await call(route, method, {})
+      expect(response.ok, `${method} 没挂上通道：${JSON.stringify(response)}`).toBe(true)
+    }
+    const wanshengTime = await call(route, 'wansheng.setTime', { time: '22:05' })
+    expect(wanshengTime.ok, JSON.stringify(wanshengTime)).toBe(true)
+    expect(wanshengTime.value.schedule).toEqual({ time: '22:05', timeZone: 'Asia/Shanghai' })
     // setTime 经通道改时间：装配期已经建好了「日课」，所以这条能真改成功（compare-and-update）。
     const setTime = await call(route, 'rikke.setTime', { time: '06:45' })
     expect(setTime.ok, JSON.stringify(setTime)).toBe(true)
@@ -114,14 +122,15 @@ describe('票13 · 六个方法挂在同一条 /xuanshu 通道上（契约 §1/�
   })
 })
 
-describe('票13 · 装配完成时两条 daily 任务已经在场（验收判据）', () => {
-  it('日课 07:30 + 底稿刷新 03:30，各自绑玄枢自铸会话', async () => {
+describe('票13 · 装配完成时三条 daily 任务已经在场（验收判据；#25 加晚省）', () => {
+  it('日课 07:30 + 底稿刷新 03:30 + 晚省 21:30，各自绑玄枢自铸会话', async () => {
     const { schedule, agents } = await assemble()
     const creates = schedule.calls.filter((entry) => entry.method === 'create')
-    expect(creates.map((entry) => entry.request.title).sort()).toEqual(['底稿刷新', '日课'].sort())
+    expect(creates.map((entry) => entry.request.title).sort()).toEqual(['底稿刷新', '日课', '晚省'].sort())
     expect(creates.find((entry) => entry.request.title === '日课').request.daily.time).toBe('07:30:00')
     expect(creates.find((entry) => entry.request.title === '底稿刷新').request.daily.time).toBe('03:30:00')
-    expect(agents.calls.map((entry) => entry.sessionId.split('-')[2]).sort()).toEqual(['digao', 'rikke'])
+    expect(creates.find((entry) => entry.request.title === '晚省').request.daily.time).toBe('21:30:00')
+    expect(agents.calls.map((entry) => entry.sessionId.split('-')[2]).sort()).toEqual(['digao', 'rikke', 'wansheng'])
   })
 
   it('rikke.status 经通道拿得到 schedule（契约修订的加性字段）', async () => {

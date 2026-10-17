@@ -18,8 +18,14 @@ export interface TrafficEntry {
   at?: string;
   kind?: string;
   date?: string;
+  /** #25：计划时刻（这一投属于哪个 occurrence）。 */
+  occurrenceAt?: string;
+  /** #25：产物相对路径（`rikke/<date>.json` / `wansheng/<date>.json`）。 */
+  artifactPath?: string | null;
   notify: { status: 'delivered' | 'failed' | 'skipped'; reason?: string | null };
   read?: boolean;
+  /** #25：这一次是补生成（界面标「补」）。 */
+  missed?: boolean;
 }
 
 /** `traffic.status` 的回答（`lastFailure` 只在账里真有 failed 时出现）。 */

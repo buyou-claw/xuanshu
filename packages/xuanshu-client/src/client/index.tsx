@@ -58,6 +58,9 @@ import { installPuPanel } from './PuPanel.js';
 import { createRikkeApi } from './rikke-api.js';
 import { createRikkeUiController } from './rikke-controller.js';
 import { installRikke } from './rikke.js';
+import { createWanshengApi } from './wansheng-api.js';
+import { createWanshengUiController } from './wansheng-controller.js';
+import { installWansheng } from './wansheng.js';
 import { createNotifyApi } from './notify-api.js';
 import { installTouchSettings } from './notify.js';
 import { createWorkflowApi } from './workflow/workflow-api.js';
@@ -189,6 +192,9 @@ export function apply(ctx: Context): void {
   // 生成 / 刷新只由按钮的 onClick 触发，apply 期一个请求都不发）。
   const rikke = createRikkeApi(rpc);
   const rikkeController = createRikkeUiController(rikke);
+  // #25：晚省的卡与面板共用一份数据面与控制器（生成只由按钮触发；apply 期不发请求）。
+  const wansheng = createWanshengApi(rpc);
+  const wanshengController = createWanshengUiController(wansheng);
   // #24：触达数据面（账本读面 / 标已读 / 通知摘要开关）。造它不发请求；
   // 只有「打开日课面板」与「人点设置开关」两条人点路径会用到它。
   const notify = createNotifyApi(rpc);
@@ -226,6 +232,9 @@ export function apply(ctx: Context): void {
     rikkeController,
     digao,
     digaoController,
+    // #25：晚省（第 5 张卡）。
+    wansheng,
+    wanshengController,
   });
 
   // ③ 主面板：keyed 槽按 key 分派；key 必须与侧栏行 id 相同。
@@ -311,4 +320,9 @@ export function apply(ctx: Context): void {
       }
     },
   });
+
+  // ⑫ 票 04（#25）：晚省面板（main key `wansheng`，order 110）—— 当天事实 + [立即生成] + 投递历史。
+  //    **最后 install**：`tests/assembly/lib/panel-surface.mjs` 的 `PANEL_KEYS` 末尾就是它，
+  //    注册序 = 本文件 install 序（顺序不符会被 `expectedRegisterNames()` 抓到）。
+  installWansheng(rpc, { api: wansheng, navigate, notify });
 }

@@ -44,16 +44,29 @@ export function createTrafficMethods(ctx, config = {}) {
     /** 标已读（只改 `read`；失败**抛**，RPC 层折成 `{ok:false,error}`）。 */
     'traffic.markRead': async (request) => markTrafficRead(dataDir, requestOf(request).ids),
 
-    /** 通知摘要开关（#24 只有这一项）。 */
-    'traffic.settings.get': async () => ({ notifySummary: readShellSettings(dataDir).notifySummary }),
+    /** 触达设置：通知摘要 + #25 的两个计划时刻（缺失 = 宿主缺省值）。 */
+    'traffic.settings.get': async () => {
+      const settings = readShellSettings(dataDir)
+      return { notifySummary: settings.notifySummary, rikkeTime: settings.rikkeTime, wanshengTime: settings.wanshengTime }
+    },
 
+    /**
+     * 改触达设置（部分更新）：`notifySummary` / `rikkeTime` / `wanshengTime` 三选一以上；
+     * 交给 `writeShellSettings` 校验 + 写后回读，非法值**抛**（写操作不许静默）。
+     * 时刻只是「期望值」：实际生效的权威是 `ctx.schedule` 里那条任务（改它走 `rikke.setTime` / `wansheng.setTime`）。
+     */
     'traffic.settings.set': async (request) => {
       const source = requestOf(request)
-      if (!Object.hasOwn(source, 'notifySummary')) {
-        throw new Error('traffic.settings.set 要 notifySummary（#24 的设置面只有这一项）')
+      const keys = ['notifySummary', 'rikkeTime', 'wanshengTime']
+      const patch = {}
+      for (const key of keys) {
+        if (Object.hasOwn(source, key)) patch[key] = source[key]
       }
-      const saved = writeShellSettings(dataDir, { notifySummary: source.notifySummary })
-      return { notifySummary: saved.notifySummary }
+      if (Object.keys(patch).length === 0) {
+        throw new Error('traffic.settings.set 要 notifySummary / rikkeTime / wanshengTime 之一')
+      }
+      const saved = writeShellSettings(dataDir, patch)
+      return { notifySummary: saved.notifySummary, rikkeTime: saved.rikkeTime, wanshengTime: saved.wanshengTime }
     },
 
     /** 契约 §5 点名的宿主半边（壳读同一份文件；这里给宿主一个可测的读写面）。 */

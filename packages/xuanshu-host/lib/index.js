@@ -77,6 +77,8 @@ import { createConsultMethods } from './consult/service.mjs';
 import { createDigaoMethods } from './digao/service.mjs';
 import { installHorosa } from './horosa/service.mjs';
 import { createTrafficMethods } from './notify/service.mjs';
+// #25：晚省的四个 RPC（确定性事实，不调模型）。
+import { createWanshengMethods } from './wansheng/service.mjs';
 import { createPuMethods, installPuSkill } from './pu/service.mjs';
 import { DEFAULT_TIME_ZONE, installDailyTasks } from './rikke/daily-tasks.mjs';
 import { baseZone, createRikkeMethods } from './rikke/service.mjs';
@@ -470,6 +472,9 @@ export function apply(ctx, config) {
       // 单独展开（方法名独立），扫描挂点是 `refreshDigao()` 内部，没有第二条扫描路径。
       ...createShijiMethods(ctx, { dataDir }),
       ...createRikkeMethods(ctx, { dataDir, env: process.env }),
+      // #25：晚省（`wansheng.status/read/generate/setTime`）—— 确定性事实产物（`<dataDir>/wansheng/<date>.json`），
+      // 与日课共用同一份底座时区与共享设置（rikkeTime / wanshengTime 的期望值）。
+      ...createWanshengMethods(ctx, { dataDir, env: process.env }),
       // #24：触达账 / 共享设置（`traffic.status` / `traffic.markRead` / `traffic.settings.*` /
       // `shell.settings.*`）。账本与设置都在 `<dataDir>/` 下，与日课产物同源。
       ...createTrafficMethods(ctx, { dataDir }),
@@ -498,7 +503,7 @@ export function apply(ctx, config) {
     log.warn('谱 / 藏 / 八字 / 底稿 / 日课 / 工作流 RPC 装配失败（已兜住）：%C', String(error?.message ?? error));
   }
 
-  // 票 13：两条 daily 定时任务（日课 07:30 / 底稿刷新 03:30）。
+  // 票 13：两条 daily 定时任务（日课 07:30 / 底稿刷新 03:30）；#25 加第三条（晚省 21:30）。
   //
   // **为什么用 `ctx.inject(['schedule'], …)` 而不是在这里直接 await**：
   // `schedule` 行由本包的 `cordis.patch.yml` 插进树里，它在运行时树中的**挂载时刻晚于本行** ——
@@ -515,10 +520,12 @@ export function apply(ctx, config) {
           const timeZone = safeBaseZone(dataDir);
           installDailyTasks({ ctx: scoped, dataDir, timeZone, env: process.env })
             .then((daily) => {
-              log.info('票13 定时任务：日课=%s（%s）、底稿刷新=%s（%s）',
+              log.info('票13 定时任务：日课=%s（%s）、底稿刷新=%s（%s）、晚省=%s（%s）',
                 daily.rikke.ok ? daily.rikke.task.id : '未建', daily.rikke.reused ? '复用' : '新建',
-                daily.digao.ok ? daily.digao.task.id : '未建', daily.digao.reused ? '复用' : '新建');
+                daily.digao.ok ? daily.digao.task.id : '未建', daily.digao.reused ? '复用' : '新建',
+                daily.wansheng.ok ? daily.wansheng.task.id : '未建', daily.wansheng.reused ? '复用' : '新建');
               for (const note of daily.notes) log.warn('票13 %s', note);
+              if (daily.missed.days.length > 0) log.info('票13 补课：补上 %s 天错过的触达', daily.missed.days.length);
             })
             .catch((error) => log.warn('票13 定时任务注册失败（已兜住）：%C', String(error?.message ?? error)));
           return () => {};
