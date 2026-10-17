@@ -31,7 +31,7 @@ pnpm --filter xuanshu-shell exec electron .    # 首次启动会 spawn dsh；窗
 
 - **home**：从 `pnpm-workspace.yaml` 所在目录判定开发档 = `<repo>/.dsh-home`。也可以显式给：
   ```pwsh
-  pnpm --filter xuanshu-shell exec electron . -- --home E:/ai_project/XuanShu/.dsh-home
+  pnpm --filter xuanshu-shell exec electron . -- --home <repo>/.dsh-home
   ```
 - **profile**：默认 `xuanshu`；`--profile <name>` 或 `XUANSHU_PROFILE` 覆盖。
 - **端口**：默认 `19388`（`--port <n>` / `XUANSHU_WEB_PORT` 覆盖）。**永远不要用 19387**（那是 DSH 桌面版的）。
