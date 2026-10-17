@@ -39,9 +39,13 @@
  */
 
 import { refreshDigao } from '../digao/generate.mjs'
-import { DIGAO_SESSION_PREFIX, RIKKE_SESSION_PREFIX } from '../digao/tasks.mjs'
+import { DIGAO_SESSION_PREFIX, RIKKE_SESSION_PREFIX, WANSHENG_SESSION_PREFIX } from '../digao/tasks.mjs'
+import { generateWansheng } from '../wansheng/generate.mjs'
+import { deliverWanshengTouch } from '../wansheng/touch.mjs'
 import { generateRikke, zoneFor } from './generate.mjs'
-import { dateInZone } from './store.mjs'
+import { settleMissedTouches } from './missed.mjs'
+import { isLateDelivery, parseScheduleOccurrence } from './occurrence.mjs'
+import { dateInZone, hourInZone } from './store.mjs'
 import { deliverRikkeTouch } from './touch.mjs'
 
 /** 注册的事件名（DSH 的 pre-step waterfall；随包 `dsh-time-context` 同款）。 */
@@ -54,6 +58,11 @@ export function isRikkeDailySession(sessionId) {
 
 export function isDigaoDailySession(sessionId) {
   return typeof sessionId === 'string' && sessionId.startsWith(DIGAO_SESSION_PREFIX)
+}
+
+/** #25：晚省的定时会话（`session-xs-wansheng-`）。 */
+export function isWanshengDailySession(sessionId) {
+  return typeof sessionId === 'string' && sessionId.startsWith(WANSHENG_SESSION_PREFIX)
 }
 
 /**
@@ -93,22 +102,42 @@ export function installDailyDelivery(ctx, { dataDir, timeZone, now, env } = {}) 
   const logger = namedLogger(ctx)
   const at = () => (typeof now === 'function' ? now() : new Date())
 
-  /** 日课那条链（底座快照 + 本地黄历 → `<dataDir>/rikke/<日期>.json` → 系统通知）。 */
-  async function runRikke(moment) {
+  /**
+   * 日课那条链（底座快照 + 本地黄历 → `<dataDir>/rikke/<日期>.json` → 系统通知）。
+   *
+   * #25：日期取 `occurrence` 在底座时区里的那一天（不是投递时刻）；迟到 > 30 分钟判「补」
+   * （产物与账行都标 `missed`，且**不推送** —— 开机瞬间不该连弹历史通知）。
+   */
+  async function runRikke(moment, occurrence) {
     try {
       const zone = zoneFor(dataDir, timeZone)
+      // 解析不出 occurrence → 退回投递时刻（`parseScheduleOccurrence` 的 note 已由调用方记日志）。
+      const reference = occurrence.at ?? moment
+      const date = dateInZone(zone, reference)
+      const missed = isLateDelivery(occurrence.at, moment)
       const generated = await generateRikke({
         ctx,
         dataDir,
-        date: dateInZone(zone, moment),
+        date,
         zone,
         manual: false, // 「定时产出的那一份」（人点那条是 true）
         at: moment,
+        missed,
+        // 补课那份的时辰取**计划时刻**（说的是那一天的事），不是补的时刻。
+        ...(occurrence.at === null ? {} : { hour: hourInZone(zone, occurrence.at) }),
       })
       if (generated.ok) {
-        logger.info('定时任务到点：日课 %s 已生成（manual=false）', generated.date)
-        // #24：定时那份才发系统通知（人点那份界面自己会显示）。通知的任何失败都只落账/记日志。
-        const touch = await deliverRikkeTouch({ dataDir, date: generated.date, at: moment, manual: false, env })
+        logger.info('定时任务到点：日课 %s 已生成（manual=false，missed=%s）', generated.date, missed)
+        // 定时那份才发系统通知（人点那份界面自己会显示）。通知的任何失败都只落账/记日志。
+        const touch = await deliverRikkeTouch({
+          dataDir,
+          date: generated.date,
+          at: moment,
+          manual: false,
+          missed,
+          occurrenceAt: occurrence.at === null ? null : occurrence.at.toISOString(),
+          env,
+        })
         if (touch.ledgerError !== null) logger.warn('日课已生成，但触达账没记上：%s', touch.ledgerError)
         if (touch.notify.status === 'failed') {
           logger.warn('日课已生成，但系统通知没发出去（%s）：%s', touch.notify.status, touch.notify.reason)
@@ -119,6 +148,37 @@ export function installDailyDelivery(ctx, { dataDir, timeZone, now, env } = {}) 
       }
     } catch (error) {
       logger.warn('日课到点跑生成链时抛了异常（已兜住，不影响这一轮）：%s', String(error?.message ?? error))
+    }
+  }
+
+  /** #25：晚省那条链（确定性事实 → `<dataDir>/wansheng/<日期>.json` → 系统通知）。 */
+  async function runWansheng(moment, occurrence) {
+    try {
+      const zone = zoneFor(dataDir, timeZone)
+      const reference = occurrence.at ?? moment
+      const date = dateInZone(zone, reference)
+      const missed = isLateDelivery(occurrence.at, moment)
+      const generated = await generateWansheng({ ctx, dataDir, date, zone, at: moment, missed })
+      if (generated.ok !== true) {
+        logger.warn('晚省到点没生成（%s）：%s', date, generated.reason)
+        return
+      }
+      logger.info('定时任务到点：晚省 %s 已生成（missed=%s）', generated.date, missed)
+      const touch = await deliverWanshengTouch({
+        dataDir,
+        date: generated.date,
+        at: moment,
+        manual: false,
+        missed,
+        occurrenceAt: occurrence.at === null ? null : occurrence.at.toISOString(),
+        env,
+      })
+      if (touch.ledgerError !== null) logger.warn('晚省已生成，但触达账没记上：%s', touch.ledgerError)
+      if (touch.notify.status === 'failed') {
+        logger.warn('晚省已生成，但系统通知没发出去（%s）：%s', touch.notify.status, touch.notify.reason)
+      }
+    } catch (error) {
+      logger.warn('晚省到点跑生成链时抛了异常（已兜住，不影响这一轮）：%s', String(error?.message ?? error))
     }
   }
 
@@ -149,8 +209,18 @@ export function installDailyDelivery(ctx, { dataDir, timeZone, now, env } = {}) 
       if (!hasScheduleReminder(payload?.messages)) return decision
       const sessionId = payload?.agent?.session?.id
       const moment = at()
-      if (isRikkeDailySession(sessionId)) await runRikke(moment)
+      // #25：这一次是替哪个计划时刻投的（解析不出 → 退回投递时刻，理由记一笔）。
+      const occurrence = parseScheduleOccurrence(payload?.messages)
+      if (occurrence.note !== null) logger.warn(occurrence.note)
+      if (isRikkeDailySession(sessionId)) await runRikke(moment, occurrence)
+      else if (isWanshengDailySession(sessionId)) await runWansheng(moment, occurrence)
       else if (isDigaoDailySession(sessionId)) await runDigao(moment)
+      else return decision
+
+      // #25：每次到点之后结算「缺的触达」（schedule 只补最近一次 occurrence，剩下的靠这里补齐）。
+      const settled = await settleMissedTouches({ ctx, dataDir, zone: zoneFor(dataDir, timeZone), now: () => moment, env })
+      for (const note of settled.notes) logger.warn('补课：%s', note)
+      for (const failure of settled.errors) logger.warn('补课：%s', failure)
     } catch (error) {
       logger.warn('定时任务到点跑生成链时抛了异常（已兜住，不影响这一轮）：%s', String(error?.message ?? error))
     }

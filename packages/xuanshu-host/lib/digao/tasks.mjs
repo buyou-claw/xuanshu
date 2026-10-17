@@ -43,19 +43,26 @@ export const DEFAULT_TIME_ZONE = 'Asia/Shanghai'
 /** 任务名（**同时是幂等键**：catalog 里按它找自己那条）。 */
 export const RIKKE_TASK_TITLE = '日课'
 export const DIGAO_TASK_TITLE = '底稿刷新'
+/** #25：晚间触达（晚省）。 */
+export const WANSHENG_TASK_TITLE = '晚省'
 
 /** 缺省时刻（契约 §1/§2 定值；错开一小时，免得两条任务在同一分钟抢会话）。 */
 export const RIKKE_DEFAULT_TIME = '07:30:00'
 export const DIGAO_DEFAULT_TIME = '03:30:00'
+/** #25 契约 §2：晚省缺省 21:30。 */
+export const WANSHENG_DEFAULT_TIME = '21:30:00'
 
 /** 会话 id 前缀（ADR-0009：`session-xs-<kind>-<uuid>`；到点认领也按它认人）。 */
 export const RIKKE_SESSION_PREFIX = 'session-xs-rikke-'
 export const DIGAO_SESSION_PREFIX = 'session-xs-digao-'
+/** #25：晚省会话前缀（`delivery.mjs` 按它认领）。 */
+export const WANSHENG_SESSION_PREFIX = 'session-xs-wansheng-'
 
 /** kind → 会话 id 前缀（**这一份是唯一来源**，别处不再写第二遍字面量）。 */
 const SESSION_PREFIXES = Object.freeze({
   rikke: RIKKE_SESSION_PREFIX,
   digao: DIGAO_SESSION_PREFIX,
+  wansheng: WANSHENG_SESSION_PREFIX,
 })
 
 /**
@@ -161,3 +168,15 @@ export const RIKKE_PROMPT = '现在做日课：宿主已按本地黄历把今天
 export const DIGAO_PROMPT = '现在刷新底稿：宿主已按规则骨架从谱 / 工作区 / 工作流三路重新派生过它'
   + '（`<dataDir>/digao.md` + `<dataDir>/digao.json`，纯派生 · 不可手改），**不要写这两个文件**。'
   + '读它，用一句话说这次刷新变了什么、或指出哪一路来源还是空的。'
+
+/**
+ * 晚省的提示词（#25）。
+ *
+ * 与日课/底稿同一条口径：**产物由宿主写**（`wansheng/generate.mjs` 的确定性事实），这一轮只让它
+ * 读产物、按事实说人话；不许它去写 `<dataDir>/wansheng/`（那是它的 cwd，写坏就没人能修）。
+ * 晚省是「摆事实 + 提醒回看」，**不替用户下结论**（spec 002 用户故事 15）。
+ */
+export const WANSHENG_PROMPT = '现在做晚省：宿主已经把今天的事实写进你的工作目录'
+  + '（`wansheng/<YYYY-MM-DD>.json`，schema `xuanshu/wansheng@1`，**不要改写它**）。'
+  + '读它，用一两句话把今天发生了什么说清楚（几场问事、哪些项目有活动），并提醒用户回看；'
+  + '不要推测吉凶、不要替用户下结论。'

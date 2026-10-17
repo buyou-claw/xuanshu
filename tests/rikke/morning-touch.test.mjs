@@ -34,7 +34,8 @@ afterEach(async () => {
   await Promise.all(shells.splice(0).map((shell) => shell.close()))
 })
 
-const NOW = () => new Date('2026-10-15T03:00:00.000Z')
+/** 本地 2026-10-15 07:40（= 23:40Z 前一天）：提醒的计划时刻是本地 07:30，投递只晚 10 分钟。 */
+const NOW = () => new Date('2026-10-14T23:40:00.000Z')
 const TODAY = '2026-10-15'
 const TZ = 'Asia/Shanghai'
 
@@ -44,7 +45,7 @@ function scheduleReminder() {
     id: 'msg-1',
     role: 'user',
     source: { kind: 'schedule' },
-    content: [{ type: 'text', text: '[SCHEDULE REMINDER]\noccurrence_at: 2026-10-15T07:30:00.000Z\nreminder_prompt_json: "现在做日课：…"' }],
+    content: [{ type: 'text', text: '[SCHEDULE REMINDER]\noccurrence_at: 2026-10-14T23:30:00.000Z\nreminder_prompt_json: "现在做日课：…"' }],
   }
 }
 
@@ -139,7 +140,7 @@ describe('#24 · 到点生成 → 一条系统通知（宿主 ↔ 假壳端点�
       body: '',
       silent: false,
       target: 'overview',
-      createdAt: '2026-10-15T03:00:00.000Z',
+      createdAt: '2026-10-14T23:40:00.000Z',
     })
     expect(target.shell.requests[0].headers.authorization).toMatch(/^Bearer /u)
   })
@@ -156,7 +157,8 @@ describe('#24 · 到点生成 → 一条系统通知（宿主 ↔ 假壳端点�
       schema: 'xuanshu/traffic@1',
       kind: 'rikke',
       date: TODAY,
-      occurrenceAt: '2026-10-15T03:00:00.000Z',
+      // #25：occurrenceAt = 提醒里的计划时刻（不是投递时刻）。
+      occurrenceAt: '2026-10-14T23:30:00.000Z',
       generated: true,
       artifactPath: `rikke/${TODAY}.json`,
       notify: { status: 'delivered', reason: null },
@@ -174,7 +176,7 @@ describe('#24 · 到点生成 → 一条系统通知（宿主 ↔ 假壳端点�
     const status = await rikke['rikke.status']({})
     expect(status.exists).toBe(true)
     expect(status.unread).toBe(1)
-    expect(status.notify).toEqual({ status: 'delivered', at: '2026-10-15T03:00:00.000Z' })
+    expect(status.notify).toEqual({ status: 'delivered', at: '2026-10-14T23:40:00.000Z' })
     expect(status.ai).toEqual({ mode: 'ok', text: '今天把要交付的那件事先收口，别把安排排太满。' })
 
     // 打开面板（traffic.markRead）之后未读数归零。

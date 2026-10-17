@@ -29,6 +29,7 @@ import { readRikkeSettings, writeRikkeSettings } from './settings.mjs'
 import { dateInZone, isDate, readRikke } from './store.mjs'
 import { deliverRikkeTouch } from './touch.mjs'
 import { readTraffic } from '../notify/traffic.mjs'
+import { syncTouchTimeSettings } from '../notify/settings.mjs'
 import { resolveDataDir } from '../bazi/service.mjs'
 
 /** 请求对象兜底（非对象一律当空请求）。 */
@@ -128,12 +129,14 @@ export function createRikkeMethods(ctx, config = {}) {
 
     /**
      * 改日课的每日时刻（契约 §2：走 `ctx.schedule.update` 的 **compare-and-update**）。
+     * #25：改完把期望值同步进共享设置（`rikkeTime`），下次安装 / 界面显示都按新值。
      * 失败**抛**（RPC 层折成 `{ok:false, error}`）：这是写操作，静默吞掉会让用户以为改成了。
      */
     'rikke.setTime': async (request) => {
       const source = requestOf(request)
       const updated = await updateDailyTime({ ctx, title: RIKKE_TASK_TITLE, time: source.time })
       if (!updated.ok) throw new Error(updated.reason)
+      syncTouchTimeSettings(dataDir, 'rikkeTime', updated.schedule.time)
       return { schedule: { time: updated.schedule.time, timeZone: updated.schedule.timeZone } }
     },
 

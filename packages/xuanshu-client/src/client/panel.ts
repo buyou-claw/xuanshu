@@ -98,12 +98,13 @@ export const PANEL_HOME = '家';
 /** 页眉右上角常驻只读路径展示（S1 §9 C11）。 */
 export const PANEL_LOCAL_NOTE = '数据都在本地 ~/.dsh/xuanshu/';
 
-/** 卡头文案（S1 §3.1）。 */
+/** 卡头文案（S1 §3.1；#25 加第 5 张「晚省」）。 */
 export const CARD_TITLE = {
   mingpan: '命盘 / 八字',
   rike: '日课',
   digao: '底稿',
   quicklinks: '快捷入口',
+  wansheng: '晚省',
 } as const;
 
 /** 只读 / 纯派生两类徽标（逐字固定，跨屏一致；S1 §9 C1/C2、assets/skins/badge-readonly.md）。 */
@@ -145,6 +146,11 @@ export const EMPTY_COPY = {
     why: '底稿还没生成过。',
     sub: '刷新一次就会按三路来源拼出骨架。',
   },
+  // #25：晚省空态（它只摆事实；没生成时给两个出口：[立即生成] 与 [改时间]）。
+  wansheng: {
+    why: '今天还没有晚省。晚省默认每天 21:30 生成。',
+    sub: '（它只摆事实、不替你下结论；点开进问事）',
+  },
 } as const;
 
 /**
@@ -155,6 +161,7 @@ export const ERROR_COPY = {
   mingpan: '命盘快照读不出来（文件缺失或格式不符）。',
   rike: '日课生成失败：底座未就绪 / 推运调用失败。',
   digao: '底稿读不出来。',
+  wansheng: '晚省读不出来（产物缺失或格式不符）。',
 } as const;
 
 /** 按钮文案（S1 §2 线框与 §3.1 散文；ASCII 箭头与线框一致）。 */
@@ -171,6 +178,11 @@ export const ACTION_COPY = {
   sourceWorkspace: '工作区',
   sourceWorkflow: '工作流',
   adjustSource: '要改就改源头：',
+  // #25：晚省的四个出口。
+  watchWansheng: '看完整晚省 ->',
+  goConsult: '去问事 ->',
+  generateWansheng: '立即生成',
+  history: '投递历史',
 } as const;
 
 /**
@@ -192,6 +204,8 @@ export const DISABLED_REASON = {
   refreshDigao: '底稿刷新还没接上（属票 13 · 底稿与日课）',
   openDetail: '命盘详情还没装配（属票 08）',
   retry: '取数重试还没接上（属票 08 / 13）',
+  wansheng: '晚省面板还没装配（属票 04 · 晚间触达）',
+  generateWansheng: '晚省生成还没接上（属票 04 · 晚间触达）',
 } as const;
 
 /** 卡级三态 + ready（S1 §6：每卡各自三态，D2 卡级骨架、无整页 loading）。 */
@@ -219,10 +233,13 @@ export function clockOf(time: string | undefined): string {
  */
 export const DIGAO_ID = 'digao';
 export const RIKKE_ID = 'rikke';
+/** #25：晚省面板（main key `wansheng`，order 110 —— 100 已被日课占用）。 */
+export const WANSHENG_ID = 'wansheng';
 
 /** 侧栏行文案（D7 措辞：不加「库 ·」前缀；日课是面板名本身）。 */
 export const DIGAO_LABEL = '底稿';
 export const RIKKE_LABEL = '日课';
+export const WANSHENG_LABEL = '晚省';
 
 /**
  * 两条侧栏行的 order。
@@ -236,6 +253,8 @@ export const RIKKE_LABEL = '日课';
  */
 export const DIGAO_ORDER = 60;
 export const RIKKE_ORDER = 100;
+/** #25：晚省的侧栏行 order（100 已被日课占用；110 是下一个既不撞位、又保持「10 一档」的空档）。 */
+export const WANSHENG_ORDER = 110;
 
 /**
  * 面板导航目标（= `main` keyed 槽的 key；`conversation` 特殊：回 DSH 原面板）。
@@ -253,11 +272,12 @@ export type PanelNavTarget =
   | 'pus'
   | 'digao'
   | 'rikke'
+  | 'wansheng'
   | 'workflow'
   | 'schedules'
   | 'onboarding'
   | 'mingpan'
   | 'conversation';
 
-/** 四卡的 DOM 名（`data-xuanshu-card`；素材命名法见 assets README §2）。 */
-export type CardName = 'mingpan' | 'rike' | 'digao' | 'quicklinks';
+/** 卡的 DOM 名（`data-xuanshu-card`；素材命名法见 assets README §2）。#25 加第 5 张「晚省」。 */
+export type CardName = 'mingpan' | 'rike' | 'digao' | 'quicklinks' | 'wansheng';
