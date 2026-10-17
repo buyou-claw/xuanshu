@@ -58,6 +58,8 @@ import { installPuPanel } from './PuPanel.js';
 import { createRikkeApi } from './rikke-api.js';
 import { createRikkeUiController } from './rikke-controller.js';
 import { installRikke } from './rikke.js';
+import { createNotifyApi } from './notify-api.js';
+import { installTouchSettings } from './notify.js';
 import { createWorkflowApi } from './workflow/workflow-api.js';
 import { installWorkflowPanel } from './workflow/WorkflowPanel.js';
 import type { RpcContext } from './rpc.js';
@@ -187,6 +189,9 @@ export function apply(ctx: Context): void {
   // 生成 / 刷新只由按钮的 onClick 触发，apply 期一个请求都不发）。
   const rikke = createRikkeApi(rpc);
   const rikkeController = createRikkeUiController(rikke);
+  // #24：触达数据面（账本读面 / 标已读 / 通知摘要开关）。造它不发请求；
+  // 只有「打开日课面板」与「人点设置开关」两条人点路径会用到它。
+  const notify = createNotifyApi(rpc);
   const digao = createDigaoApi(rpc);
   const digaoController = createDigaoUiController(digao);
 
@@ -275,7 +280,9 @@ export function apply(ctx: Context): void {
 
   // ⑧ 票 13：底稿只读面板（`digao`）与日课面板（`rikke`），各带一条侧栏行。
   installDigao(rpc, { api: digao, navigate });
-  installRikke(rpc, { api: rikke, navigate });
+  installRikke(rpc, { api: rikke, navigate, notify });
+  // #24：设置里的一行两项开关（AI 建议段 / 通知摘要）。纯加性，不新增面板、不新增侧栏行。
+  installTouchSettings(rpc, { rikke, notify });
 
   // ⑨ 票 16：工作流门厅（`workflow`，order 70）—— 创建工作流 → 会话；导出 skill 的落点表单在这里。
   installWorkflowPanel(rpc, { api: workflow, navigate });

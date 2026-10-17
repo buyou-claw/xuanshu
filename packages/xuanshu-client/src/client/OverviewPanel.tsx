@@ -26,7 +26,7 @@ import type { DigaoApi, DigaoStatus } from './digao-api.js';
 import type { DigaoOutcome, DigaoUiController } from './digao-controller.js';
 import { ERROR_COPY, PANEL_HOME, PANEL_ID, PANEL_LOCAL_NOTE, PANEL_TITLE } from './panel.js';
 import type { CardState } from './panel.js';
-import type { RikkeApi, RikkeStatus } from './rikke-api.js';
+import type { RikkeAiNote, RikkeApi, RikkeNotify, RikkeStatus } from './rikke-api.js';
 import type { RikkeOutcome, RikkeUiController } from './rikke-controller.js';
 
 /** 本机日期（`YYYY-MM-DD`，本地时区）——卡头「今天 <日期>」的缺省来源。 */
@@ -139,8 +139,14 @@ export function useBaziStatus(options: {
 export function rikkeStateFromStatus(
   status: RikkeStatus,
   outcome?: RikkeOutcome,
-): { state: CardState; content?: RikkeContent; date?: string; reason?: string } {
-  const base = { content: status.content, date: status.date };
+): { state: CardState; content?: RikkeContent; date?: string; reason?: string; ai?: RikkeAiNote; unread?: number; notify?: RikkeNotify } {
+  // #24 的三个加性字段：宿主没给就整键省略（不写 0 / 不编一个 notify）。
+  const extras = {
+    ...(status.ai === undefined ? {} : { ai: status.ai }),
+    ...(status.unread === undefined ? {} : { unread: status.unread }),
+    ...(status.notify === undefined ? {} : { notify: status.notify }),
+  };
+  const base = { content: status.content, date: status.date, ...extras };
   if (outcome?.ok === false) {
     // 生成失败：理由优先（底座未立 / 推运失败），已有内容照常带出去（S14 §6 error 行）。
     return { state: 'error', ...base, reason: outcome.reason };
@@ -196,7 +202,7 @@ export function useRikkeStatus(options: {
   controller?: RikkeUiController;
   preloaded?: RikkeStatus;
   preloadedOutcome?: RikkeOutcome;
-}): { state: CardState; content?: RikkeContent; date?: string; reason?: string } {
+}): { state: CardState; content?: RikkeContent; date?: string; reason?: string; ai?: RikkeAiNote; unread?: number; notify?: RikkeNotify } {
   const { api, controller, preloaded, preloadedOutcome } = options;
   const active = controller ?? NO_RIKKE_CONTROLLER;
   const revision = useSyncExternalStore(active.subscribe, active.getRevision, active.getRevision);
@@ -444,6 +450,10 @@ export function OverviewPanel({
           today={rikkeState.date === undefined || rikkeState.date === '' ? date : rikkeState.date}
           content={rikkeState.content}
           reason={rikkeState.reason}
+          // #24：两段式与触达状态（AI 三态 / 未读 / 最近一次推送失败）都从 `rikke.status` 来。
+          ai={rikkeState.ai}
+          unread={rikkeState.unread}
+          notify={rikkeState.notify}
           {...injected}
           onRetry={retryRikke}
         />
