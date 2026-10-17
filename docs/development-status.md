@@ -691,8 +691,16 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ### 16. Spec 002「住进去」：10 张票全部实现（2026-10-17）
 
 规格 `docs/specs/002-reside-and-use.md`，父 issue [#21](https://github.com/buyou-claw/xuanshu/issues/21)，
-集成分支 **`feat/spec-002-integration`**（从 `main` 09951eb 起，10 张票各自 worktree/分支 → Lead 合并）。
+集成分支 **`feat/spec-002-integration`**（从 `main` 09951eb 起，10 张票各自 worktree/分支 → Lead 合并），
+草稿 PR [#32](https://github.com/buyou-claw/xuanshu/pull/32) 承载（Closes #21 + #22–#31）。
 形态决策：ADR-0013（事记 = 底稿第四来源）、ADR-0014（玄枢自己的桌面壳与 home，与 DSH 桌面版零交集）。
+
+实现完成后按 `code-review` 技能跑了两轴（**Standards** / **Spec**，各自独立上下文、不合并排序），
+共 12 条发现（3 硬违规 + 4 判断项 + 5 规格项），全部在 **t32 复核修复轮**落成代码与用例：
+宿主 home/dataDir 收成**一份实现**（`lib/home.mjs`，含 real-`~/.dsh` 拒绝与扫描根）、壳的入口判断抽到
+有测试的 `main-flow.mjs`、`runTouchChain` 去重、`routes.list` 把未知默认路由改成 `null`、
+`设置 → 事记`（恢复墓碑 / 排除目录）与 `设置` 里的关窗行为/开机自启（显示**实际生效方式**）、
+点通知落 overview 的 `#xuanshu-overview` 通道、`rikke.status` 未读只数日课。修复后用例 1676 → 1761。
 
 #### 16.1 票 → issue → 交付面
 
@@ -716,21 +724,34 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 `contract-wansheng-missed.md`（晚省事实 / 补课判据 / occurrence 日期）、
 `contract-data-backup.md`（8 品类 / 清单 / 排除项）。四份契约都是「先定形状 → 两半边各自实现 → 契约夹测」。
 
+**复核修复轮（t32，2026-10-17）之后新增/收紧的形状**（都写进了代码注释与用例；外部读者按此对账）：
+
+- 新增 `<home>/xuanshu/runtime/shell-status.json`，schema `xuanshu/shell-status@1`：
+  `{schema,pid,updatedAt,autostart:{enabled,method:'login-item'|'shortcut'|'unsupported'},closeBehavior}`，
+  与 `shell-notify.json` 同级；`pid` 必须与 `XUANSHU_SHELL_PID` 对上（对不上 = 旧壳残留，宿主不用），干净退出删文件。
+- **`shell.settings.get()` 改成 `{settings, effective?}`**（之前是平铺三键，属于不兼容改形；`effective` 缺席 =
+  壳没在跑或状态读不到）；`shell.settings.set()` → `{settings}`。
+- `routes.list`：默认路由未知时 `isDefault = null`（之前写成 `false`，把「不知道」冒充成「不是」）；providers 与 models 两处都改。
+- `rikke.status` 的 `unread` / `notify` **只数 `kind==='rikke'`** 的账行（晚省不再蹭日课未读）；打开日课面板只标日课账已读。
+- 客户端新增 `#xuanshu-overview` hash 通道（壳点通知后 `show()` + 让页面回 overview；前端无路由，这是它能做到的上限）。
+- 宿主 home/dataDir 解析**只剩一份实现**（`lib/home.mjs`；`bazi/service.mjs` 只是同一函数对象的再导出）；
+  事记/工作流的 skill 扫描根也走 `resolveSearchHome()`，`DSH_HOME=~/.dsh` 时**拒绝**取真实 home 并记 note。
+
 #### 16.3 验证（数字全部抄工具输出）
 
 ```
-# pnpm test:inventory（profile 已装）
-[inventory] 用例 1676 条（基线 1676）/ 文件 155 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+# pnpm test:inventory（profile 已装；t32 复核修复轮之后）
+[inventory] 用例 1761 条（基线 1761）/ 文件 162 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
-结果：8/8 通过，exit 0（6790ms）
+结果：8/8 通过，exit 0（7527ms）
 启动器[home] PASS  隔离 home <repo>/.dsh-home（来源 --home）；真实 home ~/.dsh 不会被碰
 …（home 两档默认都不是真实 home；换 home 后两条派生路径两两不同）
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 497430B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 515773B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -738,7 +759,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门）exit 0；清单基线已按最终用例数 `--update`（1676 / 155）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门）exit 0；清单基线已按最终用例数 `--update`（1761 / 162）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -778,4 +799,14 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
   （DSH 本体只认前者）；壳与启动器都已这么传，runbook 写明。
 - **`install-profile --home ~/.dsh` 仍是显式逃生舱**（等价 setup 的 `--install`）：显式要求才写真实 home；
   默认路径已不会再落到 `~/.dsh`。
+- **#29「一键指路 设置 → 模型」只到「逐字路径 + 有真 handler 才渲染按钮」**：钉版 rc.2 没有公开的
+  `openSettings` API（`openSection` 只在 `settings.onboarding` owner props 内，空会话会弹窗且完成态是内存态）。
+  让它变成真一键需要在 `settings.onboarding` 注册一个 step（新增 cell + 空会话弹窗，属产品取舍），本轮不做；
+  界面不造死按钮，写清路径。
+- **#22 装配报告的 `profile.teardown` 是一处刻意的窄放宽**：只在「root fiber 已 UNLOADING/DISPOSED」的关闭现场
+  才允许 `profileContext` 缺失并仍判 `ok`（证据见 §16.4 第 1 条）；非关闭现场缺 `profileContext` 仍然判失败，
+  `tests/assembly/assembly-report-teardown.test.mjs` 两个方向都钉着。
+- **设置页的「点击链」没有 jsdom 证据**：本仓无 jsdom，设置页只用 `renderToStaticMarkup` + 纯函数/数据面断言；
+  壳的真窗口行为（状态文件写入、`fs.watch` 回流、隐藏窗口点通知后回 overview）只有 runbook 手测清单。
+- **硬杀壳会留下过期 `shell-status.json`**：宿主按 `pid` 不匹配拒用（有测试），但 pid 复用在理论上可能误认。
 
