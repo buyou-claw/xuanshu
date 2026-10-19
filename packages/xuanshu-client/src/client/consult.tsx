@@ -171,7 +171,9 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
   /** 开一次问事：create →（有话才）send → openSession。 */
   const start = (plain = false): void => {
     const text = question.trim();
-    if (!plain && nudgeNeeded({ question: text, selected, mounts: mountsNow })) {
+    // 没有可选谱可勾、也没有会话可挂时（第一次问事），不拦 —— 见 `nudgeNeeded` 的注释。
+    const selectableCount = defaults.kind === 'ready' ? defaults.value.optional.length : 0;
+    if (!plain && nudgeNeeded({ question: text, selected, mounts: mountsNow, selectableCount })) {
       setNudge(true);
       return;
     }

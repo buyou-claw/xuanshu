@@ -16,6 +16,7 @@
 import { basename } from 'node:path'
 
 import { createPuRepository } from '../pu/repository.mjs'
+import { getService } from '../soft-service.mjs'
 import { isoDate } from './skeleton.mjs'
 
 /** 单段正文的字符上限（底稿是「精简汇总」，不是全文搬运；超了截断并标注）。 */
@@ -69,7 +70,7 @@ export function collectPuSources(dataDir) {
  * @returns {{name: string, text: string}[]}
  */
 export function collectWorkspaceSources(ctx, shijiEntries) {
-  const registry = ctx?.workspaceRegistry
+  const registry = getService(ctx, 'workspaceRegistry')
   if (!registry || typeof registry.list !== 'function') return []
   let workspaces
   try {
@@ -122,7 +123,8 @@ export function collectWorkflowSources() {
  */
 export function collectSources({ ctx, dataDir, shijiEntries } = {}) {
   const notes = []
-  if (!ctx?.workspaceRegistry || typeof ctx.workspaceRegistry.list !== 'function') {
+  const registry = getService(ctx, 'workspaceRegistry')
+  if (!registry || typeof registry.list !== 'function') {
     notes.push('workspaceRegistry 服务不可得：工作区这一路按「无来源」处理（不伪造）。')
   }
   return {

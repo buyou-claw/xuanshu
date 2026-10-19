@@ -32,10 +32,18 @@ module.exports = __toCommonJS(index_exports);
 var import_react24 = require("react");
 
 // src/client/rpc.ts
-async function rpcCall(ctx, method, payload = {}, signal) {
-  const result = await ctx.connection.rpc.call("/xuanshu", method, payload, signal);
-  if (!result.ok) throw new Error(result.error.message);
-  return result.value;
+var RPC_PATH = "/api/xuanshu";
+async function rpcCall(_ctx, method, payload = {}, signal) {
+  const response = await fetch(RPC_PATH, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ method, payload }),
+    ...signal === void 0 ? {} : { signal }
+  });
+  if (!response.ok) throw new Error(`transport failure for ${RPC_PATH}: HTTP ${response.status}`);
+  const body = await response.json();
+  if (body?.ok === true) return body.value;
+  throw new Error(body?.error?.message ?? `${method} 调用失败（宿主没有给原因）`);
 }
 
 // src/client/bazi-api.ts
@@ -56,6 +64,13 @@ function createBaziApi(ctx) {
     timezone: (payload, signal) => rpcCall(ctx, BAZI_ENDPOINTS.timezone, payload, signal),
     cast: (request, signal) => rpcCall(ctx, BAZI_ENDPOINTS.cast, request, signal)
   };
+}
+
+// src/client/ctx-service.ts
+function readService(ctx, name) {
+  const get = ctx?.get;
+  if (typeof get !== "function") return void 0;
+  return get.call(ctx, name);
 }
 
 // src/client/bazi-controller.ts
@@ -1093,7 +1108,7 @@ function installBestOf(ctx, deps) {
     "settings.general.item",
     () => ctx.slots.register({ name: "settings.general.item", id: BESTOF_SETTINGS_ID, order: 60, inject: () => deps }, BestofSettingsRowHost)
   );
-  const commandUi = ctx.commandUi;
+  const commandUi = readService(ctx, "commandUi");
   if (typeof commandUi?.register === "function") {
     for (const name of BESTOF_COMMAND_NAMES) {
       ctx.effect(
@@ -1652,7 +1667,9 @@ var historyEmptyCopy = {
   nudgePlainExit: "只带底座 + 底稿问一次"
 };
 function nudgeNeeded(input) {
-  return input.question.trim() !== "" && input.selected.length === 0 && input.mounts.length === 0;
+  if (input.question.trim() === "") return false;
+  if (input.selected.length > 0 || input.mounts.length > 0) return false;
+  return (input.selectableCount ?? Number.POSITIVE_INFINITY) > 0;
 }
 function localDateKey(iso) {
   const at = new Date(iso);
@@ -1890,6 +1907,7 @@ function XsConsultAsk({
   summary,
   error,
   nudge = false,
+  mountable = false,
   onQuestion,
   onStart,
   onPlainAsk,
@@ -1929,7 +1947,7 @@ function XsConsultAsk({
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__nudge-title", children: historyEmptyCopy.nudgeTitle }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("ol", { className: "xs-consult__paths", children: [
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: historyEmptyCopy.nudgePathPu }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: historyEmptyCopy.nudgePathMount })
+        mountable ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: historyEmptyCopy.nudgePathMount }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__actions", children: [
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "clear-nudge", onClick: onClearNudge, children: "回到勾选区" }),
@@ -2327,7 +2345,8 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
   };
   const start = (plain = false) => {
     const text = question.trim();
-    if (!plain && nudgeNeeded({ question: text, selected, mounts: mountsNow })) {
+    const selectableCount = defaults.kind === "ready" ? defaults.value.optional.length : 0;
+    if (!plain && nudgeNeeded({ question: text, selected, mounts: mountsNow, selectableCount })) {
       setNudge(true);
       return;
     }
@@ -5402,7 +5421,7 @@ function createMountsApi(ctx) {
   };
 }
 function createWorkspaceCatalog(ctx) {
-  const face = ctx.workspaces;
+  const face = readService(ctx, "workspaces");
   const source = face?.list;
   if (typeof source?.getSnapshot !== "function") {
     return { list: () => [], subscribe: () => () => {
@@ -6918,9 +6937,11 @@ function isOverviewHash(hash) {
 }
 function createOverviewHashBridge({
   location,
-  selectPanel
+  selectPanel,
+  listenOn
 }) {
   let started = false;
+  const target = listenOn ?? location;
   const handle = () => {
     if (!isOverviewHash(location.hash)) return;
     selectPanel("overview");
@@ -6936,14 +6957,14 @@ function createOverviewHashBridge({
     start() {
       if (started) return;
       started = true;
-      location.addEventListener("hashchange", handle);
+      target.addEventListener("hashchange", handle);
       handle();
     },
     /** 卸载（幂等）。 */
     stop() {
       if (!started) return;
       started = false;
-      location.removeEventListener("hashchange", handle);
+      target.removeEventListener("hashchange", handle);
     },
     /** 纯处理（测试可直接点它，不必经过事件）。 */
     handle
@@ -6952,11 +6973,13 @@ function createOverviewHashBridge({
 function installOverviewHashBridge(ctx, options = {}) {
   const target = options.window ?? (typeof globalThis.window === "undefined" ? void 0 : globalThis.window);
   if (target === void 0 || target.location === void 0) return void 0;
+  const listenOn = typeof target.addEventListener === "function" ? target : void 0;
   const bridge = createOverviewHashBridge({
     location: target.location,
     selectPanel: (id) => {
       ctx.layout.selectPanel(id);
-    }
+    },
+    ...listenOn === void 0 ? {} : { listenOn }
   });
   bridge.start();
   return () => {
@@ -7366,7 +7389,7 @@ async function fileData(file) {
   });
   return { name: file.name, data };
 }
-function PuPanel({ ctx }) {
+function PuPanel({ ctx, openSession }) {
   const [rows, setRows] = (0, import_react18.useState)([]);
   const [loading, setLoading] = (0, import_react18.useState)(true);
   const [query, setQuery] = (0, import_react18.useState)("");
@@ -7670,7 +7693,7 @@ ${draft.body}`, summaryOnly: true });
     ] }),
     job?.status === "running" && /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("p", { children: [
       "审批由 DSH 决定，玄枢不自建审批。",
-      ctx.uiWorkspace && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("button", { onClick: () => ctx.uiWorkspace?.openSession(job.sessionId), children: "在会话里看审批" }),
+      typeof openSession === "function" && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("button", { onClick: () => openSession(job.sessionId), children: "在会话里看审批" }),
       view === "detail" && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("button", { onClick: () => void run(async () => {
         const canceled = await call("pu.cancel", { id: job.id });
         setJob(canceled);
@@ -7681,7 +7704,13 @@ ${draft.body}`, summaryOnly: true });
   ] });
 }
 function installPuPanel(ctx) {
-  ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: "pus", inject: () => ({ ctx }) }, PuPanel));
+  ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: "pus", inject: () => ({
+    ctx,
+    // `ctx.uiWorkspace` 会抛（未声明服务），必须软取；拿不到就不渲染那个按钮。
+    openSession: (sessionId) => {
+      readService(ctx, "uiWorkspace")?.openSession?.(sessionId);
+    }
+  }) }, PuPanel));
   ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: "pus", order: 40, label: "谱" }, () => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { "aria-hidden": "true", children: "谱" })));
   if (typeof document === "undefined" || document.getElementById("xs-pu-style")) return;
   const style = document.createElement("style");
@@ -10298,10 +10327,11 @@ function apply(ctx) {
   const aiReadiness = createAiReadinessController({ api: createAiApi(rpc) });
   const baziDeps = { api: bazi, controller: baziController, navigate, aiStatus: aiReadiness };
   const consultApi = createConsultApi(rpc);
-  const uiWorkspace = ctx.uiWorkspace;
-  const sessionCatalog = ctx.sessions;
-  const openSession = typeof uiWorkspace?.openSession === "function" ? (sessionId) => {
-    uiWorkspace.openSession(sessionId);
+  const uiWorkspace = readService(rpc, "uiWorkspace");
+  const sessionCatalog = readService(rpc, "sessions");
+  const openSessionFn = uiWorkspace?.openSession;
+  const openSession = typeof openSessionFn === "function" ? (sessionId) => {
+    openSessionFn(sessionId);
   } : void 0;
   const refreshSessions = typeof sessionCatalog?.refresh === "function" ? async () => {
     await sessionCatalog.refresh?.();

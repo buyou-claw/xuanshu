@@ -17,6 +17,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import { useSyncExternalStore } from 'react';
 
 import type { BestofApi } from './bestof-api.js';
+import { readService } from './ctx-service.js';
 import { BESTOF_COMMAND_NAMES, createBestofController } from './bestof-model.js';
 import type { BestofController } from './bestof-model.js';
 import { installBestofStyle } from './bestof-style.js';
@@ -107,7 +108,7 @@ export function installBestOf(ctx: Context, deps: BestofInstallDeps): void {
   );
 
   // ③ `/多模型` 与两个别名：客户端命令面（宿主目录里没有同名命令，不会撞名报错）。
-  const commandUi = (ctx as Context & { commandUi?: { register(contribution: unknown): () => void } }).commandUi;
+  const commandUi = readService<{ register(contribution: unknown): () => void }>(ctx, 'commandUi');
   if (typeof commandUi?.register === 'function') {
     for (const name of BESTOF_COMMAND_NAMES) {
       ctx.effect(() =>

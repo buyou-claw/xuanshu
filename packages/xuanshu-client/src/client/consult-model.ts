@@ -85,13 +85,23 @@ export const historyEmptyCopy = {
  * 只在**要发出去**这一刻有意义：有问题、但既没勾可选谱也没挂载项。
  * 底座与底稿一直在场，但它们不构成针对具体事项的依据 —— 这就是这条引导存在的理由；
  * 而「空问题只开会话」不该被拦（那时还没有「这一问」）。
+ *
+ * **`selectableCount`（2026-10-18 真机）**：勾选区里**一个可选谱都没有**时，不拦。
+ * 理由有两条，都是真机事实：
+ *   1. 引导给的两条路这时都是死路 —— 「勾一个谱」无谱可勾；
+ *   2. 挂载必须挂在**会话**上（`mounts-views` 的既有规则：没有会话就没有可挂的账本），
+ *      而问事门厅此刻还没建会话 —— 第一次问事的人被拦下来，两条路都走不通。
+ * 所以「第一次什么都没有」= 直接空手开问，不再多一次点击。缺省值保持旧的「有路可走」语义。
  */
 export function nudgeNeeded(input: {
   question: string;
   selected: readonly string[];
   mounts: readonly MountRef[];
+  selectableCount?: number;
 }): boolean {
-  return input.question.trim() !== '' && input.selected.length === 0 && input.mounts.length === 0;
+  if (input.question.trim() === '') return false;
+  if (input.selected.length > 0 || input.mounts.length > 0) return false;
+  return (input.selectableCount ?? Number.POSITIVE_INFINITY) > 0;
 }
 
 /** 本地日期键（`YYYY-MM-DD`，按**本机时区**取 —— 列表口径是「本地时间倒序」）。 */

@@ -60,6 +60,11 @@ function recordingCtx() {
   const calls = []
   const commands = []
   const ctx = {
+    // 真机 cordis 客户端 ctx：未写进 inject 的服务只能走 `ctx.get(name)`
+    //（属性访问会抛 `cannot get property "x" without inject`，见 src/client/ctx-service.ts）。
+    get(name) {
+      return this[name]
+    },
     effect(callback) {
       const disposer = callback()
       return typeof disposer === 'function' ? disposer : () => {}
@@ -195,6 +200,10 @@ describe('票 11 · 安装函数在无 document 的 Node 里安全', () => {
       registrations,
       commands,
       ctx: {
+        // 同 recordingCtx：客户端 ctx 的可选服务走 `get(name)`。
+        get(name) {
+          return this[name]
+        },
         effect: (callback) => {
           callback()
           return () => {}

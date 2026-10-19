@@ -88,7 +88,7 @@ describe('票 30 · data.overview / data.backup 经 apply() 挂进 /xuanshu', ()
   })
 
   it('apply 后 /xuanshu 通道上有 data.overview，返回 8 组体积', async () => {
-    const handler = routes.get('/xuanshu')
+    const handler = routes.get('/api/xuanshu')
     expect(handler, `没有注册 /xuanshu 通道（warns: ${warns.join(' / ')}）`).toBeTypeOf('function')
     const answer = await handler('data.overview', {}, signal)
     expect(answer.ok, JSON.stringify(answer.error ?? {})).toBe(true)
@@ -100,7 +100,7 @@ describe('票 30 · data.overview / data.backup 经 apply() 挂进 /xuanshu', ()
   })
 
   it('data.backup 也在同一通道上：拒收目标在 home 内的请求（可读原因，不 500）', async () => {
-    const handler = routes.get('/xuanshu')
+    const handler = routes.get('/api/xuanshu')
     const answer = await handler('data.backup', { targetDir: home, confirmed: true }, signal)
     expect(answer.ok).toBe(true) // RPC 层成功：业务失败在 value 里（{ok:false,error}）
     expect(answer.value.ok).toBe(false)

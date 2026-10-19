@@ -756,7 +756,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 523432B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 524701B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -930,7 +930,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 | E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
 
 **验证（数字抄工具输出；本行随当前验证块刷新，原轮次基线见下一行）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
-`[doc-numbers] OK：1893 条用例 / 171 个文件 / 523432 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+`[doc-numbers] OK：1893 条用例 / 171 个文件 / 524701 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
 E1/E3 与两轴复核修复新增 25 条用例后基线 `--update` 为 **1839 条 / 167 文件**，文档数字由新门核对。
 
 **这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
@@ -959,14 +959,14 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 # pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）
 [inventory] 用例 1893 条（基线 1893）/ 文件 171 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
-[doc-numbers] OK：1893 条用例 / 171 个文件 / 523432 B
+[doc-numbers] OK：1893 条用例 / 171 个文件 / 524701 B
 
 # pnpm verify:isolation
 结果：8/8 通过，exit 0（6503ms）
 
 # pnpm verify:assembly → exit 1，仅 S1 既有上游缺陷
 [S2] PASS 192 行挂载；xuanshu-host.state=2 xuanshu-client.state=2
-[S3] PASS 客户端产物 523432B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 524701B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL unrecognized Loader tree carrier（同 §16.3）
@@ -980,4 +980,119 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 备份达到规模上限现在明确失败，需检查目录规模；投影缺席时按需读相关会话日志。
 真实 Electron 窗口/托盘/toast/自启、真实多家 provider、浏览器点击链与 setup 默认档端到端的
 验收边界沿用 §16.5，本轮的模块/装配验证不能代替这些真机验收。
+
+#### 16.9 真机 web boot 修掉客户端两处「一抛就整块不渲染」（2026-10-18）
+
+**现象**：真机打开玄枢（浏览器形态）只显示 `HARNESS / Failed to load plugins / xuanshu-client /
+web boot: 1 entry did not activate / xuanshu-client: failed`。10 个面板一个都不出现。
+DSH 的 boot 只报 fiber 状态，**真实异常被吞掉**（`packages/client/web/src/boot-client.ts:66` 只拼状态名）。
+
+**取证方法（可复用）**：本机解压出来的 Chromium（electron 33/38、playwright 自带 headless shell）
+都起不来（后者报 `ICU: U_INVALID_FORMAT_ERROR`，且它自己的 `icudtl.dat` 头部是全 0），
+改用**系统已装的 Edge**（`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`）+
+全局 playwright（`%APPDATA%\npm\node_modules\playwright`）打开页面、收 `console`/`pageerror`；
+再给 `apply()` 临时加一层 `try/catch` 打出真实栈（定位完立即撤掉，不在产物里留诊断代码）。
+
+**两个根因（都不是环境问题，重启机器不会好）**
+
+1. **客户端 ctx 的未声明服务属性访问会抛**：`ctx.uiWorkspace` / `ctx.workspaces` /
+   `ctx.sessions` / `ctx.commandUi` 这些服务没写进插件的 `inject` 数组时，客户端 cordis 的属性代理
+   **直接抛** `Error: cannot get property "uiWorkspace" without inject`；`as SomeShape` 这类类型断言
+   **运行期什么也不做**。四处命中：`index.tsx`（uiWorkspace、sessions）、`bestof.tsx`（commandUi）、
+   `mounts-api.ts`（workspaces）、`PuPanel.tsx`（渲染期读 `ctx.uiWorkspace`）。
+   修法：新增 `src/client/ctx-service.ts::readService()`，可缺席服务一律走 `ctx.get(name)`
+   （缺席返回 `undefined`，正是各调用点「拿不到就如实降级」要的东西）；`PuPanel` 改成注入
+   `openSession` 回调，组件不再碰 ctx。
+2. **`hashchange` 挂在 `location` 上**：浏览器里 `location` 不是 EventTarget，
+   `location.addEventListener is not a function` —— 又是一抛就整块死。
+   修法：`overview-hash.ts` 的 `listenOn` 单独给，装到 `window`，`location` 只用来读/清 hash。
+
+**为什么以前没发现**：客户端只有 `renderToStaticMarkup` 与纯函数断言（本仓无 jsdom），
+`verify:assembly` 的 S3 是产物物化 + 槽位自检（静态），真机 web 页面从没打开过 ——
+§16.5 早就把「真浏览器点击链」登记为未验证边界，这次是它第一次真的被打开。
+
+**验证（数字抄工具输出）**
+
+```
+# 真机（Edge + playwright 探针，2026-10-18 11:43）
+body: 10 个面板全部渲染（总览/问事/谱/藏/底稿/工作流/填八字/命盘/日课/晚省）+「家 · 自我总览」
+console: 无 boot 失败、无 pageerror
+# node ./node_modules/vitest/vitest.mjs run tests/assembly tests/shell
+Tests  2 failed | 771 passed (773)   # 仅 S1 及其连带（既有已知红）
+# tsc --noEmit exit 0；build-client --check in sync 524701 B；check-doc-numbers OK
+```
+
+**测试侧的配套**：`tests/assembly/bestof-registry.test.mjs` 的两个假 ctx 补了 `get(name)`
+（模拟真 cordis：「可选服务走 `ctx.get`」是 API 事实，不是实现细节），夹具与实现不再两边同错。
+
+**仍然未验的**：真实 Electron 窗口那条线（本机 Chromium 运行时起不来，§16.5 边界不变）。
+
+#### 16.10 数据面整条不通：宿主 RPC 通道注册必抛 + 客户端传输走错路径（2026-10-18 下午）
+
+§16.9 修完两处后**界面出来了，但每张卡都是失败态**（真机截图：命盘「快照读不出来」、
+日课「底座未就绪 / 推送调用失败 —— transport failure for /xuanshu/rikke.status: HTTP 405」）。
+
+**取证**：`dsh web` 的 stderr 里有一行谁都没看的
+`dsh: warning: 1 entry did not activate / xuanshu-host (xuanshu-host): failed to import`；
+给 `installRpc` 临时加日志后拿到真实栈：
+`Error: cannot get property "webServer" without inject`，位置在
+`dsh-client-connection/lib/index.js:656` 的 `owner.webServer.register(route)`。
+
+**两处根因（都是「照着一半 API 写」）**
+
+1. **`connection.rpc.handle(name, handler)` 在 rc.2 里没法用**：它在 `register()` 内部读
+   `owner.webServer`，而 owner 是 connection service 自己的 ctx（没有 inject `webServer`），
+   必然抛。我们的 `apply()` 里这一句抛在 `ctx.inject(['connection','webServer'])` 的回调里，
+   fiber 直接 failed —— 整条数据面（bazi / consult / rikke / digao / data / shiji / workflow / bestof）
+   一条 RPC 都没注册。**rc.2 给扩展的正确入口是 `/api` 前缀路由上的 exact Fetch 路由**：
+   `connection.fetch.register({ path: '/api/<name>', methods, requestBody, fetch })`
+   （先例 `dsh-api-session-controller` 的 `/api/file`），鉴权由 `/api` 统一施加。
+   修法：`packages/xuanshu-host/lib/rpc.mjs` 改成挂 `/api/xuanshu`，信封自持
+   `{method,payload}` → `{ok,value}` / `{ok:false,error}`；派发抽成 `createRpcDispatch()`。
+2. **客户端传输指向了不存在的路径**：`rpcCall` 走 `ctx.connection.rpc.call('/xuanshu', method)`
+   → 浏览器 POST `/xuanshu/<method>`；而宿主只把 `/api` 挂成前缀路由，别的路径都是 SPA 兜底
+   → **HTTP 405**。修法：`packages/xuanshu-client/src/client/rpc.ts` 直接 `fetch('/api/xuanshu')`
+   （同源带会话 cookie），信封与宿主对齐。
+
+**真机验证（Edge + playwright 探针）**
+
+```
+启动日志：无 "did not activate"（此前 xuanshu-host 每次都没起来）
+概览页：数据都在本地 E:\ai_project\XuanShu\.dsh-home\xuanshu\   ← 真 home（占位符问题同时消失）
+命盘：底座还没立起来（如实态）
+日课：今天还没有生成日课。日课默认每天 07:30 生成（底座未立时生成会失败）
+底稿：底座未立，还没有可提炼的来源
+console：无 405、无 pageerror
+```
+
+**代价（如实登记）**：客户端传输换成 `fetch` 之后，`tests/assembly/**` 里 **13 个文件、27 条**
+把 `ctx.connection.rpc.call` 当替身的用例需要迁移到新传输（它们断言的是「方法名 + 载荷」，
+语义不变，只换夹具形状）；连同 S1 的 2 条既有红，`tests/assembly` 当前是红的。
+迁移未在本轮完成 —— 这是下一轮的第一件事，不要把它读成「功能坏了」。
+
+#### 16.11 宿主侧 `ctx?.<service>` 同一类必崩：日课 AI 段「cannot get property "llm" without inject」
+
+**现象**（真机，底座立起来之后）：命盘四柱正常、日课确定性段（宜/忌/流日）正常，
+只有 AI 段写 `AI 建议生成失败：AI 段跑的时候抛了异常（已兜住）：cannot get property "llm" without inject`。
+
+**根因**：与 §16.9 同一个机理（cordis 的 ctx 属性代理对**未 inject 的服务**直接抛），
+但这次在**宿主**侧，而且是 `ctx?.llm` 这种写法 —— `?.` 只挡 ctx 为 null，**挡不住代理抛**。
+命中的 6 处：`digao/llm.mjs`、`rikke/ai-note.mjs`（两处 LLM）、`digao/sources.mjs`（两处 workspaceRegistry）、
+`digao/tasks.mjs`（`?? ctx?.schedule` 兜底）、`rikke/daily-tasks.mjs`（`?? ctx?.agents` 兜底）。
+后两处的形状尤其隐蔽：`softGet(...) ?? ctx?.x` —— 软取拿不到时才走兜底，兜底那一刻才抛。
+
+**修法**：新增 `packages/xuanshu-host/lib/soft-service.mjs::getService(ctx, name)`（唯一软取入口，
+从不抛），把上述 6 处全换成它；不再新增第 26 份 `softGet` 复制。
+
+**真机验证（`rikke.generate` 走真宿主 + 真 DeepSeek）**
+
+```
+ai: { mode: 'ok', text: '今天把范围收小，只推进已经定下的小事…流日为乙丑土日，节奏放慢些…' }
+产物 <dataDir>/rikke/2026-10-18.json 的 ai.mode = 'ok'
+```
+
+**同一条修法顺带修好的**：底稿的 LLM 摘要、事记摘要、合参/问事的 LLM 路径（同一个 `getService(ctx,'llm')` 口径）。
+
+
+
 

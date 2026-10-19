@@ -3,8 +3,6 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Readable } from 'node:stream';
-import { EventEmitter } from 'node:events';
 import { installRpc } from '../../packages/xuanshu-host/lib/rpc.mjs';
 
 let profile; let dir = dirname(fileURLToPath(import.meta.url));
@@ -12,28 +10,72 @@ while (dir !== dirname(dir)) {
   if (existsSync(join(dir, 'profile/node_modules/@deepseek-ai/dsh-client-connection/package.json'))) { profile = join(dir, 'profile'); break; }
   dir = dirname(dir);
 }
-test.skipIf(!profile)('registered XuanShu RPC route uses real DSH Connection admission, envelopes, and method dispatch', async () => {
+
+/**
+ * 契约（2026-10-18 真机改正）：玄枢 RPC 挂在 rc.2 的 **exact Fetch 路由** `/api/xuanshu` 上，
+ * 不是 `connection.rpc.handle('/xuanshu')` —— 后者在 `register()` 内部读 `owner.webServer`，
+ * 真机上必然抛（见 `packages/xuanshu-host/lib/rpc.mjs` 文件头）。
+ * 这里用**真的** HostConnectionService，验注册面、信封与方法派发。
+ */
+test.skipIf(!profile)('XuanShu RPC 挂在 /api/xuanshu 的 exact Fetch 路由上，信封与方法派发正确', async () => {
   const require = createRequire(join(profile, 'package.json'));
   const { Context } = await import(pathToFileURL(require.resolve('@deepseek-ai/cordis')).href);
   const { HostConnectionService } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-client-connection')).href);
-  const ctx = new Context(); let route; let authenticated = true;
-  ctx.provide('webServer', { register(value) { route = value; return () => {}; } });
-  new HostConnectionService(ctx, [], { isAuthenticated: () => authenticated });
-  const registration = installRpc(ctx, { 'pu.list': async () => [{ name: '编程', level: 'base' }] });
+
+  const ctx = new Context();
+  ctx.provide('webServer', { register() { return () => {}; } });
+  const service = new HostConnectionService(ctx, [], { isAuthenticated: () => true });
+
+  // 抓注册面：真的 HostConnectionService 把路由存进私有表，这里只拦一次拿到 route 对象。
+  let captured;
+  const originalRegister = service.registerFetchRoute.bind(service);
+  service.registerFetchRoute = (owner, route) => { captured = route; return originalRegister(owner, route); };
+
+  const registration = installRpc(ctx, {
+    'pu.list': async () => [{ name: '编程', level: 'base' }],
+    'boom.teapot': async () => {
+      const error = new Error('需要先确认');
+      error.xuanshuCode = 'needs-confirmation';
+      error.details = { estimate: 3 };
+      throw error;
+    },
+  });
   await registration;
-  expect(route.path).toBe('/xuanshu');
-  const send = async (method) => {
-    const req = Readable.from([Buffer.from(JSON.stringify({ type: 'client-request', rpcId: 'test-rpc', method, payload: {} }))]);
-    Object.assign(req, { method: 'POST', url: `/xuanshu/${method}`, headers: { host: '127.0.0.1:3000', 'content-type': 'application/json' } });
-    let status; let body = '';
-    const res = Object.assign(new EventEmitter(), { writableEnded: false, writeHead(code) { status = code; }, end(data) { body += data ?? ''; this.writableEnded = true; }, write(data) { body += Buffer.from(data).toString('utf8'); return true; } });
-    await route.handler(req, res);
-    return { status, body };
+
+  expect(captured.path).toBe('/api/xuanshu');
+  expect(captured.methods).toEqual(['POST']);
+
+  const send = async (method, payload = {}) => {
+    const request = new Request('http://127.0.0.1/api/xuanshu', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ method, payload }),
+    });
+    const response = await captured.fetch(request);
+    return { status: response.status, body: await response.json() };
   };
+
   try {
-    const response = await send('pu.list');
-    expect(JSON.parse(response.body)).toMatchObject({ type: 'server-response', rpcId: 'test-rpc', result: { ok: true, value: [{ name: '编程' }] } });
-    const unknown = await send('missing'); expect(JSON.parse(unknown.body).result.ok).toBe(false);
-    authenticated = false; expect((await send('pu.list')).status).toBe(401);
-  } finally { await registration.dispose(); }
+    const ok = await send('pu.list');
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ ok: true, value: [{ name: '编程' }] });
+
+    const unknown = await send('missing');
+    expect(unknown.body.ok).toBe(false);
+    expect(unknown.body.error.code).toBe('xuanshu/invalid');
+
+    const controlled = await send('boom.teapot');
+    expect(controlled.body.error.code).toBe('needs-confirmation');
+    expect(controlled.body.error.details).toEqual({ estimate: 3 });
+
+    // 非 JSON body：400，且给可读原因
+    const bad = await captured.fetch(new Request('http://127.0.0.1/api/xuanshu', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not json',
+    }));
+    expect(bad.status).toBe(400);
+  } finally {
+    await registration.dispose();
+  }
 });

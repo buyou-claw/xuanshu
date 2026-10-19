@@ -20,6 +20,7 @@
  */
 
 import { streamText } from '../llm/text.mjs'
+import { getService } from '../soft-service.mjs'
 
 /** 摘要的长度上限（底稿是精简汇总；截断而不是超长占用）。 */
 const DIGEST_LIMIT = 600
@@ -45,7 +46,7 @@ export function digestPrompt(segments) {
  * @returns {Promise<{ok: boolean, text: string, reason: string|null, route?: object}>}
  */
 export async function condenseWithLlm(ctx, { segments }) {
-  const llm = ctx?.llm
+  const llm = getService(ctx, 'llm')
   if (!llm || typeof llm.stream !== 'function') return { ok: false, text: '', reason: 'ctx.llm 不可得（宿主没装 LLM 服务）' }
   if (!Array.isArray(segments) || segments.length === 0) return { ok: false, text: '', reason: '没有可压缩的段' }
 

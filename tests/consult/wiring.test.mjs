@@ -67,7 +67,7 @@ const CONTRACT_METHODS = ['consult.create', 'consult.send', 'consult.list', 'con
 describe('票 10 · 六个方法挂在同一条 /xuanshu 通道上（契约 §2）', () => {
   it('通道路径 = /xuanshu；六个方法名逐字可调，且与 pu.* / cang.* / bazi.* 合并而不是互相覆盖', async () => {
     const { route, sandbox } = assemble()
-    expect(route.path).toBe('/xuanshu')
+    expect(route.path).toBe('/api/xuanshu')
 
     // 先建一个会话，后面的 send / read / rename 才有对象。
     const created = await call(route, 'consult.create', { pus: [] })

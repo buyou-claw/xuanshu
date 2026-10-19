@@ -187,6 +187,14 @@ export interface XsConsultAskProps {
   error?: string;
   /** 无源拦截引导是否展开（判定在 `nudgeNeeded`，由状态机给）。 */
   nudge?: boolean;
+  /**
+   * 引导里那条「临时挂载一个工作区 / 工作流」现在走不走得通。
+   *
+   * 挂载要挂在**会话**上（`mounts-views` 的既有规则），而门厅此刻还没建会话 ——
+   * 所以第一次问事时它是死路，不该出现在引导里（2026-10-18 真机反馈：
+   * 「第一次啥都没有如何挂载」）。缺省 `false`：只给走得通的那条。
+   */
+  mountable?: boolean;
   onQuestion: (value: string) => void;
   onStart: () => void;
   onPlainAsk?: () => void;
@@ -202,6 +210,7 @@ export function XsConsultAsk({
   summary,
   error,
   nudge = false,
+  mountable = false,
   onQuestion,
   onStart,
   onPlainAsk,
@@ -237,11 +246,12 @@ export function XsConsultAsk({
       </div>
       {nudge ? (
         <div className="xs-consult__nudge" data-xuanshu-nudge="no-source" role="alert">
-          {/* S6 §5 步骤 5a：标题 + 两条去路 + 不回退的显式出口；**不发送**。 */}
+          {/* S6 §5 步骤 5a：标题 + 走得通的去路 + 不回退的显式出口；**不发送**。
+              挂载那条只在真有会话可挂时才列（门厅此刻还没有会话 = 死路，不写给人看）。 */}
           <p className="xs-consult__nudge-title">{historyEmptyCopy.nudgeTitle}</p>
           <ol className="xs-consult__paths">
             <li>{historyEmptyCopy.nudgePathPu}</li>
-            <li>{historyEmptyCopy.nudgePathMount}</li>
+            {mountable ? <li>{historyEmptyCopy.nudgePathMount}</li> : null}
           </ol>
           <div className="xs-consult__actions">
             <button type="button" data-xuanshu-action="clear-nudge" onClick={onClearNudge}>

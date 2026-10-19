@@ -187,8 +187,8 @@ describe('票 10 · 门厅：摘要行、挂载展示位与提问区', () => {
     expect(html).toContain('data-xuanshu-note="mount-placeholder"')
   })
 
-  it('无源拦截引导：两条去路 + 「只带底座 + 底稿问一次」的显式出口（S6 §5 步骤 5a）', () => {
-    const html = render(
+  it('无源拦截引导：只列走得通的去路 + 「只带底座 + 底稿问一次」的显式出口（S6 §5 步骤 5a）', () => {
+    const renderAsk = (extra) => render(
       h(XsConsultAsk, {
         question: '帮我看这次转岗的时机',
         selected: [],
@@ -201,14 +201,20 @@ describe('票 10 · 门厅：摘要行、挂载展示位与提问区', () => {
         onPlainAsk: () => {},
         onGotoHistory: () => {},
         onClearNudge: () => {},
+        ...extra,
       }),
     )
+    // 缺省（门厅还没会话 = 挂不了）：只给「勾一个谱」+「空手问一次」
+    const html = renderAsk({})
     const nudge = blockOf(html, 'data-xuanshu-nudge="no-source"')
     expect(nudge).toContain('需要先给这一问一点依据')
     expect(nudge).toContain('在勾选区勾一个谱')
-    expect(nudge).toContain('临时挂载一个工作区 / 工作流（去 S8）')
+    expect(nudge).not.toContain('临时挂载一个工作区 / 工作流（去 S8）')
     expect(nudge).toContain('只带底座 + 底稿问一次')
     expect(html).toContain('data-xuanshu-action="plain-ask"')
+    // 真有会话可挂时，挂载那条才出现
+    expect(blockOf(renderAsk({ mountable: true }), 'data-xuanshu-nudge="no-source"'))
+      .toContain('临时挂载一个工作区 / 工作流（去 S8）')
   })
 
   it('开会话失败：错误条 + [重试] + [改从历史里接着问]（S6 §6 error①）', () => {

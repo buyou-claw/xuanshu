@@ -37,16 +37,25 @@ export interface HashLocationLike {
  * `start()` 会立即检查一次（带 hash 加载的那条路径），再挂 `hashchange` 监听；
  * `stop()` 幂等。
  *
- * @param {{location: HashLocationLike, selectPanel: (id: string) => void}} options
+ * **`listenOn`（真机踩到，2026-10-18）**：`hashchange` 是 **window** 上的事件，
+ * 浏览器里 `location.addEventListener` 根本不存在（`TypeError: location.addEventListener is not a function`，
+ * 一抛就把整个 apply 拖死、玄枢 UI 一个面板都不渲染）。所以监听目标单独给，`location`
+ * 只用来读 / 清 hash。缺省仍然回落到 `location`，纯函数层的既有测试不受影响。
+ *
+ * @param {{location: HashLocationLike, selectPanel: (id: string) => void,
+ *          listenOn?: EventTargetLike}} options
  */
 export function createOverviewHashBridge({
   location,
   selectPanel,
+  listenOn,
 }: {
   location: HashLocationLike
   selectPanel: (id: string) => void
+  listenOn?: EventTargetLike
 }): { start(): void; stop(): void; handle(): void } {
   let started = false
+  const target = listenOn ?? location
 
   const handle = (): void => {
     if (!isOverviewHash(location.hash)) return;
@@ -66,14 +75,14 @@ export function createOverviewHashBridge({
     start(): void {
       if (started) return;
       started = true;
-      location.addEventListener('hashchange', handle);
+      target.addEventListener('hashchange', handle);
       handle();
     },
     /** 卸载（幂等）。 */
     stop(): void {
       if (!started) return;
       started = false;
-      location.removeEventListener('hashchange', handle);
+      target.removeEventListener('hashchange', handle);
     },
     /** 纯处理（测试可直接点它，不必经过事件）。 */
     handle,
@@ -83,6 +92,14 @@ export function createOverviewHashBridge({
 /** 最小 `window` 形状（只为注入假件）。 */
 export interface OverviewHashWindowLike {
   location: HashLocationLike
+  addEventListener?(type: 'hashchange', listener: () => void): void
+  removeEventListener?(type: 'hashchange', listener: () => void): void
+}
+
+/** 能被 `hashchange` 订阅的那种对象（浏览器里是 `window`）。 */
+export interface EventTargetLike {
+  addEventListener(type: 'hashchange', listener: () => void): void
+  removeEventListener(type: 'hashchange', listener: () => void): void
 }
 
 /**
@@ -99,11 +116,16 @@ export function installOverviewHashBridge(
 ): (() => void) | undefined {
   const target = options.window ?? (typeof globalThis.window === 'undefined' ? undefined : (globalThis.window as unknown as OverviewHashWindowLike));
   if (target === undefined || target.location === undefined) return undefined;
+  // 浏览器里 `location` 没有 addEventListener：订阅挂在 window 上，location 只读/清 hash。
+  const listenOn = typeof target.addEventListener === 'function'
+    ? (target as unknown as EventTargetLike)
+    : undefined;
   const bridge = createOverviewHashBridge({
     location: target.location,
     selectPanel: (id) => {
       ctx.layout.selectPanel(id);
     },
+    ...(listenOn === undefined ? {} : { listenOn }),
   });
   bridge.start();
   return () => {

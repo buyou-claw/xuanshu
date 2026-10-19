@@ -117,7 +117,7 @@ function softGet(ctx, name) {
 
 /** 读 schedule 服务；不可得 → null（调用方给可读理由，不抛）。 */
 export function scheduleService(ctx) {
-  const schedule = softGet(ctx, 'schedule') ?? ctx?.schedule
+  const schedule = softGet(ctx, 'schedule')
   return schedule && typeof schedule.create === 'function' ? schedule : null
 }
 
