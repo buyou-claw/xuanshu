@@ -20,17 +20,21 @@
 import { readFileSync } from 'node:fs'
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { DIGAO_ENDPOINTS, createDigaoApi } from '../../packages/xuanshu-client/src/client/digao-api.ts'
 import { matchShijiEntries, parseDigaoMarkdown } from '../../packages/xuanshu-client/src/client/digao-model.ts'
 import { DigaoPanel, installDigao } from '../../packages/xuanshu-client/src/client/digao.tsx'
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
 import {
   BADGE_DERIVED,
   DIGAO_ID,
   DIGAO_LABEL,
   DIGAO_ORDER,
 } from '../../packages/xuanshu-client/src/client/panel.ts'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 
 const render = (element) => renderToStaticMarkup(element)
 
@@ -153,22 +157,12 @@ describe('票 13 · 底稿数据面的方法名逐字对齐契约 §2', () => {
   })
 
   it('三个方法都走 /xuanshu 通道，请求体为空对象（缺省原样透传）', async () => {
-    const calls = []
-    const ctx = {
-      connection: {
-        rpc: {
-          async call(...args) {
-            calls.push(args)
-            return { ok: true, value: { exists: false, meta: null } }
-          },
-        },
-      },
-    }
-    const api = createDigaoApi(ctx)
+    const { calls } = installRpcFetch({ value: { exists: false, meta: null } })
+    const api = createDigaoApi({})
     await api.status()
     await api.read()
     await api.refresh()
-    expect(calls.map((call) => [call[0], call[1]])).toEqual([
+    expect(calls.map((call) => [call.channel, call.endpoint])).toEqual([
       ['/xuanshu', 'digao.status'],
       ['/xuanshu', 'digao.read'],
       ['/xuanshu', 'digao.refresh'],
@@ -176,8 +170,8 @@ describe('票 13 · 底稿数据面的方法名逐字对齐契约 §2', () => {
   })
 
   it('RPC 失败时抛出（由调用方决定降级：面板 error 态）', async () => {
-    const ctx = { connection: { rpc: { async call() { return { ok: false, error: { message: '底稿读不出来' } } } } } }
-    await expect(createDigaoApi(ctx).read()).rejects.toThrow('底稿读不出来')
+    installRpcFetch({ error: { message: '底稿读不出来' } })
+    await expect(createDigaoApi({}).read()).rejects.toThrow('底稿读不出来')
   })
 })
 

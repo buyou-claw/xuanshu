@@ -1,8 +1,12 @@
-import { expect, test } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CangPanel, filterCangEntries } from '../../packages/xuanshu-client/src/client/CangPanel.tsx';
 import { installCangClient } from '../../packages/xuanshu-client/src/client/cang.tsx';
+import { installRpcFetch, restoreRpcFetch } from '../assembly/lib/rpc-fetch.mjs';
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch);
 
 const entry = { id: 'one', name: '经典藏书', path: 'C:/private/password-sentinel.pdf', tags: ['书'], actions: { open: true, reveal: true, copy: true }, pointer: { valid: true, kind: 'file', checkedAt: '2026-10-14T00:00:00Z' } };
 const controller = { snapshot: () => ({ revision: 0, draft: undefined }), subscribe: () => () => {}, edit: () => {} };
@@ -24,11 +28,10 @@ test('藏 search matches names and 签 only, never contents or pointer paths', (
 
 test('the 藏 main, sidebar and registration overlay share the actual xuanshu RPC client', async () => {
   const registrations = [];
-  const calls = [];
+  const { calls } = installRpcFetch({ value: { registryPath: 'registry.jsonl', entries: [] } });
   const ctx = {
     slots: { inject: (_key, effect) => effect(), register: options => { registrations.push(options); return () => {}; }, entries: () => [] },
     layout: { selectPanel: () => { throw new Error('Must not change the overview default'); } },
-    connection: { rpc: { call: async (...args) => { calls.push(args); return { ok: true, value: { registryPath: 'registry.jsonl', entries: [] } }; } } },
   };
   installCangClient(ctx);
   expect(registrations.map(({ name, key, id, order, label }) => ({ name, key, id, order, label }))).toEqual([
@@ -38,5 +41,5 @@ test('the 藏 main, sidebar and registration overlay share the actual xuanshu RP
   ]);
   const api = registrations[0].inject().api;
   expect(await api.list()).toEqual({ registryPath: 'registry.jsonl', entries: [] });
-  expect(calls[0].slice(0, 2)).toEqual(['/xuanshu', 'cang.list']);
+  expect([calls[0].channel, calls[0].endpoint]).toEqual(['/xuanshu', 'cang.list']);
 });

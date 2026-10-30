@@ -227,10 +227,12 @@ describe('票 11 · 安装函数在无 document 的 Node 里安全', () => {
     }
   }
 
-  const fakeRpc = () => ({ connection: { rpc: { async call() { return { ok: true, value: {} } } } } })
+  // 数据面是同源 fetch（`POST /api/xuanshu`），ctx 已不承载传输层；这里只造 api 给 install 用，
+  // apply 期一个请求都不发（发了就是缺陷，不该由桩兜着）。
+  const fakeCtx = () => ({})
 
   const deps = () => {
-    const api = createBestofApi(fakeRpc())
+    const api = createBestofApi(fakeCtx())
     return { api, controller: createBestofController({ api }) }
   }
 
