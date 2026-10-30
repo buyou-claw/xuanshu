@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /**
  * `scripts/ux/probes/index.mjs` —— 静态采集器的检查器注册表。
  *
@@ -10,8 +10,8 @@
  *
  * 仅使用 Node 内置模块。ESM。
  */
-import { T_PROBES } from './t.mjs'
 import { S_PROBES } from './s.mjs'
+import { T_PROBES } from './t.mjs'
 import { X_PROBES } from './x.mjs'
 
 /** 全部静态检查器（键 = 判据 id）。 */

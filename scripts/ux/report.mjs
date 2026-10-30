@@ -151,12 +151,10 @@ export function readPreviousReport(reportDir) {
 }
 
 /**
- * 缺态清单：把 S 族三条判据的红翻成「哪几个界面面、缺的哪一态」。
+ * 「缺态清单」：S 族的红按**界面面**翻成「哪几个面、缺的哪一态」。
  *
- * 为什么不从 `findings` 推：findings 按 `file:line` 去重（几个面共用一个源文件时会并成一行），
- * 而本清单要的恰恰是**按面**列全。所以这里只看 verdicts：`S-001` → 空、`S-002` → 载、`S-003` → 错，
- * `fail` 才算缺（`not-collected` / `collection-failed` 不算「缺」也不算「有」，它们不进这张表，
- * 但仍留在兑现率的分母里 —— 未采到 ≠ 通过）。
+ * 为什么不从 findings 推：findings 按 `file:line` 去重，`sediment-views.tsx` 那种一份源文件被
+ * 三个面共用的情形会被压成一行 —— 而「哪几个面缺态」正是这份清单要回答的问题。
  *
  * @param {object[]} verdicts
  * @param {{id: string, label?: string, kind?: string}[]} faces
@@ -188,14 +186,16 @@ export function missingStatesOf(verdicts, faces = []) {
       }
     })
     .sort((left, right) => left.face.localeCompare(right.face))
-  const totals = {
-    faces: rows.length,
-    empty: rows.filter((row) => row.missing.includes('empty')).length,
-    loading: rows.filter((row) => row.missing.includes('loading')).length,
-    error: rows.filter((row) => row.missing.includes('error')).length,
-    applicable,
+  return {
+    faces: rows,
+    totals: {
+      faces: rows.length,
+      empty: rows.filter((row) => row.missing.includes('empty')).length,
+      loading: rows.filter((row) => row.missing.includes('loading')).length,
+      error: rows.filter((row) => row.missing.includes('error')).length,
+      applicable,
+    },
   }
-  return { faces: rows, totals }
 }
 
 /** 按面聚合计数（报告里「哪些界面面最脏」一眼可见）。 */
@@ -415,8 +415,7 @@ export function renderMarkdown(report) {
   }
 
   // 缺态清单（#53 · 票 06）：人读报告里唯一一处**按面**列的清单。
-  // findings 按 `file:line` 去重，共用同一份源文件的几个面会被压成一行 —— 那正是这份清单要避免的失真，
-  // 所以它从 `missingStates`（由 verdicts 现算）出，不从 findings 推。
+  // 它从 `missingStates`（由 verdicts 现算）出，不从 findings 推 —— 理由见 `missingStatesOf()`。
   const missing = report.missingStates ?? { faces: [], totals: { faces: 0, empty: 0, loading: 0, error: 0, applicable: 0 } }
   lines.push('')
   lines.push('## 附：缺态界面面（S 族 · 空 / 载 / 错）')

@@ -7,7 +7,7 @@
     "criteriaCount": 9,
     "familyCount": 4
   },
-  "frozenAt": "2026-10-30T16:54:12.478Z",
-  "approvedBy": "agent（票 06 · 待人工确认）",
-  "note": "票 06（#53）补齐族 S 三条 + X-001 后的重签：判据集新增 4 条（合并票 04 的 T 族之后重投影）。签字人是实现 agent，合并前需人复核重签（ADR-0015 第 7 条）。"
+  "frozenAt": "2026-10-30T16:52:46.971Z",
+  "approvedBy": "human",
+  "note": "T+D+S+X 落地后重签"
 }

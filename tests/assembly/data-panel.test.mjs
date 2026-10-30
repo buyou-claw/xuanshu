@@ -13,7 +13,7 @@
  */
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   DATA_ENDPOINTS,
@@ -27,6 +27,10 @@ import {
   formatBytes,
   installDataSettings,
 } from '../../packages/xuanshu-client/src/client/data.tsx'
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 
 const render = (element) => renderToStaticMarkup(element)
 
@@ -90,34 +94,24 @@ describe('票 30 · 数据页的 RPC 方法名逐字对齐宿主', () => {
   })
 
   it('overview 走 /xuanshu 通道；backup 透传 {targetDir, confirmed:true}', async () => {
-    const calls = []
-    const ctx = {
-      connection: {
-        rpc: {
-          async call(...args) {
-            calls.push(args)
-            return { ok: true, value: { ok: true } }
-          },
-        },
-      },
-    }
-    const api = createDataApi(ctx)
+    const { calls } = installRpcFetch({ value: { ok: true } })
+    const api = createDataApi({})
     await api.overview()
     await api.backup({ targetDir: 'D:\\backup', confirmed: true })
     await api.pickDirectory()
-    expect(calls.map((call) => [call[0], call[1]])).toEqual([
+    expect(calls.map((call) => [call.channel, call.endpoint])).toEqual([
       ['/xuanshu', 'data.overview'],
       ['/xuanshu', 'data.backup'],
       ['/xuanshu', 'cang.pickDirectory'],
     ])
-    expect(calls[0][2]).toEqual({})
-    expect(calls[1][2]).toEqual({ targetDir: 'D:\\backup', confirmed: true })
-    expect(calls[2][2]).toEqual({})
+    expect(calls[0].payload).toEqual({})
+    expect(calls[1].payload).toEqual({ targetDir: 'D:\\backup', confirmed: true })
+    expect(calls[2].payload).toEqual({})
   })
 
   it('RPC 层失败时抛出（页面据此显示可读错误）', async () => {
-    const ctx = { connection: { rpc: { async call() { return { ok: false, error: { message: '通道不可用' } } } } } }
-    await expect(createDataApi(ctx).overview()).rejects.toThrow('通道不可用')
+    installRpcFetch({ error: { message: '通道不可用' } })
+    await expect(createDataApi({}).overview()).rejects.toThrow('通道不可用')
   })
 })
 

@@ -27,9 +27,13 @@ import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { PANEL_KEYS, expectedCells, expectedRegisterNames } from './lib/panel-surface.mjs'
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 
 import { OverviewPanel } from '../../packages/xuanshu-client/src/client/OverviewPanel.tsx'
 import {
@@ -63,6 +67,12 @@ const REACT_STUB = {
 
 /**
  * 物化提交的 `lib/client.js`：假 loader 拿信封、假 require 物化 factory。
+ *
+ * `fetch` 必须显式放进沙箱：`vm.runInNewContext` 给的是一个**独立全局**，`8fdaa4b` 之后
+ * 数据面走同源 fetch，产物在 apply 期会调 `fetch('/api/xuanshu')` —— 浏览器里它是真全局，
+ * 这里就得在沙箱里补一个（转发到**当下**的 `globalThis.fetch`，于是 `lib/rpc-fetch.mjs`
+ * 装的夹具对产物同样生效；转发而不是直接给引用，是为了让同一文件里的 `setHandler` 也管用）。
+ *
  * @returns 插件对象与它请求过的外部依赖。
  */
 function materializeArtifact() {
@@ -71,7 +81,10 @@ function materializeArtifact() {
   const text = readFileSync(ARTIFACT, 'utf8')
   vm.runInNewContext(
     text,
-    { window: { __ModuleLoader__: { load: (spec) => loaded.push(spec) } } },
+    {
+      window: { __ModuleLoader__: { load: (spec) => loaded.push(spec) } },
+      fetch: (...args) => globalThis.fetch(...args),
+    },
     { filename: ARTIFACT },
   )
   expect(loaded.length, '产物必须恰好调用一次 __ModuleLoader__.load()').toBe(1)
@@ -529,11 +542,23 @@ function flushAsync() {
 }
 
 /**
- * 造一个**带 connection** 的假 ctx：apply 期唯一会发生的 RPC 是 `data.overview`，
+ * 造一个**带数据面**的假 ctx：apply 期唯一会发生的 RPC 是 `data.overview`，
  * 它由宿主回传产品 / 开发档的 home / dataDir（形状照 `lib/data/service.mjs`）。
+ *
+ * 数据面走同源 fetch（`POST /api/xuanshu`），桩装在 `globalThis.fetch` 上（见 `lib/rpc-fetch.mjs`），
+ * 所以 `rpcCalls` 是夹具的记录项，`ctx` 本身不再需要 `connection`。
  */
 function wiredCtx(answer = { home: HOST_HOME, dataDir: HOST_DATA_DIR }) {
-  const rpcCalls = []
+  const rpc = installRpcFetch({
+    value: {
+      schema: 'xuanshu/data@1',
+      ...answer,
+      groups: [],
+      total: { bytes: 0, files: 0 },
+      excluded: [],
+      notes: [],
+    },
+  })
   const registers = []
   const ctx = {
     effect(callback) {
@@ -542,24 +567,6 @@ function wiredCtx(answer = { home: HOST_HOME, dataDir: HOST_DATA_DIR }) {
     },
     theme: { overrideTokens: () => () => {} },
     layout: { selectPanel: () => {} },
-    connection: {
-      rpc: {
-        async call(channel, endpoint, payload) {
-          rpcCalls.push({ channel, endpoint, payload })
-          return {
-            ok: true,
-            value: {
-              schema: 'xuanshu/data@1',
-              ...answer,
-              groups: [],
-              total: { bytes: 0, files: 0 },
-              excluded: [],
-              notes: [],
-            },
-          }
-        },
-      },
-    },
     slots: {
       inject(_name, callback) {
         callback()
@@ -573,7 +580,7 @@ function wiredCtx(answer = { home: HOST_HOME, dataDir: HOST_DATA_DIR }) {
       subscribe: () => () => {},
     },
   }
-  return { ctx, rpcCalls, registers }
+  return { ctx, rpcCalls: rpc.calls, setRpcHandler: rpc.setHandler, registers }
 }
 
 /** 按 main key / cell id 找那一次注册，取它的注入面（= 生产里组件收到的 props）。 */
@@ -626,9 +633,9 @@ describe('票 07 · R3 注入面：装配期取一次宿主 data.overview 的 ho
   })
 
   it('宿主读不到（RPC 拒绝 / 没连接）：装配不抛，注入面回空中性占位', async () => {
-    const { ctx, registers } = wiredCtx()
+    const { ctx, registers, setRpcHandler } = wiredCtx()
     // 让 data.overview 拒绝：装配层必须 fail-soft，不能把异常丢给 apply。
-    ctx.connection.rpc.call = async () => ({ ok: false, error: { message: '宿主还没解析 home' } })
+    setRpcHandler({ error: { message: '宿主还没解析 home' } })
     const { plugin } = materializeArtifact()
     expect(() => plugin.apply(ctx)).not.toThrow()
     await flushAsync()

@@ -16,11 +16,15 @@
  */
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { EXTRA_REGISTRATIONS, expectedCells } from './lib/panel-surface.mjs'
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
 import { SHIJI_ENDPOINTS, createShijiApi } from '../../packages/xuanshu-client/src/client/shiji-api.ts'
 import { SHIJI_ENTRY_ID, XsShijiSaveEntry, installShiji } from '../../packages/xuanshu-client/src/client/shiji-views.tsx'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 
 const render = (element) => renderToStaticMarkup(element)
 const SESSION = 'session-xs-consult-1bb37188-5787-4f96-a6ec-0de66a825f2a'
@@ -77,21 +81,12 @@ describe('票 27 · 事记数据面：方法名逐字对齐宿主，确认位写
   })
 
   it('都走 /xuanshu 通道；写动作的请求体带 confirmed:true（界面构造不出别的）', async () => {
-    const calls = []
-    const api = createShijiApi({
-      connection: {
-        rpc: {
-          async call(...args) {
-            calls.push(args)
-            return { ok: true, value: { ok: true, entry: ENTRY } }
-          },
-        },
-      },
-    })
+    const { calls } = installRpcFetch({ value: { ok: true, entry: ENTRY } })
+    const api = createShijiApi({})
     await api.list()
     await api.remove({ id: 'shiji-aaaaaaaaaaaaaaaa' })
     await api.fromSession({ sessionId: SESSION })
-    expect(calls.map((call) => [call[0], call[1], call[2]])).toEqual([
+    expect(calls.map((call) => [call.channel, call.endpoint, call.payload])).toEqual([
       ['/xuanshu', 'shiji.list', {}],
       ['/xuanshu', 'shiji.remove', { id: 'shiji-aaaaaaaaaaaaaaaa', confirmed: true }],
       ['/xuanshu', 'shiji.fromSession', { sessionId: SESSION, confirmed: true }],
@@ -99,18 +94,11 @@ describe('票 27 · 事记数据面：方法名逐字对齐宿主，确认位写
   })
 
   it('宿主的方法级失败（ok:false）折成可读 Error（理由要显示在界面上）', async () => {
-    const api = createShijiApi({
-      connection: {
-        rpc: {
-          async call() {
-            return {
-              ok: true,
-              value: { ok: false, error: { code: 'summary-unavailable', message: '摘要未能生成（模型不可用）：本次没有写入任何事记。' } },
-            }
-          },
-        },
-      },
+    // 注意外层仍是一封**成功**信封：失败在 `value` 里（方法级），不是传输层失败。
+    installRpcFetch({
+      value: { ok: false, error: { code: 'summary-unavailable', message: '摘要未能生成（模型不可用）：本次没有写入任何事记。' } },
     })
+    const api = createShijiApi({})
     await expect(api.fromSession({ sessionId: SESSION })).rejects.toThrow('摘要未能生成（模型不可用）')
     await expect(api.remove({ id: 'shiji-aaaaaaaaaaaaaaaa' })).rejects.toThrow('摘要未能生成（模型不可用）')
   })

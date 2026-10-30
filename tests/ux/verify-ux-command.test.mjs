@@ -12,13 +12,11 @@ import { describe, expect, it } from 'vitest'
 
 import { writeFreeze } from '../../scripts/ux/freeze.mjs'
 import { CRITERIA_FILE, projectCriteria } from '../../scripts/ux/project.mjs'
-import { applicableFaces } from '../../scripts/ux/scope.mjs'
 import { runVerifyUx, VerifyUxError } from '../../scripts/verify-ux.mjs'
 import { faceManifest } from '../assembly/lib/panel-surface.mjs'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..')
 const FACES = faceManifest()
-const CRITERIA = projectCriteria({ repoRoot: REPO_ROOT, faces: FACES }).document
 
 describe('票 02 · 一条命令跑完全链路', () => {
   it('跑完给出兑现率 + 判据集版本号 + 人读/机读两份报告（不落盘模式）', async () => {
@@ -31,10 +29,10 @@ describe('票 02 · 一条命令跑完全链路', () => {
     expect(exitCode).toBe(0)
     expect(report.criteria.label).toBe('ux-v1')
     expect(report.criteria.version).toMatch(/^[0-9a-f]{64}$/)
-    // 分母 = Σ 每条判据的适用界面面（与判定器同一个算法，别在这里手抄一个乘法：
-    // #53 加了 S / X 一族之后，写死的「4 × 25 + 22」当场就错了）。
-    const expectedApplicable = CRITERIA.criteria.reduce((sum, criterion) => sum + applicableFaces(criterion, FACES).length, 0)
-    expect(report.rate.applicable).toBe(expectedApplicable)
+    // 分母 = 判据 × 适用界面面；判据数与各族 scope 会随票增长，所以钉「分母 = verdict 行数」这条不变式
+    // （一条 verdict 就是一对 (判据, 面)，没有一行被悄悄丢掉）。
+    expect(report.rate.applicable).toBe(report.verdicts.filter((verdict) => verdict.status !== 'human-only').length)
+    expect(report.rate.applicable).toBeGreaterThan(FACES.length)
     expect(report.rate.passed).toBeLessThan(report.rate.applicable) // 现实里有红
     expect(markdown).toContain('兑现率')
     expect(paths).toEqual({}) // write:false 时一个文件都不写

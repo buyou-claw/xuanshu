@@ -15,7 +15,7 @@
  */
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   NOTIFY_ENDPOINTS,
@@ -29,6 +29,10 @@ import {
   createShellSettingsWriter,
   installTouchSettings,
 } from '../../packages/xuanshu-client/src/client/notify.tsx'
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 
 const render = (element) => renderToStaticMarkup(element)
 
@@ -83,24 +87,15 @@ describe('P1 · 方法名与请求形状：两个开关调到 shell.settings.set
   })
 
   it('createNotifyApi 补的两个方法走 /xuanshu 通道；set 只提交 closeBehavior / autostart', async () => {
-    const calls = []
-    const api = createNotifyApi({
-      connection: {
-        rpc: {
-          async call(...args) {
-            calls.push(args)
-            return { ok: true, value: { settings: { closeBehavior: 'hide', autostart: false, notifySummary: false } } }
-          },
-        },
-      },
-    })
+    const { calls } = installRpcFetch({ value: { settings: { closeBehavior: 'hide', autostart: false, notifySummary: false } } })
+    const api = createNotifyApi({})
     await api.getShellSettings()
     await api.setShellSettings({ closeBehavior: 'hide', autostart: false })
-    expect(calls.map((call) => [call[0], call[1]])).toEqual([
+    expect(calls.map((call) => [call.channel, call.endpoint])).toEqual([
       ['/xuanshu', 'shell.settings.get'],
       ['/xuanshu', 'shell.settings.set'],
     ])
-    expect(calls[1][2]).toEqual({ closeBehavior: 'hide', autostart: false })
+    expect(calls[1].payload).toEqual({ closeBehavior: 'hide', autostart: false })
   })
 
   it('NOTIFY_ENDPOINTS 不受影响（摘要开关仍走 traffic.settings.*）', () => {
