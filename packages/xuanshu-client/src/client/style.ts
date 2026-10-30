@@ -4,14 +4,19 @@
  * 取值纪律（票 03 assets README §4 / 皮肤规格）：
  *   - 一律引用 `--xs-*`（由 `tokens.ts` 的 overrideTokens 覆盖层落到 body）；
  *   - 主按钮底走 DSH 品牌别名 `--dsw-alias-brand-primary`（skins/primary-button.md）；
- *   - **不写字面色值**；唯一字面尺寸是断点 1100px（媒体查询吃不了 `var()`，
+ *   - **不写字面色值**；断点也不写字面值，一律走 `breakpoints.ts`（macros 吃不了 `var()`，
  *     语义权威 = `--xs-size-breakpoint-wide`，见 `assets/tokens/xs-tokens.css:214`）。
+ *
+ * 注入纪律（spec 003 判据 T-002）：本文件**不再自己建 style 标签** —— CSS 登记到
+ * `styles.ts` 的单一消费层，由它幂等注入一次。
  *
  * 皮肤对照：`assets/skins/skeleton-card.md`（卡级骨架）、`quicklinks-cell.md`（快捷入口）、
  *   `badge-readonly.md`（两类徽标）、`why-empty-caption.md`（空态说明行）、`primary-button.md`（主按钮）。
  */
+import { BREAKPOINT_WIDE_PX } from './breakpoints.js';
+import { installXuanshuStyles, registerStyleSheet } from './styles.js';
 
-/** style 标签的稳定 id（`data-plugin-css`），用于幂等注入判断。 */
+/** style 段名（`data-plugin-css` 由 `styles.ts` 统一持有；这里只登记这一段的 id）。 */
 export const STYLE_TAG_ID = 'xuanshu-client/overview.css';
 
 /** 本包全部类名以 `xs-` 前缀（F4：自有前缀，不与宿主类名竞争）。 */
@@ -60,7 +65,7 @@ export const OVERVIEW_CSS = `
   margin: 0 auto;
 }
 /* 宽屏（>= --xs-size-breakpoint-wide = 1100px）：2×2；窄屏单列按 D3 读序堆叠。 */
-@media (min-width: 1100px) {
+@media (min-width: ${BREAKPOINT_WIDE_PX}px) {
   .xs-overview__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -370,13 +375,6 @@ export const OVERVIEW_CSS = `
  * @returns 本次是否真的插入了标签（测试/SSR 下返回 false）。
  */
 export function installOverviewStyle(): boolean {
-  if (typeof document === 'undefined') return false;
-  const selector = `style[data-plugin-css="${STYLE_TAG_ID}"]`;
-  if (document.querySelector(selector) !== null) return false;
-  const tag = document.createElement('style');
-  tag.dataset.plugin = 'xuanshu-client';
-  tag.dataset.pluginCss = STYLE_TAG_ID;
-  tag.textContent = OVERVIEW_CSS;
-  (document.head ?? document.documentElement).appendChild(tag);
-  return true;
+  registerStyleSheet(STYLE_TAG_ID, OVERVIEW_CSS);
+  return installXuanshuStyles();
 }

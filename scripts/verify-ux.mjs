@@ -215,6 +215,14 @@ function printSummary({ report, paths, outDir }) {
     console.log('[verify:ux] blocker：')
     for (const verdict of report.groups.blockers) console.log(`  ✗ ${verdict.criterionId} ${verdict.face} · ${verdict.message}`)
   }
+  // 缺态清单（#53 · 票 06）：命令行也照面列一遍，别让人为「哪个面缺哪一态」去翻 JSON。
+  const missing = report.missingStates
+  if (missing !== undefined && missing.totals.faces > 0) {
+    console.log(
+      `[verify:ux] 缺态：${missing.totals.faces} 个界面面（空 ${missing.totals.empty} / 载 ${missing.totals.loading} / 错 ${missing.totals.error}）`,
+    )
+    for (const row of missing.faces) console.log(`  ✗ ${row.face} 缺：${row.missingLabels.join(' / ')}`)
+  }
   if (report.findings.length > 0) {
     console.log(`[verify:ux] 命中位置（去重后 ${report.findings.length} 处）：`)
     for (const finding of report.findings) {

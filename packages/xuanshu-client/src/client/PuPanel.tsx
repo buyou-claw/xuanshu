@@ -3,6 +3,8 @@ import type { Context } from '@deepseek-ai/cordis';
 import { readService } from './ctx-service.js';
 import { rpcCall } from './rpc.js';
 import type { RpcContext } from './rpc.js';
+import { installXuanshuStyles, registerStyleSheet } from './styles.js'
+import { BREAKPOINT_WIDE_PX } from './breakpoints.js'
 
 type Level = 'base' | 'optional';
 interface Pu { slug: string; name: string; level: Level; description: string; body: string; summary: string; source: string; updatedAt: string; stale?: boolean; error?: string }
@@ -131,6 +133,6 @@ export function installPuPanel(ctx: Context & RpcContext): void {
     },
   }) }, PuPanel as never));
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: 'pus', order: 40, label: '谱' }, () => <span aria-hidden="true">谱</span>));
-  if (typeof document === 'undefined' || document.getElementById('xs-pu-style')) return;
-  const style = document.createElement('style'); style.id = 'xs-pu-style'; style.textContent = `.xs-pu{padding:24px;overflow:auto;height:100%;color:var(--dsw-alias-text-primary);background:var(--dsw-alias-bg-canvas)}.xs-pu header,.xs-pu-toolbar,.xs-pu article{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.xs-pu article{justify-content:space-between;padding:12px;border-bottom:1px solid var(--dsw-alias-border-default)}.xs-pu label{display:block;margin:12px 0}.xs-pu input,.xs-pu select,.xs-pu textarea,.xs-pu button{color:inherit;background:var(--dsw-alias-bg-surface);border:1px solid var(--dsw-alias-border-default);border-radius:8px;padding:8px;font:inherit}.xs-pu button{cursor:pointer;margin:4px}.xs-pu button:disabled{opacity:.5;cursor:default}.xs-pu textarea{display:block;width:100%;min-height:100px;box-sizing:border-box}.xs-pu .xs-pu-body{min-height:220px;font-family:monospace}.xs-pu-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px}.xs-pu section{margin:24px 0}.xs-pu [role=alert]{padding:12px;border:1px solid var(--dsw-alias-border-danger)}@media(max-width:1100px){.xs-pu-detail{grid-template-columns:1fr}.xs-pu{padding:16px}}`; document.head.appendChild(style);
+  registerStyleSheet('xs-pu-style', `.xs-pu{padding:24px;overflow:auto;height:100%;color:var(--dsw-alias-text-primary);background:var(--dsw-alias-bg-canvas)}.xs-pu header,.xs-pu-toolbar,.xs-pu article{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.xs-pu article{justify-content:space-between;padding:12px;border-bottom:1px solid var(--dsw-alias-border-default)}.xs-pu label{display:block;margin:12px 0}.xs-pu input,.xs-pu select,.xs-pu textarea,.xs-pu button{color:inherit;background:var(--dsw-alias-bg-surface);border:1px solid var(--dsw-alias-border-default);border-radius:8px;padding:8px;font:inherit}.xs-pu button{cursor:pointer;margin:4px}.xs-pu button:disabled{opacity:.5;cursor:default}.xs-pu textarea{display:block;width:100%;min-height:100px;box-sizing:border-box}.xs-pu .xs-pu-body{min-height:220px;font-family:monospace}.xs-pu-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px}.xs-pu section{margin:24px 0}.xs-pu [role=alert]{padding:12px;border:1px solid var(--dsw-alias-border-danger)}@media(max-width: ${BREAKPOINT_WIDE_PX}px){.xs-pu-detail{grid-template-columns:1fr}.xs-pu{padding:16px}}`)
+  installXuanshuStyles()
 }

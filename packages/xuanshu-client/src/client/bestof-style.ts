@@ -1,3 +1,4 @@
+import { installXuanshuStyles, registerStyleSheet } from './styles.js'
 /**
  * 票 11 · 合参浮层的样式（token 走票 03 覆盖过的 `--xs-*`，不写死配色）。
  *
@@ -7,11 +8,8 @@
 export const BESTOF_STYLE_ID = 'xs-bestof-style';
 
 export function installBestofStyle(): void {
-  if (typeof document === 'undefined' || document.getElementById(BESTOF_STYLE_ID) !== null) return;
-  const style = document.createElement('style');
-  style.id = BESTOF_STYLE_ID;
-  style.textContent = `
-.xs-bestof-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.32);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;z-index:40;overflow:auto}
+  registerStyleSheet("xs-bestof-style", `
+.xs-bestof-backdrop{position:fixed;inset:0;background:var(--xs-surface-overlay-mask);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;z-index:40;overflow:auto}
 .xs-bestof{width:min(960px,100%);max-height:88vh;overflow:auto;background:var(--xs-surface-card);color:var(--xs-text-body);border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad);box-shadow:var(--xs-shadow-card)}
 .xs-bestof h3,.xs-bestof h4{margin:0 0 6px;font-weight:600}
 .xs-bestof h3{font-size:1.05rem}
@@ -39,6 +37,6 @@ export function installBestofStyle(): void {
 .xs-bestof summary{cursor:pointer;color:var(--xs-text-secondary);font-size:.85rem}
 .xs-bestof__settings{display:flex;gap:10px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--xs-edge-card);padding:8px 0}
 .xs-bestof__settings-note{color:var(--xs-text-secondary);font-size:.8rem}
-`;
-  document.head.appendChild(style);
+`);
+  installXuanshuStyles()
 }
