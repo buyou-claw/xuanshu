@@ -27,7 +27,9 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { SCRIPTS } from './browser-scripts.mjs'
+import { NAV_CRITERIA } from '../nav-vocabulary.mjs'
+import { createNav, createNavStore, navFactsFor } from './browser-nav.mjs'
+import { SCRIPTS, resolveScripts } from './browser-scripts.mjs'
 
 export const BROWSER_COLLECTOR = 'browser'
 
@@ -228,12 +230,15 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms)
  *
  * @param {object} input
  * @param {import('playwright').Page} input.page
- * @param {{id: string, faces: string[], criteria: string[]}} input.script
+ * @param {{id: string, faces: string[], criteria: string[], scenarios?: string[], run: Function}} input.script
  * @param {(faceId: string, targets: object[]) => void} input.record
+ * @param {{home: string, port: number, url: string}} input.env 隔离实例的地址与临时 home（剧本 3 要在里面造真文件）
+ * @param {ReturnType<typeof createNav>} input.nav 导航族（N）的采样器
+ * @param {string} [input.scenario] 失败态变体（见每条剧本的 `scenarios`）
+ * @param {object[]} [input.steps] 步骤账本（**由调用方持有**：剧本中途抛错时，已经跑过的步骤也要留得下来）
  * @returns {Promise<{steps: object[], outcome: string}>}
  */
-export async function runScript({ page, script, record }) {
-  const steps = []
+export async function runScript({ page, script, record, env, nav, scenario, steps = [] }) {
   const step = (name, detail = {}) => {
     steps.push({ step: name, ...detail })
   }
@@ -242,6 +247,9 @@ export async function runScript({ page, script, record }) {
     settle,
     step,
     record,
+    nav,
+    env,
+    scenario,
     /** 量当前屏**属于玄枢的**可点目标的可点区域（D/C 族的原始事实）。
      *
      * 为什么必须划「属于玄枢」这条线：整页里还有 DSH 自己的侧栏行（36px）、新建会话按钮（38px）……
@@ -292,8 +300,12 @@ export async function runScript({ page, script, record }) {
 /**
  * 跑浏览器半边（可被测试直接调用：不读 argv）。
  *
+ * `scriptIds` 里的每一项可以是 `'ask-consult'`，也可以是带失败态变体的 `'register-cang:missing-file'`
+ * （见 `browser-scripts.mjs` 的 `scenarios`）—— 失败态要能**单独跑**，否则「三条失败态各真实触发过」
+ * 就只能在一条长剧本里撞运气。
+ *
  * @param {{repoRoot: string, criteria: object, faces: object[], scriptIds?: string[], log?: Function}} input
- * @returns {Promise<{evidence: object[], notes: string[], available: boolean, reason?: string}>}
+ * @returns {Promise<{evidence: object[], notes: string[], available: boolean, reason?: string, steps?: object[]}>}
  */
 export async function collectBrowser({ repoRoot, criteria, faces, scriptIds, log = () => {} }) {
   const notes = []
@@ -311,15 +323,19 @@ export async function collectBrowser({ repoRoot, criteria, faces, scriptIds, log
   }
 
   const ids = scriptIds ?? Object.keys(SCRIPTS)
-  const chosen = ids.map((id) => {
-    const script = SCRIPTS[id]
-    if (script === undefined) throw new BrowserCollectorError(`没有这条剧本：${id}（现有：${Object.keys(SCRIPTS).join(' / ')}）`)
-    return script
-  })
+  let chosen
+  try {
+    chosen = resolveScripts(ids)
+  } catch (error) {
+    throw new BrowserCollectorError(error?.message ?? String(error))
+  }
 
   let browser
   let instance
   const samples = new Map() // faceId → targets[]
+  const navStore = createNavStore()
+  /** 跑到一半炸掉时，已经跑过的剧本步骤也要带出去（失败态的证据就在这里）。 */
+  const partialSteps = []
   try {
     browser = await playwright.chromium.launch({ channel: 'msedge', headless: true })
     instance = await startIsolatedInstance({ repoRoot, log })
@@ -331,35 +347,67 @@ export async function collectBrowser({ repoRoot, criteria, faces, scriptIds, log
     await page.goto(instance.url, { waitUntil: 'domcontentloaded' })
     await settle(page, 3500)
 
-    const steps = []
-    for (const script of chosen) {
+    const nav = createNav({ page, store: navStore, settle })
+    const env = { home: instance.home, port: instance.port, url: instance.url }
+    const steps = partialSteps
+    for (const { script, scenario } of chosen) {
+      // 步骤账本先挂上去再跑：剧本抛错时，`catch` 里带出去的就是「断在哪一步」。
+      const record = { script: script.id, scenario, outcome: 'running', steps: [] }
+      steps.push(record)
       const run = await runScript({
         page,
         script,
+        scenario,
+        env,
+        nav,
+        steps: record.steps,
         record: (faceId, targets) => { samples.set(faceId, [...(samples.get(faceId) ?? []), ...targets]) },
       })
-      steps.push({ script: script.id, outcome: run.outcome, steps: run.steps })
-      log(`剧本 ${script.id}：${run.outcome}（${run.steps.length} 步）`)
+      record.outcome = run.outcome
+      log(`剧本 ${script.id}${scenario === 'clean' || scenario === 'normal' ? '' : `（${scenario}）`}：${run.outcome}（${run.steps.length} 步）`)
     }
     if (consoleErrors.length > 0) notes.push(`页面控制台报错 ${consoleErrors.length} 条：${consoleErrors.slice(0, 3).join(' / ')}`)
 
     const evidence = []
     for (const criterion of browserCriteria) {
       for (const face of faces) {
-        if (!samples.has(face.id)) continue // 剧本没走到这个面：留空，判定为「未采到」
+        // N 族的事实只来自 `nav` 采样（入口表 / 关闭落点 / Tab 走查）；D 族来自 `measure()` 量的矩形。
+        // 没有这一面的观察 = 不产证据 = 判定为「未采到」（空 facts 会被谓词判成没问题，那是最危险的假绿）。
+        const facts = NAV_CRITERIA.includes(criterion.id)
+          ? navFactsFor(criterion.id, face.id, navStore)
+          : (samples.has(face.id) ? { targets: samples.get(face.id) } : null)
+        if (facts === null) continue
         evidence.push({
           criterionId: criterion.id,
           face: face.id,
           collector: BROWSER_COLLECTOR,
           status: 'observed',
-          facts: { targets: samples.get(face.id) },
+          facts,
           evidence: [],
         })
+      }
+    }
+    // 导航族采样的覆盖面写进 notes：命令原语今天渲染不出来，报告要能说「未观测」而不是装作看过。
+    if (navStore.samples > 0) {
+      notes.push(`导航族采样 ${navStore.samples} 次（走过的面板：${[...navStore.panels].sort().join(' / ')}）`)
+    }
+    // 「入口点得通但什么都没开」是**要人管**的接线问题，不能只躺在步骤记录里：
+    // N 族在那一面因此是「未采到」（不是通过），报告要给出原因，否则读者只会看到一条空着的面。
+    for (const entry of steps) {
+      for (const row of entry.steps) {
+        if (row.step === 'mounts-drawer' && row.opened === false && row.note === undefined) {
+          notes.push(
+            '挂载账本抽屉的入口点了没开（门厅的挂载区与 `shell.overlay` 的浮层各持一个 controller，'
+              + '浮层不跟随门厅的状态）：N 族在 slot:shell.overlay#xuanshu-mounts-drawer 上记「未采到」，不是通过',
+          )
+        }
       }
     }
     return { evidence, notes, available: true, steps }
   } catch (error) {
     // 整轮采不到：如实说，不编空 facts（空 facts 会被判成「没问题」）。
+    // **但已经跑过的步骤要带出去**：没有步骤的失败原因只剩一句 Playwright 调用栈，等于让人空手去看
+    // 「哪一步断的」；而失败态本来就是这套剧本要覆盖的东西，步骤记录是它最有用的那部分证据。
     const reason = error instanceof BrowserCollectorError ? error.message : `浏览器半边失败：${error?.message ?? error}`
     const evidence = []
     for (const criterion of browserCriteria) {
@@ -367,7 +415,7 @@ export async function collectBrowser({ repoRoot, criteria, faces, scriptIds, log
         evidence.push({ criterionId: criterion.id, face: face.id, collector: BROWSER_COLLECTOR, status: 'collection-failed', reason, facts: null, evidence: [] })
       }
     }
-    return { evidence, notes: [...notes, reason], available: false, reason }
+    return { evidence, notes: [...notes, reason], available: false, reason, steps: partialSteps }
   } finally {
     try { await browser?.close() } catch { /* 已经关了 */ }
     try { await instance?.stop() } catch { /* 清理失败不覆盖主结论 */ }

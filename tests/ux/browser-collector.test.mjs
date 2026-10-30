@@ -134,7 +134,7 @@ describe('票 07 · D-001：可点目标 ≥44×44（留白档）', () => {
 
 const hasPlaywright = resolvePlaywright() !== null
 
-describe('票 07 · 唯一条端到端：隔离实例 + 剧本 1（建谱）', () => {
+describe('票 07 · 唯一条端到端：隔离实例 + 三条剧本（建谱 / 问事 / 藏库）', () => {
   it.skipIf(!hasPlaywright)(
     '起隔离实例 → 走完「建一个谱」→ 拿到浏览器证据 → 判定引擎给出 D-001 verdict',
     async () => {
@@ -146,10 +146,11 @@ describe('票 07 · 唯一条端到端：隔离实例 + 剧本 1（建谱）', (
         generatedAt: '2026-10-31T00:00:00.000Z',
       })
       expect(exitCode).toBe(0)
-      // 证据从真浏览器来：两个面被量过（总览 + 谱），命令面不在其中
+      // 证据从真浏览器来：默认剧本集是**三条**（票 08 加了问事 / 藏库），所以 D-001 量到的就是
+      // 三条剧本走到的四个面；命令面不在其中（入口不是渲染面）。
       const browserVerdicts = report.verdicts.filter((verdict) => verdict.criterionId === 'D-001')
       const observed = browserVerdicts.filter((verdict) => verdict.status === 'pass' || verdict.status === 'fail')
-      expect(observed.map((verdict) => verdict.face).sort()).toEqual(['panel:overview', 'panel:pus'])
+      expect(observed.map((verdict) => verdict.face).sort()).toEqual(['panel:cang', 'panel:consult', 'panel:overview', 'panel:pus'])
       // 报告如实写「没走到那些面」而不是假装通过
       expect(browserVerdicts.filter((verdict) => verdict.status === 'not-collected').length).toBeGreaterThan(0)
       // D-001 至少在一个面上是红（实测：32–39px 的按钮不少），且 message 带尺寸
