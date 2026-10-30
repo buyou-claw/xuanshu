@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 /**
  * `scripts/ux/assertions/index.mjs` —— 判定谓词注册表（键 = 判据 id）。
  *
@@ -6,13 +6,15 @@
  *
  * 仅使用 Node 内置模块。ESM。
  */
-import { T_ASSERTIONS } from './t.mjs'
+import { D_ASSERTIONS } from './d.mjs'
 import { S_ASSERTIONS } from './s.mjs'
 import { X_ASSERTIONS } from './x.mjs'
+import { T_ASSERTIONS } from './t.mjs'
 
 /** 全部判定谓词（键 = 判据 id）。 */
 export const ASSERTIONS = {
   ...T_ASSERTIONS,
+  ...D_ASSERTIONS,
   ...S_ASSERTIONS,
   ...X_ASSERTIONS,
 }

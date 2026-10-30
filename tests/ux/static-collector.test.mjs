@@ -29,7 +29,7 @@ describe('票 02 · 静态半边如实点名字面色值', () => {
   it('证据形状统一：criterionId / face / collector / status / facts / evidence 六件齐', () => {
     const { evidence } = collectStatic({ repoRoot: REPO_ROOT, criteria: CRITERIA, faces: FACES })
     expect(evidence.length).toBeGreaterThan(0)
-    // 同一批证据里现在有不止一族的判据（票 06 加了 S / X），所以逐条断言形状、不假定是哪条。
+    // 同一批证据里现在有不止一族判据（票 06 加了 S / X），所以逐条断言形状、不假定是哪条。
     for (const item of evidence) {
       expect(typeof item.criterionId).toBe('string')
       expect(typeof item.face).toBe('string')
@@ -94,9 +94,9 @@ describe('票 02 · 采集失败必须是独立状态', () => {
       criteria: CRITERIA,
       faces: [{ id: 'panel:ghost', kind: 'panel', label: '不存在', sources: ['src/不存在.tsx'] }],
     })
-    expect(evidence.length).toBeGreaterThan(0)
-    // 五条判据（T-001 + S-001..003 + X-001）都吃到这一个面，所以是 5 条 collection-failed。
-    expect(evidence).toHaveLength(CRITERIA.criteria.length)
+    // 每条 **static** 判据都吃到这一个面（票 06 起是 T-001 + S-001..003 + X-001；
+    // D 族是 browser 判据，静态半边本来就不采它），所以条数 = static 判据数。
+    expect(evidence).toHaveLength(CRITERIA.criteria.filter((criterion) => criterion.check === 'static').length)
     for (const item of evidence) {
       expect(item.status).toBe('collection-failed')
       expect(item.facts).toBeNull()

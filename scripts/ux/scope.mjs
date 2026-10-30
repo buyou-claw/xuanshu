@@ -18,6 +18,9 @@ export function applicableFaces(criterion, faces) {
   if (scope.kind === 'all') return faces
   if (scope.kind === 'panel') return faces.filter((face) => face.kind === 'panel')
   if (scope.kind === 'parasitic') return faces.filter((face) => face.kind === 'parasitic')
+  // `rendered` = 真的有渲染位置的界面面。命令面是入口、不是渲染面（它没有 DOM，量不出尺寸），
+  // 所以浏览器判据用它来划范围：否则「命令面的尺寸」会永远停在「未采到」，白白稀释兑现率。
+  if (scope.kind === 'rendered') return faces.filter((face) => face.slot !== null)
   if (scope.kind === 'ids') {
     const wanted = new Set(scope.ids)
     return faces.filter((face) => wanted.has(face.id))

@@ -1,0 +1,13 @@
+{
+  "schema": "xuanshu/ux-criteria-freeze@1",
+  "version": "b8a6391c8dffb57234c9d5068905daa46ab60ac7cc23dca582c951682e7be7f9",
+  "criteria": {
+    "file": "docs/design/ui-v1/criteria/criteria.json",
+    "sha256": "22782c2d08f1bb3aedbf638dea05e624ea50c7db16c24f79a19814154aa526b6",
+    "criteriaCount": 6,
+    "familyCount": 4
+  },
+  "frozenAt": "2026-10-30T16:51:22.891Z",
+  "approvedBy": "agent（票 06 · 待人工确认）",
+  "note": "票 06（#53）补齐族 S 三条 + X-001 后的重签：判据集新增 4 条。签字人是实现 agent，合并前需人复核重签（ADR-0015 第 7 条）。"
+}

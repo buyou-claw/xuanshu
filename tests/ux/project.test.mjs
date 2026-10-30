@@ -53,11 +53,12 @@ const ONE_RULE = {
 }
 
 describe('票 02 · 证据 → 判定 → 报告 → 命令（投影器半边）', () => {
-  it('判据集 v1 从设计稿升格出来：五列齐全（#53 起不止一条判据，按 id 取）', () => {
+  it('判据集 v1 从设计稿升格出来：每条判据五列齐全（票 02 只有 T-001，票 07 加 D-001）', () => {
     const { document } = projectCriteria({ repoRoot: REPO_ROOT, faces: FACES })
-    // 票 06（#53）加进了族 S / X，判据集不再只有一条 —— 这里改成按 id 取，别拿条数当前提。
-    const criterion = document.criteria.find((item) => item.id === 'T-001')
-    expect(criterion).toBeTruthy()
+    const ids = document.criteria.map((criterion) => criterion.id)
+    expect(ids).toContain('T-001')
+    const [criterion] = document.criteria
+    expect(criterion.id).toBe('T-001')
     // 五列各就位（id / 判据 / 检查方式 / 证据 / 严重级）
     expect(criterion.statement.length).toBeGreaterThan(0)
     expect(criterion.check).toBe('static')

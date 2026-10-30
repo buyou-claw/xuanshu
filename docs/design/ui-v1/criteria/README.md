@@ -9,8 +9,8 @@
 |---|---|---|
 | `rules/<族>.json` | 人（判据提案批准后） | 判据的**作者面**：每条一句话、可判真假，带出处锚 |
 | `criteria.json` | 投影器（`scripts/ux/project.mjs`） | 判据集**投影产物**：同一输入必须产出同一字节，`version` 是它的 sha256 |
-| `freeze.json` | 人（签字那一次） | 冻结值：`version` + 冻结时刻。巡检启动先校验它 |
-| `proposals/` | AI / 任何人 | 提案区。**新判据只能先落这里**，由人批准后搬进 `rules/` |
+| `freeze.json` | 人（签字那一次） | 冻结值：`version` + `criteria.json` 全文的 sha256 + 冻结时刻。巡检启动先校验它 |
+| `proposals/` | AI / 任何人 | 提案区。**新判据只能先落这里**，由人批准后搬进 `rules/`（用法见 `proposals/README.md`） |
 
 `rules/` 与 `criteria.json` 的差别只有一个方向：**`rules/` 是人写的原文，`criteria.json` 是它的确定性投影**。
 不要手改 `criteria.json` —— 它自己算出的 `version` 会立刻对不上，巡检会拒绝运行（`scripts/ux/freeze.mjs`）。
@@ -38,6 +38,9 @@
 
 ## 4. 变更权
 
-- 判据冻结后被改 → 巡检**拒绝运行**并非零退出（不是打个警告继续跑）。
+- 判据冻结后被改 → 巡检**拒绝运行**并非零退出（退出码 3，且不产出报告）：冻结值对不上 / 缺失 /
+  冻结值坏了都在这一档，提示会说清**是哪一侧变了**（考卷侧 / 冻结值侧 / 缺冻结值）。
+- 冻结值由 `node scripts/ux/freeze.mjs --write` 写入（`--check` 校验）；它覆盖 `criteria.json` **全文**
+  （`version` + 整份文件的 sha256），所以连 `ruleFiles` 里的字节都动不了。
 - AI 的写入面只有 `proposals/`。把提案搬进 `rules/` 并重新冻结，是**人的动作**（一次签字，见 ADR-0015 第 7 条）。
 - 历史兑现率只在「同一版判据 + 同一批界面面」之间可比；跨版本时报告写「不可比」，不硬算。

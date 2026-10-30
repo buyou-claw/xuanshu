@@ -138,8 +138,8 @@ function normalizeRule(rule, { familyFile, family, repoRoot, faceIds }) {
 
   const appliesTo = rule?.appliesTo ?? { kind: 'all' }
   if (appliesTo === null || typeof appliesTo !== 'object') throw new CriteriaError(`${where}: appliesTo 必须是对象`)
-  if (!['all', 'panel', 'parasitic', 'ids'].includes(appliesTo.kind)) {
-    throw new CriteriaError(`${where}: appliesTo.kind 只能是 all / panel / parasitic / ids`)
+  if (!['all', 'panel', 'parasitic', 'rendered', 'ids'].includes(appliesTo.kind)) {
+    throw new CriteriaError(`${where}: appliesTo.kind 只能是 all / panel / parasitic / rendered / ids`)
   }
   if (appliesTo.kind === 'ids') {
     if (!Array.isArray(appliesTo.ids) || appliesTo.ids.length === 0) {

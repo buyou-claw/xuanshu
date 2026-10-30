@@ -10,6 +10,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
+import { writeFreeze } from '../../scripts/ux/freeze.mjs'
 import { CRITERIA_FILE, projectCriteria } from '../../scripts/ux/project.mjs'
 import { runVerifyUx, VerifyUxError } from '../../scripts/verify-ux.mjs'
 import { faceManifest } from '../assembly/lib/panel-surface.mjs'
@@ -18,8 +19,8 @@ const REPO_ROOT = join(import.meta.dirname, '..', '..')
 const FACES = faceManifest()
 
 describe('票 02 · 一条命令跑完全链路', () => {
-  it('跑完给出兑现率 + 判据集版本号 + 人读/机读两份报告（不落盘模式）', () => {
-    const { report, markdown, exitCode, paths } = runVerifyUx({
+  it('跑完给出兑现率 + 判据集版本号 + 人读/机读两份报告（不落盘模式）', async () => {
+    const { report, markdown, exitCode, paths } = await runVerifyUx({
       repoRoot: REPO_ROOT,
       faces: FACES,
       write: false,
@@ -28,14 +29,16 @@ describe('票 02 · 一条命令跑完全链路', () => {
     expect(exitCode).toBe(0)
     expect(report.criteria.label).toBe('ux-v1')
     expect(report.criteria.version).toMatch(/^[0-9a-f]{64}$/)
-    expect(report.rate.applicable).toBe(FACES.length * report.criteria.count) // 判据数 × 全部界面面（appliesTo 全 all）
+    // 分母 = 判据 × 适用界面面：T 族覆盖全部 25 面，D-001（browser）只覆盖 22 个有渲染位置的面
+    expect(report.rate.applicable).toBeGreaterThanOrEqual(FACES.length)
+    expect(report.rate.applicable).toBeLessThanOrEqual(FACES.length * report.criteria.count)
     expect(report.rate.passed).toBeLessThan(report.rate.applicable) // 现实里有红
     expect(markdown).toContain('兑现率')
     expect(paths).toEqual({}) // write:false 时一个文件都不写
   })
 
-  it('报告点名「字面色值」的具体位置（人能三秒核回源码）', () => {
-    const { report } = runVerifyUx({ repoRoot: REPO_ROOT, faces: FACES, write: false, generatedAt: 'now' })
+  it('报告点名「字面色值」的具体位置（人能三秒核回源码）', async () => {
+    const { report } = await runVerifyUx({ repoRoot: REPO_ROOT, faces: FACES, write: false, generatedAt: 'now' })
     expect(report.findings.length).toBeGreaterThan(0)
     for (const finding of report.findings) {
       expect(finding.file).toMatch(/^packages\/xuanshu-client\/src\//)
@@ -47,9 +50,13 @@ describe('票 02 · 一条命令跑完全链路', () => {
     )
   })
 
-  it('浏览器半边还没实现：如实写「没有浏览器证据」，不装作跑过', () => {
-    const { report } = runVerifyUx({ repoRoot: REPO_ROOT, faces: FACES, mode: 'browser', write: false, generatedAt: 'now' })
-    expect(report.collection.notes.join('\n')).toContain('浏览器半边尚未实现')
+  it('只跑静态半边时如实写「browser 判据未采到」，不装作跑过', async () => {
+    const { report } = await runVerifyUx({ repoRoot: REPO_ROOT, faces: FACES, write: false, generatedAt: 'now' })
+    expect(report.collection.notes.join('\n')).toContain('browser 判据显示为「未采到」')
+    // 未采到 ≠ 通过：D-001 这一轮全部落在 not-collected 里，不进 pass
+    const browserVerdicts = report.verdicts.filter((verdict) => verdict.criterionId === 'D-001')
+    expect(browserVerdicts.length).toBeGreaterThan(0)
+    expect(browserVerdicts.every((verdict) => verdict.status === 'not-collected')).toBe(true)
   })
 })
 
@@ -67,6 +74,8 @@ describe('票 02 · 判据投影产物过期就拒绝跑', () => {
     const faces = [{ id: 'panel:overview', kind: 'panel', label: '自我总览', sources: [] }]
     const projected = projectCriteria({ repoRoot: root, faces })
     writeFileSync(join(root, CRITERIA_FILE), projected.text)
+    // 巡检启动先校验冻结值（票 03 / #50）：夹具也得先冻一次，否则测的就不是本组要测的那条路径。
+    writeFreeze({ repoRoot: root, frozenAt: '2026-10-30T00:00:00.000Z' })
     if (tamperCriteria) {
       // 改判据集里一个字节：模拟「AI 顺手调低了考卷」
       writeFileSync(join(root, CRITERIA_FILE), projected.text.replace('不出现字面色值', '不出现字面色值 '))
@@ -74,29 +83,29 @@ describe('票 02 · 判据投影产物过期就拒绝跑', () => {
     return { root, faces }
   }
 
-  it('投影产物与 rules/ 不一致 → 拒绝跑并说清怎么修（不是笼统报错）', () => {
+  it('投影产物与 rules/ 不一致 → 拒绝跑并说清怎么修（不是笼统报错）', async () => {
     const { root, faces } = tempRepo({ tamperCriteria: true })
-    expect(() => runVerifyUx({ repoRoot: root, faces, write: false, generatedAt: 'now' })).toThrow(VerifyUxError)
-    expect(() => runVerifyUx({ repoRoot: root, faces, write: false, generatedAt: 'now' })).toThrow(/--write|过期/)
+    await expect(runVerifyUx({ repoRoot: root, faces, write: false, generatedAt: 'now' })).rejects.toThrow(VerifyUxError)
+    await expect(runVerifyUx({ repoRoot: root, faces, write: false, generatedAt: 'now' })).rejects.toThrow(/--write|过期/)
   })
 
-  it('投影产物缺失 → 拒绝跑（不允许拿一份没投影过的考卷判分）', () => {
+  it('投影产物缺失 → 拒绝跑（不允许拿一份没投影过的考卷判分）', async () => {
     const { root, faces } = tempRepo()
     rmSync(join(root, CRITERIA_FILE))
-    expect(() => runVerifyUx({ repoRoot: root, faces, write: false, generatedAt: 'now' })).toThrow(/不存在/)
+    await expect(runVerifyUx({ repoRoot: root, faces, write: false, generatedAt: 'now' })).rejects.toThrow(/不存在/)
   })
 
-  it('一致时能跑：一份判据 × 一个面 = 1 对分母', () => {
+  it('一致时能跑：一份判据 × 一个面 = 1 对分母', async () => {
     const { root, faces } = tempRepo()
-    const { report } = runVerifyUx({ repoRoot: root, faces, write: false, generatedAt: 'now' })
+    const { report } = await runVerifyUx({ repoRoot: root, faces, write: false, generatedAt: 'now' })
     expect(report.rate).toEqual({ passed: 1, applicable: 1, value: 1 })
   })
 })
 
 describe('票 02 · 报告落盘（默认模式）', () => {
-  it('写到 ux-reports/<时间>/report.{json,md} + latest 指针，机读报告是合法 JSON', () => {
+  it('写到 ux-reports/<时间>/report.{json,md} + latest 指针，机读报告是合法 JSON', async () => {
     const root = mkdtempSync(join(tmpdir(), 'ux-write-'))
-    const { paths } = runVerifyUx({
+    const { paths } = await runVerifyUx({
       repoRoot: REPO_ROOT,
       faces: FACES,
       generatedAt: '2026-10-30T01:02:03.004Z',

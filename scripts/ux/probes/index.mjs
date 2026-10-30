@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 /**
  * `scripts/ux/probes/index.mjs` —— 静态采集器的检查器注册表。
  *
