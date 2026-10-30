@@ -54,7 +54,7 @@ function mainText(page) {
  *
  * 不能拿「生成预览」这种字去判：它出现在步骤条文案里（① 给资料 → … → ④ 生成预览），
  * 一定先命中，于是每次都会假装成功。这里只看**只在该步才存在的按钮**与状态行。 */
-async function waitForTerminal({ page, timeoutMs = 30_000 }) {
+async function waitForTerminal({ page, timeoutMs = 20_000 }) {
   const deadline = Date.now() + timeoutMs
   let text = ''
   while (Date.now() < deadline) {
