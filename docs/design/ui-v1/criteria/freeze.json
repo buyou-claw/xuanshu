@@ -1,13 +1,13 @@
 {
   "schema": "xuanshu/ux-criteria-freeze@1",
-  "version": "b8a6391c8dffb57234c9d5068905daa46ab60ac7cc23dca582c951682e7be7f9",
+  "version": "d72c33d21928ab0085bc05a098358e8c589d1de75543da2be3452f2afd733b46",
   "criteria": {
     "file": "docs/design/ui-v1/criteria/criteria.json",
-    "sha256": "22782c2d08f1bb3aedbf638dea05e624ea50c7db16c24f79a19814154aa526b6",
-    "criteriaCount": 6,
+    "sha256": "659304a4eb19fc5e6b7548d16a8843cbb6a071bd37ec240c8e96d07f310ed298",
+    "criteriaCount": 9,
     "familyCount": 4
   },
-  "frozenAt": "2026-10-30T16:51:22.891Z",
+  "frozenAt": "2026-10-30T16:54:12.478Z",
   "approvedBy": "agent（票 06 · 待人工确认）",
-  "note": "票 06（#53）补齐族 S 三条 + X-001 后的重签：判据集新增 4 条。签字人是实现 agent，合并前需人复核重签（ADR-0015 第 7 条）。"
+  "note": "票 06（#53）补齐族 S 三条 + X-001 后的重签：判据集新增 4 条（合并票 04 的 T 族之后重投影）。签字人是实现 agent，合并前需人复核重签（ADR-0015 第 7 条）。"
 }

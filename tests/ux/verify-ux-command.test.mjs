@@ -12,11 +12,13 @@ import { describe, expect, it } from 'vitest'
 
 import { writeFreeze } from '../../scripts/ux/freeze.mjs'
 import { CRITERIA_FILE, projectCriteria } from '../../scripts/ux/project.mjs'
+import { applicableFaces } from '../../scripts/ux/scope.mjs'
 import { runVerifyUx, VerifyUxError } from '../../scripts/verify-ux.mjs'
 import { faceManifest } from '../assembly/lib/panel-surface.mjs'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..')
 const FACES = faceManifest()
+const CRITERIA = projectCriteria({ repoRoot: REPO_ROOT, faces: FACES }).document
 
 describe('票 02 · 一条命令跑完全链路', () => {
   it('跑完给出兑现率 + 判据集版本号 + 人读/机读两份报告（不落盘模式）', async () => {
@@ -29,9 +31,10 @@ describe('票 02 · 一条命令跑完全链路', () => {
     expect(exitCode).toBe(0)
     expect(report.criteria.label).toBe('ux-v1')
     expect(report.criteria.version).toMatch(/^[0-9a-f]{64}$/)
-    // 分母 = 判据 × 适用界面面：T 族覆盖全部 25 面，D-001（browser）只覆盖 22 个有渲染位置的面
-    expect(report.rate.applicable).toBeGreaterThanOrEqual(FACES.length)
-    expect(report.rate.applicable).toBeLessThanOrEqual(FACES.length * report.criteria.count)
+    // 分母 = Σ 每条判据的适用界面面（与判定器同一个算法，别在这里手抄一个乘法：
+    // #53 加了 S / X 一族之后，写死的「4 × 25 + 22」当场就错了）。
+    const expectedApplicable = CRITERIA.criteria.reduce((sum, criterion) => sum + applicableFaces(criterion, FACES).length, 0)
+    expect(report.rate.applicable).toBe(expectedApplicable)
     expect(report.rate.passed).toBeLessThan(report.rate.applicable) // 现实里有红
     expect(markdown).toContain('兑现率')
     expect(paths).toEqual({}) // write:false 时一个文件都不写
@@ -95,10 +98,11 @@ describe('票 02 · 判据投影产物过期就拒绝跑', () => {
     await expect(runVerifyUx({ repoRoot: root, faces, write: false, generatedAt: 'now' })).rejects.toThrow(/不存在/)
   })
 
-  it('一致时能跑：一份判据 × 一个面 = 1 对分母', async () => {
+  it('一致时能跑：族 T 四条判据 × 一个面 = 4 对分母（这个面没有源文件，四条都无从命中）', async () => {
     const { root, faces } = tempRepo()
     const { report } = await runVerifyUx({ repoRoot: root, faces, write: false, generatedAt: 'now' })
-    expect(report.rate).toEqual({ passed: 1, applicable: 1, value: 1 })
+    expect(report.criteria.count).toBe(4)
+    expect(report.rate).toEqual({ passed: 4, applicable: 4, value: 1 })
   })
 })
 

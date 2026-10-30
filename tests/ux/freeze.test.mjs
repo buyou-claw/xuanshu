@@ -161,7 +161,7 @@ describe('票 03 · 守卫：重算版本后三方比对，指出是哪一侧变
     // 判据集变了：往 rules 里加一条，再按正常通道重投影（version 自证是通的）
     const rulesPath = join(root, 'docs/design/ui-v1/criteria/rules/T.json')
     const rules = JSON.parse(readFileSync(rulesPath, 'utf8'))
-    rules.rules.push({ ...rules.rules[0], id: 'T-002', statement: '新增一条判据（模拟判据集变更）' })
+    rules.rules.push({ ...rules.rules[0], id: 'T-900', statement: '新增一条判据（模拟判据集变更）' })
     writeFileSync(rulesPath, `${JSON.stringify(rules, null, 2)}\n`)
     const reprojected = projectCriteria({ repoRoot: root, faces: FACES })
     writeFileSync(criteriaPath(root), reprojected.text)
@@ -336,8 +336,8 @@ describe('票 03 · 提案区与生效区物理分开', () => {
     )
     const after = await runVerifyUx({ repoRoot: root, faces: FACES, write: false, generatedAt: FROZEN_AT })
     expect(after.report.rate).toEqual(before.report.rate)
-    // 提案也不进投影产物：生效判据里没有它
-    expect(reversionFromText(readFileSync(criteriaPath(root), 'utf8')).document.criteria).toHaveLength(1)
+    // 提案也不进投影产物：生效判据里没有它（条数随 rules/ 变，断言点「没有 T-999」而不是钉一个数）
+    expect(reversionFromText(readFileSync(criteriaPath(root), 'utf8')).document.criteria.map((rule) => rule.id)).not.toContain('T-999')
   })
 
   it('提案区是真实存在的目录 + README 写明批准链路（人搬进 rules/ → 重投影 → 重新冻结）', () => {

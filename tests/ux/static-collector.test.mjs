@@ -18,7 +18,7 @@ const REPO_ROOT = join(import.meta.dirname, '..', '..')
 const FACES = faceManifest()
 const CRITERIA = projectCriteria({ repoRoot: REPO_ROOT, faces: FACES }).document
 
-/** 收集到的全部字面色值出现（跨面展开）。#53 起同一批证据里还有族 S / X，按判据筛出 T-001。 */
+/** 收集到的全部字面色值出现（跨面展开；票 04 起库里还有 T-002..T-004 的证据，这里只看 T-001）。 */
 function occurrencesOf(evidence) {
   return evidence
     .filter((item) => item.criterionId === 'T-001' && item.status === 'observed')
@@ -29,16 +29,18 @@ describe('票 02 · 静态半边如实点名字面色值', () => {
   it('证据形状统一：criterionId / face / collector / status / facts / evidence 六件齐', () => {
     const { evidence } = collectStatic({ repoRoot: REPO_ROOT, criteria: CRITERIA, faces: FACES })
     expect(evidence.length).toBeGreaterThan(0)
-    // 同一批证据里现在有不止一族判据（票 06 加了 S / X），所以逐条断言形状、不假定是哪条。
+    const staticCriteria = CRITERIA.criteria.filter((criterion) => criterion.check === 'static')
+    const criterionIds = new Set(staticCriteria.map((criterion) => criterion.id))
     for (const item of evidence) {
-      expect(typeof item.criterionId).toBe('string')
+      expect(criterionIds.has(item.criterionId)).toBe(true)
       expect(typeof item.face).toBe('string')
       expect(item.collector).toBe('static')
       expect(item.status).toBe('observed')
       expect(Array.isArray(item.evidence)).toBe(true)
       expect(item.facts).toBeTruthy()
     }
-    expect(new Set(evidence.map((item) => item.criterionId))).toContain('T-001')
+    // 票 04 起：静态判据（T-001..T-004）× 全部界面面，一个 (判据, 面) 一份证据，不重不漏
+    expect(evidence).toHaveLength(staticCriteria.length * FACES.length)
   })
 
   it('11 处字面 hex（mounts.tsx 9 + WorkflowPanel 2）——spec 里那个数字是 hex 口径', () => {
@@ -94,9 +96,9 @@ describe('票 02 · 采集失败必须是独立状态', () => {
       criteria: CRITERIA,
       faces: [{ id: 'panel:ghost', kind: 'panel', label: '不存在', sources: ['src/不存在.tsx'] }],
     })
-    // 每条 **static** 判据都吃到这一个面（票 06 起是 T-001 + S-001..003 + X-001；
-    // D 族是 browser 判据，静态半边本来就不采它），所以条数 = static 判据数。
-    expect(evidence).toHaveLength(CRITERIA.criteria.filter((criterion) => criterion.check === 'static').length)
+    // 静态判据（T-001..T-004）× 一个面：每条都读同一个不存在的文件，所以四条都得如实报「采集失败」。
+    const staticCriteria = CRITERIA.criteria.filter((criterion) => criterion.check === 'static')
+    expect(evidence).toHaveLength(staticCriteria.length)
     for (const item of evidence) {
       expect(item.status).toBe('collection-failed')
       expect(item.facts).toBeNull()

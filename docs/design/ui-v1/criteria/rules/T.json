@@ -17,6 +17,42 @@
         "file": "docs/design/ui-v1/shared/设计token字典.md",
         "anchor": "1. 本文件**不出现**色值（`#rrggbb` / `rgb()` / 颜色名）、px / rem / em 数值。"
       }
+    },
+    {
+      "id": "T-002",
+      "statement": "样式的注入点收敛在单一消费层：界面面的源文件里没有自己注入的 `<style>`，每个面板不再各写一份样式表",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": { "kind": "all" },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "2. 线框里**不写 token**（线框只写结构与文案位），token 只出现在组件树与该屏第 9 节。"
+      }
+    },
+    {
+      "id": "T-003",
+      "statement": "断点不写字面值：`@media` 的宽窄屏分界只走 `--xs-size-breakpoint-wide`（1100px）的语义，样式里不出现 `min-width: 1100px` / `max-width: 700px` 这类字面 px",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": { "kind": "all" },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "、px / rem / em 数值。"
+      }
+    },
+    {
+      "id": "T-004",
+      "statement": "颜色声明一律从 token 取：`color` / `background` / `border*` / `box-shadow` 的值是 `var(--…)`，或是允许的关键字（transparent / inherit / none / currentColor）",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": { "kind": "all" },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "（`#rrggbb` / `rgb()` / 颜色名）"
+      }
     }
   ]
 }
