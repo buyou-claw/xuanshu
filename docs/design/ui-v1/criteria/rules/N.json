@@ -1,0 +1,46 @@
+{
+  "family": "N",
+  "title": "导航（入口唯一 / 返回落点 / 键盘可达）",
+  "source": {
+    "file": "docs/specs/003-ux-quality-line.md",
+    "anchor": "同时登记一个新判据族：**导航模型**"
+  },
+  "rules": [
+    {
+      "id": "N-001",
+      "statement": "同一个动作只有一个入口：同一动作名出现在两个及以上入口（侧栏行 / 面板 / 抽屉 / 输入框 dock / 命令）即红，并逐个列出是哪几个入口；置灰的入口不算入口",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": { "kind": "rendered" },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "同一个动作只有一个入口"
+      }
+    },
+    {
+      "id": "N-002",
+      "statement": "关闭抽屉 / 面板后回到来处：关掉之后站的面必须等于打开它时站的面；落回首页（overview）即红",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": { "kind": "rendered" },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "从抽屉 / 面板返回时回到我来的地方"
+      }
+    },
+    {
+      "id": "N-003",
+      "statement": "键盘能走完一条任务：本面里 Tab 顺序可达（至少两个骤停点）、每个焦点都有可见描边（`:focus-visible` 有 outline 或 box-shadow）、抽屉按 Esc 能关",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": { "kind": "rendered" },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "键盘能走完一条完整任务（Tab 顺序、Esc 关抽屉、焦点可见）"
+      }
+    }
+  ]
+}

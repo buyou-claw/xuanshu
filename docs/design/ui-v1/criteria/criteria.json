@@ -39,6 +39,15 @@
       "ruleCount": 3
     },
     {
+      "id": "N",
+      "title": "导航（入口唯一 / 返回落点 / 键盘可达）",
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "同时登记一个新判据族：**导航模型**"
+      },
+      "ruleCount": 3
+    },
+    {
       "id": "X",
       "title": "文案一致性",
       "source": {
@@ -254,6 +263,57 @@
       "tombstone": false
     },
     {
+      "id": "N-001",
+      "family": "N",
+      "statement": "同一个动作只有一个入口：同一动作名出现在两个及以上入口（侧栏行 / 面板 / 抽屉 / 输入框 dock / 命令）即红，并逐个列出是哪几个入口；置灰的入口不算入口",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "同一个动作只有一个入口"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "N-002",
+      "family": "N",
+      "statement": "关闭抽屉 / 面板后回到来处：关掉之后站的面必须等于打开它时站的面；落回首页（overview）即红",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "从抽屉 / 面板返回时回到我来的地方"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "N-003",
+      "family": "N",
+      "statement": "键盘能走完一条任务：本面里 Tab 顺序可达（至少两个骤停点）、每个焦点都有可见描边（`:focus-visible` 有 outline 或 box-shadow）、抽屉按 Esc 能关",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "键盘能走完一条完整任务（Tab 顺序、Esc 关抽屉、焦点可见）"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
       "id": "X-001",
       "family": "X",
       "statement": "同一状态在所有界面面只用一套说法：空态只许「还没有…」「没有…」，加载态只许「正在…」「…中」，错误态只许「失败」「读不到」「打不开」「不可用」——「暂无」「空的」「加载中」「读取中」「请稍候」「出错」「错误」「异常」这类同义替换不许与它们并存；且错误行旁边必须有可执行的下一步（重试 / 换个 / 请在…），只有一句「失败了」不算",
@@ -271,7 +331,7 @@
       "tombstone": false
     }
   ],
-  "version": "636f87fd2f62e1a952651eee6a1646b444f0fbb956fadafd3958732284229898",
+  "version": "0795319454e055518f4bc662735212b3fd7a4d931f87c3268834863003e984fa",
   "ruleFiles": [
     {
       "file": "docs/design/ui-v1/criteria/rules/C.json",
@@ -280,6 +340,10 @@
     {
       "file": "docs/design/ui-v1/criteria/rules/D.json",
       "sha256": "267753b60a7c211b8bbe8572509bb6025d3a9af6b08f252d53180b4415aef4ca"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/N.json",
+      "sha256": "ead586c63ee04340b016fa07c86c772e83ab66597280160b3fb030391bdb36ed"
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/S.json",

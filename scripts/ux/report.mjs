@@ -32,6 +32,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { buildDiff, diffCounts, isRed } from './diff.mjs'
+import { NAV_CRITERIA, NAV_KIND_LABEL, faceLabelOf } from './nav-vocabulary.mjs'
 import { CRITERION_STATE, STATES, STATE_LABEL } from './state-vocabulary.mjs'
 
 /** 报告 schema。报告器与「读报告的下一步」靠它对齐。 */
@@ -202,6 +203,58 @@ export function missingStatesOf(verdicts, faces = []) {
   }
 }
 
+/**
+ * 「导航族 N 清单」：把入口唯一 / 返回落点 / 键盘可达的红**按界面面**收成一张小表。
+ *
+ * 为什么不从 findings 推：N 族的事实全在浏览器里（入口表 / 落点 / Tab 走查），
+ * 根本没有 `file:line` 可去重 —— findings 里一条都不会有。这一节由 verdicts 现算，
+ * 与「缺态清单」同一个理由、同一种风格。
+ *
+ * @param {object[]} verdicts
+ * @param {{id: string, label?: string, kind?: string}[]} faces
+ * @returns {{faces: {face: string, label: string, issues: {criterionId: string, kind: string, message: string}[]}[], totals: {faces: number, unique: number, return: number, keyboard: number, applicable: number, observed: number, notCollected: number}}}
+ */
+export function navFamilyOf(verdicts, faces = []) {
+  const byFace = new Map()
+  let applicable = 0
+  let observed = 0
+  let notCollected = 0
+  for (const verdict of verdicts) {
+    if (!NAV_CRITERIA.includes(verdict.criterionId)) continue
+    applicable += 1
+    if (verdict.status === 'not-collected' || verdict.status === 'collection-failed') notCollected += 1
+    if (verdict.status === 'pass' || verdict.status === 'fail') observed += 1
+    if (verdict.status !== 'fail') continue
+    const entry = byFace.get(verdict.face) ?? { face: verdict.face, label: '', issues: [] }
+    entry.issues.push({
+      criterionId: verdict.criterionId,
+      kind: NAV_KIND_LABEL[verdict.criterionId] ?? verdict.criterionId,
+      message: verdict.message,
+    })
+    byFace.set(verdict.face, entry)
+  }
+  const rows = [...byFace.values()]
+    .map((entry) => ({
+      face: entry.face,
+      label: faceLabelOf(entry.face, faces),
+      issues: entry.issues.slice().sort((left, right) => left.criterionId.localeCompare(right.criterionId)),
+    }))
+    .sort((left, right) => left.face.localeCompare(right.face))
+  const countOf = (criterionId) => rows.filter((row) => row.issues.some((issue) => issue.criterionId === criterionId)).length
+  return {
+    faces: rows,
+    totals: {
+      faces: rows.length,
+      unique: countOf('N-001'),
+      return: countOf('N-002'),
+      keyboard: countOf('N-003'),
+      applicable,
+      observed,
+      notCollected,
+    },
+  }
+}
+
 /** 按面聚合计数（报告里「哪些界面面最脏」一眼可见）。 */
 function faceSummaries(faces, verdicts) {
   const byFace = new Map()
@@ -293,6 +346,8 @@ export function buildReport({
     },
     findings: findingsOf(verdicts),
     missingStates: missingStatesOf(verdicts, faces),
+    // 导航族**单列一栏**（#60 验收最后一条）：不与视觉档混排，也不进 findings（那一族没有 file:line）。
+    navFamily: navFamilyOf(verdicts, faces),
     // 视觉档实测值（票 09 / #56）：**只有数字，没有结论**。缺浏览器证据时它是空表 + 一句说明，
     // 不是一个「0 面全绿」的假表 —— 没量过的面不进这张表（它们的 verdict 已经是 not-collected）。
     visualMetrics: visualMetrics ?? {
@@ -453,6 +508,28 @@ export function renderMarkdown(report) {
     for (const row of missing.faces) {
       lines.push(`- \`${row.face}\` ${row.label === '' ? '' : `${row.label} · `}缺：${row.missingLabels.join(' / ')}`)
     }
+  }
+
+  // 导航族清单（#60 · 票 08b）：**单列一栏**，不与视觉档混排。
+  // 数据同样由 verdicts 现算（`navFamilyOf()`）—— N 族的事实全在浏览器里，findings 里一条都没有。
+  const nav = report.navFamily ?? { faces: [], totals: { faces: 0, unique: 0, return: 0, keyboard: 0, applicable: 0, observed: 0, notCollected: 0 } }
+  lines.push('')
+  lines.push('## 附：导航族 N（入口唯一 / 返回落点 / 键盘可达）')
+  if (nav.faces.length === 0) {
+    lines.push(nav.totals.applicable === 0 ? '- 判据集里没有 N 族（这一栏空着）。' : '- 无。')
+  } else {
+    lines.push(
+      `- 合计 **${nav.totals.faces} 个界面面**有 N 族红（N 族分母 ${nav.totals.applicable} 条，已观测 ${nav.totals.observed} 条）：`
+        + `入口不唯一 ${nav.totals.unique} 面 / 返回落点 ${nav.totals.return} 面 / 键盘可达 ${nav.totals.keyboard} 面`,
+    )
+    for (const row of nav.faces) {
+      for (const issue of row.issues) {
+        lines.push(`- \`${row.face}\` ${row.label === '' ? '' : `${row.label} · `}${issue.kind}（${issue.criterionId}）：${issue.message}`)
+      }
+    }
+  }
+  if (nav.totals.notCollected > 0) {
+    lines.push(`- 另有 ${nav.totals.notCollected} 条未采到（N 族证据只覆盖剧本真走到的面；未采到 ≠ 通过）`)
   }
 
   // 视觉档实测（#56 · 票 09）：每面**最小点击目标**与**最低对比度**。

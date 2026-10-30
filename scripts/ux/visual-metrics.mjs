@@ -79,6 +79,10 @@ export function visualMetricsOf({ evidence, faces = [] }) {
   for (const item of evidence) {
     if (item?.collector !== 'browser') continue
     const faceId = item.faceId ?? item.face
+    // 只吃 `measure()` 产的那份样本（有 `targets` / `bodyTexts`）。浏览器半边不止一种证据：
+    // 导航族 N 采的是入口表 / 落点 / Tab 走查（票 08b），它同样 `status: 'observed'`，但里面没有尺寸 ——
+    // 混进来会让「这一面」取到一份空样本，报出一张「最小点击目标 无」的假表。
+    if (item.status === 'observed' && !Array.isArray(item.facts?.targets) && !Array.isArray(item.facts?.bodyTexts)) continue
     if (factsByFace.has(faceId)) continue
     if (item.status !== 'observed' || item.facts === null || typeof item.facts !== 'object') {
       factsByFace.set(faceId, null) // 采到了「没采成」：也要出现在表里，不能让这个面悄悄消失

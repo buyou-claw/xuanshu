@@ -1,13 +1,13 @@
 {
   "schema": "xuanshu/ux-criteria-freeze@1",
-  "version": "636f87fd2f62e1a952651eee6a1646b444f0fbb956fadafd3958732284229898",
+  "version": "0795319454e055518f4bc662735212b3fd7a4d931f87c3268834863003e984fa",
   "criteria": {
     "file": "docs/design/ui-v1/criteria/criteria.json",
-    "sha256": "ab725d7d29879041cdfb82f1751eb042913ada42822638cba35b8202c0d32329",
-    "criteriaCount": 13,
-    "familyCount": 5
+    "sha256": "df12484651040087728eafab050877788b1c3b949d0a1387af9457b22261cc83",
+    "criteriaCount": 16,
+    "familyCount": 6
   },
-  "frozenAt": "2026-10-30T17:33:03.422Z",
-  "approvedBy": "human",
-  "note": "D/C 视觉档落地后重签"
+  "frozenAt": "2026-10-30T18:24:55.251Z",
+  "approvedBy": "integration-owner",
+  "note": "票 08/08b（N 族）落地后重签"
 }
