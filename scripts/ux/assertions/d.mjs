@@ -2,14 +2,20 @@
 /**
  * `scripts/ux/assertions/d.mjs` —— 判据族 D（密度与点击目标）的判定。
  *
- * 输入是**真实浏览器量出来的矩形**（`getBoundingClientRect`），不是读源码猜的尺寸 ——
- * 所以这条判据只能由浏览器半边喂证据；静态半边喂不出它（喂不出就是「未采到」）。
+ * 输入是**真实浏览器量出来的**事实（`getBoundingClientRect` 的矩形、`querySelectorAll` 命中的
+ * 主按钮），不是读源码猜的尺寸 —— 所以这一族只能由浏览器半边喂证据；静态半边喂不出它
+ * （喂不出就是「未采到」）。
+ *
+ * D-001 由票 07 落地（语义不动：一个目标的最小边 < 44 就算红）。
+ * D-002 由票 09 / #56 补上：**任一时刻**一屏可见的主操作 ≤ 1 —— 它吃的是「快照」而不是并集，
+ * 因为同一屏在两个状态里各有一个主按钮（先「创建新谱」后「开始转换」）不算并列主操作。
  *
  * 仅使用 Node 内置模块。ESM。
  */
+import { VISUAL_THRESHOLDS } from './visual-thresholds.mjs'
 
 /** 留白档的最小可点目标（spec 003 §视觉档位；与 ADR-0015 的 comfortable 档一致）。 */
-export const MIN_TARGET = 44
+export const MIN_TARGET = VISUAL_THRESHOLDS.MIN_TARGET
 
 /** 一行摘要：把最小的几个目标点名（人一眼能去改哪一个）。 */
 function smallest(targets, limit = 6) {
@@ -17,6 +23,20 @@ function smallest(targets, limit = 6) {
   return sorted
     .slice(0, limit)
     .map((target) => `${target.label === '' ? target.tag : target.label} ${target.width}×${target.height}`)
+    .join('、')
+}
+
+/** 一次快照里的主操作数量（采集器给 `{count, buttons}`；两个字段任一可信）。 */
+function snapshotCount(snapshot) {
+  if (Array.isArray(snapshot?.buttons)) return snapshot.buttons.length
+  const count = Number(snapshot?.count)
+  return Number.isFinite(count) && count >= 0 ? count : 0
+}
+
+/** 一次快照里主操作的文本（点名用）。 */
+function snapshotLabels(snapshot) {
+  return (Array.isArray(snapshot?.buttons) ? snapshot.buttons : [])
+    .map((button) => (button.label === '' ? button.tag : button.label))
     .join('、')
 }
 
@@ -36,6 +56,34 @@ export const D_ASSERTIONS = {
     return {
       pass: false,
       message: `${tooSmall.length}/${targets.length} 个可点目标小于 ${MIN_TARGET}×${MIN_TARGET}：${smallest(tooSmall)}`,
+    }
+  },
+
+  /**
+   * D-002：任一时刻一屏可见的主操作（`.xs-btn--primary`）≤ 1。
+   * @param {{primaryActions: {count: number, buttons: {tag: string, label: string}[]}[]}} facts
+   */
+  'D-002': (facts) => {
+    const snapshots = Array.isArray(facts?.primaryActions) ? facts.primaryActions : []
+    if (snapshots.length === 0) {
+      // 没量到快照 = 这个面当时不在场；不能当成「零个主操作，所以合规」。
+      return { pass: false, message: '没有量到任何主操作快照：这个面当时不在场，证据不足以判过' }
+    }
+    const counts = snapshots.map(snapshotCount)
+    const max = Math.max(...counts)
+    if (max <= VISUAL_THRESHOLDS.MAX_PRIMARY_ACTIONS) {
+      return {
+        pass: true,
+        message: `主操作最多 ${max} 个（上限 ${VISUAL_THRESHOLDS.MAX_PRIMARY_ACTIONS}），共 ${snapshots.length} 次快照`,
+      }
+    }
+    const worst = snapshots[counts.indexOf(max)]
+    const labels = snapshotLabels(worst)
+    return {
+      pass: false,
+      message:
+        `某一时刻有 ${max} 个并列主操作（上限 ${VISUAL_THRESHOLDS.MAX_PRIMARY_ACTIONS}）：`
+        + `${labels === '' ? '(无文本)' : labels}`,
     }
   },
 }

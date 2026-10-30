@@ -77,8 +77,8 @@ export const SCRIPTS = {
     title: '建一个谱',
     /** 这条剧本会走到的界面面（证据按面归档；没走到的不算采到）。 */
     faces: ['panel:overview', 'panel:pus'],
-    /** 它期望提供证据的判据 id。 */
-    criteria: ['D-001'],
+    /** 它期望提供证据的判据 id（票 09 起 `measure()` 一次量齐点击目标、主操作与正文计算样式）。 */
+    criteria: ['D-001', 'D-002', 'C-001', 'C-002', 'C-003'],
     async run({ page, settle, step, measure }) {
       await dismissBlockingModals({ page, settle, step })
 

@@ -22,6 +22,10 @@
  * 「哪几个面、缺的哪一态」。这一节由 verdicts 现算，不从 findings 推 —— findings 按 `file:line`
  * 去重，几个面共用同一份源文件时会被压成一行，正是本清单要避免的失真。
  *
+ * `visualMetrics`（#56 · 票 09）：每面的**最小点击目标**与**最低对比度**实测值。它由
+ * `scripts/ux/visual-metrics.mjs` 从证据里收极值，本文件只负责把它排进人读报告 ——
+ * 实测值不是判据：报告里看到 32px 不等于红，红不红看 verdicts。
+ *
  * 仅使用 Node 内置模块。ESM。
  */
 import { existsSync, readFileSync } from 'node:fs'
@@ -233,10 +237,21 @@ function faceSummaries(faces, verdicts) {
  *   previous?: {criteria: {version: string}, verdicts: object[]} | null,
  *   generatedAt: string,
  *   collection?: object,
+ *   visualMetrics?: object | null,
  * }} input
+ *   `visualMetrics` 是**实测极值**（`visual-metrics.mjs` 的产物），不是判定结论：
+ *   它只让报告回答「这一面最小的点击目标是多少、最低的对比度是多少」，通过与否仍只看 verdicts。
  * @returns {object} 机读报告（人读版本由 `renderMarkdown()` 出）
  */
-export function buildReport({ criteria, faces, verdicts, previous = null, generatedAt, collection = {} }) {
+export function buildReport({
+  criteria,
+  faces,
+  verdicts,
+  previous = null,
+  generatedAt,
+  collection = {},
+  visualMetrics = null,
+}) {
   if (typeof criteria?.version !== 'string' || criteria.version === '') {
     throw new ReportError('判据集没有 version：报告不接受一个口径不明的数字')
   }
@@ -277,6 +292,14 @@ export function buildReport({ criteria, faces, verdicts, previous = null, genera
     },
     findings: findingsOf(verdicts),
     missingStates: missingStatesOf(verdicts, faces),
+    // 视觉档实测值（票 09 / #56）：**只有数字，没有结论**。缺浏览器证据时它是空表 + 一句说明，
+    // 不是一个「0 面全绿」的假表 —— 没量过的面不进这张表（它们的 verdict 已经是 not-collected）。
+    visualMetrics: visualMetrics ?? {
+      schema: null,
+      thresholds: null,
+      faces: [],
+      totals: { faces: 0, measured: 0, textElements: 0, smallestTarget: null, lowestContrast: null, primaryActionsMax: null },
+    },
     verdicts,
   }
   assertRate(report)
@@ -428,6 +451,57 @@ export function renderMarkdown(report) {
     )
     for (const row of missing.faces) {
       lines.push(`- \`${row.face}\` ${row.label === '' ? '' : `${row.label} · `}缺：${row.missingLabels.join(' / ')}`)
+    }
+  }
+
+  // 视觉档实测（#56 · 票 09）：每面**最小点击目标**与**最低对比度**。
+  // 与上一节的分工：缺态清单回答「哪几个面缺哪一态」，这一节回答「哪一面的数字最难看」。
+  // 数字都来自 `visualMetrics`（采集器只收原始值 → 这里只报极值），不是从 verdicts 反推的。
+  const visual = report.visualMetrics ?? { faces: [], totals: {} }
+  const visualTotals = visual.totals ?? {}
+  const thresholds = visual.thresholds ?? null
+  lines.push('')
+  lines.push('## 附：视觉档实测（每面最小点击目标 / 最低对比度）')
+  if ((visual.faces ?? []).length === 0) {
+    lines.push('- 无实测值（这一轮没有浏览器证据：数字要在 `--browser` 跑过之后才有，未采到 ≠ 达标）。')
+  } else {
+    const smallest = visualTotals.smallestTarget
+    const lowest = visualTotals.lowestContrast
+    const mostPrimary = visualTotals.primaryActionsMax
+    const parts = [`- 合计 **${visualTotals.measured ?? 0}/${visualTotals.faces ?? 0} 个面**量过（${visualTotals.textElements ?? 0} 个文字元素）`]
+    parts.push(
+      smallest === null || smallest === undefined
+        ? '最小点击目标：无'
+        : `最小点击目标 **${smallest.width}×${smallest.height}**（\`${smallest.face}\`${smallest.label === '' ? '' : ` 「${smallest.label}」`}）`,
+    )
+    parts.push(
+      lowest === null || lowest === undefined
+        ? '最低对比度：无'
+        : `最低对比度 **${lowest.ratio}:1**（\`${lowest.face}\` · ${lowest.fontSize}px「${lowest.text}」）`,
+    )
+    parts.push(mostPrimary === null || mostPrimary === undefined ? '主操作：无' : `同屏主操作最多 **${mostPrimary.value} 个**`)
+    lines.push(parts.join('；'))
+    if (thresholds !== null) {
+      lines.push(
+        `- 判据阈值（留白档，与 \`rules/D.json\` / \`rules/C.json\` 同一份）：点击目标 ≥${thresholds.MIN_TARGET}×${thresholds.MIN_TARGET}`
+          + ` · 主操作 ≤${thresholds.MAX_PRIMARY_ACTIONS} · 字号 ≥${thresholds.MIN_BODY_FONT_SIZE}px`
+          + ` · 行高 ≥${thresholds.MIN_LINE_HEIGHT_RATIO} · 对比度正文 ${thresholds.CONTRAST_AA_NORMAL}:1 / 大字 ${thresholds.CONTRAST_AA_LARGE}:1`,
+      )
+    }
+    for (const row of visual.faces) {
+      if (row.measured !== true) {
+        lines.push(`- \`${row.face}\` ${row.label === '' ? '' : `${row.label} · `}没采到实测值（这一面当时没量）`)
+        continue
+      }
+      const target = row.smallestTarget
+      const contrast = row.lowestContrast
+      lines.push(
+        `- \`${row.face}\` ${row.label === '' ? '' : `${row.label} · `}`
+          + `最小点击目标 ${target === null ? '无' : `${target.width}×${target.height}`}`
+          + ` · 最低对比度 ${contrast === null ? '无' : `${contrast.ratio}:1（${contrast.fontSize}px「${contrast.text}」）`}`
+          + ` · 同屏主操作最多 ${row.primaryActionsMax ?? '无'} 个`
+          + ` · 文字元素 ${row.bodyTexts} 个`,
+      )
     }
   }
 

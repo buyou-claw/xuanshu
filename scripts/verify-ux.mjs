@@ -29,6 +29,7 @@ import { CriteriaFrozenError, guardCriteria } from './ux/freeze.mjs'
 import { run as judgeRun } from './ux/judge.mjs'
 import { CRITERIA_FILE, projectCriteria, readNormalizedText } from './ux/project.mjs'
 import { buildReport, readPreviousReport, renderMarkdown } from './ux/report.mjs'
+import { visualMetricsOf } from './ux/visual-metrics.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const DEFAULT_REPO_ROOT = resolve(HERE, '..')
@@ -166,12 +167,23 @@ export async function runVerifyUx(options = {}) {
 
   // ④ 判定（唯一判定点）→ ⑤ 报告（与上一次同一落点比较）。
   const judged = judgeRun({ criteria, evidence, faces })
+  // 视觉档实测值（#56）：从证据里收「每面最小点击目标 / 最低对比度」。它不是判据（不产生通过与否），
+  // 但报告要能给得出具体的数 —— 否则「32px 太小」这种结论只能靠嘴说。
+  const visualMetrics = visualMetricsOf({ evidence, faces })
   const outRoot = resolveOutRoot({ repoRoot, outDir: options.outDir })
   // 读上一次报告**只有这一处**（report.mjs 是唯一读点）。坏报告不毁这一轮，但要留一句说明：
   // 「比不了」和「没变化」在人读报告里是两件事。
   const previousRead = readPreviousReport(outRoot)
   if (previousRead.note !== '') collection.notes.push(previousRead.note)
-  const report = buildReport({ criteria, faces, verdicts: judged.verdicts, previous: previousRead.previous, generatedAt, collection })
+  const report = buildReport({
+    criteria,
+    faces,
+    verdicts: judged.verdicts,
+    previous: previousRead.previous,
+    generatedAt,
+    collection,
+    visualMetrics,
+  })
   const markdown = renderMarkdown(report)
 
   const paths = {}
@@ -202,6 +214,20 @@ function printSummary({ report, paths, outDir }) {
     return accumulator
   }, {})
   console.log(`[verify:ux] 判定：${Object.entries(counts).map(([status, count]) => `${status} ${count}`).join(' / ')}`)
+  // 视觉档实测（#56）：报告要能一句话回答「最小的点击目标 / 最低的对比度」。没有浏览器证据时如实说没有。
+  const visual = report.visualMetrics ?? {}
+  if (Array.isArray(visual.faces) && visual.faces.length > 0) {
+    const smallest = visual.totals?.smallestTarget
+    const lowest = visual.totals?.lowestContrast
+    console.log(
+      '[verify:ux] 视觉档实测：'
+        + `最小点击目标 ${smallest === null || smallest === undefined ? '无' : `${smallest.width}×${smallest.height}（${smallest.face}）`}`
+        + ` · 最低对比度 ${lowest === null || lowest === undefined ? '无' : `${lowest.ratio}:1（${lowest.face}）`}`
+        + ` · 同屏主操作最多 ${visual.totals?.primaryActionsMax?.value ?? '无'} 个`,
+    )
+  } else {
+    console.log('[verify:ux] 视觉档实测：没有浏览器证据（--browser 才有视觉档数字；未采到 ≠ 达标）')
+  }
   if (report.diff.comparable) {
     console.log(`[verify:ux] 较上次：回退 ${report.diff.regressions.length} · 新增 ${report.diff.added.length} · 已修 ${report.diff.fixed.length} · 消失 ${report.diff.disappeared.length}`)
   } else {

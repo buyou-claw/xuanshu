@@ -27,7 +27,16 @@
         "file": "docs/specs/003-ux-quality-line.md",
         "anchor": "点击目标 ≥44×44"
       },
-      "ruleCount": 1
+      "ruleCount": 2
+    },
+    {
+      "id": "C",
+      "title": "对比度与可读性",
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "视觉档位（克制留白）"
+      },
+      "ruleCount": 3
     },
     {
       "id": "X",
@@ -177,6 +186,74 @@
       "tombstone": false
     },
     {
+      "id": "D-002",
+      "family": "D",
+      "statement": "任一时刻一屏可见的主操作（`.xs-btn--primary`）不超过 1 个（留白档：一屏至多一个主操作；同一屏出现并列主操作即违反，同一屏在两个状态里各有一个不算并列）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "单屏主操作 ≤1"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "C-001",
+      "family": "C",
+      "statement": "每个渲染出来的正文级文字元素（跳过 `aria-hidden` 与控件标签）其计算字号 ≥ 16px（留白档下限；设计稿 body 档 14px 与 `.8rem` 辅助字都低于它）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "正文 ≥16px"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "C-002",
+      "family": "C",
+      "statement": "每个渲染出来的正文级文字元素其计算行高与字号之比 ≥ 1.5（`line-height: normal` 没有给出比值，按低于下限算）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "行高 ≥1.5"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "C-003",
+      "family": "C",
+      "statement": "每个渲染出来的正文级文字元素与其有效背景的对比度达 WCAG AA：正文（字号 < 18.66px 或字重 < 700）≥ 4.5:1，大字（字号 ≥ 24px，或 ≥ 18.66px 且字重 ≥ 700）≥ 3:1",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "对比度达 WCAG AA"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
       "id": "X-001",
       "family": "X",
       "statement": "同一状态在所有界面面只用一套说法：空态只许「还没有…」「没有…」，加载态只许「正在…」「…中」，错误态只许「失败」「读不到」「打不开」「不可用」——「暂无」「空的」「加载中」「读取中」「请稍候」「出错」「错误」「异常」这类同义替换不许与它们并存；且错误行旁边必须有可执行的下一步（重试 / 换个 / 请在…），只有一句「失败了」不算",
@@ -194,11 +271,15 @@
       "tombstone": false
     }
   ],
-  "version": "d72c33d21928ab0085bc05a098358e8c589d1de75543da2be3452f2afd733b46",
+  "version": "636f87fd2f62e1a952651eee6a1646b444f0fbb956fadafd3958732284229898",
   "ruleFiles": [
     {
+      "file": "docs/design/ui-v1/criteria/rules/C.json",
+      "sha256": "2f501561bf44f113bf1467e41e062972ff2c21222513d85f96fb164fb0eb7373"
+    },
+    {
       "file": "docs/design/ui-v1/criteria/rules/D.json",
-      "sha256": "d1fb484844cb613c2d357f7fccf83b011ae9968852e2fae5e030df0cca76e269"
+      "sha256": "267753b60a7c211b8bbe8572509bb6025d3a9af6b08f252d53180b4415aef4ca"
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/S.json",

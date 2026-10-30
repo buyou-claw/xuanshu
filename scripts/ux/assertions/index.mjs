@@ -6,6 +6,7 @@
  *
  * 仅使用 Node 内置模块。ESM。
  */
+import { C_ASSERTIONS } from './c.mjs'
 import { D_ASSERTIONS } from './d.mjs'
 import { S_ASSERTIONS } from './s.mjs'
 import { T_ASSERTIONS } from './t.mjs'
@@ -15,6 +16,7 @@ import { X_ASSERTIONS } from './x.mjs'
 export const ASSERTIONS = {
   ...T_ASSERTIONS,
   ...D_ASSERTIONS,
+  ...C_ASSERTIONS,
   ...S_ASSERTIONS,
   ...X_ASSERTIONS,
 }
