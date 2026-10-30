@@ -59,7 +59,7 @@ const FREEZE_WRITE = 'node scripts/ux/freeze.mjs --write'
 const REPORT_IGNORE = /^\s*\/?ux-reports\/?\s*$/mu
 
 /** 工具没跑成（退出码 2）。判据红走 `violations`。 */
-export class AuthorityError extends Error {
+class AuthorityError extends Error {
   constructor(message) {
     super(message)
     this.name = 'AuthorityError'

@@ -43,7 +43,7 @@ export class GitRangeError extends Error {
  * @param {{cwd: string}} options
  * @returns {{status: number|null, stdout: string, stderr: string}}
  */
-export function git(args, { cwd }) {
+function git(args, { cwd }) {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true })
   if (result.error !== undefined && result.error !== null) {
     throw new GitRangeError(`git 起不来（${result.error.message}）：先确认 PATH 里有 git`, { args })
@@ -58,7 +58,7 @@ export function git(args, { cwd }) {
  * @param {{cwd: string, what: string}} options
  * @returns {string}
  */
-export function gitText(args, { cwd, what }) {
+function gitText(args, { cwd, what }) {
   const result = git(args, { cwd })
   if (result.status !== 0) {
     throw new GitRangeError(`${what} 失败（git ${args.join(' ')}，exit ${result.status}）：${result.stderr.trim()}`, {
@@ -82,16 +82,6 @@ export function gitText(args, { cwd, what }) {
  */
 export function resolveRepoRoot({ cwd }) {
   return gitText(['rev-parse', '--show-toplevel'], { cwd, what: `把 ${cwd} 解析成 git 仓库根` }).trim()
-}
-
-/**
- * 判断一个 ref 存在（`<ref>^{commit}` 保证它真的指向提交，而不是一个空 tag）。
- *
- * @param {{repoRoot: string, ref: string}} input
- * @returns {boolean}
- */
-export function refExists({ repoRoot, ref }) {
-  return git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: repoRoot }).status === 0
 }
 
 /** 提交信息的可读短名（报告里点名用）。 */

@@ -36,7 +36,7 @@ export const BASELINE_ROOT = 'ux-reports/'
  * 基线目录的机检形状：`ux-reports/<…>/baseline/` 或 `ux-reports/baselines/`。
  * 单复数都收：README 里定的落点是 `ux-reports/baselines/`，但历史约定里也出现过单数。
  */
-export const BASELINE_PATTERN = /^ux-reports\/(?:.*\/)?baselines?\//u
+const BASELINE_PATTERN = /^ux-reports\/(?:.*\/)?baselines?\//u
 
 /** 判据生效区的三处（ADR-0015 第 6 条：生效判据由人改，AI 只能写 proposals/）。 */
 export const EFFECTIVE_CRITERIA = CRITERIA_FILE
@@ -44,7 +44,7 @@ export const EFFECTIVE_FREEZE = FREEZE_FILE
 export const EFFECTIVE_RULES_DIR = `${CRITERIA_RULES_DIR}/`
 
 /** 提案区（AI 可以写；不在生效区内，也不在任何一条检查的拦截范围里）。 */
-export const PROPOSALS_DIR = `${CRITERIA_DIR}/proposals/`
+const PROPOSALS_DIR = `${CRITERIA_DIR}/proposals/`
 
 /**
  * 这个路径是不是客户端源码（修复说明的触发条件）。

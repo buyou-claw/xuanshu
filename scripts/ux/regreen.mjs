@@ -89,7 +89,7 @@ function requireReport(report, label) {
  * @param {{repoRoot: string, input: string|object, label: string}} input
  * @returns {object}
  */
-export function loadReport({ repoRoot, input, label }) {
+function loadReport({ repoRoot, input, label }) {
   if (typeof input !== 'string') return input
   const absolute = isAbsolute(input) ? input : join(repoRoot, input)
   if (!existsSync(absolute)) {
@@ -221,8 +221,11 @@ function parseArgs(argv) {
     if (arg === '--help' || arg === '-h') options.help = true
     else if (arg === '--before') options.before = argv[++index]
     else if (arg === '--after') options.after = argv[++index]
-    else if (arg === '--repo') options.repoRoot = resolve(argv[++index] ?? '.')
-    else throw new RegreenError(`未知参数：${arg}（用法见 --help）`)
+    else if (arg === '--repo') {
+      const value = argv[++index]
+      if (value === undefined || value.startsWith('--')) throw new RegreenError('--repo 缺一个目录')
+      options.repoRoot = resolve(value)
+    } else throw new RegreenError(`未知参数：${arg}（用法见 --help）`)
   }
   return options
 }

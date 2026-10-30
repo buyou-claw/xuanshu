@@ -19,7 +19,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { RegreenError, assertRegreened } from '../../scripts/ux/regreen.mjs'
+import { REGREEN_SCHEMA, RegreenError, assertRegreened } from '../../scripts/ux/regreen.mjs'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..')
 const SCRIPT = join(REPO_ROOT, 'scripts', 'ux', 'regreen.mjs')
@@ -85,7 +85,7 @@ describe('票 10 · 转绿断言：只有 fail → pass 才算修好', () => {
     ])
 
     const result = assertRegreened({ before, after })
-    expect(result.schema).toBe('xuanshu/ux-regreen@1')
+    expect(result.schema).toBe(REGREEN_SCHEMA)
     expect(result.checked).toBe(1)
     expect(result.regreened).toEqual([{ criterionId: 'T-001', face: 'panel:overview' }])
   })

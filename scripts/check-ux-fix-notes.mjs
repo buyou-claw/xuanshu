@@ -42,7 +42,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const DEFAULT_REPO_ROOT = resolve(HERE, '..')
 
 /** 工具没跑成（退出码 2）。判据红走 `violations`，不走异常。 */
-export class FixNotesError extends Error {
+class FixNotesError extends Error {
   constructor(message) {
     super(message)
     this.name = 'FixNotesError'
@@ -142,7 +142,7 @@ export function parseFixNotes(message) {
  * @param {{repoRoot: string, criteriaFile?: string}} input
  * @returns {Set<string>}
  */
-export function loadCriteriaIds({ repoRoot, criteriaFile = CRITERIA_FILE }) {
+function loadCriteriaIds({ repoRoot, criteriaFile = CRITERIA_FILE }) {
   const absolute = isAbsolute(criteriaFile) ? criteriaFile : join(repoRoot, criteriaFile)
   if (!existsSync(absolute)) {
     throw new FixNotesError(
@@ -238,7 +238,7 @@ export function checkFixNotes({ repoRoot, since = DEFAULT_BASE_REF, criteriaIds 
 }
 
 /** 一条违规的人读一行（报告与测试都按这一行认领）。 */
-export function describeViolation(violation) {
+function describeViolation(violation) {
   const who = `${shortSha(violation.sha)} ${violation.subject}`
   if (violation.kind === 'missing-note') {
     const shown = violation.paths.slice(0, 3).join('、')
