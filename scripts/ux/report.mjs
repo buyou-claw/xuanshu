@@ -18,12 +18,17 @@
  * 视觉基线**不进这里**：基线只用于说明「这次有没有意外视觉变化」，不产生通过/未通过结论
  * （spec 003 §18）。所以本文件里没有任何 baseline 输入。
  *
+ * `缺态清单`（#53 · 票 06）：把 S 族（`S-001` 空 / `S-002` 载 / `S-003` 错）的红按**界面面**翻成
+ * 「哪几个面、缺的哪一态」。这一节由 verdicts 现算，不从 findings 推 —— findings 按 `file:line`
+ * 去重，几个面共用同一份源文件时会被压成一行，正是本清单要避免的失真。
+ *
  * 仅使用 Node 内置模块。ESM。
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { buildDiff, diffCounts } from './diff.mjs'
+import { CRITERION_STATE, STATES, STATE_LABEL } from './state-vocabulary.mjs'
 
 /** 报告 schema。报告器与「读报告的下一步」靠它对齐。 */
 export const REPORT_SCHEMA = 'xuanshu/ux-report@1'
@@ -145,6 +150,54 @@ export function readPreviousReport(reportDir) {
   return { previous: parsed, note: '' }
 }
 
+/**
+ * 「缺态清单」：S 族的红按**界面面**翻成「哪几个面、缺的哪一态」。
+ *
+ * 为什么不从 findings 推：findings 按 `file:line` 去重，`sediment-views.tsx` 那种一份源文件被
+ * 三个面共用的情形会被压成一行 —— 而「哪几个面缺态」正是这份清单要回答的问题。
+ *
+ * @param {object[]} verdicts
+ * @param {{id: string, label?: string, kind?: string}[]} faces
+ * @returns {{faces: {face: string, label: string, kind: string, missing: string[], missingLabels: string[]}[], totals: {faces: number, empty: number, loading: number, error: number, applicable: number}}}
+ */
+export function missingStatesOf(verdicts, faces = []) {
+  const labelOf = new Map(faces.map((face) => [face.id, face.label ?? '']))
+  const kindOf = new Map(faces.map((face) => [face.id, face.kind ?? '']))
+  const byFace = new Map()
+  let applicable = 0
+  for (const verdict of verdicts) {
+    const state = CRITERION_STATE[verdict.criterionId]
+    if (state === undefined) continue
+    applicable += 1
+    if (verdict.status !== 'fail') continue
+    const entry = byFace.get(verdict.face) ?? { face: verdict.face, states: [] }
+    entry.states.push(state)
+    byFace.set(verdict.face, entry)
+  }
+  const rows = [...byFace.values()]
+    .map((entry) => {
+      const missing = STATES.filter((state) => entry.states.includes(state))
+      return {
+        face: entry.face,
+        label: labelOf.get(entry.face) ?? '',
+        kind: kindOf.get(entry.face) ?? '',
+        missing,
+        missingLabels: missing.map((state) => STATE_LABEL[state]),
+      }
+    })
+    .sort((left, right) => left.face.localeCompare(right.face))
+  return {
+    faces: rows,
+    totals: {
+      faces: rows.length,
+      empty: rows.filter((row) => row.missing.includes('empty')).length,
+      loading: rows.filter((row) => row.missing.includes('loading')).length,
+      error: rows.filter((row) => row.missing.includes('error')).length,
+      applicable,
+    },
+  }
+}
+
 /** 按面聚合计数（报告里「哪些界面面最脏」一眼可见）。 */
 function faceSummaries(faces, verdicts) {
   const byFace = new Map()
@@ -223,6 +276,7 @@ export function buildReport({ criteria, faces, verdicts, previous = null, genera
       humanOnly: verdicts.filter((verdict) => verdict.status === 'human-only'),
     },
     findings: findingsOf(verdicts),
+    missingStates: missingStatesOf(verdicts, faces),
     verdicts,
   }
   assertRate(report)
@@ -357,6 +411,23 @@ export function renderMarkdown(report) {
     for (const finding of report.findings) {
       const where = finding.line === null ? finding.file : `${finding.file}:${finding.line}`
       lines.push(`- \`${finding.criterionId}\` ${where} · ${finding.detail}`)
+    }
+  }
+
+  // 缺态清单（#53 · 票 06）：人读报告里唯一一处**按面**列的清单。
+  // 它从 `missingStates`（由 verdicts 现算）出，不从 findings 推 —— 理由见 `missingStatesOf()`。
+  const missing = report.missingStates ?? { faces: [], totals: { faces: 0, empty: 0, loading: 0, error: 0, applicable: 0 } }
+  lines.push('')
+  lines.push('## 附：缺态界面面（S 族 · 空 / 载 / 错）')
+  if (missing.faces.length === 0) {
+    lines.push('- 无。')
+  } else {
+    lines.push(
+      `- 合计 **${missing.totals.faces} 个界面面缺态**（S 族分母 ${missing.totals.applicable} 条）：`
+        + `缺空态 ${missing.totals.empty} 面 / 缺加载态 ${missing.totals.loading} 面 / 缺错误态 ${missing.totals.error} 面`,
+    )
+    for (const row of missing.faces) {
+      lines.push(`- \`${row.face}\` ${row.label === '' ? '' : `${row.label} · `}缺：${row.missingLabels.join(' / ')}`)
     }
   }
 

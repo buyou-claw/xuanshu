@@ -136,6 +136,10 @@ export const PANEL_FACE_META = {
       'packages/xuanshu-client/src/client/OverviewIcon.tsx',
       'packages/xuanshu-client/src/client/cards.tsx',
       'packages/xuanshu-client/src/client/style.ts',
+      // #53（票 06）：四卡的空态 / 错误态**文案常量**住在这里（`EMPTY_COPY` / `ERROR_COPY`，
+      // `cards.tsx` 只按 `state === 'empty'` 取用）。文案就是渲染文本，属于「这个面的渲染代码」；
+      // 不列进来，S 族就会把「文案在隔壁文件」误判成「这个面没有空态」。
+      'packages/xuanshu-client/src/client/panel.ts',
     ],
   },
   pus: { label: '谱管理', sources: ['packages/xuanshu-client/src/client/PuPanel.tsx'] },

@@ -10,11 +10,15 @@
  *
  * 仅使用 Node 内置模块。ESM。
  */
+import { S_PROBES } from './s.mjs'
 import { T_PROBES } from './t.mjs'
+import { X_PROBES } from './x.mjs'
 
 /** 全部静态检查器（键 = 判据 id）。 */
 export const STATIC_PROBES = {
   ...T_PROBES,
+  ...S_PROBES,
+  ...X_PROBES,
 }
 
 /**
