@@ -1,0 +1,41 @@
+{
+  "schema": "xuanshu/ux-criteria@1",
+  "label": "ux-v1",
+  "families": [
+    {
+      "id": "T",
+      "title": "token 消费",
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "### 0.4 禁则（写稿人自查）"
+      },
+      "ruleCount": 1
+    }
+  ],
+  "criteria": [
+    {
+      "id": "T-001",
+      "family": "T",
+      "statement": "界面源码的样式里不出现字面色值（hex / rgb() / hsl()），颜色一律从 token 取",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "blocker",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "1. 本文件**不出现**色值（`#rrggbb` / `rgb()` / 颜色名）、px / rem / em 数值。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    }
+  ],
+  "version": "ccf7282ebcf2890ae94e175eb208256ea24b645ae2f291956a69f48a1ad4f3b6",
+  "ruleFiles": [
+    {
+      "file": "docs/design/ui-v1/criteria/rules/T.json",
+      "sha256": "2ded8213c8aec5c9a4c8300998c7b50107b7f8287a93ebd6949371819712e09b"
+    }
+  ]
+}
