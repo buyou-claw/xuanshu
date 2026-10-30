@@ -746,7 +746,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 ```
 # pnpm test:inventory（profile 已装；main 全量复核打磨后，见 §16.8）
-[inventory] 用例 1950 条（基线 1950）/ 文件 177 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2133 条（基线 2133）/ 文件 187 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -756,7 +756,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 524701B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 523629B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（1950 / 177）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（2133 / 187）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -930,7 +930,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 | E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
 
 **验证（数字抄工具输出；本行随当前验证块刷新，原轮次基线见下一行）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
-`[doc-numbers] OK：1950 条用例 / 177 个文件 / 524701 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+`[doc-numbers] OK：2133 条用例 / 187 个文件 / 523629 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
 E1/E3 与两轴复核修复新增 25 条用例后基线 `--update` 为 **1839 条 / 167 文件**，文档数字由新门核对。
 
 **这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
@@ -957,16 +957,16 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 
 ```
 # pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）
-[inventory] 用例 1950 条（基线 1950）/ 文件 177 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2133 条（基线 2133）/ 文件 187 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
-[doc-numbers] OK：1950 条用例 / 177 个文件 / 524701 B
+[doc-numbers] OK：2133 条用例 / 187 个文件 / 523629 B
 
 # pnpm verify:isolation
 结果：8/8 通过，exit 0（6503ms）
 
 # pnpm verify:assembly → exit 1，仅 S1 既有上游缺陷
 [S2] PASS 192 行挂载；xuanshu-host.state=2 xuanshu-client.state=2
-[S3] PASS 客户端产物 524701B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 523629B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL unrecognized Loader tree carrier（同 §16.3）
@@ -1019,7 +1019,7 @@ body: 10 个面板全部渲染（总览/问事/谱/藏/底稿/工作流/填八�
 console: 无 boot 失败、无 pageerror
 # node ./node_modules/vitest/vitest.mjs run tests/assembly tests/shell
 Tests  2 failed | 771 passed (773)   # 仅 S1 及其连带（既有已知红）
-# tsc --noEmit exit 0；build-client --check in sync 524701 B；check-doc-numbers OK
+# tsc --noEmit exit 0；build-client --check in sync 523629 B；check-doc-numbers OK
 ```
 
 **测试侧的配套**：`tests/assembly/bestof-registry.test.mjs` 的两个假 ctx 补了 `get(name)`
@@ -1120,9 +1120,10 @@ spec 003 与票 01 写的「10 面板 + 18 寄生 = 30 面」是把 `4+2+2+3+1+3
 2 设置项 / 3 输入框 dock / 1 回合尾）+ 3 个命令 = 25 面**。分母按真值算；`faceManifest()` 对
 「新增了注册面却没登记 label/sources」直接抛错，所以覆盖面不会因为没人记得而静默缩水。
 
-### 17.3 判据集 v1（9 条 / 4 族）
+### 17.3 判据集 v1（13 条 / 5 族）
 
-`T-001..004`（token 消费）· `D-001`（点击目标 ≥44×44，browser）· `S-001..003`（空/载/错，static）· `X-001`（文案一致性）。
+`T-001..004`（token 消费）· `D-001..002`（点击目标 ≥44×44 / 一屏至多一个主操作，browser）·
+`C-001..003`（正文 ≥16 / 行高 ≥1.5 / 对比度 AA，browser）· `S-001..003`（空/载/错，static）· `X-001`（文案一致性）。
 阈值与出处：`rules/*.json` 每条都带 `source.anchor`，投影器校验锚必须真的存在于设计稿（或 spec 003 §视觉档位）。
 
 ### 17.4 这一轮的数字（抄工具输出）
@@ -1138,6 +1139,15 @@ spec 003 与票 01 写的「10 面板 + 18 寄生 = 30 面」是把 `4+2+2+3+1+3
   字面断点 9 → 0（`breakpoints.ts`）、非 token 颜色声明 8 → 0。
 - 剩下的 26 条红属族 S/X（缺空态/加载态/错误态、文案不统一）：**这是实测结论，不是回归**。
 - `D-001` 的 22 条在静态半边是 `not-collected`（未采到 ≠ 通过）；`--browser` 才会采到。
+
+**视觉档实测（`--browser`，真 Edge，剧本 1 只走到 overview + pus 两个面，13 条判据 / 分母 310）**：
+最小点击目标 **70×21**、最低对比度 **3.42:1**、同屏主操作最多 **2 个**。`C-002`（行高 ≥1.5）是唯一
+**两面全红**的：玄枢这些面板都没设 `line-height`（computed = `normal` ≈ 1.2），设计稿 type-scale 写的
+body 行高 1.6 没落地 —— 这是真缺陷，修法是在 `styles.ts` 统一给正文行高（下一张修复票）。
+
+**一处需要人裁决的自相矛盾**：`assets/tokens/type-scale.md` 的 body 是 14px、caption 12px，而 spec 003 §21
+要求正文 ≥16px。`C-001` 的红有一半来自这条冲突。本 spec 不动设计稿取值（Out of Scope），所以按现状
+如实判红；要么改 type-scale（新 ADR），要么改 spec 的留白档阈值 —— 两条都不该由巡检自己决定。
 
 ### 17.5 继承红与顺带修好
 
