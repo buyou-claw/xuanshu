@@ -170,7 +170,11 @@ describe('票13 · 底稿三方法（契约 §1）', () => {
       summary: '把底稿改成两段这件事聊清楚了。',
       now: new Date('2026-10-18T00:00:00.000Z'),
     })
-    await methods['digao.refresh']({})
+    // ③ 再扫一次。**必须注入 now**：`digao.refresh` 这条 RPC 没有 now 接缝，走它就等于用**墙上时钟**
+    //    写 lastActiveAt —— 于是「10-18 那条更晚」这个前提在 2026-10-18 之后必然失效（实测 2026-10-31 起
+    //    永久翻序）。这条用例验的是「按 lastActiveAt 倒序」，不是「按当前时间排序」，所以第二次也注入同一个
+    //    扫描时刻，让它与第一次同口径。
+    await refreshDigao({ ctx, dataDir: sandbox.dataDir, now: new Date('2026-10-15T00:00:00.000Z') })
 
     const markdown = sandbox.read('digao.md')
     const past = markdown.slice(markdown.indexOf('## 曾经做过什么'))

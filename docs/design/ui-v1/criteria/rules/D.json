@@ -17,6 +17,18 @@
         "file": "docs/specs/003-ux-quality-line.md",
         "anchor": "点击目标 ≥44×44"
       }
+    },
+    {
+      "id": "D-002",
+      "statement": "任一时刻一屏可见的主操作（`.xs-btn--primary`）不超过 1 个（留白档：一屏至多一个主操作；同一屏出现并列主操作即违反，同一屏在两个状态里各有一个不算并列）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": { "kind": "rendered" },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "单屏主操作 ≤1"
+      }
     }
   ]
 }

@@ -746,7 +746,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 ```
 # pnpm test:inventory（profile 已装；main 全量复核打磨后，见 §16.8）
-[inventory] 用例 1950 条（基线 1950）/ 文件 177 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2133 条（基线 2133）/ 文件 187 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -756,7 +756,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 524701B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 523629B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（1950 / 177）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（2133 / 187）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -930,7 +930,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 | E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
 
 **验证（数字抄工具输出；本行随当前验证块刷新，原轮次基线见下一行）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
-`[doc-numbers] OK：1950 条用例 / 177 个文件 / 524701 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+`[doc-numbers] OK：2133 条用例 / 187 个文件 / 523629 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
 E1/E3 与两轴复核修复新增 25 条用例后基线 `--update` 为 **1839 条 / 167 文件**，文档数字由新门核对。
 
 **这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
@@ -957,16 +957,16 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 
 ```
 # pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）
-[inventory] 用例 1950 条（基线 1950）/ 文件 177 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2133 条（基线 2133）/ 文件 187 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
-[doc-numbers] OK：1950 条用例 / 177 个文件 / 524701 B
+[doc-numbers] OK：2133 条用例 / 187 个文件 / 523629 B
 
 # pnpm verify:isolation
 结果：8/8 通过，exit 0（6503ms）
 
 # pnpm verify:assembly → exit 1，仅 S1 既有上游缺陷
 [S2] PASS 192 行挂载；xuanshu-host.state=2 xuanshu-client.state=2
-[S3] PASS 客户端产物 524701B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 523629B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL unrecognized Loader tree carrier（同 §16.3）
@@ -1019,7 +1019,7 @@ body: 10 个面板全部渲染（总览/问事/谱/藏/底稿/工作流/填八�
 console: 无 boot 失败、无 pageerror
 # node ./node_modules/vitest/vitest.mjs run tests/assembly tests/shell
 Tests  2 failed | 771 passed (773)   # 仅 S1 及其连带（既有已知红）
-# tsc --noEmit exit 0；build-client --check in sync 524701 B；check-doc-numbers OK
+# tsc --noEmit exit 0；build-client --check in sync 523629 B；check-doc-numbers OK
 ```
 
 **测试侧的配套**：`tests/assembly/bestof-registry.test.mjs` 的两个假 ctx 补了 `get(name)`
@@ -1091,7 +1091,81 @@ ai: { mode: 'ok', text: '今天把范围收小，只推进已经定下的小事�
 产物 <dataDir>/rikke/2026-10-18.json 的 ai.mode = 'ok'
 ```
 
-**同一条修法顺带修好的**：底稿的 LLM 摘要、事记摘要、合参/问事的 LLM 路径（同一个 `getService(ctx,'llm')` 口径）。
+**同一条修法顺带修好的**：底稿的 LLM 摘要、事记摘要、合参/问事的 LLM 调用路径（同一个 `getService(ctx,'llm')` 口径）。
+
+---
+
+## 17. Spec 003 体验质量线（判据 / 巡检 / 兑现率）
+
+> 时间：2026-10-31｜工单：#48–#60（13 张）｜ADR：[`adr/0015-ux-quality-line-machine-criteria.md`](adr/0015-ux-quality-line-machine-criteria.md)
+> 真值入口：`pnpm verify:ux`（只报告、不挡门）；判据集在 `docs/design/ui-v1/criteria/`
+
+### 17.1 建成了什么
+
+| 模块 | 位置 | 一句话 |
+|---|---|---|
+| 界面面清单 | `tests/assembly/lib/panel-surface.mjs::faceManifest()` | 分母的唯一来源（注册面派生，不另抄） |
+| 判据投影器 | `scripts/ux/project.mjs` | `rules/*.json` → `criteria.json`（字节确定，`version` = sha256） |
+| 冻结守卫 | `scripts/ux/freeze.mjs` | 判据被改一个字节 → 拒绝运行、退出码 3、不出报告 |
+| 静态采集器 | `scripts/ux/collect/static.mjs` + `probes/*` | 读源码收事实，不判定 |
+| 浏览器采集器 | `scripts/ux/collect/browser.mjs` + `browser-scripts.mjs` | 起隔离实例跑任务剧本，只收证据 |
+| 判定引擎 | `scripts/ux/judge.mjs` + `assertions/*` | **唯一判定点**，纯函数 |
+| 报告器 | `scripts/ux/report.mjs` + `diff.mjs` | 兑现率 / 三分类 diff / 缺态清单 / 人读 + 机读 |
+| 修复护栏 | `scripts/check-ux-fix-notes.mjs` / `check-ux-authority.mjs` / `ux/regreen.mjs` | 修复说明、写入面、转绿断言 |
+
+### 17.2 界面面真值：**25**，不是 30
+
+spec 003 与票 01 写的「10 面板 + 18 寄生 = 30 面」是把 `4+2+2+3+1+3=15` 估成了 18。真实注册面
+（`expectedCells()` + `BESTOF_COMMAND_NAMES`）是：**10 个面板 + 12 个寄生位（4 抽屉 / 2 设置区块 /
+2 设置项 / 3 输入框 dock / 1 回合尾）+ 3 个命令 = 25 面**。分母按真值算；`faceManifest()` 对
+「新增了注册面却没登记 label/sources」直接抛错，所以覆盖面不会因为没人记得而静默缩水。
+
+### 17.3 判据集 v1（13 条 / 5 族）
+
+`T-001..004`（token 消费）· `D-001..002`（点击目标 ≥44×44 / 一屏至多一个主操作，browser）·
+`C-001..003`（正文 ≥16 / 行高 ≥1.5 / 对比度 AA，browser）· `S-001..003`（空/载/错，static）· `X-001`（文案一致性）。
+阈值与出处：`rules/*.json` 每条都带 `source.anchor`，投影器校验锚必须真的存在于设计稿（或 spec 003 §视觉档位）。
+
+### 17.4 这一轮的数字（抄工具输出）
+
+```
+# node scripts/verify-ux.mjs（静态半边）
+兑现率：174/222 = 78.4% · 判据集 ux-v1 · 25 个界面面 × 9 条判据
+判定：pass 174 / fail 26 / not-collected 22（D-001 需要浏览器）
+较上次：回退 0 · 新增 0 · 已修 42 · 消失 0
+```
+
+- 族 T 四条**全绿**（票 11 清偿）：字面色值 15 → 0、注入点 12 → 1（`styles.ts` 单一消费层）、
+  字面断点 9 → 0（`breakpoints.ts`）、非 token 颜色声明 8 → 0。
+- 剩下的 26 条红属族 S/X（缺空态/加载态/错误态、文案不统一）：**这是实测结论，不是回归**。
+- `D-001` 的 22 条在静态半边是 `not-collected`（未采到 ≠ 通过）；`--browser` 才会采到。
+
+**视觉档实测（`--browser`，真 Edge，剧本 1 只走到 overview + pus 两个面，13 条判据 / 分母 310）**：
+最小点击目标 **70×21**、最低对比度 **3.42:1**、同屏主操作最多 **2 个**。`C-002`（行高 ≥1.5）是唯一
+**两面全红**的：玄枢这些面板都没设 `line-height`（computed = `normal` ≈ 1.2），设计稿 type-scale 写的
+body 行高 1.6 没落地 —— 这是真缺陷，修法是在 `styles.ts` 统一给正文行高（下一张修复票）。
+
+**一处需要人裁决的自相矛盾**：`assets/tokens/type-scale.md` 的 body 是 14px、caption 12px，而 spec 003 §21
+要求正文 ≥16px。`C-001` 的红有一半来自这条冲突。本 spec 不动设计稿取值（Out of Scope），所以按现状
+如实判红；要么改 type-scale（新 ADR），要么改 spec 的留白档阈值 —— 两条都不该由巡检自己决定。
+
+### 17.5 继承红与顺带修好
+
+- **修好**：`tests/assembly/**` 里 39 条 + `tests/cang/panel` 1 条 API 用例仍按旧传输层
+  （`ctx.connection.rpc.call`）打桩 —— 上一提交把数据面改成同源 `fetch('/api/xuanshu')` 后它们全红。
+  新增 `tests/assembly/lib/rpc-fetch.mjs` 统一打桩，断言口径零放宽，40 条转绿。
+- **仍红（与本 spec 无关，已登记）**：`tests/digao/service.test.mjs`「事记按 lastActiveAt 倒序」
+  （`8fdaa4b` 起就红，排序断言本身）；`tests/assembly/assembly-contract.test.mjs` 的 S1/CLI 两条（上游 DSH 缺陷，`knownRed`）。
+
+### 17.6 这一轮新踩到的坑（记下来）
+
+1. **`profile/cordis.patch.yml` 会被 DSH 改写**：首跑关掉「预览版说明」时 DSH 往这个**入库件**里追加
+   `welcomeNoticeVersion`。浏览器采集器现在启动前快照、`stop()` 原样写回；手工探针留下的那次改动已 `git checkout` 还原。
+2. **worktree 里跑不了浏览器半边**：`worktree-create` 只链 `packages/*/node_modules`，临时 home 的
+   `profiles/xuanshu` 是 link 到**worktree 的** `profile/`（那份没有 node_modules）。实现者票请只在主仓跑 `--browser`。
+3. **媒体查询吃不了 `var()`**：所以断点只能走 JS 常量 + 模板插值；T-003 的采集口径因此把
+   `${BREAKPOINT_*_PX}px` 判为「来自 token」，不判字面 —— 否则把值搬进常量也照样红，等于逼人留字面值。
+4. **清理带 junction 的临时 home**：先 `cmd /c rmdir <link>` 摘链接，再递归删目录。直接递归删会跟穿到仓库 `profile/`。
 
 
 

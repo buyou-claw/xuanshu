@@ -41,6 +41,16 @@ const STYLE_CREATE = /document\.createElement\(\s*['"]style['"]\s*\)/
 const MEDIA_AT = /@media\b/
 const MEDIA_WIDTH = /\(\s*(min|max)-width\s*:\s*([^()]*?)\s*\)/g
 
+/**
+ * 「这个断点值是不是写死的」判据。
+ *
+ * 媒体查询吃不了 `var()`，所以断点只能以两种形态出现：
+ *   1. 模板插值 `${BREAKPOINT_WIDE_PX}px` —— 值来自 `breakpoints.ts`（它是唯一来源），**不算字面**；
+ *   2. 直接写 `1100px` —— 这就是「字面断点」，T-003 要红。
+ * 这条区分是票 11 收敛断点后才有的：不区分的话，把值搬进常量也照样红，等于逼人留字面值。
+ */
+const INTERPOLATED = /^\$\{[A-Z0-9_]+\}px$/
+
 /** 颜色声明：`color` / `background(-color)` / `border` / `border-<side>` / `border-color` / `box-shadow`。 */
 const DECLARATION = /\b(background(?:-color)?|color|border(?:-(?:top|right|bottom|left))?(?:-color)?|box-shadow)\s*:\s*([^;}]+)/g
 
@@ -194,7 +204,10 @@ function breakpointsOf({ files, read }) {
       if (WHOLE_LINE_COMMENT.test(line)) continue
       if (!MEDIA_AT.test(line)) continue
       for (const match of line.matchAll(MEDIA_WIDTH)) {
-        breakpoints.push({ file, line: lineNumber(index), feature: `${match[1]}-width`, value: match[2].trim() })
+        const value = match[2].trim()
+        // `${BREAKPOINT_WIDE_PX}px` = 值来自 breakpoints.ts，不是字面断点（理由见 INTERPOLATED 注释）
+        if (INTERPOLATED.test(value)) continue
+        breakpoints.push({ file, line: lineNumber(index), feature: `${match[1]}-width`, value })
       }
     }
   }

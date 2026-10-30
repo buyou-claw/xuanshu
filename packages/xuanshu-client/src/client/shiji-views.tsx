@@ -24,6 +24,7 @@ import { useEffect, useState } from 'react';
 import type { PanelNavTarget } from './panel.js';
 import { isConsultSessionId } from './sediment-model.js';
 import type { ShijiApi, ShijiEntry } from './shiji-api.js';
+import { installXuanshuStyles, registerStyleSheet } from './styles.js'
 
 /** 入口条 cell id（`conversation.composer.dock` 是 list 槽，新 id 是**加**不是替换）。 */
 export const SHIJI_ENTRY_ID = 'xuanshu.shiji-entry';
@@ -456,10 +457,7 @@ export function installShijiSettings(ctx: Context, deps: { api: ShijiApi }): voi
  * 与 `sediment-views.tsx` 同款守卫：Node 里执行时安静跳过。
  */
 function installShijiStyle(): void {
-  if (typeof document === 'undefined' || document.getElementById('xs-shiji-style') !== null) return;
-  const style = document.createElement('style');
-  style.id = 'xs-shiji-style';
-  style.textContent = `
+  registerStyleSheet("xuanshu-shiji-style", `
 .xs-shiji__entry{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0}
 .xs-shiji__entry button{font:inherit}
 .xs-shiji__note{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6}
@@ -479,6 +477,6 @@ function installShijiStyle(): void {
 .xs-shiji__row button:disabled{opacity:.5;cursor:not-allowed}
 .xs-shiji__settings input[type="text"]{font:inherit;margin-left:6px;padding:4px 8px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);background:var(--xs-surface-card);color:inherit}
 .xs-shiji__error{color:var(--xs-text-secondary)}
-`;
-  document.head.appendChild(style);
+`);
+  installXuanshuStyles()
 }

@@ -1,13 +1,13 @@
 {
   "schema": "xuanshu/ux-criteria-freeze@1",
-  "version": "d72c33d21928ab0085bc05a098358e8c589d1de75543da2be3452f2afd733b46",
+  "version": "636f87fd2f62e1a952651eee6a1646b444f0fbb956fadafd3958732284229898",
   "criteria": {
     "file": "docs/design/ui-v1/criteria/criteria.json",
-    "sha256": "659304a4eb19fc5e6b7548d16a8843cbb6a071bd37ec240c8e96d07f310ed298",
-    "criteriaCount": 9,
-    "familyCount": 4
+    "sha256": "ab725d7d29879041cdfb82f1751eb042913ada42822638cba35b8202c0d32329",
+    "criteriaCount": 13,
+    "familyCount": 5
   },
-  "frozenAt": "2026-10-30T16:52:46.971Z",
+  "frozenAt": "2026-10-30T17:33:03.422Z",
   "approvedBy": "human",
-  "note": "T+D+S+X 落地后重签"
+  "note": "D/C 视觉档落地后重签"
 }

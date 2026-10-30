@@ -1,0 +1,46 @@
+{
+  "family": "C",
+  "title": "对比度与可读性",
+  "source": {
+    "file": "docs/specs/003-ux-quality-line.md",
+    "anchor": "视觉档位（克制留白）"
+  },
+  "rules": [
+    {
+      "id": "C-001",
+      "statement": "每个渲染出来的正文级文字元素（跳过 `aria-hidden` 与控件标签）其计算字号 ≥ 16px（留白档下限；设计稿 body 档 14px 与 `.8rem` 辅助字都低于它）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": { "kind": "rendered" },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "正文 ≥16px"
+      }
+    },
+    {
+      "id": "C-002",
+      "statement": "每个渲染出来的正文级文字元素其计算行高与字号之比 ≥ 1.5（`line-height: normal` 没有给出比值，按低于下限算）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": { "kind": "rendered" },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "行高 ≥1.5"
+      }
+    },
+    {
+      "id": "C-003",
+      "statement": "每个渲染出来的正文级文字元素与其有效背景的对比度达 WCAG AA：正文（字号 < 18.66px 或字重 < 700）≥ 4.5:1，大字（字号 ≥ 24px，或 ≥ 18.66px 且字重 ≥ 700）≥ 3:1",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": { "kind": "rendered" },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "对比度达 WCAG AA"
+      }
+    }
+  ]
+}

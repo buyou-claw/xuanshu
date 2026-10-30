@@ -33,6 +33,8 @@ import { confirmGate, countWords, diffParagraphs, isConsultSessionId, previewTex
 import { dataDirPath, useHomePaths } from './home-paths.js';
 import type { HomePathsWatch } from './home-paths.js';
 import type { PanelNavTarget } from './panel.js';
+import { installXuanshuStyles, registerStyleSheet } from './styles.js'
+import { BREAKPOINT_WIDE_PX } from './breakpoints.js'
 
 /** 入口条 cell id（`conversation.composer.dock` 是 list 槽，新 id 是**加**不是替换）。 */
 export const SEDIMENT_ENTRY_ID = 'xuanshu.sediment-entry';
@@ -510,10 +512,7 @@ export function installSediment(ctx: Context, deps: SedimentInstallDeps): void {
  * 与 `consult.tsx` 同款守卫：Node 里执行时安静跳过。
  */
 function installSedimentStyle(): void {
-  if (typeof document === 'undefined' || document.getElementById('xs-sediment-style') !== null) return;
-  const style = document.createElement('style');
-  style.id = 'xs-sediment-style';
-  style.textContent = `
+  registerStyleSheet("xuanshu-sediment-style", `
 .xs-sediment__entry{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0}
 .xs-sediment__field{display:flex;gap:6px;align-items:center;font-size:.85rem}
 .xs-sediment__entry select,.xs-sediment__entry button{font:inherit}
@@ -529,7 +528,7 @@ function installSedimentStyle(): void {
 .xs-sediment__actions button{font:inherit;padding:6px 12px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
 .xs-sediment__actions button:disabled{opacity:.5;cursor:not-allowed}
 .xs-btn--primary{background:var(--xs-constraint-human-gate-bg,var(--xs-accent));border-color:var(--xs-accent);color:var(--xs-constraint-human-gate-fg,var(--xs-accent-fg))}
-.xs-sediment__overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:16px;z-index:30}
+.xs-sediment__overlay{position:fixed;inset:0;background:var(--xs-surface-overlay-mask);display:flex;align-items:center;justify-content:center;padding:16px;z-index:30}
 .xs-sediment__dialog{background:var(--xs-surface-card);color:var(--xs-text-body);border-radius:var(--xs-radius-card);max-width:var(--xs-size-modal-width,720px);max-height:90vh;overflow:auto;padding:var(--xs-space-card-pad);box-sizing:border-box}
 .xs-sediment__dialog h2{font-size:1.05rem;font-weight:600;margin:0 0 8px}
 .xs-sediment__part{border-top:1px solid var(--xs-edge-card);padding-top:8px;margin-top:8px}
@@ -544,7 +543,7 @@ function installSedimentStyle(): void {
 .xs-sediment__error{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:8px;margin:6px 0}
 .xs-sediment__gate-reason{font-size:.8rem;color:var(--xs-text-secondary);margin:6px 0 0}
 .xs-sediment__notice{position:fixed;right:16px;bottom:16px;z-index:40;background:var(--xs-surface-card);color:var(--xs-text-body);border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:12px}
-@media(max-width:1100px){.xs-sediment__dialog{max-width:none;width:100%;height:100%}}
-`;
-  document.head.appendChild(style);
+@media(max-width: ${BREAKPOINT_WIDE_PX}px){.xs-sediment__dialog{max-width:none;width:100%;height:100%}}
+`);
+  installXuanshuStyles()
 }

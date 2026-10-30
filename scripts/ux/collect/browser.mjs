@@ -225,13 +225,54 @@ export async function startIsolatedInstance({ repoRoot, log = () => {} }) {
 /** 让页面等一会儿：DSH 的客户端插件是异步装的，等 DOM 稳定比等某个具体选择器稳。 */
 const settle = (page, ms = 1200) => page.waitForTimeout(ms)
 
+/** 空的事实包（一个面被量过但某个方向一个元素都没有时用它，形状仍然完整）。 */
+function emptySample() {
+  return { targets: [], primaryActions: [], bodyTexts: [] }
+}
+
+/**
+ * 把一次测量并进某个面的事实包。
+ *
+ * 三种事实的合并口径刻意不同，理由都在「同一屏的不同状态」上：
+ *   - `targets`（D-001）取**并集**：这个面出现过的可点目标都要够大，先出现后消失的那个也算数；
+ *   - `primaryActions`（D-002）按**快照**追加、不并集：判据问的是「任一时刻」≤1，
+ *     同一屏先「创建新谱」后「开始转换」是两次快照、各 1 个，不是并列 2 个；
+ *   - `bodyTexts`（C 族）按 `selector + 文本` **去重**：同一句在两帧里重复出现不该让「最小字号」漂。
+ *
+ * @param {Map<string, object>} samples
+ * @param {string} faceId
+ * @param {{targets?: object[], primaryActions?: object|object[], bodyTexts?: object[]}} sample
+ */
+export function mergeSample(samples, faceId, sample) {
+  const current = samples.get(faceId) ?? emptySample()
+  const merged = {
+    targets: [...current.targets, ...(Array.isArray(sample?.targets) ? sample.targets : [])],
+    primaryActions: [
+      ...current.primaryActions,
+      ...(Array.isArray(sample?.primaryActions)
+        ? sample.primaryActions
+        : sample?.primaryActions === undefined || sample?.primaryActions === null ? [] : [sample.primaryActions]),
+    ],
+    bodyTexts: [...current.bodyTexts],
+  }
+  const seen = new Set(merged.bodyTexts.map((text) => `${text.selector}\u0000${text.text}`))
+  for (const text of Array.isArray(sample?.bodyTexts) ? sample.bodyTexts : []) {
+    const key = `${text.selector}\u0000${text.text}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.bodyTexts.push(text)
+  }
+  samples.set(faceId, merged)
+  return merged
+}
+
 /**
  * 跑一条剧本，收集证据。
  *
  * @param {object} input
  * @param {import('playwright').Page} input.page
  * @param {{id: string, faces: string[], criteria: string[], scenarios?: string[], run: Function}} input.script
- * @param {(faceId: string, targets: object[]) => void} input.record
+ * @param {(faceId: string, sample: object) => void} input.record
  * @param {{home: string, port: number, url: string}} input.env 隔离实例的地址与临时 home（剧本 3 要在里面造真文件）
  * @param {ReturnType<typeof createNav>} input.nav 导航族（N）的采样器
  * @param {string} [input.scenario] 失败态变体（见每条剧本的 `scenarios`）
@@ -250,7 +291,12 @@ export async function runScript({ page, script, record, env, nav, scenario, step
     nav,
     env,
     scenario,
-    /** 量当前屏**属于玄枢的**可点目标的可点区域（D/C 族的原始事实）。
+    /**
+     * 量当前屏**属于玄枢的**事实（D 族点击目标 / 主操作 + C 族字号 / 行高 / 颜色）。
+     *
+     * 只收**原始值**：矩形、计算样式里的 `fontSize` / `lineHeight` / `color` / `backgroundColor`。
+     * 比值（行高比、对比度）与阈值比较**不在这里**——那在 `scripts/ux/assertions/{c,d}.mjs`。
+     * 采集器一旦开始判对错，就等于多出第二个判定点（spec 003 §Testing Decisions 第 1 条）。
      *
      * 为什么必须划「属于玄枢」这条线：整页里还有 DSH 自己的侧栏行（36px）、新建会话按钮（38px）……
      * 那些不是玄枢的界面面（spec 003 §Out of Scope：不改 15 屏稿之外的界面）。判据量错对象，
@@ -258,7 +304,7 @@ export async function runScript({ page, script, record, env, nav, scenario, step
      * 玄枢的面板根是 `<main class="xs-…">`，寄生位（抽屉 / dock / 区块）也都带 `xs-` 前缀的类。
      */
     measure: async (faceId) => {
-      const targets = await page.evaluate(() => {
+      const sample = await page.evaluate(() => {
         const visible = (element) => {
           const rect = element.getBoundingClientRect()
           const style = getComputedStyle(element)
@@ -273,25 +319,122 @@ export async function runScript({ page, script, record, env, nav, scenario, step
           }
           return false
         }
-        return [...document.querySelectorAll('button,[role="button"],a[href],input:not([type="hidden"]),select,textarea')]
+        const labelOf = (element, limit = 32) =>
+          (element.getAttribute('aria-label') ?? element.textContent ?? element.getAttribute('placeholder') ?? '')
+            .trim()
+            .replace(/\s+/g, ' ')
+            .slice(0, limit)
+        const describe = (element) => {
+          // 稳定又短的定位串：`tag.xs-类:nth-of-type(n)`，最多三层（够认出是哪一句，不刷屏）。
+          const parts = []
+          let node = element
+          for (let depth = 0; depth < 3 && node !== null && node !== document.body; depth += 1) {
+            const className = typeof node.className === 'string' ? node.className : ''
+            const token = /(^|\s)(xs-[^\s]+)/.exec(className)?.[2] ?? ''
+            const tag = node.tagName.toLowerCase()
+            let index = ''
+            if (node.parentElement !== null) {
+              const sameTag = [...node.parentElement.children].filter((child) => child.tagName === node.tagName)
+              if (sameTag.length > 1) index = `:nth-of-type(${sameTag.indexOf(node) + 1})`
+            }
+            parts.unshift(`${tag}${token === '' ? '' : `.${token}`}${index}`)
+            node = node.parentElement
+          }
+          return parts.join(' > ')
+        }
+
+        // ① 可点目标（D-001，票 07 的口径，不改语义）
+        const targets = [...document.querySelectorAll('button,[role="button"],a[href],input:not([type="hidden"]),select,textarea')]
           .filter((element) => visible(element) && !element.hasAttribute('disabled') && ownedByXuanshu(element))
           .map((element) => {
             const rect = element.getBoundingClientRect()
-            const label = (element.getAttribute('aria-label') ?? element.textContent ?? element.getAttribute('placeholder') ?? '')
-              .trim()
-              .replace(/\s+/g, ' ')
-              .slice(0, 32)
             return {
               tag: element.tagName.toLowerCase(),
-              label,
+              label: labelOf(element),
               width: Math.round(rect.width),
               height: Math.round(rect.height),
             }
           })
+
+        // ② 主操作（D-002）：这一次测量 = 一帧快照，数量与文本一起记（判定按快照算，不按并集算）
+        const primaryButtons = [...document.querySelectorAll('.xs-btn--primary')]
+          .filter((element) => visible(element) && ownedByXuanshu(element))
+          .map((element) => ({ tag: element.tagName.toLowerCase(), label: labelOf(element) }))
+        const primaryActions = { count: primaryButtons.length, buttons: primaryButtons }
+
+        // ③ 正文级文字（C-001..003）：直接持有文本节点的元素才算「一句文字」，避免祖先重复计入
+        const parseColor = (css) => {
+          const match = /^rgba?\(([^)]+)\)$/.exec((css ?? '').trim())
+          if (match === null) return null
+          const parts = match[1].split(',').map((part) => Number.parseFloat(part.trim()))
+          if (parts.length < 3 || parts.some((part) => Number.isNaN(part))) return null
+          return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 }
+        }
+        /** 有效背景：从自身向上叠半透明层，直到遇到不透明层；一层都没有就按画布白底（HTML 默认）。 */
+        const effectiveBackground = (element) => {
+          const layers = []
+          let node = element
+          while (node !== null) {
+            const parsed = parseColor(getComputedStyle(node).backgroundColor)
+            if (parsed !== null && parsed.a > 0) {
+              layers.push(parsed)
+              if (parsed.a >= 0.999) break
+            }
+            node = node.parentElement
+          }
+          let base = { r: 255, g: 255, b: 255 }
+          if (layers.length > 0 && layers[layers.length - 1].a >= 0.999) base = layers.pop()
+          let merged = base
+          for (let index = layers.length - 1; index >= 0; index -= 1) {
+            const layer = layers[index]
+            merged = {
+              r: layer.r * layer.a + merged.r * (1 - layer.a),
+              g: layer.g * layer.a + merged.g * (1 - layer.a),
+              b: layer.b * layer.a + merged.b * (1 - layer.a),
+            }
+          }
+          return `rgb(${Math.round(merged.r)}, ${Math.round(merged.g)}, ${Math.round(merged.b)})`
+        }
+
+        const CONTROL_SELECTOR = 'button,input,select,textarea,option,[role="button"],[role="tab"],[role="menuitem"]'
+        const bodyTexts = []
+        for (const element of document.querySelectorAll('body *')) {
+          if (bodyTexts.length >= 400) break
+          if (element.closest('[aria-hidden="true"]') !== null) continue // 跳过 aria-hidden（含祖先）
+          if (element.closest(CONTROL_SELECTOR) !== null) continue // 控件标签不是「正文」
+          if (element.closest('script,style,noscript,template,svg,canvas,img,video') !== null) continue
+          const ownText = [...element.childNodes]
+            .filter((node) => node.nodeType === 3)
+            .map((node) => node.textContent ?? '')
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+          if (ownText === '') continue
+          if (!/[A-Za-z0-9\u3400-\u9fff]/.test(ownText)) continue // 纯标点 / 分隔符不算一句正文
+          if (!visible(element)) continue
+          if (!ownedByXuanshu(element)) continue
+          const style = getComputedStyle(element)
+          const fontSize = Number.parseFloat(style.fontSize)
+          if (!(fontSize > 0)) continue
+          const lineHeight = style.lineHeight === 'normal' ? 'normal' : Number.parseFloat(style.lineHeight)
+          bodyTexts.push({
+            selector: describe(element),
+            tag: element.tagName.toLowerCase(),
+            text: ownText.slice(0, 48),
+            fontSize: Math.round(fontSize * 100) / 100,
+            lineHeight: typeof lineHeight === 'number' ? Math.round(lineHeight * 100) / 100 : lineHeight,
+            fontWeight: Number.parseInt(style.fontWeight, 10) || 400,
+            color: style.color,
+            backgroundColor: effectiveBackground(element),
+          })
+        }
+
+        return { targets, primaryActions, bodyTexts }
       })
-      if (Array.isArray(faceId)) for (const id of faceId) record(id, targets)
-      else record(faceId, targets)
-      return targets
+
+      if (Array.isArray(faceId)) for (const id of faceId) record(id, sample)
+      else record(faceId, sample)
+      return sample
     },
   })
   return { steps, outcome: result?.outcome ?? 'unknown' }
@@ -332,7 +475,7 @@ export async function collectBrowser({ repoRoot, criteria, faces, scriptIds, log
 
   let browser
   let instance
-  const samples = new Map() // faceId → targets[]
+  const samples = new Map() // faceId → {targets, primaryActions, bodyTexts}（`mergeSample()` 合并同一面的多次测量）
   const navStore = createNavStore()
   /** 跑到一半炸掉时，已经跑过的剧本步骤也要带出去（失败态的证据就在这里）。 */
   const partialSteps = []
@@ -361,7 +504,7 @@ export async function collectBrowser({ repoRoot, criteria, faces, scriptIds, log
         env,
         nav,
         steps: record.steps,
-        record: (faceId, targets) => { samples.set(faceId, [...(samples.get(faceId) ?? []), ...targets]) },
+        record: (faceId, sample) => mergeSample(samples, faceId, sample),
       })
       record.outcome = run.outcome
       log(`剧本 ${script.id}${scenario === 'clean' || scenario === 'normal' ? '' : `（${scenario}）`}：${run.outcome}（${run.steps.length} 步）`)
@@ -375,7 +518,7 @@ export async function collectBrowser({ repoRoot, criteria, faces, scriptIds, log
         // 没有这一面的观察 = 不产证据 = 判定为「未采到」（空 facts 会被谓词判成没问题，那是最危险的假绿）。
         const facts = NAV_CRITERIA.includes(criterion.id)
           ? navFactsFor(criterion.id, face.id, navStore)
-          : (samples.has(face.id) ? { targets: samples.get(face.id) } : null)
+          : (samples.has(face.id) ? samples.get(face.id) : null)
         if (facts === null) continue
         evidence.push({
           criterionId: criterion.id,

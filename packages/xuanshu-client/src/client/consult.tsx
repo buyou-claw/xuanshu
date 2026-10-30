@@ -33,6 +33,8 @@ import type { PanelNavTarget } from './panel.js';
 import { useHomePaths } from './home-paths.js';
 import type { HomePathsWatch } from './home-paths.js';
 import type { RpcContext } from './rpc.js';
+import { installXuanshuStyles, registerStyleSheet } from './styles.js'
+import { BREAKPOINT_WIDE_PX } from './breakpoints.js'
 
 /** 取数三态（门厅的勾选区与列表各自持有，互不拖累）。 */
 type Loadable<T> = { kind: 'loading' } | { kind: 'ready'; value: T } | { kind: 'error'; message: string };
@@ -420,10 +422,7 @@ export function installConsult(ctx: Context & RpcContext, deps: ConsultInstallDe
  * 与 `cang-style.ts` 同款守卫：Node 里执行时安静跳过，只有碰 DOM 的那一步被挡掉。
  */
 function installConsultStyle(): void {
-  if (typeof document === 'undefined' || document.getElementById('xs-consult-style') !== null) return;
-  const style = document.createElement('style');
-  style.id = 'xs-consult-style';
-  style.textContent = `
+  registerStyleSheet("xuanshu-consult-style", `
 .xs-consult{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
 .xs-consult h1,.xs-consult h3,.xs-consult h4{font-weight:600}.xs-consult h1{font-size:1.15rem}.xs-consult h3{font-size:.98rem;margin:16px 0 6px}.xs-consult h4{font-size:.85rem;margin:12px 0 4px;color:var(--xs-text-secondary)}
 .xs-consult__head,.xs-consult__toolbar,.xs-consult__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -462,7 +461,7 @@ function installConsultStyle(): void {
 .xs-consult__message>.xs-consult__badge,.xs-consult__message>.xs-consult__note,.xs-consult__message>.xs-consult__text{grid-column:2}
 .xs-consult__role{color:var(--xs-text-secondary);font-size:.85rem}
 .xs-consult__text{margin:0;line-height:1.7;white-space:pre-wrap}
-@media(max-width:1100px){.xs-consult{padding:16px}.xs-consult__row-hit{flex-direction:column;gap:2px}}
-`;
-  document.head.appendChild(style);
+@media(max-width: ${BREAKPOINT_WIDE_PX}px){.xs-consult{padding:16px}.xs-consult__row-hit{flex-direction:column;gap:2px}}
+`);
+  installXuanshuStyles()
 }
