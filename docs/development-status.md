@@ -746,7 +746,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 ```
 # pnpm test:inventory（profile 已装；main 全量复核打磨后，见 §16.8）
-[inventory] 用例 2133 条（基线 2133）/ 文件 187 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2184 条（基线 2184）/ 文件 190 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -756,7 +756,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 523629B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 523964B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（2133 / 187）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（2184 / 190）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -930,7 +930,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 | E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
 
 **验证（数字抄工具输出；本行随当前验证块刷新，原轮次基线见下一行）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
-`[doc-numbers] OK：2133 条用例 / 187 个文件 / 523629 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+`[doc-numbers] OK：2184 条用例 / 190 个文件 / 523964 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
 E1/E3 与两轴复核修复新增 25 条用例后基线 `--update` 为 **1839 条 / 167 文件**，文档数字由新门核对。
 
 **这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
@@ -957,16 +957,16 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 
 ```
 # pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）
-[inventory] 用例 2133 条（基线 2133）/ 文件 187 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2184 条（基线 2184）/ 文件 190 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
-[doc-numbers] OK：2133 条用例 / 187 个文件 / 523629 B
+[doc-numbers] OK：2184 条用例 / 190 个文件 / 523964 B
 
 # pnpm verify:isolation
 结果：8/8 通过，exit 0（6503ms）
 
 # pnpm verify:assembly → exit 1，仅 S1 既有上游缺陷
 [S2] PASS 192 行挂载；xuanshu-host.state=2 xuanshu-client.state=2
-[S3] PASS 客户端产物 523629B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 523964B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL unrecognized Loader tree carrier（同 §16.3）
@@ -1019,7 +1019,7 @@ body: 10 个面板全部渲染（总览/问事/谱/藏/底稿/工作流/填八�
 console: 无 boot 失败、无 pageerror
 # node ./node_modules/vitest/vitest.mjs run tests/assembly tests/shell
 Tests  2 failed | 771 passed (773)   # 仅 S1 及其连带（既有已知红）
-# tsc --noEmit exit 0；build-client --check in sync 523629 B；check-doc-numbers OK
+# tsc --noEmit exit 0；build-client --check in sync 523964 B；check-doc-numbers OK
 ```
 
 **测试侧的配套**：`tests/assembly/bestof-registry.test.mjs` 的两个假 ctx 补了 `get(name)`
@@ -1120,42 +1120,66 @@ spec 003 与票 01 写的「10 面板 + 18 寄生 = 30 面」是把 `4+2+2+3+1+3
 2 设置项 / 3 输入框 dock / 1 回合尾）+ 3 个命令 = 25 面**。分母按真值算；`faceManifest()` 对
 「新增了注册面却没登记 label/sources」直接抛错，所以覆盖面不会因为没人记得而静默缩水。
 
-### 17.3 判据集 v1（13 条 / 5 族）
+### 17.3 判据集 v1（17 条 / 7 族）
 
-`T-001..004`（token 消费）· `D-001..002`（点击目标 ≥44×44 / 一屏至多一个主操作，browser）·
-`C-001..003`（正文 ≥16 / 行高 ≥1.5 / 对比度 AA，browser）· `S-001..003`（空/载/错，static）· `X-001`（文案一致性）。
+`T-001..004`（token 消费，static）· `D-001..002`（点击目标 ≥44×44 / 一屏至多一个主操作，browser）·
+`C-001..003`（正文 ≥16 / 行高 ≥1.5 / 对比度 AA，browser）· `S-001..003`（空/载/错，static）·
+`N-001..003`（入口唯一 / 返回落点 / 键盘可达，browser）· `X-001`（文案一致性，static）·
+`L-001`（层级与排版，**human-only**，写明「机器判不了的原因」）。
 阈值与出处：`rules/*.json` 每条都带 `source.anchor`，投影器校验锚必须真的存在于设计稿（或 spec 003 §视觉档位）。
 
 ### 17.4 这一轮的数字（抄工具输出）
 
 ```
 # node scripts/verify-ux.mjs（静态半边）
-兑现率：174/222 = 78.4% · 判据集 ux-v1 · 25 个界面面 × 9 条判据
-判定：pass 174 / fail 26 / not-collected 22（D-001 需要浏览器）
-较上次：回退 0 · 新增 0 · 已修 42 · 消失 0
+兑现率：174/376 = 46.3% · 判据集 ux-v1 · 25 个界面面 × 17 条判据
+判定：pass 174 / fail 26 / human-only 22 / not-collected 176
+
+# node scripts/verify-ux.mjs --browser（再起隔离实例跑三条剧本）
+兑现率：195/376 = 51.9%
+判定：pass 195 / fail 42 / human-only 22 / not-collected 139
+视觉档实测：最小点击目标 70×21（panel:overview）· 最低对比度 3.42:1 · 同屏主操作最多 2 个
 ```
 
 - 族 T 四条**全绿**（票 11 清偿）：字面色值 15 → 0、注入点 12 → 1（`styles.ts` 单一消费层）、
   字面断点 9 → 0（`breakpoints.ts`）、非 token 颜色声明 8 → 0。
-- 剩下的 26 条红属族 S/X（缺空态/加载态/错误态、文案不统一）：**这是实测结论，不是回归**。
-- `D-001` 的 22 条在静态半边是 `not-collected`（未采到 ≠ 通过）；`--browser` 才会采到。
+- 静态半边的 26 条红全在族 S/X（缺空态/加载态/错误态、文案不统一）：**实测结论，不是回归**。
+- `--browser` 多出的 16 条红来自族 D/C/N（视觉档与导航），只覆盖剧本走到的面；其余是 `not-collected`
+  （未采到 ≠ 通过）。导航族实测：`N-001` 5 面红（`pus` 3 个入口 / `onboarding` 2 / `workflow` 2 /
+  藏抽屉 2 / 挂载抽屉 2），`N-002` 观测 2 面全绿，`N-003` 观测 3 面全绿。
 
-**视觉档实测（`--browser`，真 Edge，剧本 1 只走到 overview + pus 两个面，13 条判据 / 分母 310）**：
-最小点击目标 **70×21**、最低对比度 **3.42:1**、同屏主操作最多 **2 个**。`C-002`（行高 ≥1.5）是唯一
-**两面全红**的：玄枢这些面板都没设 `line-height`（computed = `normal` ≈ 1.2），设计稿 type-scale 写的
-body 行高 1.6 没落地 —— 这是真缺陷，修法是在 `styles.ts` 统一给正文行高（下一张修复票）。
+**视觉档实测（真 Edge，剧本 1 只走到 overview + pus 两个面）**：最小点击目标 **70×21**、最低对比度
+**3.42:1**、同屏主操作最多 **2 个**。`C-002`（行高 ≥1.5）是唯一**两面全红**的：玄枢这些面板都没设
+`line-height`（computed = `normal` ≈ 1.2），设计稿 type-scale 写的 body 行高 1.6 没落地 —— 真缺陷，
+修法是在 `styles.ts` 统一给正文行高（下一张修复票）。
 
 **一处需要人裁决的自相矛盾**：`assets/tokens/type-scale.md` 的 body 是 14px、caption 12px，而 spec 003 §21
 要求正文 ≥16px。`C-001` 的红有一半来自这条冲突。本 spec 不动设计稿取值（Out of Scope），所以按现状
 如实判红；要么改 type-scale（新 ADR），要么改 spec 的留白档阈值 —— 两条都不该由巡检自己决定。
+这也是 `rules/D.json` / `C.json` 的 `source.file` 指向 spec 003 而不是 ui-v1 的原因（**唯一一处**被允许的
+出处例外，等上面那条裁决完再回改设计稿）。
+
+**已知的口径代价（下一张票该改）**：`S-001..003` / `X-001` 的 `appliesTo` 是 `all`，命令面（`/多模型` 等
+3 个）也在里面 —— 命令没有 DOM，三态只能由它打开的浮层承载，于是产生 9 条**不可直接行动**的红。
+本 spec 选择照判（不开天窗），代价是 26 条红里占 9 条。正确的做法是把 S/X 的 scope 改成 `rendered`
+（与 D/C/N 一致），并同步 `family-s` 的断言。
+
+**巡检顺手抓到的两个真问题**（未做成判据，写进报告 notes）：
+1. **挂载账本抽屉点了不开** —— 门厅挂载区与 `shell.overlay` 浮层各持一个 controller
+   （`index.tsx` 造一个给区、`installMounts` 内部又造一个给浮层），所以 N 族在挂载抽屉记「未采到」。
+2. **藏库卡片的次级入口在闭合的 `<details>` 里**：宽屏下 summary 被藏、内容不在 Tab 序与可访问树，
+   指针也常打不中（boundingBox 0×0）—— 两次运行尺寸不稳定，所以没写成 N-003 判据（会变成抖动的红）。
 
 ### 17.5 继承红与顺带修好
 
 - **修好**：`tests/assembly/**` 里 39 条 + `tests/cang/panel` 1 条 API 用例仍按旧传输层
   （`ctx.connection.rpc.call`）打桩 —— 上一提交把数据面改成同源 `fetch('/api/xuanshu')` 后它们全红。
   新增 `tests/assembly/lib/rpc-fetch.mjs` 统一打桩，断言口径零放宽，40 条转绿。
-- **仍红（与本 spec 无关，已登记）**：`tests/digao/service.test.mjs`「事记按 lastActiveAt 倒序」
-  （`8fdaa4b` 起就红，排序断言本身）；`tests/assembly/assembly-contract.test.mjs` 的 S1/CLI 两条（上游 DSH 缺陷，`knownRed`）。
+- **修好**：`tests/digao/service.test.mjs`「事记按 lastActiveAt 倒序」是一条**时间债** ——
+  用例把 2026-10-18 当「更晚」，但第二次刷新走没有 `now` 接缝的 RPC，等于用墙上时钟写 `lastActiveAt`；
+  2026-10-18 之后必然翻序（今天 10-31 稳定复现）。修法：第二次也注入同一个扫描时刻，断言口径未放宽。
+- **仍红（与本 spec 无关，已登记）**：`tests/assembly/assembly-contract.test.mjs` 的 S1/CLI 两条
+  （上游 DSH 缺陷，`knownRed`）。
 
 ### 17.6 这一轮新踩到的坑（记下来）
 

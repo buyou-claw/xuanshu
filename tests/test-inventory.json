@@ -1,6 +1,6 @@
 {
   "note": "用例清单基线：收集到的用例数（含 skip）。--update 刷新；knownRed 之外的失败 = 违规。",
-  "total": 2133,
+  "total": 2184,
   "files": {
     "tests/assembly/ai-readiness-api.test.mjs": 3,
     "tests/assembly/ai-readiness-controller.test.mjs": 8,
@@ -168,7 +168,9 @@
     "tests/traffic/settings.test.mjs": 13,
     "tests/ux/authority.test.mjs": 14,
     "tests/ux/browser-collector.test.mjs": 10,
+    "tests/ux/browser-scripts.test.mjs": 19,
     "tests/ux/family-dc.test.mjs": 33,
+    "tests/ux/family-n.test.mjs": 29,
     "tests/ux/family-s.test.mjs": 30,
     "tests/ux/family-t.test.mjs": 15,
     "tests/ux/fix-notes.test.mjs": 13,
@@ -180,6 +182,7 @@
     "tests/ux/report.test.mjs": 10,
     "tests/ux/single-source-docs.test.mjs": 5,
     "tests/ux/static-collector.test.mjs": 7,
+    "tests/ux/styles-host.test.mjs": 3,
     "tests/ux/verify-ux-command.test.mjs": 7,
     "tests/wansheng/facts.test.mjs": 21,
     "tests/wansheng/generate.test.mjs": 4,
