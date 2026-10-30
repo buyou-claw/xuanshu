@@ -1,3 +1,5 @@
+import { installXuanshuStyles, registerStyleSheet } from './styles.js'
+import { BREAKPOINT_WIDE_PX } from './breakpoints.js'
 /**
  * 票 08 · 两块新面的样式（S3 向导 / S2 命盘详情）。
  *
@@ -8,10 +10,7 @@
  * token 全部走 `tokens.ts` 覆盖过的 `--xs-*`（票 03 取值），不写死配色。
  */
 export function installBaziStyle(): void {
-  if (typeof document === 'undefined' || document.getElementById('xs-bazi-style') !== null) return;
-  const style = document.createElement('style');
-  style.id = 'xs-bazi-style';
-  style.textContent = `
+  registerStyleSheet("xs-bazi-style", `
 .xs-wizard{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
 .xs-wizard h1,.xs-wizard h2,.xs-wizard h3{font-weight:600}.xs-wizard h2{font-size:1.05rem}.xs-wizard h3{font-size:.95rem;margin:18px 0 6px}
 .xs-wizard__steps{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}
@@ -68,7 +67,7 @@ export function installBaziStyle(): void {
 .xs-mingpan__basis,.xs-mingpan__origin{line-height:1.8}
 .xs-mingpan__confirm{margin-top:12px;padding:12px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card)}
 .xs-mingpan__actions,.xs-mingpan__head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-@media(max-width:1100px){.xs-wizard__cols{grid-template-columns:1fr}.xs-wizard{padding:16px}.xs-mingpan{padding:16px}}
-`;
-  document.head.appendChild(style);
+@media(max-width: ${BREAKPOINT_WIDE_PX}px){.xs-wizard__cols{grid-template-columns:1fr}.xs-wizard{padding:16px}.xs-mingpan{padding:16px}}
+`);
+  installXuanshuStyles()
 }

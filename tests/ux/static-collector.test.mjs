@@ -8,6 +8,10 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import { collectStatic } from '../../scripts/ux/collect/static.mjs'
@@ -17,6 +21,14 @@ import { faceManifest } from '../assembly/lib/panel-surface.mjs'
 const REPO_ROOT = join(import.meta.dirname, '..', '..')
 const FACES = faceManifest()
 const CRITERIA = projectCriteria({ repoRoot: REPO_ROOT, faces: FACES }).document
+
+/** 造一个只含一个源文件的「假仓库 + 假界面面」（用来证明探测器仍有牙）。 */
+function plantedRepo(file, text) {
+  const root = mkdtempSync(join(tmpdir(), 'ux-collect-plant-'))
+  mkdirSync(join(root, 'src'), { recursive: true })
+  writeFileSync(join(root, file), text)
+  return { root, face: { id: 'panel:planted', kind: 'panel', label: '植入样本', sources: [file] } }
+}
 
 /** 收集到的全部字面色值出现（跨面展开；票 04 起库里还有 T-002..T-004 的证据，这里只看 T-001）。 */
 function occurrencesOf(evidence) {
@@ -43,39 +55,42 @@ describe('票 02 · 静态半边如实点名字面色值', () => {
     expect(evidence).toHaveLength(staticCriteria.length * FACES.length)
   })
 
-  it('11 处字面 hex（mounts.tsx 9 + WorkflowPanel 2）——spec 里那个数字是 hex 口径', () => {
+  it('清偿后（票 11）：全仓 0 处字面色值；采集器仍然逐个面去采（不是「不采了」）', () => {
     const { evidence } = collectStatic({ repoRoot: REPO_ROOT, criteria: CRITERIA, faces: FACES })
-    const hex = occurrencesOf(evidence).filter((occurrence) => occurrence.literal.startsWith('#'))
-    const files = [...new Set(hex.map((occurrence) => occurrence.file))]
-    expect(hex).toHaveLength(11)
-    expect(files.sort()).toEqual([
-      'packages/xuanshu-client/src/client/mounts.tsx',
-      'packages/xuanshu-client/src/client/workflow/WorkflowPanel.tsx',
-    ])
-    expect(hex.filter((occurrence) => occurrence.file.endsWith('mounts.tsx'))).toHaveLength(9)
-    expect(hex.filter((occurrence) => occurrence.file.endsWith('WorkflowPanel.tsx'))).toHaveLength(2)
+    expect(occurrencesOf(evidence)).toEqual([])
+    // 25 个面每个都有一份 T-001 证据（「0 命中」是采出来的，不是没采）
+    const t001 = evidence.filter((item) => item.criterionId === 'T-001')
+    expect(t001).toHaveLength(FACES.length)
+    expect(t001.every((item) => item.status === 'observed')).toBe(true)
   })
 
-  it('判据写的是「字面色值」而不是「hex」：rgb()/rgba() 同样点名（禁则原文就是这么写的）', () => {
-    const { evidence } = collectStatic({ repoRoot: REPO_ROOT, criteria: CRITERIA, faces: FACES })
-    const functions = occurrencesOf(evidence).filter((occurrence) => !occurrence.literal.startsWith('#'))
-    expect(functions.length).toBeGreaterThan(0)
-    for (const occurrence of functions) expect(occurrence.literal).toMatch(/^(rgb|rgba|hsl|hsla)\($/)
+  it('判据写的是「字面色值」而不是「hex」：rgb()/rgba() 同样要抓（用植入样本证明探测器没退化成只认 hex）', () => {
+    const planted = plantedRepo('src/planted.ts', '.x{background:rgba(0,0,0,.4)}\n')
+    const { evidence } = collectStatic({
+      repoRoot: planted.root,
+      criteria: CRITERIA,
+      faces: [planted.face],
+    })
+    const item = evidence.find((candidate) => candidate.criterionId === 'T-001')
+    expect(item.facts.occurrences).toHaveLength(1)
+    expect(item.facts.occurrences[0].literal).toBe('rgba(')
   })
 
   it('一个文件被多个面共用时，每个面各自留下自己的证据（判定按面算，报告按位置去重）', () => {
-    const { evidence } = collectStatic({ repoRoot: REPO_ROOT, criteria: CRITERIA, faces: FACES })
-    const sedimentFaces = evidence.filter(
-      (item) =>
-        item.criterionId === 'T-001'
-        && item.status === 'observed'
-        && item.facts.occurrences.some((occurrence) => occurrence.file.endsWith('sediment-views.tsx')),
+    // 用植入样本而不是真仓现状：真仓现在已经没有违规了，但「共用文件 → 每面一份证据」这条形状不能丢
+    const shared = plantedRepo('src/shared.ts', '.x{color:#fff}\n')
+    const faces = [
+      { ...shared.face, id: 'slot:shell.overlay#a', kind: 'parasitic', sources: ['src/shared.ts'] },
+      { ...shared.face, id: 'slot:shell.overlay#b', kind: 'parasitic', sources: ['src/shared.ts'] },
+      { ...shared.face, id: 'slot:shell.overlay#c', kind: 'parasitic', sources: ['src/shared.ts'] },
+    ]
+    const { evidence } = collectStatic({ repoRoot: shared.root, criteria: CRITERIA, faces })
+    const withHits = evidence.filter(
+      (item) => item.criterionId === 'T-001' && item.facts.occurrences.length > 0,
     )
-    expect(sedimentFaces.map((item) => item.face).sort()).toEqual([
-      'slot:conversation.chat.turnTail#xuanshu.sediment-draft',
-      'slot:conversation.composer.dock#xuanshu.sediment-entry',
-      'slot:shell.overlay#xuanshu.sediment-notice',
-    ])
+    expect(withHits.map((item) => item.face).sort()).toEqual(['slot:shell.overlay#a', 'slot:shell.overlay#b', 'slot:shell.overlay#c'])
+    // 三份证据指向同一个 file:line —— 报告的「命中位置」去重后只剩一行
+    expect(new Set(withHits.flatMap((item) => item.facts.occurrences.map((occurrence) => `${occurrence.file}:${occurrence.line}`))).size).toBe(1)
   })
 
   it('只读：采集不写源码（跑完前后文件字节不变）', async () => {

@@ -27,11 +27,13 @@
  *                  **票 07 已把该 bundle 接进 `dsh.profile.bundles`**，所以上面那条前置拒绝的真值翻了：
  *                  `webBundle.available === true`，`profile` 门过、放行 spawn（见 tests/isolation/resolve.test.mjs
  *                  的 R2/R17 翻转断言 + 真起冒烟 `tests/isolation/lib/web-boot.mjs`）。
- *                  **已知残留**：本模式构造的命令仍是 `--profile <p> web …`，而 0.2.0-rc.2 的 CLI 根解析器
- *                  会把 `web` 当多余位置参数拒掉（实测 `error: too many arguments. Expected 0 arguments
- *                  but got 1: web.`）；CLI 认的形态是 `dsh web --port <n> --no-open`（`dsh <name>` 捷径
- *                  把 `web` 展开成 `--profile web`）。所以「web 真的能起」由上面那个冒烟文件用后者证明，
- *                  而本模式的命令构造尚未随票 07 调整（写域与门行为分离，改前先由票主裁决）。
+ *                  **命令形态（spec 003 顺带改正的注记）**：本模式构造的是
+ *                  `node <profile>/node_modules/@deepseek-ai/dsh/lib/bin.js --profile <p> --port <n> --no-open`
+ *                  —— **没有 `web` 位置参数**。0.2.0-rc.2 的 CLI 根解析器会把 `--profile <p> web` 里的
+ *                  `web` 当成多余位置参数拒掉（实测 `error: too many arguments. Expected 0 arguments
+ *                  but got 1: web.`）；`dsh web` 那种写法是 CLI 的 `dsh <name>` 捷径在**没有** `--profile`
+ *                  时的形态。两种形态各有一条证据：本模式的构造见下方 `dshArgs`，捷径形态由
+ *                  `tests/isolation/lib/web-boot.mjs` 证明。
  *   headless       真跑一次 `dsh --profile <p> --help`（= boot + dispose + exit 0，不调 LLM、不开端口），
  *                  并断言 `<home>/xuanshu/assembly-report.json` **本次新写出**；
  *   env            不 spawn，只把 plan.env / plan.command 打到 stdout，给 pwsh / CI 用。

@@ -24,6 +24,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { PanelNavTarget } from '../panel.js';
 import type { RpcContext } from '../rpc.js';
 import type { WorkflowApi, WorkflowItem } from './workflow-api.js';
+import { installXuanshuStyles, registerStyleSheet } from '../styles.js'
 import {
   WORKFLOW_BOUNDARY_NOTE, WORKFLOW_EXPORT_HINT, WORKFLOW_HUMAN_JUDGE_NOTE, WORKFLOW_ID, WORKFLOW_LABEL,
   WORKFLOW_LOCAL_NOTE, WORKFLOW_ORDER, WORKFLOW_OUT_OF_SCOPE_NOTE, exportBlockers, splitWorkflows, workflowSubtitle,
@@ -233,18 +234,14 @@ function WorkflowIcon({ size = 20 }: { size?: number }) {
 
 /** 样式（非 DOM 环境安全返回；与其它面板同款「样式随 JS 走」）。 */
 export function installWorkflowStyle(): void {
-  if (typeof document === 'undefined') return;
   const id = 'xuanshu-workflow-style';
-  if (document.getElementById(id) !== null) return;
-  const style = document.createElement('style');
-  style.id = id;
-  style.textContent = [
+  registerStyleSheet("xuanshu-workflow-style", [
     '.xs-workflow{padding:20px 24px;color:var(--dsh-text-primary,inherit);font:inherit}',
     '.xs-workflow__head{display:flex;align-items:center;justify-content:space-between;gap:12px}',
     '.xs-workflow__title{margin:0;font-size:18px}',
     '.xs-workflow__note,.xs-workflow__hint,.xs-workflow__rule{margin:8px 0;opacity:.8;font-size:13px}',
-    '.xs-workflow__error{color:var(--dsh-danger,#c33)}',
-    '.xs-workflow__group{margin-top:18px;border-top:1px solid var(--dsh-border,#0002);padding-top:12px}',
+    '.xs-workflow__error{color:var(--xs-state-error-fg)}',
+    '.xs-workflow__group{margin-top:18px;border-top:1px solid var(--xs-edge-divider);padding-top:12px}',
     '.xs-workflow__groupTitle{margin:0 0 8px;font-size:14px;opacity:.85}',
     '.xs-workflow__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}',
     '.xs-workflow__item{display:flex;align-items:center;gap:10px}',
@@ -253,8 +250,8 @@ export function installWorkflowStyle(): void {
     '.xs-workflow__field input,.xs-workflow__field textarea{flex:1}',
     '.xs-workflow__blockers{margin:6px 0;padding-left:18px;font-size:12px;opacity:.85}',
     '.xs-workflow__done{margin:8px 0;font-size:13px}',
-  ].join('\n');
-  document.head.appendChild(style);
+  ].join('\n'));
+  installXuanshuStyles()
 }
 
 /** 门厅面板安装所需的依赖（由 `index.tsx` 造好）。 */
