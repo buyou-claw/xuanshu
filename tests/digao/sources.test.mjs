@@ -27,7 +27,16 @@ const ENTRIES = [
   { source: 'workflow', refId: 'w-unknown', lastActiveAt: '2026-12-01T00:00:00.000Z' },
 ]
 
-const ctx = { workspaceRegistry: { list: () => WORKSPACES } }
+/**
+ * 宿主 ctx 的**唯一**取服务方式是 `ctx.get(name)`（`lib/soft-service.mjs`；cordis 对没进
+ * `inject` 的服务属性访问会直接抛，见复核清单第 5 条）。所以夹具必须编码这个形状，
+ * 不能拿一个裸属性对象顶替——那会让「服务取不到」的实现也能过。
+ */
+function makeHostCtx(services) {
+  return { get: (name) => (Object.hasOwn(services, name) ? services[name] : undefined) }
+}
+
+const ctx = makeHostCtx({ workspaceRegistry: { list: () => WORKSPACES } })
 
 describe('票27 · 工作区一路：按最后活跃倒序（账本是唯一权威）', () => {
   it('最后活跃新的排前面；账本里没有活跃时间的排最后（保持原序）', () => {

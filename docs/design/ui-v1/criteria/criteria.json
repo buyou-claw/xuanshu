@@ -1,0 +1,122 @@
+{
+  "schema": "xuanshu/ux-criteria@1",
+  "label": "ux-v1",
+  "families": [
+    {
+      "id": "T",
+      "title": "token 消费",
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "### 0.4 禁则（写稿人自查）"
+      },
+      "ruleCount": 4
+    },
+    {
+      "id": "D",
+      "title": "密度与点击目标",
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "点击目标 ≥44×44"
+      },
+      "ruleCount": 1
+    }
+  ],
+  "criteria": [
+    {
+      "id": "T-001",
+      "family": "T",
+      "statement": "界面源码的样式里不出现字面色值（hex / rgb() / hsl()），颜色一律从 token 取",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "blocker",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "1. 本文件**不出现**色值（`#rrggbb` / `rgb()` / 颜色名）、px / rem / em 数值。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "T-002",
+      "family": "T",
+      "statement": "样式的注入点收敛在单一消费层：界面面的源文件里没有自己注入的 `<style>`，每个面板不再各写一份样式表",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "2. 线框里**不写 token**（线框只写结构与文案位），token 只出现在组件树与该屏第 9 节。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "T-003",
+      "family": "T",
+      "statement": "断点不写字面值：`@media` 的宽窄屏分界只走 `--xs-size-breakpoint-wide`（1100px）的语义，样式里不出现 `min-width: 1100px` / `max-width: 700px` 这类字面 px",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "、px / rem / em 数值。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "T-004",
+      "family": "T",
+      "statement": "颜色声明一律从 token 取：`color` / `background` / `border*` / `box-shadow` 的值是 `var(--…)`，或是允许的关键字（transparent / inherit / none / currentColor）",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "（`#rrggbb` / `rgb()` / 颜色名）"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "D-001",
+      "family": "D",
+      "statement": "每个可点目标的可点区域不小于 44×44 CSS 像素（留白档：控件少而大，点得准）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "点击目标 ≥44×44"
+      },
+      "humanReason": null,
+      "tombstone": false
+    }
+  ],
+  "version": "98d268415b0ae51fd725248a91d350d629155b4a17555cf2fee0b72a6b610c55",
+  "ruleFiles": [
+    {
+      "file": "docs/design/ui-v1/criteria/rules/D.json",
+      "sha256": "d1fb484844cb613c2d357f7fccf83b011ae9968852e2fae5e030df0cca76e269"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/T.json",
+      "sha256": "8da03255f5d3deaf2af5c8be26eace61b42b06347d3aedaaca77be51ccd7e2a2"
+    }
+  ]
+}
