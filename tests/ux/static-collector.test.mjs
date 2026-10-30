@@ -18,10 +18,10 @@ const REPO_ROOT = join(import.meta.dirname, '..', '..')
 const FACES = faceManifest()
 const CRITERIA = projectCriteria({ repoRoot: REPO_ROOT, faces: FACES }).document
 
-/** 收集到的全部字面色值出现（跨面展开）。 */
+/** 收集到的全部字面色值出现（跨面展开；票 04 起库里还有 T-002..T-004 的证据，这里只看 T-001）。 */
 function occurrencesOf(evidence) {
   return evidence
-    .filter((item) => item.status === 'observed')
+    .filter((item) => item.criterionId === 'T-001' && item.status === 'observed')
     .flatMap((item) => item.facts.occurrences.map((occurrence) => ({ ...occurrence, face: item.face })))
 }
 
@@ -29,14 +29,18 @@ describe('票 02 · 静态半边如实点名字面色值', () => {
   it('证据形状统一：criterionId / face / collector / status / facts / evidence 六件齐', () => {
     const { evidence } = collectStatic({ repoRoot: REPO_ROOT, criteria: CRITERIA, faces: FACES })
     expect(evidence.length).toBeGreaterThan(0)
+    const staticCriteria = CRITERIA.criteria.filter((criterion) => criterion.check === 'static')
+    const criterionIds = new Set(staticCriteria.map((criterion) => criterion.id))
     for (const item of evidence) {
-      expect(item.criterionId).toBe('T-001')
+      expect(criterionIds.has(item.criterionId)).toBe(true)
       expect(typeof item.face).toBe('string')
       expect(item.collector).toBe('static')
       expect(item.status).toBe('observed')
       expect(Array.isArray(item.evidence)).toBe(true)
       expect(item.facts).toBeTruthy()
     }
+    // 票 04 起：静态判据（T-001..T-004）× 全部界面面，一个 (判据, 面) 一份证据，不重不漏
+    expect(evidence).toHaveLength(staticCriteria.length * FACES.length)
   })
 
   it('11 处字面 hex（mounts.tsx 9 + WorkflowPanel 2）——spec 里那个数字是 hex 口径', () => {
@@ -62,7 +66,10 @@ describe('票 02 · 静态半边如实点名字面色值', () => {
   it('一个文件被多个面共用时，每个面各自留下自己的证据（判定按面算，报告按位置去重）', () => {
     const { evidence } = collectStatic({ repoRoot: REPO_ROOT, criteria: CRITERIA, faces: FACES })
     const sedimentFaces = evidence.filter(
-      (item) => item.status === 'observed' && item.facts.occurrences.some((occurrence) => occurrence.file.endsWith('sediment-views.tsx')),
+      (item) =>
+        item.criterionId === 'T-001'
+        && item.status === 'observed'
+        && item.facts.occurrences.some((occurrence) => occurrence.file.endsWith('sediment-views.tsx')),
     )
     expect(sedimentFaces.map((item) => item.face).sort()).toEqual([
       'slot:conversation.chat.turnTail#xuanshu.sediment-draft',
@@ -89,10 +96,14 @@ describe('票 02 · 采集失败必须是独立状态', () => {
       criteria: CRITERIA,
       faces: [{ id: 'panel:ghost', kind: 'panel', label: '不存在', sources: ['src/不存在.tsx'] }],
     })
-    expect(evidence).toHaveLength(1)
-    expect(evidence[0].status).toBe('collection-failed')
-    expect(evidence[0].facts).toBeNull()
-    expect(evidence[0].reason).toMatch(/ENOENT|no such file/i)
+    // 静态判据（T-001..T-004）× 一个面：每条都读同一个不存在的文件，所以四条都得如实报「采集失败」。
+    const staticCriteria = CRITERIA.criteria.filter((criterion) => criterion.check === 'static')
+    expect(evidence).toHaveLength(staticCriteria.length)
+    for (const item of evidence) {
+      expect(item.status).toBe('collection-failed')
+      expect(item.facts).toBeNull()
+      expect(item.reason).toMatch(/ENOENT|no such file/i)
+    }
   })
 
   it('没人给它检查器的机器判据 → 直接报错（不静默跳过）', () => {

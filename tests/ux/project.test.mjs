@@ -53,10 +53,12 @@ const ONE_RULE = {
 }
 
 describe('票 02 · 证据 → 判定 → 报告 → 命令（投影器半边）', () => {
-  it('判据集 v1 从设计稿升格出来：每条判据五列齐全（票 02 只有 T-001，票 07 加 D-001）', () => {
+  it('判据集 v1 从设计稿升格出来：每条判据五列齐全（票 02 只有 T-001，票 07 加 D-001，票 04 补齐 T-002..T-004）', () => {
     const { document } = projectCriteria({ repoRoot: REPO_ROOT, faces: FACES })
     const ids = document.criteria.map((criterion) => criterion.id)
     expect(ids).toContain('T-001')
+    // 票 04 把族 T 补到四条（别的票往别的族加，别在这里钉全量顺序）
+    expect(ids.filter((id) => id.startsWith('T-'))).toEqual(['T-001', 'T-002', 'T-003', 'T-004'])
     const [criterion] = document.criteria
     expect(criterion.id).toBe('T-001')
     // 五列各就位（id / 判据 / 检查方式 / 证据 / 严重级）
