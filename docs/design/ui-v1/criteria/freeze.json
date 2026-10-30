@@ -1,0 +1,13 @@
+{
+  "schema": "xuanshu/ux-criteria-freeze@1",
+  "version": "ccf7282ebcf2890ae94e175eb208256ea24b645ae2f291956a69f48a1ad4f3b6",
+  "criteria": {
+    "file": "docs/design/ui-v1/criteria/criteria.json",
+    "sha256": "89f44294c5ab057779e3961a70da77d5d9abd0b981149db35a6dc762ef264da3",
+    "criteriaCount": 1,
+    "familyCount": 1
+  },
+  "frozenAt": "2026-10-30T16:29:14.982Z",
+  "approvedBy": "human",
+  "note": "票 03 首次冻结（判据集 v1：T-001）"
+}

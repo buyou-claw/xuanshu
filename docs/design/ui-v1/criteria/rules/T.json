@@ -1,0 +1,22 @@
+{
+  "family": "T",
+  "title": "token 消费",
+  "source": {
+    "file": "docs/design/ui-v1/shared/设计token字典.md",
+    "anchor": "### 0.4 禁则（写稿人自查）"
+  },
+  "rules": [
+    {
+      "id": "T-001",
+      "statement": "界面源码的样式里不出现字面色值（hex / rgb() / hsl()），颜色一律从 token 取",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "blocker",
+      "appliesTo": { "kind": "all" },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "1. 本文件**不出现**色值（`#rrggbb` / `rgb()` / 颜色名）、px / rem / em 数值。"
+      }
+    }
+  ]
+}
