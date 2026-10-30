@@ -1,0 +1,22 @@
+{
+  "family": "D",
+  "title": "密度与点击目标",
+  "source": {
+    "file": "docs/specs/003-ux-quality-line.md",
+    "anchor": "点击目标 ≥44×44"
+  },
+  "rules": [
+    {
+      "id": "D-001",
+      "statement": "每个可点目标的可点区域不小于 44×44 CSS 像素（留白档：控件少而大，点得准）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": { "kind": "rendered" },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "点击目标 ≥44×44"
+      }
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "schema": "xuanshu/ux-criteria@1",
+  "label": "ux-v1",
+  "families": [
+    {
+      "id": "T",
+      "title": "token 消费",
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "### 0.4 禁则（写稿人自查）"
+      },
+      "ruleCount": 1
+    },
+    {
+      "id": "D",
+      "title": "密度与点击目标",
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "点击目标 ≥44×44"
+      },
+      "ruleCount": 1
+    }
+  ],
+  "criteria": [
+    {
+      "id": "T-001",
+      "family": "T",
+      "statement": "界面源码的样式里不出现字面色值（hex / rgb() / hsl()），颜色一律从 token 取",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "blocker",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "1. 本文件**不出现**色值（`#rrggbb` / `rgb()` / 颜色名）、px / rem / em 数值。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "D-001",
+      "family": "D",
+      "statement": "每个可点目标的可点区域不小于 44×44 CSS 像素（留白档：控件少而大，点得准）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "点击目标 ≥44×44"
+      },
+      "humanReason": null,
+      "tombstone": false
+    }
+  ],
+  "version": "142e63ef2f50dfcff2812e984408b04ca941c4720069d7530da40cf1996d93de",
+  "ruleFiles": [
+    {
+      "file": "docs/design/ui-v1/criteria/rules/D.json",
+      "sha256": "d1fb484844cb613c2d357f7fccf83b011ae9968852e2fae5e030df0cca76e269"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/T.json",
+      "sha256": "2ded8213c8aec5c9a4c8300998c7b50107b7f8287a93ebd6949371819712e09b"
+    }
+  ]
+}
