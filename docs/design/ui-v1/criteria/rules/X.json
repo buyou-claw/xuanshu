@@ -1,0 +1,22 @@
+{
+  "family": "X",
+  "title": "文案一致性",
+  "source": {
+    "file": "docs/design/ui-v1/README.md",
+    "anchor": "状态名一律用同一套稳定名"
+  },
+  "rules": [
+    {
+      "id": "X-001",
+      "statement": "同一状态在所有界面面只用一套说法：空态只许「还没有…」「没有…」，加载态只许「正在…」「…中」，错误态只许「失败」「读不到」「打不开」「不可用」——「暂无」「空的」「加载中」「读取中」「请稍候」「出错」「错误」「异常」这类同义替换不许与它们并存；且错误行旁边必须有可执行的下一步（重试 / 换个 / 请在…），只有一句「失败了」不算",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": { "kind": "all" },
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "在同一屏内复用，不新造同义词"
+      }
+    }
+  ]
+}

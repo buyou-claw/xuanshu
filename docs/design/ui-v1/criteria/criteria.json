@@ -1,0 +1,135 @@
+{
+  "schema": "xuanshu/ux-criteria@1",
+  "label": "ux-v1",
+  "families": [
+    {
+      "id": "T",
+      "title": "token 消费",
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "### 0.4 禁则（写稿人自查）"
+      },
+      "ruleCount": 1
+    },
+    {
+      "id": "S",
+      "title": "状态齐全（空 / 载 / 错）",
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "### 3.4 关键状态（验收硬要求）"
+      },
+      "ruleCount": 3
+    },
+    {
+      "id": "X",
+      "title": "文案一致性",
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "状态名一律用同一套稳定名"
+      },
+      "ruleCount": 1
+    }
+  ],
+  "criteria": [
+    {
+      "id": "T-001",
+      "family": "T",
+      "statement": "界面源码的样式里不出现字面色值（hex / rgb() / hsl()），颜色一律从 token 取",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "blocker",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "1. 本文件**不出现**色值（`#rrggbb` / `rgb()` / 颜色名）、px / rem / em 数值。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "S-001",
+      "family": "S",
+      "statement": "每个界面面的源文件（同一文件内）既有「判空分支」（`kind === 'empty'` / `!x.length` / `x.length === 0` / 状态标记属性）又有一句中文空态说明；只有注释、只有一个字符串常量、或只有类型里的状态名，都算缺空态",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "空态必须可执行"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "S-002",
+      "family": "S",
+      "statement": "每个界面面的源文件（同一文件内）既有「加载 / 进行中分支」（`loading` / `busy` / `running` / `pending` 出现在条件里，或状态标记属性点名 loading / pending）又有可见的加载证据（一句「正在…」或「…中」中文，或骨架屏标记 `xs-skeleton` / `data-xuanshu-skeleton`）；只有一个 loading 变量而没有可见证据，算缺加载态",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "首屏 `loading` 用**卡级骨架**"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "S-003",
+      "family": "S",
+      "statement": "每个界面面的源文件（同一文件内）既有「错误分支」（`error` / `failed` / `failure` 出现在条件里，或错误状态标记属性）又有一句中文失败说明（「失败」「读不到」「打不开」「不可用」等）；错误行只把 `{error}` 变量原样直出、没有一句固定中文说法，算缺错误态",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "`空态`、`加载态`、`错误态` 三种"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "X-001",
+      "family": "X",
+      "statement": "同一状态在所有界面面只用一套说法：空态只许「还没有…」「没有…」，加载态只许「正在…」「…中」，错误态只许「失败」「读不到」「打不开」「不可用」——「暂无」「空的」「加载中」「读取中」「请稍候」「出错」「错误」「异常」这类同义替换不许与它们并存；且错误行旁边必须有可执行的下一步（重试 / 换个 / 请在…），只有一句「失败了」不算",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "在同一屏内复用，不新造同义词"
+      },
+      "humanReason": null,
+      "tombstone": false
+    }
+  ],
+  "version": "a26b5a47cf41e9c63d3ef2f879bec993e07573cff44ef54354267dc26bd7513b",
+  "ruleFiles": [
+    {
+      "file": "docs/design/ui-v1/criteria/rules/S.json",
+      "sha256": "7473dd8cff23f9531f0f29a77d14490f8305564ad50180d856a07360890999ab"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/T.json",
+      "sha256": "2ded8213c8aec5c9a4c8300998c7b50107b7f8287a93ebd6949371819712e09b"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/X.json",
+      "sha256": "0a282964e3438588a1057b44cc25199ba314d95442db5c85b94f2d72b5da9e47"
+    }
+  ]
+}
