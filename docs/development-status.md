@@ -1091,7 +1091,71 @@ ai: { mode: 'ok', text: '今天把范围收小，只推进已经定下的小事�
 产物 <dataDir>/rikke/2026-10-18.json 的 ai.mode = 'ok'
 ```
 
-**同一条修法顺带修好的**：底稿的 LLM 摘要、事记摘要、合参/问事的 LLM 路径（同一个 `getService(ctx,'llm')` 口径）。
+**同一条修法顺带修好的**：底稿的 LLM 摘要、事记摘要、合参/问事的 LLM 调用路径（同一个 `getService(ctx,'llm')` 口径）。
+
+---
+
+## 17. Spec 003 体验质量线（判据 / 巡检 / 兑现率）
+
+> 时间：2026-10-31｜工单：#48–#60（13 张）｜ADR：[`adr/0015-ux-quality-line-machine-criteria.md`](adr/0015-ux-quality-line-machine-criteria.md)
+> 真值入口：`pnpm verify:ux`（只报告、不挡门）；判据集在 `docs/design/ui-v1/criteria/`
+
+### 17.1 建成了什么
+
+| 模块 | 位置 | 一句话 |
+|---|---|---|
+| 界面面清单 | `tests/assembly/lib/panel-surface.mjs::faceManifest()` | 分母的唯一来源（注册面派生，不另抄） |
+| 判据投影器 | `scripts/ux/project.mjs` | `rules/*.json` → `criteria.json`（字节确定，`version` = sha256） |
+| 冻结守卫 | `scripts/ux/freeze.mjs` | 判据被改一个字节 → 拒绝运行、退出码 3、不出报告 |
+| 静态采集器 | `scripts/ux/collect/static.mjs` + `probes/*` | 读源码收事实，不判定 |
+| 浏览器采集器 | `scripts/ux/collect/browser.mjs` + `browser-scripts.mjs` | 起隔离实例跑任务剧本，只收证据 |
+| 判定引擎 | `scripts/ux/judge.mjs` + `assertions/*` | **唯一判定点**，纯函数 |
+| 报告器 | `scripts/ux/report.mjs` + `diff.mjs` | 兑现率 / 三分类 diff / 缺态清单 / 人读 + 机读 |
+| 修复护栏 | `scripts/check-ux-fix-notes.mjs` / `check-ux-authority.mjs` / `ux/regreen.mjs` | 修复说明、写入面、转绿断言 |
+
+### 17.2 界面面真值：**25**，不是 30
+
+spec 003 与票 01 写的「10 面板 + 18 寄生 = 30 面」是把 `4+2+2+3+1+3=15` 估成了 18。真实注册面
+（`expectedCells()` + `BESTOF_COMMAND_NAMES`）是：**10 个面板 + 12 个寄生位（4 抽屉 / 2 设置区块 /
+2 设置项 / 3 输入框 dock / 1 回合尾）+ 3 个命令 = 25 面**。分母按真值算；`faceManifest()` 对
+「新增了注册面却没登记 label/sources」直接抛错，所以覆盖面不会因为没人记得而静默缩水。
+
+### 17.3 判据集 v1（9 条 / 4 族）
+
+`T-001..004`（token 消费）· `D-001`（点击目标 ≥44×44，browser）· `S-001..003`（空/载/错，static）· `X-001`（文案一致性）。
+阈值与出处：`rules/*.json` 每条都带 `source.anchor`，投影器校验锚必须真的存在于设计稿（或 spec 003 §视觉档位）。
+
+### 17.4 这一轮的数字（抄工具输出）
+
+```
+# node scripts/verify-ux.mjs（静态半边）
+兑现率：174/222 = 78.4% · 判据集 ux-v1 · 25 个界面面 × 9 条判据
+判定：pass 174 / fail 26 / not-collected 22（D-001 需要浏览器）
+较上次：回退 0 · 新增 0 · 已修 42 · 消失 0
+```
+
+- 族 T 四条**全绿**（票 11 清偿）：字面色值 15 → 0、注入点 12 → 1（`styles.ts` 单一消费层）、
+  字面断点 9 → 0（`breakpoints.ts`）、非 token 颜色声明 8 → 0。
+- 剩下的 26 条红属族 S/X（缺空态/加载态/错误态、文案不统一）：**这是实测结论，不是回归**。
+- `D-001` 的 22 条在静态半边是 `not-collected`（未采到 ≠ 通过）；`--browser` 才会采到。
+
+### 17.5 继承红与顺带修好
+
+- **修好**：`tests/assembly/**` 里 39 条 + `tests/cang/panel` 1 条 API 用例仍按旧传输层
+  （`ctx.connection.rpc.call`）打桩 —— 上一提交把数据面改成同源 `fetch('/api/xuanshu')` 后它们全红。
+  新增 `tests/assembly/lib/rpc-fetch.mjs` 统一打桩，断言口径零放宽，40 条转绿。
+- **仍红（与本 spec 无关，已登记）**：`tests/digao/service.test.mjs`「事记按 lastActiveAt 倒序」
+  （`8fdaa4b` 起就红，排序断言本身）；`tests/assembly/assembly-contract.test.mjs` 的 S1/CLI 两条（上游 DSH 缺陷，`knownRed`）。
+
+### 17.6 这一轮新踩到的坑（记下来）
+
+1. **`profile/cordis.patch.yml` 会被 DSH 改写**：首跑关掉「预览版说明」时 DSH 往这个**入库件**里追加
+   `welcomeNoticeVersion`。浏览器采集器现在启动前快照、`stop()` 原样写回；手工探针留下的那次改动已 `git checkout` 还原。
+2. **worktree 里跑不了浏览器半边**：`worktree-create` 只链 `packages/*/node_modules`，临时 home 的
+   `profiles/xuanshu` 是 link 到**worktree 的** `profile/`（那份没有 node_modules）。实现者票请只在主仓跑 `--browser`。
+3. **媒体查询吃不了 `var()`**：所以断点只能走 JS 常量 + 模板插值；T-003 的采集口径因此把
+   `${BREAKPOINT_*_PX}px` 判为「来自 token」，不判字面 —— 否则把值搬进常量也照样红，等于逼人留字面值。
+4. **清理带 junction 的临时 home**：先 `cmd /c rmdir <link>` 摘链接，再递归删目录。直接递归删会跟穿到仓库 `profile/`。
 
 
 
