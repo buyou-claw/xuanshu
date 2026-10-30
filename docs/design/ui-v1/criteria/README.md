@@ -25,8 +25,11 @@
 | `evidence` | `file-line` · `computed-style` · `screenshot` · `transcript` | 报告里每条红要指得回这个位置 |
 | `severity` | `blocker` · `major` · `minor` | 决定报告排序，不决定是否通过 |
 
-附加字段：`appliesTo`（`{kind:"all"|"panel"|"parasitic"}` 或 `{kind:"ids",ids:[…]}`）、
-`source`（`{file, anchor}`，锚必须真的出现在文件里，否则投影失败）。
+附加字段：
+- `appliesTo`：`{kind:"all"}`（全部界面面，含命令面）/ `{kind:"panel"}` / `{kind:"parasitic"}` /
+  `{kind:"rendered"}`（有渲染位置的界面面：排除命令面 —— 命令是入口、没有 DOM，量不出尺寸）/
+  `{kind:"ids", ids:[…]}`。
+- `source`：`{file, anchor}`，锚必须真的出现在文件里，否则投影失败。
 
 ## 3. 三条硬门槛
 

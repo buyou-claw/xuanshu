@@ -16,8 +16,11 @@
 import { BREAKPOINT_WIDE_PX } from './breakpoints.js';
 import { installXuanshuStyles, registerStyleSheet } from './styles.js';
 
-/** style 段名（`data-plugin-css` 由 `styles.ts` 统一持有；这里只登记这一段的 id）。 */
-export const STYLE_TAG_ID = 'xuanshu-client/overview.css';
+/**
+ * 总览这一段样式的**段名**（不是 `<style>` 标签 id —— 标签 id 只有 `styles.ts` 的 `STYLE_TAG_ID`，
+ * 全仓一个标签）。名字里带 `SHEET` 就是为了不再和它混。
+ */
+const OVERVIEW_SHEET_ID = 'xuanshu-client/overview.css';
 
 /** 本包全部类名以 `xs-` 前缀（F4：自有前缀，不与宿主类名竞争）。 */
 export const OVERVIEW_CSS = `
@@ -375,6 +378,6 @@ export const OVERVIEW_CSS = `
  * @returns 本次是否真的插入了标签（测试/SSR 下返回 false）。
  */
 export function installOverviewStyle(): boolean {
-  registerStyleSheet(STYLE_TAG_ID, OVERVIEW_CSS);
+  registerStyleSheet(OVERVIEW_SHEET_ID, OVERVIEW_CSS);
   return installXuanshuStyles();
 }

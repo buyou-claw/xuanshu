@@ -31,7 +31,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { buildDiff, diffCounts } from './diff.mjs'
+import { buildDiff, diffCounts, isRed } from './diff.mjs'
 import { CRITERION_STATE, STATES, STATE_LABEL } from './state-vocabulary.mjs'
 
 /** 报告 schema。报告器与「读报告的下一步」靠它对齐。 */
@@ -260,7 +260,8 @@ export function buildReport({
   // 分类只在 diff.mjs 里发生一次；不可比时它返回空桶 + 原因，这里不做任何补算。
   const diff = buildDiff({ previous, criteriaVersion: criteria.version, verdicts })
 
-  const failing = verdicts.filter((verdict) => verdict.status === 'fail')
+  // 「红」的口径只在 diff.mjs 定义（isRed）—— 报告不再自己解释状态字符串。
+  const failing = verdicts.filter((verdict) => isRed(verdict))
   const blockers = failing
     .filter((verdict) => verdict.severity === 'blocker')
     .sort(

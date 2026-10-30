@@ -128,13 +128,13 @@ describe('票 11 · 清偿后的真实数字：T 族全绿', () => {
     expect(redFacesOf('T-004')).toEqual([])
   })
 
-  it('`--dsw-alias-*` 的消费事实仍可数（票 04 的「全仓仅 4 处」是旧数字，这里只钉「可数且非零」）', () => {
+  it('`--dsw-alias-*` 的消费事实仍可数（票 04 的「全仓仅 4 处」是旧数字，这里只钉「事实在场且可数」）', () => {
     const facts = factsOf('T-004', 'panel:overview')
-    const summary = facts.repo.aliasConsumption ?? facts.repo.dswAlias ?? null
-    if (summary !== null) {
-      expect(typeof summary).toBe('object')
-    }
-    // 至少每处 T-004 的 message 都能说清「有多少处颜色声明 / 多少走 token」
+    // 事实字段名就是 `alias`（`probes/t.mjs:347`）；写成 `?? 兜底` 会让这条断言永远真空转。
+    expect(facts.alias).toBeTruthy()
+    expect(typeof facts.alias.sites).toBe('number')
+    expect(facts.alias.sites).toBeGreaterThan(0)
+    expect(Array.isArray(facts.alias.tokens)).toBe(true)
     for (const verdict of verdictsOf('T-004')) expect(verdict.status).toBe('pass')
   })
 })

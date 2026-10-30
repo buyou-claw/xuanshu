@@ -20,18 +20,9 @@ export const STYLE_TAG_ID = 'xuanshu-client/styles.css';
 /** id → CSS 文本。模块加载时登记；同 id 重复登记以后者为准（幂等，热重载安全）。 */
 const SHEETS = new Map<string, string>();
 
-/**
- * 登记一段样式（不碰 DOM）。
- * @param id - 稳定的段名（惯例：`<来源文件>.css`）
- * @param css - 该段的 CSS 原文
- */
+/** 登记一段样式（不碰 DOM）。 */
 export function registerStyleSheet(id: string, css: string): void {
   SHEETS.set(id, css);
-}
-
-/** 已登记段数（测试与诊断用；不参与渲染）。 */
-export function registeredStyleSheetCount(): number {
-  return SHEETS.size;
 }
 
 /** 合成后的 CSS（按登记顺序；测试与诊断用）。 */
@@ -40,21 +31,29 @@ export function composedStyleText(): string {
 }
 
 /**
- * 幂等注入：把已登记的全部样式挂成一个 `<style>`。
+ * 幂等注入：把已登记的全部样式挂成一个 `<style>`，**并在有新段落时刷新它的内容**。
  *
- * 照官方 `ui-layout` 的手法（`dsh-client-ui-layout/lib/client.js:72-81`）：先按
- * `data-plugin-css` 查一次，命中就不再插 —— 插件重载 / 多次 apply 都不会叠出第二份。
+ * 为什么必须刷新：各模块的调用形状是「先 `registerStyleSheet(自己的 CSS)`，再 `installXuanshuStyles()`」。
+ * 如果这里像官方 ui-layout 那样「标签在就早退」，那么**只有第一个 apply 的模块**的样式会真的进 DOM，
+ * 后面注册的段落永远不落地 —— 页面不会报错，只会「样式莫名其妙没生效」。所以：
+ *   - 标签只在第一次创建（幂等，重载不会叠出第二份）；
+ *   - 之后每次调用都按当前登记内容对一次 `textContent`，不同就刷新（新段落照样落地）。
  *
- * @returns 本次是否真的插入了标签（无 DOM 的环境返回 false：SSR / 断言台 / 产物物化）
+ * @returns 本次是否真的**新建**了标签（内容刷新不算；无 DOM 的环境返回 false）
  */
 export function installXuanshuStyles(): boolean {
   if (typeof document === 'undefined') return false;
   const selector = `style[data-plugin-css="${STYLE_TAG_ID}"]`;
-  if (document.querySelector(selector) !== null) return false;
+  const composed = composedStyleText();
+  const existing = document.querySelector(selector) as HTMLStyleElement | null;
+  if (existing !== null) {
+    if (existing.textContent !== composed) existing.textContent = composed;
+    return false;
+  }
   const tag = document.createElement('style');
   tag.dataset.plugin = 'xuanshu-client';
   tag.dataset.pluginCss = STYLE_TAG_ID;
-  tag.textContent = composedStyleText();
+  tag.textContent = composed;
   (document.head ?? document.documentElement).appendChild(tag);
   return true;
 }

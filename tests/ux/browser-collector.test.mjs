@@ -60,10 +60,10 @@ describe('票 07 · 产物落后于源码就拒绝采集', () => {
   })
 
   it('真实仓库此刻是新鲜的（否则任何浏览器采集都该被拒绝）', () => {
-    // 只断言形状：本仓 HEAD 上 src 与 lib/client.js 同步由 pnpm verify:all 的 --check 保证。
+    // 这条**必须能红**：src 改了没重建 → 巡检该拒绝采集。它不是「只断言形状」——
+    // 那样写等于永不失败。真值由 `pnpm verify:all` 的 `build-client --check` 一起守。
     const result = checkClientArtifact({ repoRoot: REPO_ROOT })
-    expect(typeof result.fresh).toBe('boolean')
-    if (!result.fresh) expect(result.reason).toMatch(/build-client|落后|不存在/)
+    expect(result.fresh, result.reason ?? '').toBe(true)
   })
 })
 

@@ -4,10 +4,6 @@
  * 只测「输出形状」与「失败如实」——采集器不判定，所以这里不测 pass/fail
  * （那由 `tests/ux/judge.test.mjs` 覆盖）。
  */
-import { mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

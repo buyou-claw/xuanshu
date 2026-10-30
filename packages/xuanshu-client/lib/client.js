@@ -761,11 +761,16 @@ function composedStyleText() {
 function installXuanshuStyles() {
   if (typeof document === "undefined") return false;
   const selector = `style[data-plugin-css="${STYLE_TAG_ID}"]`;
-  if (document.querySelector(selector) !== null) return false;
+  const composed = composedStyleText();
+  const existing = document.querySelector(selector);
+  if (existing !== null) {
+    if (existing.textContent !== composed) existing.textContent = composed;
+    return false;
+  }
   const tag = document.createElement("style");
   tag.dataset.plugin = "xuanshu-client";
   tag.dataset.pluginCss = STYLE_TAG_ID;
-  tag.textContent = composedStyleText();
+  tag.textContent = composed;
   (document.head ?? document.documentElement).appendChild(tag);
   return true;
 }
@@ -2027,12 +2032,15 @@ var xs_tokens_default = {
 };
 
 // src/client/breakpoints.ts
-function sizePx(name, fallback) {
+function sizePx(name) {
   const table = xs_tokens_default.tokens ?? {};
-  const raw = table[name]?.light ?? fallback;
-  return Number(String(raw).replace(/px$/u, ""));
+  const raw = table[name]?.light;
+  if (typeof raw !== "string" || !/^\d+(\.\d+)?px$/u.test(raw)) {
+    throw new Error(`breakpoints: token「${name}」读不到或不是 px 值（拿到 ${JSON.stringify(raw)}）—— 断点的值只认设计 token`);
+  }
+  return Number(raw.replace(/px$/u, ""));
 }
-var BREAKPOINT_WIDE_PX = sizePx("--xs-size-breakpoint-wide", "1100px");
+var BREAKPOINT_WIDE_PX = sizePx("--xs-size-breakpoint-wide");
 var BREAKPOINT_NARROW_PX = 700;
 
 // src/client/cang-style.ts
@@ -9925,7 +9933,7 @@ function installShijiStyle() {
 }
 
 // src/client/style.ts
-var STYLE_TAG_ID2 = "xuanshu-client/overview.css";
+var OVERVIEW_SHEET_ID = "xuanshu-client/overview.css";
 var OVERVIEW_CSS = `
 .xs-overview {
   box-sizing: border-box;
@@ -10272,7 +10280,7 @@ var OVERVIEW_CSS = `
 }
 `;
 function installOverviewStyle() {
-  registerStyleSheet(STYLE_TAG_ID2, OVERVIEW_CSS);
+  registerStyleSheet(OVERVIEW_SHEET_ID, OVERVIEW_CSS);
   return installXuanshuStyles();
 }
 

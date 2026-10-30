@@ -11,15 +11,25 @@
  */
 import tokens from '../../../../docs/design/ui-v1/assets/tokens/xs-tokens.json';
 
-/** 从主题 token 里读一个尺寸值（light/dark 同值；读不到时用 fallback）。 */
-function sizePx(name: string, fallback: string): number {
+/**
+ * 从主题 token 里读一个尺寸值并转成数字。
+ *
+ * 读不到 / 不是 `px` 值 → **直接抛**，不静默退回一个字面量：
+ * 静默 fallback 会把刚收敛掉的字面值又写回产物里，而且「断点悄悄变成 1100」这种事
+ * 在界面上表现为「宽屏不换列」——比构建期炸掉难查一百倍。这条 throw 在
+ * `node scripts/build-client.mjs` 的物化自检里就会炸，等于把问题挡在提交前。
+ */
+function sizePx(name: string): number {
   const table = (tokens as { tokens?: Record<string, { light?: string }> }).tokens ?? {};
-  const raw = table[name]?.light ?? fallback;
-  return Number(String(raw).replace(/px$/u, ''));
+  const raw = table[name]?.light;
+  if (typeof raw !== 'string' || !/^\d+(\.\d+)?px$/u.test(raw)) {
+    throw new Error(`breakpoints: token「${name}」读不到或不是 px 值（拿到 ${JSON.stringify(raw)}）—— 断点的值只认设计 token`);
+  }
+  return Number(raw.replace(/px$/u, ''));
 }
 
 /** 宽屏断点（`--xs-size-breakpoint-wide` = 1100px）：`>=` 该宽度走两列布局。 */
-export const BREAKPOINT_WIDE_PX = sizePx('--xs-size-breakpoint-wide', '1100px');
+export const BREAKPOINT_WIDE_PX = sizePx('--xs-size-breakpoint-wide');
 
 /**
  * 窄屏断点（700px）：设计字典里**没有**对应 token（`--xs-size-breakpoint-narrow` 尚未登记），
