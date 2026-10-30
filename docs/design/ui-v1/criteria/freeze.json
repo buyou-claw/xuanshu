@@ -1,0 +1,13 @@
+{
+  "schema": "xuanshu/ux-criteria-freeze@1",
+  "version": "142e63ef2f50dfcff2812e984408b04ca941c4720069d7530da40cf1996d93de",
+  "criteria": {
+    "file": "docs/design/ui-v1/criteria/criteria.json",
+    "sha256": "3e73443aaf15ad8e48d36d55eec81beed4b0d5a6093e9aa508cc79ef63610427",
+    "criteriaCount": 2,
+    "familyCount": 2
+  },
+  "frozenAt": "2026-10-30T16:43:37.477Z",
+  "approvedBy": "human",
+  "note": "spec-003 集成：T+D 两族落地后的首次冻结"
+}

@@ -389,22 +389,22 @@ describe('票 05 · diff 是纯函数，读上一次只在 report.mjs', () => {
     expect(ok.previous.verdicts).toHaveLength(1)
   })
 
-  it('坏报告不毁掉这一轮：verify:ux 照跑，并把降级原因写进报告说明', () => {
+  it('坏报告不毁掉这一轮：verify:ux 照跑，并把降级原因写进报告说明', async () => {
     const outDir = mkdtempSync(join(tmpdir(), 'ux-previous-e2e-'))
     writeFileSync(join(outDir, 'latest.json'), '{ 坏掉了')
     const faces = faceManifest()
-    const { report } = runVerifyUx({ repoRoot: REPO_ROOT, faces, outDir, write: false, generatedAt: 'now' })
+    const { report } = await runVerifyUx({ repoRoot: REPO_ROOT, faces, outDir, write: false, generatedAt: 'now' })
     expect(report.diff.comparable).toBe(false)
     expect(report.collection.notes.join('\n')).toContain('读不出来')
   })
 
-  it('同一落点跑两轮：第二轮拿第一轮的 latest.json 做基准，四个桶都空（这才是「可比」）', () => {
+  it('同一落点跑两轮：第二轮拿第一轮的 latest.json 做基准，四个桶都空（这才是「可比」）', async () => {
     const outDir = mkdtempSync(join(tmpdir(), 'ux-diff-e2e-'))
     const faces = faceManifest()
-    const first = runVerifyUx({ repoRoot: REPO_ROOT, faces, outDir, generatedAt: '2026-10-31T00:00:00.000Z' })
+    const first = await runVerifyUx({ repoRoot: REPO_ROOT, faces, outDir, generatedAt: '2026-10-31T00:00:00.000Z' })
     expect(first.report.diff.comparable).toBe(false)
 
-    const second = runVerifyUx({ repoRoot: REPO_ROOT, faces, outDir, generatedAt: '2026-10-31T00:01:00.000Z' })
+    const second = await runVerifyUx({ repoRoot: REPO_ROOT, faces, outDir, generatedAt: '2026-10-31T00:01:00.000Z' })
     expect(second.report.diff.comparable).toBe(true)
     expect(second.report.diff.added).toEqual([])
     expect(second.report.diff.fixed).toEqual([])
