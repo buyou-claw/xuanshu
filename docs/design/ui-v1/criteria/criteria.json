@@ -9,7 +9,7 @@
         "file": "docs/design/ui-v1/shared/设计token字典.md",
         "anchor": "### 0.4 禁则（写稿人自查）"
       },
-      "ruleCount": 1
+      "ruleCount": 4
     },
     {
       "id": "D",
@@ -40,6 +40,57 @@
       "tombstone": false
     },
     {
+      "id": "T-002",
+      "family": "T",
+      "statement": "样式的注入点收敛在单一消费层：界面面的源文件里没有自己注入的 `<style>`，每个面板不再各写一份样式表",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "2. 线框里**不写 token**（线框只写结构与文案位），token 只出现在组件树与该屏第 9 节。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "T-003",
+      "family": "T",
+      "statement": "断点不写字面值：`@media` 的宽窄屏分界只走 `--xs-size-breakpoint-wide`（1100px）的语义，样式里不出现 `min-width: 1100px` / `max-width: 700px` 这类字面 px",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "、px / rem / em 数值。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "T-004",
+      "family": "T",
+      "statement": "颜色声明一律从 token 取：`color` / `background` / `border*` / `box-shadow` 的值是 `var(--…)`，或是允许的关键字（transparent / inherit / none / currentColor）",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "（`#rrggbb` / `rgb()` / 颜色名）"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
       "id": "D-001",
       "family": "D",
       "statement": "每个可点目标的可点区域不小于 44×44 CSS 像素（留白档：控件少而大，点得准）",
@@ -57,7 +108,7 @@
       "tombstone": false
     }
   ],
-  "version": "142e63ef2f50dfcff2812e984408b04ca941c4720069d7530da40cf1996d93de",
+  "version": "98d268415b0ae51fd725248a91d350d629155b4a17555cf2fee0b72a6b610c55",
   "ruleFiles": [
     {
       "file": "docs/design/ui-v1/criteria/rules/D.json",
@@ -65,7 +116,7 @@
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/T.json",
-      "sha256": "2ded8213c8aec5c9a4c8300998c7b50107b7f8287a93ebd6949371819712e09b"
+      "sha256": "8da03255f5d3deaf2af5c8be26eace61b42b06347d3aedaaca77be51ccd7e2a2"
     }
   ]
 }

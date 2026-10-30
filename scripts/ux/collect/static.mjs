@@ -38,7 +38,9 @@ export function collectStatic({ repoRoot, criteria, faces }) {
     for (const face of applicableFaces(criterion, faces)) {
       const base = { criterionId: criterion.id, face: face.id, collector: STATIC_COLLECTOR }
       try {
-        const collected = probe({ face, read: cache.read, repoRoot })
+        // `faces` 也交给检查器：跨面的事实（一个注入点被几个界面面共享 / `--dsw-alias-*` 全仓几处）
+        // 只能从这里拿，否则每个检查器会自己再抄一份面清单——分母就出现第二份来源了。
+        const collected = probe({ face, read: cache.read, repoRoot, faces })
         evidence.push({ ...base, status: 'observed', facts: collected.facts, evidence: collected.evidence ?? [] })
       } catch (error) {
         // 采集失败照实说：不编一个空 facts 让判定器误判成「没问题」。
