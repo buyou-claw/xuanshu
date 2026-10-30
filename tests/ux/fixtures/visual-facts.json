@@ -1,12 +1,12 @@
 {
-  "recordedAt": "2026-10-30T17:15:55.105Z",
+  "recordedAt": "2026-10-30T17:35:12.461Z",
   "collector": "browser",
   "script": "create-pu",
   "viewport": {
     "width": 1280,
     "height": 900
   },
-  "note": "票 09 (#56) 录制：真浏览器跑剧本 1（建谱）时 measure() 收到的原始事实，原样保存；用例读它走判定，不再起浏览器。",
+  "note": "票 09 (#56) 录制：真浏览器跑剧本 1（建谱）时 measure() 收到的原始事实，原样保存；用例读它走判定，不再起浏览器。合并 feat/spec-003-integration（含 #58 体验债清偿）之后重录过一次。",
   "faces": {
     "panel:overview": {
       "targets": [
