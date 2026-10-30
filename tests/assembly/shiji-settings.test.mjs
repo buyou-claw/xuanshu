@@ -20,8 +20,9 @@
  */
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
 import { SHIJI_ENDPOINTS, createShijiApi } from '../../packages/xuanshu-client/src/client/shiji-api.ts'
 import {
   SHIJI_SETTINGS_ID,
@@ -30,6 +31,9 @@ import {
   XsShijiSettingsSection,
   installShijiSettings,
 } from '../../packages/xuanshu-client/src/client/shiji-views.tsx'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 
 const render = (element) => renderToStaticMarkup(element)
 
@@ -95,41 +99,25 @@ describe('P4 · 数据面：restore 与 settings 的请求形状', () => {
   })
 
   it('restore 的 confirmed:true 写死在数据面里（界面没有第二个入参）；settings.set 透传 excludedDirs', async () => {
-    const calls = []
-    const api = createShijiApi({
-      connection: {
-        rpc: {
-          async call(channel, method, payload) {
-            calls.push([channel, method, payload])
-            return { ok: true, value: { ok: true, excludedDirs: payload?.excludedDirs ?? [] } }
-          },
-        },
-      },
-    })
+    const { calls } = installRpcFetch((call) => ({ value: { ok: true, excludedDirs: call.payload?.excludedDirs ?? [] } }))
+    const api = createShijiApi({})
     await api.restore({ id: TOMBSTONE.id })
     await api.getSettings()
     await api.setSettings({ excludedDirs: ['node_modules'] })
-    expect(calls.map((call) => [call[0], call[1]])).toEqual([
+    expect(calls.map((call) => [call.channel, call.endpoint])).toEqual([
       ['/xuanshu', 'shiji.restore'],
       ['/xuanshu', 'shiji.settings.get'],
       ['/xuanshu', 'shiji.settings.set'],
     ])
-    expect(calls[0][2]).toEqual({ id: TOMBSTONE.id, confirmed: true })
-    expect(calls[1][2]).toEqual({})
-    expect(calls[2][2]).toEqual({ excludedDirs: ['node_modules'] })
+    expect(calls[0].payload).toEqual({ id: TOMBSTONE.id, confirmed: true })
+    expect(calls[1].payload).toEqual({})
+    expect(calls[2].payload).toEqual({ excludedDirs: ['node_modules'] })
   })
 
   it('settings.set 的 ok:false 折成可读 Error（写操作不许静默）', async () => {
-    const api = createShijiApi({
-      connection: {
-        rpc: {
-          async call() {
-            return { ok: true, value: { ok: false, error: { code: 'invalid-settings', message: '排除目录必须是相对项目根的路径' } } }
-          },
-        },
-      },
-    })
-    await expect(api.setSettings({ excludedDirs: ['/abs'] })).rejects.toThrow('相对项目根')
+    // 外层信封成功、失败在 `value` 里（方法级），与宿主真实回包一致。
+    installRpcFetch({ value: { ok: false, error: { code: 'invalid-settings', message: '排除目录必须是相对项目根的路径' } } })
+    await expect(createShijiApi({}).setSettings({ excludedDirs: ['/abs'] })).rejects.toThrow('相对项目根')
   })
 })
 

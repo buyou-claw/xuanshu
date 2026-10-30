@@ -19,10 +19,10 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { PANEL_KEYS, expectedCells, expectedRegisterNames } from './lib/panel-surface.mjs'
-
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
 import { BAZI_ENDPOINTS, createBaziApi } from '../../packages/xuanshu-client/src/client/bazi-api.ts'
 import { createBaziUiController } from '../../packages/xuanshu-client/src/client/bazi-controller.ts'
 import { installMingpan } from '../../packages/xuanshu-client/src/client/MingpanPanel.tsx'
@@ -40,6 +40,9 @@ import {
   PANEL_ORDER,
   RIKKE_ID,
 } from '../../packages/xuanshu-client/src/client/panel.ts'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..', '..')
@@ -144,18 +147,8 @@ describe('票 08 · 命盘数据面的方法名逐字对齐契约 §2', () => {
   })
 
   it('每个方法都走 /xuanshu 通道，并原样透传请求体（含 confirmed 与 timeAlg 省缺）', async () => {
-    const calls = []
-    const ctx = {
-      connection: {
-        rpc: {
-          async call(...args) {
-            calls.push(args)
-            return { ok: true, value: { state: 'empty' } }
-          },
-        },
-      },
-    }
-    const api = createBaziApi(ctx)
+    const { calls } = installRpcFetch({ value: { state: 'empty' } })
+    const api = createBaziApi({})
 
     await api.status()
     await api.snapshot()
@@ -164,7 +157,7 @@ describe('票 08 · 命盘数据面的方法名逐字对齐契约 §2', () => {
     await api.timezone({ lat: 31.2304, lon: 121.4737, date: '1990-06-01', time: '04:00' })
     await api.cast({ birth: { date: '1990-06-01', time: '04:00', zone: 'Asia/Shanghai', lat: 31.2304, lon: 121.4737 }, confirmed: true })
 
-    expect(calls.map((call) => [call[0], call[1]])).toEqual([
+    expect(calls.map((call) => [call.channel, call.endpoint])).toEqual([
       ['/xuanshu', 'bazi.status'],
       ['/xuanshu', 'bazi.snapshot'],
       ['/xuanshu', 'bazi.basePu'],
@@ -172,17 +165,17 @@ describe('票 08 · 命盘数据面的方法名逐字对齐契约 §2', () => {
       ['/xuanshu', 'bazi.timezone'],
       ['/xuanshu', 'bazi.cast'],
     ])
-    expect(calls[3][2]).toEqual({ query: 'shang', limit: 20 })
-    expect(calls[4][2]).toEqual({ lat: 31.2304, lon: 121.4737, date: '1990-06-01', time: '04:00' })
-    expect(calls[5][2]).toEqual({
+    expect(calls[3].payload).toEqual({ query: 'shang', limit: 20 })
+    expect(calls[4].payload).toEqual({ lat: 31.2304, lon: 121.4737, date: '1990-06-01', time: '04:00' })
+    expect(calls[5].payload).toEqual({
       birth: { date: '1990-06-01', time: '04:00', zone: 'Asia/Shanghai', lat: 31.2304, lon: 121.4737 },
       confirmed: true,
     })
   })
 
   it('RPC 失败时抛出（由调用方决定降级：卡级 error / 城市静默回落小库）', async () => {
-    const ctx = { connection: { rpc: { async call() { return { ok: false, error: { message: '底座没起来' } } } } } }
-    await expect(createBaziApi(ctx).status()).rejects.toThrow('底座没起来')
+    installRpcFetch({ error: { message: '底座没起来' } })
+    await expect(createBaziApi({}).status()).rejects.toThrow('底座没起来')
   })
 })
 

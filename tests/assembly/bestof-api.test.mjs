@@ -4,27 +4,19 @@
  * 这一条盯的是「两个实现者共享的接口面」：方法名逐字（`bestof.run/state/adopt/cancel`）、
  * 请求体原样透传、命令三名字等价 + `//` 不算命令 + 命令名到第一个空白为界。
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { BESTOF_ENDPOINTS, createBestofApi } from '../../packages/xuanshu-client/src/client/bestof-api.ts'
 import { BESTOF_COMMAND_NAMES, parseBestofCommand } from '../../packages/xuanshu-client/src/client/bestof-model.ts'
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
 
-/** 记录型假连接。 */
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
+
+/** 记录型假数据面（记录项形状见 `lib/rpc-fetch.mjs` 文件头）。 */
 function fakeCtx(value = { ok: true }) {
-  const calls = []
-  return {
-    calls,
-    ctx: {
-      connection: {
-        rpc: {
-          async call(...args) {
-            calls.push(args)
-            return { ok: true, value }
-          },
-        },
-      },
-    },
-  }
+  const rpc = installRpcFetch({ value })
+  return { calls: rpc.calls, ctx: {} }
 }
 
 describe('票 11 / 票 28 · 方法名逐字对齐契约', () => {
@@ -50,7 +42,7 @@ describe('票 11 / 票 28 · 方法名逐字对齐契约', () => {
     await api.estimate({ sessionId: 'session-xs-consult-x', question: '问一句', routes: [{ provider: 'deepseek' }] })
     await api.listRoutes()
 
-    expect(calls.map((call) => [call[0], call[1]])).toEqual([
+    expect(calls.map((call) => [call.channel, call.endpoint])).toEqual([
       ['/xuanshu', 'bestof.run'],
       ['/xuanshu', 'bestof.state'],
       ['/xuanshu', 'bestof.adopt'],
@@ -58,22 +50,22 @@ describe('票 11 / 票 28 · 方法名逐字对齐契约', () => {
       ['/xuanshu', 'bestof.estimate'],
       ['/xuanshu', 'routes.list'],
     ])
-    expect(calls[0][2]).toEqual({ sessionId: 'session-xs-consult-x', question: '问一句', angles: ['classic', 'cautious'] })
-    expect(calls[2][2]).toEqual({ runId: 'bestof-1', decision: 'adopt', adoptedId: 'c2' })
-    expect(calls[4][2]).toEqual({ sessionId: 'session-xs-consult-x', question: '问一句', routes: [{ provider: 'deepseek' }] })
-    expect(calls[5][2]).toEqual({})
+    expect(calls[0].payload).toEqual({ sessionId: 'session-xs-consult-x', question: '问一句', angles: ['classic', 'cautious'] })
+    expect(calls[2].payload).toEqual({ runId: 'bestof-1', decision: 'adopt', adoptedId: 'c2' })
+    expect(calls[4].payload).toEqual({ sessionId: 'session-xs-consult-x', question: '问一句', routes: [{ provider: 'deepseek' }] })
+    expect(calls[5].payload).toEqual({})
   })
 
   it('取消信号透传（轮询过期回包靠它）', async () => {
     const { calls, ctx } = fakeCtx()
     const controller = new AbortController()
     await createBestofApi(ctx).state({ runId: 'bestof-1' }, controller.signal)
-    expect(calls[0][3]).toBe(controller.signal)
+    expect(calls[0].signal).toBe(controller.signal)
   })
 
   it('RPC 失败时抛出（由调用方决定降级：浮层错误条 / 本地停止）', async () => {
-    const ctx = { connection: { rpc: { async call() { return { ok: false, error: { message: '未知玄枢操作：bestof.cancel' } } } } } }
-    await expect(createBestofApi(ctx).cancel({ runId: 'bestof-1' })).rejects.toThrow('未知玄枢操作')
+    installRpcFetch({ error: { message: '未知玄枢操作：bestof.cancel' } })
+    await expect(createBestofApi({}).cancel({ runId: 'bestof-1' })).rejects.toThrow('未知玄枢操作')
   })
 })
 

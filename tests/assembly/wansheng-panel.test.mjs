@@ -12,7 +12,7 @@
  */
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { XsDeliveryHistory, TRAFFIC_STATUS_TEXT } from '../../packages/xuanshu-client/src/client/notify.tsx'
 import { OverviewPanel, wanshengStateFromStatus } from '../../packages/xuanshu-client/src/client/OverviewPanel.tsx'
@@ -22,6 +22,10 @@ import {
 import { XsMissedBadge, XsWanshengCard } from '../../packages/xuanshu-client/src/client/cards.tsx'
 import { WanshengPanel, installWansheng } from '../../packages/xuanshu-client/src/client/wansheng.tsx'
 import { createWanshengApi } from '../../packages/xuanshu-client/src/client/wansheng-api.ts'
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 
 const render = (element) => renderToStaticMarkup(element)
 
@@ -372,16 +376,17 @@ describe('#25 · installWansheng（加性注册 / 无 document 安全）', () =>
   it('实际注册入口通过 RPC 取回工作流事实并传给晚省面板', async () => {
     const { registrations, components, ctx } = installCtx()
     const calls = []
-    ctx.connection = { rpc: { call: async (channel, endpoint) => {
-      calls.push([channel, endpoint])
-      return { ok: true, value: STATUS_READY }
-    } } }
+    const rpc = installRpcFetch((call) => {
+      calls.push([call.channel, call.endpoint])
+      return { value: STATUS_READY }
+    })
     installWansheng(ctx, { api: createWanshengApi(ctx), navigate: () => {} })
     const main = registrations.find((options) => options.name === 'main')
     const props = main.inject()
     const status = await props.api.status()
     const html = render(h(components.get(main), { ...props, preloaded: status, preloadedHistory: { entries: [], unread: 0 } }))
     expect(calls).toEqual([['/xuanshu', 'wansheng.status']])
+    expect(rpc.calls).toHaveLength(1)
     expect(html).toContain('今天 1 个工作流有活动')
     expect(html).toContain('整理阅读笔记')
   })

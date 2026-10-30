@@ -217,8 +217,9 @@ describe('票 10 · 安装函数在无 document 的 Node 里安全', () => {
     }
   }
 
+  // 数据面是同源 fetch（`POST /api/xuanshu`），ctx 已不承载传输层；install 期一个请求都不发。
   const deps = () => ({
-    api: createConsultApi({ connection: { rpc: { async call() { return { ok: true, value: {} } } } } }),
+    api: createConsultApi({}),
     navigate: () => {},
     openSession: () => {},
     // 打开宿主建的会话前要刷一次客户端会话目录（顺序由 consult-model 的用例钉住）。

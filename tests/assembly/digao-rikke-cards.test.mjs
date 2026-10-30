@@ -13,12 +13,16 @@
  */
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { createDigaoApi } from '../../packages/xuanshu-client/src/client/digao-api.ts'
 import { createDigaoUiController } from '../../packages/xuanshu-client/src/client/digao-controller.ts'
 import { OverviewPanel, digaoStateFromStatus, rikkeStateFromStatus } from '../../packages/xuanshu-client/src/client/OverviewPanel.tsx'
 import { createRikkeUiController } from '../../packages/xuanshu-client/src/client/rikke-controller.ts'
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 
 const render = (element) => renderToStaticMarkup(element)
 
@@ -110,17 +114,12 @@ describe('票 13 · status → 卡级四态（纯映射，可无 DOM 测）', ()
 describe('票 13 · 底稿刷新控制器', () => {
   it('造控制器不发请求；显式 refresh() 才走 digao.refresh 并广播代次', async () => {
     const calls = []
-    const api = createDigaoApi({
-      connection: {
-        rpc: {
-          async call(_channel, method) {
-            calls.push(method)
-            if (method === 'digao.refresh') return { ok: true, value: { meta: DIGAO_META } }
-            return { ok: true, value: { exists: true, meta: DIGAO_META } }
-          },
-        },
-      },
+    installRpcFetch((call) => {
+      calls.push(call.endpoint)
+      if (call.endpoint === 'digao.refresh') return { value: { meta: DIGAO_META } }
+      return { value: { exists: true, meta: DIGAO_META } }
     })
+    const api = createDigaoApi({})
     const controller = createDigaoUiController(api)
     expect(calls).toEqual([])
     let notified = 0

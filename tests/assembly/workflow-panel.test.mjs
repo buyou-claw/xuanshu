@@ -16,10 +16,14 @@
  */
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { WORKFLOW_ENDPOINTS, createWorkflowApi } from '../../packages/xuanshu-client/src/client/workflow/workflow-api.ts'
 import { QUICKLINK } from '../../packages/xuanshu-client/src/client/panel.ts'
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 import {
   WORKFLOW_HUMAN_JUDGE_NOTE, WORKFLOW_ID, WORKFLOW_LABEL, WORKFLOW_ORDER, exportBlockers, splitWorkflows, workflowSubtitle,
 } from '../../packages/xuanshu-client/src/client/workflow/workflow-model.ts'
@@ -65,28 +69,27 @@ describe('票16 · 工作流数据面的方法名逐字对齐契约 §4', () => 
   })
 
   it('都走 /xuanshu 通道，请求体按契约透传', async () => {
-    const calls = []
-    const ctx = { connection: { rpc: { async call(...args) { calls.push(args); return { ok: true, value: {} } } } } }
-    const api = createWorkflowApi(ctx)
+    const { calls } = installRpcFetch({ value: {} })
+    const api = createWorkflowApi({})
     await api.create()
     await api.create({ seed: '每周整理行业动态' })
     await api.list()
     await api.exportSkill({ sessionId: 'session-xs-workflow-1', name: 'weekly-digest', description: 'd', content: 'c' })
-    expect(calls.map((call) => [call[0], call[1]])).toEqual([
+    expect(calls.map((call) => [call.channel, call.endpoint])).toEqual([
       ['/xuanshu', 'workflow.create'],
       ['/xuanshu', 'workflow.create'],
       ['/xuanshu', 'workflow.list'],
       ['/xuanshu', 'workflow.exportSkill'],
     ])
-    expect(calls[0][2]).toEqual({})
-    expect(calls[1][2]).toEqual({ seed: '每周整理行业动态' })
-    expect(calls[2][2]).toEqual({})
-    expect(calls[3][2].name).toBe('weekly-digest')
+    expect(calls[0].payload).toEqual({})
+    expect(calls[1].payload).toEqual({ seed: '每周整理行业动态' })
+    expect(calls[2].payload).toEqual({})
+    expect(calls[3].payload.name).toBe('weekly-digest')
   })
 
   it('RPC 失败时抛出（由调用方决定降级：面板 error 态）', async () => {
-    const ctx = { connection: { rpc: { async call() { return { ok: false, error: { message: '工作流列表读不出来' } } } } } }
-    await expect(createWorkflowApi(ctx).list()).rejects.toThrow('工作流列表读不出来')
+    installRpcFetch({ error: { message: '工作流列表读不出来' } })
+    await expect(createWorkflowApi({}).list()).rejects.toThrow('工作流列表读不出来')
   })
 })
 

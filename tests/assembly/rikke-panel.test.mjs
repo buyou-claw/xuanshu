@@ -18,8 +18,9 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
 import { RIKKE_ENDPOINTS, createRikkeApi } from '../../packages/xuanshu-client/src/client/rikke-api.ts'
 import { createRikkeUiController } from '../../packages/xuanshu-client/src/client/rikke-controller.ts'
 import { RIKKE_AI_OFF_TEXT, rikkeAiView } from '../../packages/xuanshu-client/src/client/rikke-model.ts'
@@ -28,6 +29,9 @@ import { XsRikkeCard } from '../../packages/xuanshu-client/src/client/cards.tsx'
 import { NOTIFY_ENDPOINTS, createNotifyApi } from '../../packages/xuanshu-client/src/client/notify-api.ts'
 import { XsTouchSettingsRow, installTouchSettings } from '../../packages/xuanshu-client/src/client/notify.tsx'
 import { RIKKE_ID, RIKKE_LABEL, RIKKE_ORDER } from '../../packages/xuanshu-client/src/client/panel.ts'
+
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..', '..')
@@ -87,37 +91,27 @@ describe('票 13 · 日课数据面的方法名逐字对齐契约 §2', () => {
   })
 
   it('三个方法都走 /xuanshu 通道，请求体按契约透传（date 省缺 = 今天）', async () => {
-    const calls = []
-    const ctx = {
-      connection: {
-        rpc: {
-          async call(...args) {
-            calls.push(args)
-            return { ok: true, value: { exists: false } }
-          },
-        },
-      },
-    }
-    const api = createRikkeApi(ctx)
+    const { calls } = installRpcFetch({ value: { exists: false } })
+    const api = createRikkeApi({})
     await api.status()
     await api.status({ date: '2026-10-15' })
     await api.generate()
     await api.setTime({ time: '07:45' })
-    expect(calls.map((call) => [call[0], call[1]])).toEqual([
+    expect(calls.map((call) => [call.channel, call.endpoint])).toEqual([
       ['/xuanshu', 'rikke.status'],
       ['/xuanshu', 'rikke.status'],
       ['/xuanshu', 'rikke.generate'],
       ['/xuanshu', 'rikke.setTime'],
     ])
-    expect(calls[0][2]).toEqual({})
-    expect(calls[1][2]).toEqual({ date: '2026-10-15' })
-    expect(calls[2][2]).toEqual({})
-    expect(calls[3][2]).toEqual({ time: '07:45' })
+    expect(calls[0].payload).toEqual({})
+    expect(calls[1].payload).toEqual({ date: '2026-10-15' })
+    expect(calls[2].payload).toEqual({})
+    expect(calls[3].payload).toEqual({ time: '07:45' })
   })
 
   it('RPC 失败时抛出（由调用方决定降级：面板 error 态）', async () => {
-    const ctx = { connection: { rpc: { async call() { return { ok: false, error: { message: '底座未立' } } } } } }
-    await expect(createRikkeApi(ctx).generate()).rejects.toThrow('底座未立')
+    installRpcFetch({ error: { message: '底座未立' } })
+    await expect(createRikkeApi({}).generate()).rejects.toThrow('底座未立')
   })
 })
 
@@ -487,30 +481,24 @@ describe('#24 · 触达数据面（traffic.* / rikke.settings.*）', () => {
 
   it('markDeliveredRead：只把 delivered 且未读的 id 交给 traffic.markRead（failed / skipped / 已读都不动）', async () => {
     const calls = []
-    const api = createNotifyApi({
-      connection: {
-        rpc: {
-          async call(_channel, method, payload) {
-            calls.push([method, payload])
-            if (method === 'traffic.status') {
-              return {
-                ok: true,
-                value: {
-                  entries: [
-                    { id: 'traffic-1', notify: { status: 'delivered', reason: null }, read: false },
-                    { id: 'traffic-2', notify: { status: 'failed', reason: 'permission-denied' }, read: false },
-                    { id: 'traffic-3', notify: { status: 'delivered', reason: null }, read: true },
-                    { id: 'traffic-4', notify: { status: 'skipped', reason: '人点生成' }, read: false },
-                  ],
-                  unread: 1,
-                },
-              }
-            }
-            return { ok: true, value: { ok: true, updated: 1 } }
+    installRpcFetch((call) => {
+      calls.push([call.endpoint, call.payload])
+      if (call.endpoint === 'traffic.status') {
+        return {
+          value: {
+            entries: [
+              { id: 'traffic-1', notify: { status: 'delivered', reason: null }, read: false },
+              { id: 'traffic-2', notify: { status: 'failed', reason: 'permission-denied' }, read: false },
+              { id: 'traffic-3', notify: { status: 'delivered', reason: null }, read: true },
+              { id: 'traffic-4', notify: { status: 'skipped', reason: '人点生成' }, read: false },
+            ],
+            unread: 1,
           },
-        },
-      },
+        }
+      }
+      return { value: { ok: true, updated: 1 } }
     })
+    const api = createNotifyApi({})
     expect(await api.markDeliveredRead()).toEqual({ ok: true, updated: 1 })
     expect(calls.map((call) => call[0])).toEqual(['traffic.status', 'traffic.markRead'])
     expect(calls[1][1]).toEqual({ ids: ['traffic-1'] })
@@ -518,28 +506,22 @@ describe('#24 · 触达数据面（traffic.* / rikke.settings.*）', () => {
 
   it('P3（复核 #24）· 打开日课面板只标 kind=rikke 的已读：晚省那一行不动', async () => {
     const calls = []
-    const api = createNotifyApi({
-      connection: {
-        rpc: {
-          async call(_channel, method, payload) {
-            calls.push([method, payload])
-            if (method === 'traffic.status') {
-              return {
-                ok: true,
-                value: {
-                  entries: [
-                    { id: 'traffic-wansheng', kind: 'wansheng', notify: { status: 'delivered', reason: null }, read: false },
-                    { id: 'traffic-rikke', kind: 'rikke', notify: { status: 'delivered', reason: null }, read: false },
-                  ],
-                  unread: 2,
-                },
-              }
-            }
-            return { ok: true, value: { ok: true, updated: 1 } }
+    installRpcFetch((call) => {
+      calls.push([call.endpoint, call.payload])
+      if (call.endpoint === 'traffic.status') {
+        return {
+          value: {
+            entries: [
+              { id: 'traffic-wansheng', kind: 'wansheng', notify: { status: 'delivered', reason: null }, read: false },
+              { id: 'traffic-rikke', kind: 'rikke', notify: { status: 'delivered', reason: null }, read: false },
+            ],
+            unread: 2,
           },
-        },
-      },
+        }
+      }
+      return { value: { ok: true, updated: 1 } }
     })
+    const api = createNotifyApi({})
     expect(await api.markDeliveredRead({ kind: 'rikke' })).toEqual({ ok: true, updated: 1 })
     // 只有 rikke 那条进 markRead：打开日课面板不该把晚省的未读抹掉。
     expect(calls[1][1]).toEqual({ ids: ['traffic-rikke'] })
@@ -547,33 +529,23 @@ describe('#24 · 触达数据面（traffic.* / rikke.settings.*）', () => {
 
   it('没有未读就不发 markRead（打开面板不该白写一次盘）', async () => {
     const calls = []
-    const api = createNotifyApi({
-      connection: {
-        rpc: {
-          async call(_channel, method) {
-            calls.push(method)
-            return { ok: true, value: { entries: [], unread: 0 } }
-          },
-        },
-      },
+    installRpcFetch((call) => {
+      calls.push(call.endpoint)
+      return { value: { entries: [], unread: 0 } }
     })
+    const api = createNotifyApi({})
     expect(await api.markDeliveredRead()).toEqual({ ok: true, updated: 0 })
     expect(calls).toEqual(['traffic.status'])
   })
 
   it('rikke.settings.get / set 走同一通道（AI 段开关）', async () => {
     const calls = []
-    const api = createRikkeApi({
-      connection: {
-        rpc: {
-          async call(_channel, method, payload) {
-            calls.push([method, payload])
-            if (method === 'rikke.settings.get') return { ok: true, value: { aiEnabled: true } }
-            return { ok: true, value: { aiEnabled: false } }
-          },
-        },
-      },
+    installRpcFetch((call) => {
+      calls.push([call.endpoint, call.payload])
+      if (call.endpoint === 'rikke.settings.get') return { value: { aiEnabled: true } }
+      return { value: { aiEnabled: false } }
     })
+    const api = createRikkeApi({})
     expect(await api.getSettings()).toEqual({ aiEnabled: true })
     expect(await api.setSettings({ aiEnabled: false })).toEqual({ aiEnabled: false })
     expect(calls.map((call) => call[0])).toEqual(['rikke.settings.get', 'rikke.settings.set'])
