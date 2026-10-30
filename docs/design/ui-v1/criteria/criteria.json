@@ -21,6 +21,15 @@
       "ruleCount": 3
     },
     {
+      "id": "L",
+      "title": "层级与排版",
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "### 0.4 禁则（写稿人自查）"
+      },
+      "ruleCount": 1
+    },
+    {
       "id": "D",
       "title": "密度与点击目标",
       "source": {
@@ -78,7 +87,7 @@
     {
       "id": "T-002",
       "family": "T",
-      "statement": "样式的注入点收敛在单一消费层：界面面的源文件里没有自己注入的 `<style>`，每个面板不再各写一份样式表",
+      "statement": "样式只有一个注入点：各模块只登记自己的 CSS，注入动作收敛到单一消费层（界面面的源文件里不再自己 `document.createElement('style')` 并挂到 head）",
       "check": "static",
       "evidence": "file-line",
       "severity": "major",
@@ -175,6 +184,23 @@
         "anchor": "`空态`、`加载态`、`错误态` 三种"
       },
       "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "L-001",
+      "family": "L",
+      "statement": "同一屏内的文字层级（标题 / 正文 / 次要 / 元信息）一眼可区分：相邻两级的字号或字重至少有一项不同，且同一级的元素在整屏里用同一档",
+      "check": "human-only",
+      "evidence": "screenshot",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/assets/tokens/type-scale.md",
+        "anchor": "字号分「语义档」，实现票在组件里**点名档位 token，不写死 px**"
+      },
+      "humanReason": "「一眼能不能分出层级」是审美判断：字号差、字重差都能被机器量（那已由 C-001/C-002 覆盖），但「这屏读起来是不是有层次」没有可复现的阈值。按 spec 003 §判据硬门槛，它只能由人看一次并签字，不许伪装成机器判据。",
       "tombstone": false
     },
     {
@@ -331,7 +357,7 @@
       "tombstone": false
     }
   ],
-  "version": "0795319454e055518f4bc662735212b3fd7a4d931f87c3268834863003e984fa",
+  "version": "14f8e05d83ff886fbf22ccdf63d6ca7a85bbd9ccaa1bc95a56ad6078afbe4bfd",
   "ruleFiles": [
     {
       "file": "docs/design/ui-v1/criteria/rules/C.json",
@@ -340,6 +366,10 @@
     {
       "file": "docs/design/ui-v1/criteria/rules/D.json",
       "sha256": "267753b60a7c211b8bbe8572509bb6025d3a9af6b08f252d53180b4415aef4ca"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/L.json",
+      "sha256": "89d0bfe6e8908a454def269ded79669eac64213883bd38d6cf072e4a9f8273fb"
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/N.json",
@@ -351,7 +381,7 @@
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/T.json",
-      "sha256": "8da03255f5d3deaf2af5c8be26eace61b42b06347d3aedaaca77be51ccd7e2a2"
+      "sha256": "8a4d8cd1359db5f49562e0062b66dfcb8bf8509ef03c3e62f8ef7b265a292db5"
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/X.json",

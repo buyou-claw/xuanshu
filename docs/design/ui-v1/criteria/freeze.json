@@ -1,13 +1,13 @@
 {
   "schema": "xuanshu/ux-criteria-freeze@1",
-  "version": "0795319454e055518f4bc662735212b3fd7a4d931f87c3268834863003e984fa",
+  "version": "14f8e05d83ff886fbf22ccdf63d6ca7a85bbd9ccaa1bc95a56ad6078afbe4bfd",
   "criteria": {
     "file": "docs/design/ui-v1/criteria/criteria.json",
-    "sha256": "df12484651040087728eafab050877788b1c3b949d0a1387af9457b22261cc83",
-    "criteriaCount": 16,
-    "familyCount": 6
+    "sha256": "be4b5c0dde1e45a19c4942713a1ee8dfb6b8a522550b6110ee2ce91620d3f40c",
+    "criteriaCount": 17,
+    "familyCount": 7
   },
-  "frozenAt": "2026-10-30T18:24:55.251Z",
+  "frozenAt": "2026-10-30T18:29:04.578Z",
   "approvedBy": "integration-owner",
-  "note": "票 08/08b（N 族）落地后重签"
+  "note": "L-001 human-only + T-002 文本对齐后重签"
 }

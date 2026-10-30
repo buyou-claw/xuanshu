@@ -76,7 +76,7 @@ describe('票 02 · 判据投影产物过期就拒绝跑', () => {
     const projected = projectCriteria({ repoRoot: root, faces })
     writeFileSync(join(root, CRITERIA_FILE), projected.text)
     // 巡检启动先校验冻结值（票 03 / #50）：夹具也得先冻一次，否则测的就不是本组要测的那条路径。
-    writeFreeze({ repoRoot: root, frozenAt: '2026-10-30T00:00:00.000Z' })
+    writeFreeze({ repoRoot: root, frozenAt: '2026-10-30T00:00:00.000Z', approvedBy: 'fixture' })
     if (tamperCriteria) {
       // 改判据集里一个字节：模拟「AI 顺手调低了考卷」
       writeFileSync(join(root, CRITERIA_FILE), projected.text.replace('不出现字面色值', '不出现字面色值 '))

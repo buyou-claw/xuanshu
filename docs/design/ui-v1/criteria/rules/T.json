@@ -20,7 +20,7 @@
     },
     {
       "id": "T-002",
-      "statement": "样式的注入点收敛在单一消费层：界面面的源文件里没有自己注入的 `<style>`，每个面板不再各写一份样式表",
+      "statement": "样式只有一个注入点：各模块只登记自己的 CSS，注入动作收敛到单一消费层（界面面的源文件里不再自己 `document.createElement('style')` 并挂到 head）",
       "check": "static",
       "evidence": "file-line",
       "severity": "major",

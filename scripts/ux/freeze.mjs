@@ -240,7 +240,10 @@ export function guardCriteria({ repoRoot, criteriaText, document }) {
  * @throws {CriteriaError} criteria.json 不存在（先投影）
  * @throws {CriteriaFrozenError} 传入的 version 与重算不一致（stale-version）
  */
-export function writeFreeze({ repoRoot, version, frozenAt, note = null, approvedBy = 'human' }) {
+export function writeFreeze({ repoRoot, version, frozenAt, note = null, approvedBy }) {
+  if (typeof approvedBy !== 'string' || approvedBy.trim() === '') {
+    throw new CriteriaError('writeFreeze: approvedBy 必填（冻结值要能说清是谁签的字）');
+  }
   const absolute = join(repoRoot, CRITERIA_FILE)
   if (!existsSync(absolute)) {
     throw new CriteriaError(
@@ -313,11 +316,19 @@ async function main() {
 
   try {
     if (wantWrite) {
+      // `--approved-by` **必填**：默认值等于允许「跑一条命令就得到 human 签字」，
+      // 那个字段就成了摆设。真正的绑定签字是 PR 审批（ADR-0015 第 7 条），
+      // 这里要的是「谁按的这一下」可追溯 —— 没名字就不写。
+      const approvedBy = readFlagValue('--approved-by')
+      if (typeof approvedBy !== 'string' || approvedBy.trim() === '') {
+        console.error('[ux:freeze] --write 必须带 --approved-by <谁签的字>（不接受默认签字人）')
+        return 2
+      }
       const written = writeFreeze({
         repoRoot,
         frozenAt: undefined,
         note: readFlagValue('--note') ?? null,
-        approvedBy: readFlagValue('--approved-by') ?? 'human',
+        approvedBy: approvedBy.trim(),
       })
       console.log(`[ux:freeze] 已冻结：${written.file}`)
       console.log(

@@ -104,13 +104,13 @@ describe('票 03 · 冻结值（读写）', () => {
 
   it('不给 version 也冻结得了（人只按一次回车，不该被迫背哈希）', () => {
     const { root, projected } = tempRepo()
-    const written = writeFreeze({ repoRoot: root, frozenAt: FROZEN_AT })
+    const written = writeFreeze({ repoRoot: root, frozenAt: FROZEN_AT, approvedBy: 'human' })
     expect(written.version).toBe(projected.version)
   })
 
   it('传入的 version 与重算不一致 → 拒绝冻结，且不落盘（冻结值不许凭调用方口径写）', () => {
     const { root } = tempRepo()
-    const error = expectFrozenError(() => writeFreeze({ repoRoot: root, version: 'f'.repeat(64), frozenAt: FROZEN_AT }))
+    const error = expectFrozenError(() => writeFreeze({ repoRoot: root, version: 'f'.repeat(64), frozenAt: FROZEN_AT, approvedBy: 'human' }))
     expect(error.side).toBe('stale-version')
     expect(existsSync(freezePath(root))).toBe(false)
   })
@@ -286,7 +286,7 @@ describe('票 03 · 命令面：verify-ux 退出码 3 / freeze.mjs --write|--che
 
   it('freeze.mjs --write 是人的签字那一击：写出冻结值（带 note），随后 --check 通过', () => {
     const { root } = tempRepo()
-    const written = runNode('scripts/ux/freeze.mjs', ['--write', '--repo', root, '--note', '票 03 首次冻结'])
+    const written = runNode('scripts/ux/freeze.mjs', ['--write', '--repo', root, '--note', '票 03 首次冻结', '--approved-by', 'human'])
     expect(written.status).toBe(0)
     expect(written.stdout).toContain(projectedVersionOf(root).slice(0, 12))
     expect(JSON.parse(readFileSync(freezePath(root), 'utf8')).note).toBe('票 03 首次冻结')
