@@ -18,6 +18,8 @@
     "dev:xuanshu": "node scripts/isolation/startup.mjs --mode web",
     "doctor:xuanshu": "node scripts/isolation/startup.mjs",
     "verify:isolation": "node scripts/verify-isolation.mjs",
+    "verify:ux": "node scripts/verify-ux.mjs",
+    "ux:project": "node scripts/ux/project.mjs",
     "test": "vitest run",
     "test:inventory": "node scripts/check-test-inventory.mjs",
     "test:assembly": "vitest run tests/assembly",
