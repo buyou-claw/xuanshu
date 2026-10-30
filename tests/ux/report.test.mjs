@@ -1,18 +1,18 @@
 /**
  * 报告器（spec 003 · 票 02 / #49）：兑现率、字段齐全、人读顺序。
  *
- * 三分类 diff 的完整覆盖在票 05（#52）；本文件只管「没有上一次报告时不许硬算一个数」。
+ * 三分类 diff 的完整覆盖在票 05（#52）的 `tests/ux/report-diff.test.mjs`；分类函数本体在
+ * `scripts/ux/diff.mjs`——本文件只保留票 02 写下的那几条 diff 断言（语义不变，只换 import 来源）。
  */
 import { describe, expect, it } from 'vitest'
 
+import { diffVerdicts, verdictKey } from '../../scripts/ux/diff.mjs'
 import {
   buildReport,
   computeRate,
   assertRate,
-  diffVerdicts,
   renderMarkdown,
   ReportError,
-  verdictKey,
 } from '../../scripts/ux/report.mjs'
 
 const FACES = [
@@ -141,7 +141,7 @@ describe('票 02 · 没有上一次报告时不硬算 diff', () => {
     expect(report.diff.reason).toContain('不可比')
   })
 
-  it('同一版本时做三分类（票 05 会在此基础上补排序与「上次有、这次没有」）', () => {
+  it('同一版本时做三分类（票 05 起分类函数在 diff.mjs；本断言语义不变）', () => {
     const previous = {
       criteria: { version: CRITERIA.version },
       verdicts: [

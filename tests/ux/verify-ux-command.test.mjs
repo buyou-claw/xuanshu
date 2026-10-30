@@ -28,6 +28,7 @@ describe('票 02 · 一条命令跑完全链路', () => {
     expect(exitCode).toBe(0)
     expect(report.criteria.label).toBe('ux-v1')
     expect(report.criteria.version).toMatch(/^[0-9a-f]{64}$/)
+    // 分母 = 判据 × 适用界面面：T-001 覆盖全部 25 面，D-001（browser）只覆盖 22 个有渲染位置的面
     expect(report.rate.applicable).toBe(FACES.length + FACES.filter((face) => face.slot !== null).length)
     expect(report.rate.passed).toBeLessThan(report.rate.applicable) // 现实里有红
     expect(markdown).toContain('兑现率')

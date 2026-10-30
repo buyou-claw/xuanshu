@@ -25,7 +25,7 @@ import { faceManifest } from '../tests/assembly/lib/panel-surface.mjs'
 import { collectStatic } from './ux/collect/static.mjs'
 import { run as judgeRun } from './ux/judge.mjs'
 import { CRITERIA_FILE, projectCriteria, readNormalizedText } from './ux/project.mjs'
-import { buildReport, renderMarkdown, REPORT_SCHEMA } from './ux/report.mjs'
+import { buildReport, readPreviousReport, renderMarkdown } from './ux/report.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const DEFAULT_REPO_ROOT = resolve(HERE, '..')
@@ -74,21 +74,14 @@ function readCommittedCriteria({ repoRoot, projected }) {
   return projected.document
 }
 
-function readPreviousReport(repoRoot) {
-  const absolute = join(repoRoot, DEFAULT_REPORT_DIR, 'latest.json')
-  if (!existsSync(absolute)) return null
-  try {
-    const parsed = JSON.parse(readNormalizedText(absolute))
-    if (parsed?.schema !== REPORT_SCHEMA) return null
-    return parsed
-  } catch {
-    // 上一次报告坏了不该让这一轮跑不成：当成「没有上一次」并在 notes 里说清。
-    return null
-  }
-}
-
 function timestampSlug(iso) {
   return iso.replace(/[:.]/g, '-')
+}
+
+/** 报告落点的绝对路径：`--out` 给绝对路径就用它，给相对路径就相对仓库根（读写同一个地方）。 */
+function resolveOutRoot({ repoRoot, outDir }) {
+  if (outDir === undefined) return join(repoRoot, DEFAULT_REPORT_DIR)
+  return isAbsolute(outDir) ? outDir : join(repoRoot, outDir)
 }
 
 /**
@@ -113,8 +106,14 @@ export function runVerifyUx(options = {}) {
   const projected = projectCriteria({ repoRoot, faces })
   const criteria = readCommittedCriteria({ repoRoot, projected })
 
+  // 「读上一次」只发生在 report.mjs（`readPreviousReport()`）：这里只递目录。
+  // 读写同一个落点：`--out` 用哪儿，就从哪儿拿上一次。
+  const outRoot = resolveOutRoot({ repoRoot, outDir: options.outDir })
+  const previousRead = readPreviousReport(outRoot)
+
   // 浏览器半边在后续票接入；现在只跑静态，并把「没跑」如实写进报告（不装作已跑）。
   const collection = { mode, notes: [] }
+  if (previousRead.note !== '') collection.notes.push(previousRead.note)
   const evidence = []
   if (mode === 'static' || mode === 'browser') {
     const statics = collectStatic({ repoRoot, criteria, faces })
@@ -128,19 +127,18 @@ export function runVerifyUx(options = {}) {
   }
 
   const judged = judgeRun({ criteria, evidence, faces })
-  const previous = readPreviousReport(repoRoot)
-  const report = buildReport({ criteria, faces, verdicts: judged.verdicts, previous, generatedAt, collection })
+  const report = buildReport({
+    criteria,
+    faces,
+    verdicts: judged.verdicts,
+    previous: previousRead.previous,
+    generatedAt,
+    collection,
+  })
   const markdown = renderMarkdown(report)
 
   const paths = {}
   if (options.write !== false) {
-    // `--out` 给绝对路径就用它（测试往临时目录写），给相对路径就相对仓库根。
-    const outRoot =
-      options.outDir === undefined
-        ? join(repoRoot, DEFAULT_REPORT_DIR)
-        : isAbsolute(options.outDir)
-          ? options.outDir
-          : join(repoRoot, options.outDir)
     const reportDir = join(outRoot, timestampSlug(generatedAt))
     mkdirSync(reportDir, { recursive: true })
     paths.json = join(reportDir, 'report.json')
@@ -178,6 +176,21 @@ function printSummary({ report, paths, outDir }) {
     }
   }
   if (!report.diff.comparable) console.log(`[verify:ux] diff：${report.diff.reason}`)
+  else {
+    const diff = report.diff
+    const parts = [
+      `回退 ${diff.regressions.length}`,
+      `新增 ${diff.added.length}`,
+      `已修 ${diff.fixed.length}`,
+      `消失 ${diff.disappeared.length}`,
+    ]
+    if (diff.stillFailing.length > 0) parts.push(`一直红 ${diff.stillFailing.length}`)
+    if (diff.transitions.length > 0) parts.push(`状态迁移 ${diff.transitions.length}`)
+    console.log(`[verify:ux] 较上次：${parts.join(' · ')}`)
+    if (diff.regressions.length > 0) {
+      for (const verdict of diff.regressions) console.log(`  🔴 ${verdict.criterionId} ${verdict.face} · ${verdict.message}`)
+    }
+  }
   if (paths?.markdown !== undefined) {
     console.log(`[verify:ux] 报告：${paths.markdown}`)
     console.log(`[verify:ux] 机读：${paths.json}`)
