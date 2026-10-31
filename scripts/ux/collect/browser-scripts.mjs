@@ -383,12 +383,10 @@ export const SCRIPTS = {
       //    开不出来就如实记「入口置灰 / 点了没开 = 这一面未采到」，不是通过。
       if (stillConsult) {
         const from = await nav.landing()
-        // 两个入口都在门厅的挂载区里：标题旁的「临时挂载…」与状态栏的「挂载 N 字 / 预算 M 字」。
-        // 谁启用了就点谁（没有会话时两个都置灰 —— 那不是失败，是没有可挂的账本）。
-        const candidates = [
-          `${CONSULT} [data-xuanshu-action="open-mounts"]`,
-          `${CONSULT} [data-xuanshu-mount-status="1"]`,
-        ]
+        // 门厅的挂载区里只有**一扇**门：标题旁的「临时挂载…」（#69 / N-001 之后状态栏退回纯读数，
+        // 从前它也能点开同一个抽屉 —— 两个入口指同一动作，判据会红）。所以这里只认这一个选择器；
+        // 没有会话时它置灰 —— 那不是失败，是没有可挂的账本。
+        const candidates = [`${CONSULT} [data-xuanshu-action="open-mounts"]`]
         let entry = null
         for (const selector of candidates) {
           const candidate = page.locator(selector).first()

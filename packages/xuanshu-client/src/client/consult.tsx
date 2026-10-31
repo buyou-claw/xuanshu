@@ -276,10 +276,10 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
               <p>{`谱清单读不到：${defaults.message}`}</p>
               <div className="xs-consult__actions">
                 <button type="button" data-xuanshu-action="retry-defaults" onClick={reloadDefaults}>重试</button>
-                <button type="button" data-xuanshu-action="goto-manage-pu" onClick={() => { navigate('pus'); }}>
-                  {'去谱管理 ▸ S5'}
-                </button>
               </div>
+              {/* #69 / 判据 N-001：这里原本还有一枚「去谱管理 ▸ S5」。谱管理的门只有侧栏行「谱」一个，
+                  所以错误态只给「重试」这一个动作 + 一句去路（能力没丢：侧栏行「谱」一直都在）。 */}
+              <p className="xs-consult__note" data-xuanshu-note="goto-pu-sidebar">谱清单读不到时改不了谱上的内容；要看谱库，点侧栏「谱」。</p>
             </div>
           ) : null}
           {defaults.kind === 'ready' ? (
@@ -288,7 +288,6 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
               optional={optional}
               selected={selected}
               onToggle={(slug) => { touched.current = true; setSelected((current) => toggleSelection(current, slug)); }}
-              onManagePu={() => { navigate('pus'); }}
               onOpenDetail={() => { navigate('mingpan'); }}
             />
           ) : null}

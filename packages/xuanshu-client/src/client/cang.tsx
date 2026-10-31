@@ -11,9 +11,8 @@
  *      `.scratch/notes/dsh-api-facts.md §6.5`（槽位面；**具体 file:line 未确认**，不编）。
  *      抽屉走 overlay 而不是另一个 main key：它要在任何面板之上都能划出来。
  *   3. **apply 期不切面板**：`installCangClient` 一次 `selectPanel` 都不调（默认面板由根入口切一次，
- *      `verify-assembly` S3 断言它恰一次、值为 `overview`）。
- *      `navigatePus` 是**用户点「去谱管理」时才用**的，而且先查 `main` 槽里有没有 `pus` 再切
- *      （注册面 fail-soft：目标没装配就什么也不做）。
+ *      `verify-assembly` S3 断言它恰一次、值为 `overview`）。#69 之后**面板里也不再切**：
+ *      去谱管理只有侧栏行「谱」这一扇门（判据 N-001），所以这里连 `navigatePus` 的接线都没有了。
  *   4. **RPC 方法名逐字对应宿主**（`packages/xuanshu-host/lib/cang/service.mjs` 的 `cang.*`）：
  *      改一边不会在编译期报错，只会静默不匹配 —— 所以名字在这里是**接口面**，不是字符串常量。
  *
@@ -60,9 +59,9 @@ export function installCangClient(ctx: Context & RpcContext): void {
     pickDirectory: () => rpcCall(ctx, 'cang.pickDirectory'),
   };
   const controller = createCangController();
-  // fail-soft：`pus` 面板没装配时不做任何事（`selectPanel` 对未注册 key 会 throw）。
-  const navigatePus = () => { if (ctx.slots.entries('main').some(entry => entry.options?.key === 'pus')) ctx.layout.selectPanel('pus'); };
-  ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'cang', inject: () => ({ api, controller, navigatePus }) }, CangPanel));
+  // 藏库面板不接「去谱管理」的跳转：谱管理的门只有侧栏行「谱」一个（#69 / 判据 N-001）。
+  // 以前这里的 `navigatePus` 是面板里那枚「查看谱」按钮的接线 —— 两个门指同一动作，删掉按钮后接线一起删。
+  ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'cang', inject: () => ({ api, controller }) }, CangPanel));
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: 'cang', order: 50, label: '藏' }, CangIcon));
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'xuanshu-cang-drawer', inject: () => ({ api, controller }) }, CangOverlay));
 }

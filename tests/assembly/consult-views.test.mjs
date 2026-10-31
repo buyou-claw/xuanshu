@@ -120,7 +120,10 @@ describe('票 10 · 勾选谱：恒定在场项 + 两组可选谱', () => {
     expect(digaoCard).toContain('纯派生')
     expect(digaoCard).toContain('要改就改源头')
     for (const source of ['谱', '工作区', '工作流']) expect(digaoCard).toContain(source)
-    expect(digaoCard).toContain('data-xuanshu-action="locked-goto-pu"')
+    // #69 / 判据 N-001：去路仍然在，但**不是第二扇门** —— 谱管理只有侧栏行「谱」一个入口，
+    // 所以这张卡指的是侧栏行，而不是再挂一枚「去谱管理 ▸」按钮（同一动作两个入口即红）。
+    expect(digaoCard, '谱管理的门只剩侧栏行：这里不该再有按钮').not.toMatch(/<button[^>]*>去谱管理/u)
+    expect(digaoCard).toContain('侧栏「谱」')
 
     // 锁定行不给任何「取消 / 关掉这一项」的途径
     expect(html).not.toMatch(/data-xuanshu-action="(unlock|disable-locked|cancel-locked)/)
@@ -138,9 +141,11 @@ describe('票 10 · 勾选谱：恒定在场项 + 两组可选谱', () => {
     expect(tagOf(optionalRow, 'type="checkbox"')).not.toContain('checked')
   })
 
-  it('勾选清单只列谱：两组可勾选块里不出现工作区 / 工作流（C6②），并给「管理谱 ▸ S5」出口', () => {
+  it('勾选清单只列谱：两组可勾选块里不出现工作区 / 工作流（C6②）；去谱管理的路点名侧栏行而不是第二扇门', () => {
     const html = picker()
-    expect(html).toContain('data-xuanshu-action="manage-pu"')
+    // #69 / 判据 N-001：谱管理的门只有侧栏行「谱」一个 —— 这块里不许再挂一枚「管理谱 ▸ S5」。
+    expect(html, '勾选清单里还挂着去谱管理的按钮').not.toMatch(/<button[^>]*>管理谱/u)
+    expect(html).toContain('侧栏「谱」')
     for (const level of ['base', 'optional']) {
       const group = blockOf(html, `data-xuanshu-group="${level}"`)
       expect(group, `${level} 组里混进了挂载对象`).not.toContain('工作区')

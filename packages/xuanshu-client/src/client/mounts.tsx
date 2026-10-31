@@ -34,7 +34,8 @@ export function installMountsStyle(): void {
     // 而宿主定在 14px 时（实测值）下限仍压得住 —— 判据 C-001 量的是渲染值。
     '.xs-mounts__summary{margin:6px 0;opacity:.8;font-size:max(16px,var(--dsh-content-font-size,16px))}',
     '.xs-mounts__note{margin:6px 0;opacity:.8;font-size:13px}',
-    '.xs-mounts__status{background:none;border:0;padding:0;color:inherit;opacity:.85;cursor:pointer;font-size:12px}',
+    // 状态栏是读数不是按钮（#69）：去掉 `cursor:pointer` —— 一个不接点击的读数不该摆出可点的样子。
+    '.xs-mounts__status{background:none;border:0;padding:0;color:inherit;opacity:.85;font-size:12px}',
     '.xs-mounts__overlay{position:fixed;inset:0;background:var(--xs-surface-overlay-mask);display:flex;justify-content:flex-end;z-index:60}',
     '.xs-mounts__drawer{width:min(720px,92vw);height:100%;overflow:auto;background:var(--xs-surface-overlay);padding:16px;display:flex;flex-direction:column;gap:12px}',
     '.xs-mounts__head{display:flex;align-items:center;justify-content:space-between}',

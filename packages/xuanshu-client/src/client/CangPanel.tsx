@@ -17,6 +17,13 @@
  * 槽位与注册面：本组件由 `cang.tsx` 的 `installCangClient` 注进 `main` 槽
  * （槽位面见 `.scratch/notes/dsh-api-facts.md §6.5`；**具体 file:line 未确认**，不编）。
  * 三态（loading / error / empty）+ 空态可执行（空态里就有「登记第一个藏」）。
+ *
+ * 入口唯一（#69 / 判据 N-001，两个「为什么」）：
+ *   5. **这里不再有去谱管理的按钮**：谱管理的门只有侧栏行「谱」一个（十个面板共同的唯一导航原语）。
+ *      面板里再放一个「查看谱」就是同一动作的第二扇门 —— 用户要在两个地方决定点哪个。
+ *      「藏 vs 谱」这句边界话留着（它是信息，不是门），只是把去路说成侧栏行。
+ *   6. **空态只有一扇登记门**：工具条的「登记藏」在空态不渲染（不是置灰 —— 置灰仍是一个门）。
+ *      空态自带「登记第一个藏」那一个 CTA（#68 补的可执行空态），两个并排就是 N-001 的重复入口。
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { CangApi, CangController, CangEntry, CangList } from './cang-model.js';
@@ -33,8 +40,8 @@ export function filterCangEntries(entries: CangEntry[], query: string, tag: stri
   return entries.filter(entry => (!tag || entry.tags.includes(tag)) && (!needle || [entry.name, ...entry.tags].some(value => value.toLocaleLowerCase().includes(needle))))
     .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, 'zh-CN') : b.createdAt.localeCompare(a.createdAt));
 }
-export interface CangPanelProps { api: CangApi; controller: CangController; navigatePus?: () => void; initialData?: CangList }
-export function CangPanel({ api, controller, navigatePus, initialData }: CangPanelProps) {
+export interface CangPanelProps { api: CangApi; controller: CangController; initialData?: CangList }
+export function CangPanel({ api, controller, initialData }: CangPanelProps) {
   // 与抽屉共享同一个 controller：`revision` 变了就重取（见 cang.tsx 文件头第 1 条）。
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [data, setData] = useState<CangList | undefined>(initialData);
@@ -65,6 +72,8 @@ export function CangPanel({ api, controller, navigatePus, initialData }: CangPan
     try { await operation(); } catch (reason) { setNotice(String((reason as Error).message ?? reason)); } finally { setBusy(false); }
   }
   const entries = data?.entries ?? [];
+  // 空态（有分支、无条目）：由空态那一块给唯一的一扇登记门，工具条的「登记藏」让位。
+  const empty = !loading && !error && !entries.length;
   const tags = [...new Set(entries.flatMap(entry => entry.tags))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
   const filtered = filterCangEntries(entries, query, tag, sort);
   // 按「签」分组（没贴签的归到「未贴签」）；同一个藏挂了几个签就在几组里各出现一次。
@@ -73,10 +82,10 @@ export function CangPanel({ api, controller, navigatePus, initialData }: CangPan
   return <section className="xs-cang" data-xuanshu-panel="cang">
     <h1>藏库</h1>
     <p className="xs-cang__boundary" data-xuanshu-note="no-ai">{CANG_AI_FREE}</p>
-    <p>谱会被 AI 读进上下文；藏只是你自己的本地文件入口。<button type="button" disabled={!navigatePus} onClick={navigatePus}>查看谱</button></p>
+    <p>谱会被 AI 读进上下文；藏只是你自己的本地文件入口。<span className="xs-cang__how">（要找谱：点侧栏「谱」。）</span></p>
     <p>藏不是挂载对象；工作区与工作流走临时挂载。</p>
     <div className="xs-cang__toolbar">
-      <button type="button" disabled={loading || !!error} onClick={() => controller.edit(newCangDraft())}>登记藏</button>
+      {empty ? null : <button type="button" disabled={loading || !!error} onClick={() => controller.edit(newCangDraft())}>登记藏</button>}
       <label>搜藏名 / 签 <input value={query} onChange={event => setQuery(event.target.value)} /></label>
       <label>签 <select value={tag} onChange={event => setTag(event.target.value)}><option value="">全部</option>{tags.map(value => <option key={value}>{value}</option>)}</select></label>
       <label>排序 <select value={sort} onChange={event => setSort(event.target.value as 'recent' | 'name')}><option value="recent">最近登记</option><option value="name">名称</option></select></label>
@@ -84,7 +93,7 @@ export function CangPanel({ api, controller, navigatePus, initialData }: CangPan
     {loading && <p role="status">正在读取藏库注册表…</p>}
     {error && <div role="alert"><p>注册表读取失败：{error}</p><button type="button" onClick={() => setReload(value => value + 1)}>重试</button></div>}
     {notice && <p role="alert">{notice}</p>}
-    {!loading && !error && !entries.length && <div className="xs-cang__empty"><p>你还没有登记任何藏。藏只登记指针，不复制文件。</p><button type="button" onClick={() => controller.edit(newCangDraft())}>登记第一个藏</button></div>}
+    {empty && <div className="xs-cang__empty"><p>你还没有登记任何藏。藏只登记指针，不复制文件。</p><button type="button" onClick={() => controller.edit(newCangDraft())}>登记第一个藏</button></div>}
     {!loading && !error && !!entries.length && !filtered.length && <p>没有匹配的藏名或签。</p>}
     {!loading && !error && [...groups].map(([label, items]) => <details open key={label} className="xs-cang__group"><summary>签「{label}」（{items.length}）</summary>{items.map(entry => <article className="xs-cang__card" key={entry.id} data-cang-id={entry.id}>
       <h2>{entry.name} <span className="xs-cang__status">已登记</span></h2>

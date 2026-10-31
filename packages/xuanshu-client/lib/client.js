@@ -1326,7 +1326,7 @@ function filterCangEntries(entries, query, tag, sort) {
   const needle = query.trim().toLocaleLowerCase();
   return entries.filter((entry) => (!tag || entry.tags.includes(tag)) && (!needle || [entry.name, ...entry.tags].some((value) => value.toLocaleLowerCase().includes(needle)))).sort((a, b) => sort === "name" ? a.name.localeCompare(b.name, "zh-CN") : b.createdAt.localeCompare(a.createdAt));
 }
-function CangPanel({ api, controller, navigatePus, initialData }) {
+function CangPanel({ api, controller, initialData }) {
   const state = (0, import_react3.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
   const [data, setData] = (0, import_react3.useState)(initialData);
   const [loading, setLoading] = (0, import_react3.useState)(!initialData);
@@ -1369,6 +1369,7 @@ function CangPanel({ api, controller, navigatePus, initialData }) {
     }
   }
   const entries = data?.entries ?? [];
+  const empty = !loading && !error && !entries.length;
   const tags = [...new Set(entries.flatMap((entry) => entry.tags))].sort((a, b) => a.localeCompare(b, "zh-CN"));
   const filtered = filterCangEntries(entries, query, tag, sort);
   const groups = /* @__PURE__ */ new Map();
@@ -1378,11 +1379,11 @@ function CangPanel({ api, controller, navigatePus, initialData }) {
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "xs-cang__boundary", "data-xuanshu-note": "no-ai", children: CANG_AI_FREE }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { children: [
       "谱会被 AI 读进上下文；藏只是你自己的本地文件入口。",
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", disabled: !navigatePus, onClick: navigatePus, children: "查看谱" })
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "xs-cang__how", children: "（要找谱：点侧栏「谱」。）" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "藏不是挂载对象；工作区与工作流走临时挂载。" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "xs-cang__toolbar", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", disabled: loading || !!error, onClick: () => controller.edit(newCangDraft()), children: "登记藏" }),
+      empty ? null : /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", disabled: loading || !!error, onClick: () => controller.edit(newCangDraft()), children: "登记藏" }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { children: [
         "搜藏名 / 签 ",
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("input", { value: query, onChange: (event) => setQuery(event.target.value) })
@@ -1411,7 +1412,7 @@ function CangPanel({ api, controller, navigatePus, initialData }) {
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", onClick: () => setReload((value) => value + 1), children: "重试" })
     ] }),
     notice && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "alert", children: notice }),
-    !loading && !error && !entries.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "xs-cang__empty", children: [
+    empty && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "xs-cang__empty", children: [
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "你还没有登记任何藏。藏只登记指针，不复制文件。" }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", onClick: () => controller.edit(newCangDraft()), children: "登记第一个藏" })
     ] }),
@@ -2135,7 +2136,7 @@ function installCangStyle() {
 .xs-cang{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
 .xs-cang h1,.xs-cang h2{font-weight:600}.xs-cang h2{font-size:1.05rem}.xs-cang p{line-height:1.6}.xs-cang__boundary{position:sticky;top:0;z-index:1;background:var(--xs-constraint-noai-bg);color:var(--xs-constraint-noai-fg);padding:12px;border-radius:8px}
 .xs-cang__toolbar,.xs-cang__actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--xs-space-toolbar);margin:16px 0}.xs-cang button,.xs-cang__drawer button{font:inherit;padding:7px 12px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}.xs-cang button:disabled,.xs-cang__drawer button:disabled{opacity:.5;cursor:not-allowed}
-.xs-cang input,.xs-cang select,.xs-cang__drawer input{font:inherit;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:7px;min-width:0}.xs-cang__card{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad);margin:12px 0;background:var(--xs-surface-card)}.xs-cang code{overflow-wrap:anywhere;font-family:var(--font-mono,monospace);color:var(--xs-text-code)}.xs-cang__status{font-size:.8rem;font-weight:400}.xs-cang__more>summary{cursor:pointer}.xs-cang__more>div{display:flex;flex-wrap:wrap;gap:8px}.xs-cang__group>summary{padding:8px;cursor:pointer}.xs-cang footer{margin-top:24px;color:var(--xs-text-secondary)}.xs-cang__confirm{padding:16px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-nested)}
+.xs-cang input,.xs-cang select,.xs-cang__drawer input{font:inherit;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:7px;min-width:0}.xs-cang__card{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad);margin:12px 0;background:var(--xs-surface-card)}.xs-cang code{overflow-wrap:anywhere;font-family:var(--font-mono,monospace);color:var(--xs-text-code)}.xs-cang__status{font-size:.8rem;font-weight:400}.xs-cang__how{opacity:.8;font-size:.9rem}.xs-cang__more>summary{cursor:pointer}.xs-cang__more>div{display:flex;flex-wrap:wrap;gap:8px}.xs-cang__group>summary{padding:8px;cursor:pointer}.xs-cang footer{margin-top:24px;color:var(--xs-text-secondary)}.xs-cang__confirm{padding:16px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-nested)}
 .xs-cang__overlay{position:fixed;inset:0;display:flex;justify-content:flex-end;background:var(--xs-surface-overlay-mask);pointer-events:auto;z-index:100}.xs-cang__drawer{width:min(560px,100%);overflow:auto;background:var(--xs-surface-overlay);color:var(--xs-text-body);padding:var(--xs-space-overlay-pad);box-sizing:border-box;box-shadow:var(--xs-shadow-card)}.xs-cang__drawer form>label{display:block;margin:16px 0}.xs-cang__drawer form>label input{display:block;box-sizing:border-box;width:100%;margin-top:8px}.xs-cang__drawer fieldset label{display:block;margin:8px 0}.xs-cang__drawer fieldset input{margin-right:8px}
 @media(min-width: ${BREAKPOINT_WIDE_PX}px){.xs-cang__more>summary{display:none}.xs-cang__more:not([open])>div{display:flex}}
 @media(max-width: ${BREAKPOINT_NARROW_PX}px){.xs-cang{padding:14px}.xs-cang__toolbar{align-items:stretch;flex-direction:column}.xs-cang__drawer{padding:16px}}`);
@@ -2189,10 +2190,7 @@ function installCangClient(ctx) {
     pickDirectory: () => rpcCall(ctx, "cang.pickDirectory")
   };
   const controller = createCangController();
-  const navigatePus = () => {
-    if (ctx.slots.entries("main").some((entry) => entry.options?.key === "pus")) ctx.layout.selectPanel("pus");
-  };
-  ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: "cang", inject: () => ({ api, controller, navigatePus }) }, CangPanel));
+  ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: "cang", inject: () => ({ api, controller }) }, CangPanel));
   ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: "cang", order: 50, label: "藏" }, CangIcon));
   ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "xuanshu-cang-drawer", inject: () => ({ api, controller }) }, CangOverlay));
 }
@@ -2421,7 +2419,7 @@ var import_jsx_runtime6 = require("react/jsx-runtime");
 function lockedExplain(source) {
   return source.kind === "digao" ? "底稿与八字同级、默认必加载的基础谱；它是纯派生的，要改就改源头（谱 / 工作区 / 工作流）。" : "底座始终在场、不可关：它是每一场问事的前提。";
 }
-function XsConsultPicker({ required, optional, selected, onToggle, onManagePu, onOpenDetail }) {
+function XsConsultPicker({ required, optional, selected, onToggle, onOpenDetail }) {
   const groups = groupOptional(optional);
   const [explaining, setExplaining] = (0, import_react5.useState)(void 0);
   return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "pu-picker", children: [
@@ -2455,10 +2453,7 @@ function XsConsultPicker({ required, optional, selected, onToggle, onManagePu, o
           children: [
             /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { children: lockedExplain(source) }),
             source.present ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": `locked-absent-${source.kind}`, children: source.reason ?? "这一项现在不在场" }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-consult__actions", children: source.kind === "digao" ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_jsx_runtime6.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "locked-goto-pu", onClick: onManagePu, children: "去谱管理 ▸" }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__note", children: "三个源头：谱（在谱管理里改）/ 工作区 / 工作流；底稿本身在底稿面板看。" })
-            ] }) : /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_jsx_runtime6.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-consult__actions", children: source.kind === "digao" ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(import_jsx_runtime6.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__note", "data-xuanshu-note": "goto-pu-sidebar", children: "三个源头：谱（点侧栏「谱」改）/ 工作区 / 工作流；底稿本身在底稿面板看。" }) }) : /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_jsx_runtime6.Fragment, { children: [
               /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "locked-goto-mingpan", onClick: onOpenDetail, children: "去命盘详情 ▸" }),
               /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__note", children: "要改出生信息：走命盘详情里的「重新录制出生信息」。" })
             ] }) })
@@ -2485,7 +2480,7 @@ function XsConsultPicker({ required, optional, selected, onToggle, onManagePu, o
       ] }, source.slug))
     ] }, group2.level)),
     optional.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "no-optional-pu", children: historyEmptyCopy.noneOptionalPu }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-consult__actions", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "manage-pu", onClick: onManagePu, children: "管理谱 ▸ S5" }) })
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "goto-pu-sidebar", children: "要改谱：点侧栏「谱」（谱管理只有那一个入口）。" })
   ] });
 }
 function XsConsultMountPlaceholder({ mounts }) {
@@ -3036,12 +3031,8 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
       defaults.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-consult__note", "data-xuanshu-state": "pu-loading", children: "正在读谱清单…" }) : null,
       defaults.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-consult__error", "data-xuanshu-error": "defaults", role: "alert", children: [
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: `谱清单读不到：${defaults.message}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "xs-consult__actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "retry-defaults", onClick: reloadDefaults, children: "重试" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "goto-manage-pu", onClick: () => {
-            navigate("pus");
-          }, children: "去谱管理 ▸ S5" })
-        ] })
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "xs-consult__actions", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", "data-xuanshu-action": "retry-defaults", onClick: reloadDefaults, children: "重试" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "goto-pu-sidebar", children: "谱清单读不到时改不了谱上的内容；要看谱库，点侧栏「谱」。" })
       ] }) : null,
       defaults.kind === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
         XsConsultPicker,
@@ -3052,9 +3043,6 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
           onToggle: (slug) => {
             touched.current = true;
             setSelected((current) => toggleSelection(current, slug));
-          },
-          onManagePu: () => {
-            navigate("pus");
           },
           onOpenDetail: () => {
             navigate("mingpan");
@@ -6289,17 +6277,14 @@ function createMountsController(options) {
 // src/client/mounts-views.tsx
 var import_react13 = require("react");
 var import_jsx_runtime15 = require("react/jsx-runtime");
-function XsMountStatusBar({ status, budgetSource, hint, onOpen }) {
+function XsMountStatusBar({ status, budgetSource, hint }) {
   const text = status === void 0 ? hint ?? "挂载 … 字 / 预算 …" : statusLine(status);
   return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
-    "button",
+    "span",
     {
-      type: "button",
       className: "xs-mounts__status",
       "data-xuanshu-mount-status": "1",
       "data-xuanshu-budget-unknown": status?.budget === null ? "1" : "0",
-      onClick: onOpen,
-      disabled: onOpen === void 0,
       title: status?.budget === null ? BUDGET_UNKNOWN_NOTE : `本次挂载的裁剪结果（来源：${budgetSource ?? "unknown"}）`,
       children: text
     }
@@ -6313,7 +6298,7 @@ function XsMountSection({ mounts, status, canMount, reason, revision, onOpen }) 
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mounts__summary", "data-xuanshu-mount-summary": "1", children: mountsSummary(mounts) }),
     canMount ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mounts__note", "data-xuanshu-note": "mounts-need-session", children: reason ?? "先生成一次问事，再临时挂载：挂载落在那次问事的清单上。" }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(XsMountStatusBar, { status, onOpen: canMount ? onOpen : void 0, hint: canMount ? void 0 : "挂载 0 字 / 预算 …" })
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(XsMountStatusBar, { status, hint: canMount ? void 0 : "挂载 0 字 / 预算 …" })
   ] });
 }
 function WorkspaceRow({ candidate, selected, onToggle }) {
@@ -6436,7 +6421,8 @@ function installMountsStyle() {
     // 而宿主定在 14px 时（实测值）下限仍压得住 —— 判据 C-001 量的是渲染值。
     ".xs-mounts__summary{margin:6px 0;opacity:.8;font-size:max(16px,var(--dsh-content-font-size,16px))}",
     ".xs-mounts__note{margin:6px 0;opacity:.8;font-size:13px}",
-    ".xs-mounts__status{background:none;border:0;padding:0;color:inherit;opacity:.85;cursor:pointer;font-size:12px}",
+    // 状态栏是读数不是按钮（#69）：去掉 `cursor:pointer` —— 一个不接点击的读数不该摆出可点的样子。
+    ".xs-mounts__status{background:none;border:0;padding:0;color:inherit;opacity:.85;font-size:12px}",
     ".xs-mounts__overlay{position:fixed;inset:0;background:var(--xs-surface-overlay-mask);display:flex;justify-content:flex-end;z-index:60}",
     ".xs-mounts__drawer{width:min(720px,92vw);height:100%;overflow:auto;background:var(--xs-surface-overlay);padding:16px;display:flex;flex-direction:column;gap:12px}",
     ".xs-mounts__head{display:flex;align-items:center;justify-content:space-between}",
