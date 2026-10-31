@@ -352,7 +352,7 @@ function missingReason(providers, defaultModel) {
   if (target.modelCount === 0) {
     return {
       code: "no-model",
-      text: `${target.name ?? target.id} 已注册，但模型清单是空的（没有可用模型）。`,
+      text: `${target.name ?? target.id} 已注册，但模型清单里还没有可用的模型。`,
       next: `打开 DSH「${AI_SETTINGS_PATH}」给这家加一个模型。`
     };
   }
@@ -3181,8 +3181,13 @@ function installConsult(ctx, deps) {
 }
 function installConsultStyle() {
   registerStyleSheet("xuanshu-consult-style", `
-.xs-consult{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
-.xs-consult h1,.xs-consult h3,.xs-consult h4{font-weight:600}.xs-consult h1{font-size:1.15rem}.xs-consult h3{font-size:.98rem;margin:16px 0 6px}.xs-consult h4{font-size:.85rem;margin:12px 0 4px;color:var(--xs-text-secondary)}
+.xs-consult{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body);font-size:max(16px,var(--dsh-content-font-size,16px))}
+/* 正文下限钉在面板根上（判据 C-001）：宿主在容器上定义了 --dsh-content-font-size（实测 14px），
+   所以 var(…, 16px) 的 fallback 永远不生效，只有 max() 能压住。放根上而不是逐条写，
+   是因为 summary / text / 列表正文这些「没有自己 font-size」的句子全靠继承拿字号。
+   h3 / h4 是例外：它们原先写死 rem（.98rem = 15.68px、.85rem = 13.6px），绝对值不继承，
+   所以各自也要钉一次；两档同为 heading（16px / 600），靠颜色与嵌套分，不靠字号。 */
+.xs-consult h1,.xs-consult h3,.xs-consult h4{font-weight:600}.xs-consult h1{font-size:1.15rem}.xs-consult h3{font-size:max(16px,var(--dsh-content-font-size,16px));margin:16px 0 6px}.xs-consult h4{font-size:max(16px,var(--dsh-content-font-size,16px));margin:12px 0 4px;color:var(--xs-text-secondary)}
 .xs-consult__head,.xs-consult__toolbar,.xs-consult__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .xs-consult__head{justify-content:space-between}
 .xs-consult button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
@@ -3200,12 +3205,12 @@ function installConsultStyle() {
 .xs-consult__badge{font-size:.72rem;padding:2px 8px;border:1px solid var(--xs-edge-card);border-radius:999px;color:var(--xs-text-secondary)}
 .xs-consult__note{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6}
 .xs-consult__field{display:block;margin:10px 0}
-.xs-consult__field>span{display:block;margin-bottom:4px;font-size:.85rem}
+.xs-consult__field>span{display:block;margin-bottom:4px;font-size:max(16px,var(--dsh-content-font-size,16px))}
 .xs-consult__locked{list-style:none;margin:0;padding:0}
 .xs-consult__rows{list-style:none;margin:0;padding:0}
 .xs-consult__row-hit{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left}
 .xs-consult__shortid{font-family:var(--font-mono,monospace);color:var(--xs-text-code);font-size:.85rem}
-.xs-consult__summary{line-height:1.7}
+.xs-consult__summary{line-height:1.7;font-size:max(16px,var(--dsh-content-font-size,16px))}
 .xs-consult__nudge,.xs-consult__error{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:12px;margin:10px 0}
 .xs-consult__nudge-title{font-weight:600;margin:0 0 6px}
 .xs-consult__paths{margin:0 0 8px;padding-left:20px;line-height:1.7}
@@ -3213,7 +3218,7 @@ function installConsultStyle() {
 .xs-consult__empty-why{font-weight:600;margin:0 0 6px}
 .xs-consult__messages{margin-top:12px}
 .xs-consult__round{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px;margin:12px 0}
-.xs-consult__round-head{font-size:.85rem;margin:0 0 4px;color:var(--xs-text-secondary)}
+.xs-consult__round-head{font-size:max(16px,var(--dsh-content-font-size,16px));margin:0 0 4px;color:var(--xs-text-secondary)}
 .xs-consult__message{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:10px 0;border-bottom:1px solid var(--xs-edge-card)}
 /* 角色占第一列；徽标 / 来源 / 正文一律第二列（否则混合行会把正文挤进 44px 那一列）。 */
 .xs-consult__message>.xs-consult__badge,.xs-consult__message>.xs-consult__note,.xs-consult__message>.xs-consult__text{grid-column:2}
@@ -3334,7 +3339,7 @@ function XsDataSection({ state, actions }) {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-data__block", children: [
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { children: "分类体积" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(GroupTable, { overview: state.overview }),
+        state.overview.groups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-data__note xs-data__empty", role: "note", "data-xs-state": "empty", children: "还没有可统计的数据：这一次连一个分类都没读到（数据目录可能还没建）。先去用一次——写一条谱、藏或事记——再回到本页，这里就会按分类列出体积与文件数。" }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(GroupTable, { overview: state.overview }),
         state.overview.notes.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "xs-data__note", "data-xuanshu-data-notes": true, children: state.overview.notes.map((note) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("li", { children: note }, note)) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ExcludedList, { overview: state.overview })
@@ -3875,7 +3880,7 @@ function TouchSettingsHost({ rikke, notify }) {
     };
   }, [rikke, notify]);
   if (state === void 0) {
-    return error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-touch__note", role: "alert", "data-xuanshu-setting-error": "read", children: error });
+    return error === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-touch__note", "data-xs-state": "loading", children: "正在读触达开关…" }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-touch__note", role: "alert", "data-xuanshu-setting-error": "read", children: error });
   }
   const writeShell = (patch) => {
     const before = state.shell;
@@ -4579,16 +4584,21 @@ function XsDigaoCard({
                   children: "立即刷新"
                 }
               )
-            ) : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
-              ActionButton,
-              {
-                action: "start-onboarding",
-                primary: true,
-                disabled: onboardingDisabled,
-                reason: DISABLED_REASON.onboarding,
-                onClick: onStartOnboarding,
-                children: ACTION_COPY.startOnboarding
-              }
+            ) : (
+              // 空因 (a)：冷启动。这个按钮与命盘卡空态**同一个动作**（去填出生信息）——
+              // 两者同时可见时不再各给一份主权重（判据 D-002：一屏至多一个主操作）。
+              // 读序第一张卡（命盘）承担主行动，这里降为次要按钮：动作、文案、回调都不变，
+              // 变的只有视觉权重，用户仍然能从这张卡直接进向导。
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+                ActionButton,
+                {
+                  action: "start-onboarding",
+                  disabled: onboardingDisabled,
+                  reason: DISABLED_REASON.onboarding,
+                  onClick: onStartOnboarding,
+                  children: ACTION_COPY.startOnboarding
+                }
+              )
             )
           }
         ) : null,
@@ -5889,7 +5899,9 @@ function MingpanPanel({
       /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "xs-mingpan__actions", children: startOnboarding })
     ] }) : null,
     view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "xs-mingpan__error", "data-xuanshu-view": "error", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "排盘失败：读不到命盘快照。下面是宿主给的原因。" }),
       /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: view.message }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "xs-mingpan__hint", children: "可以先点「重试」再读一次；如果还是读不到，就去补出生信息——重录会重新出盘并原子替换底座谱。" }),
       /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "xs-mingpan__actions", children: [
         /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", "data-xuanshu-action": "retry", onClick: () => {
           controller.invalidate();
@@ -6405,7 +6417,9 @@ function installMountsStyle() {
     ".xs-mounts__section{margin:12px 0;padding:10px;border:1px solid var(--xs-edge-card);border-radius:8px}",
     ".xs-mounts__section-head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
     // 说明行是正文（16px），只有 note 是元信息（13px）—— 原来一行 12px 让两者一起偏小。
-    ".xs-mounts__summary{margin:6px 0;opacity:.8;font-size:16px}",
+    // 写成 max() 而不是字面 16px：宿主把 --dsh-content-font-size 抬到 20 时它也要跟着抬，
+    // 而宿主定在 14px 时（实测值）下限仍压得住 —— 判据 C-001 量的是渲染值。
+    ".xs-mounts__summary{margin:6px 0;opacity:.8;font-size:max(16px,var(--dsh-content-font-size,16px))}",
     ".xs-mounts__note{margin:6px 0;opacity:.8;font-size:13px}",
     // 状态栏是读数不是按钮（#69）：去掉 `cursor:pointer` —— 一个不接点击的读数不该摆出可点的样子。
     ".xs-mounts__status{background:none;border:0;padding:0;color:inherit;opacity:.85;font-size:12px}",
@@ -8502,7 +8516,7 @@ function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }) {
   return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("main", { className: "xs-rikke", "data-xuanshu-panel": RIKKE_ID, children: [
     /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("header", { className: "xs-rikke__head", children: [
       /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("h1", { children: `日课 · ${date}` }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-rikke__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今日日课已到" : view.kind === "empty" ? "今天还没有生成日课" : view.kind === "error" ? "生成失败" : "读取中…" })
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-rikke__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今日日课已到" : view.kind === "empty" ? "今天还没有生成日课" : view.kind === "error" ? "生成失败" : "正在读日课…" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__basis", "data-xuanshu-note": "time-basis", children: `时间基准：${date} ${status?.generatedAt ?? "（生成时刻未回传）"} · ${status?.zone ?? "（时区未回传）"} · 本机时钟` }),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__basis xs-rikke__no-network", "data-xuanshu-note": "no-network", children: RIKKE_NO_NETWORK_NOTE }),
@@ -8844,7 +8858,7 @@ function WanshengPanel({
     /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("header", { className: "xs-wansheng__head", children: [
       /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("h1", { children: `晚省 · ${date}` }),
       status?.missed === true ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(XsMissedMark, {}) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今天的晚省已到" : view.kind === "empty" ? "今天还没有晚省" : view.kind === "error" ? "读取失败" : "读取中…" })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今天的晚省已到" : view.kind === "empty" ? "今天还没有晚省" : view.kind === "error" ? "读取失败" : "正在读晚省…" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "schedule", children: schedule === void 0 ? "计划时刻：宿主未回传（在「自动化任务」面板里看这条 daily 任务）" : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用` }),
     status?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "generated-at", children: `生成于 ${status.generatedAt}` }),
@@ -8999,21 +9013,20 @@ function WorkflowPanel({ api, navigate, preloaded }) {
   const [draft, setDraft] = (0, import_react21.useState)({ sessionId: "", name: "", description: "", content: "" });
   const [exportError, setExportError] = (0, import_react21.useState)(void 0);
   const [exported, setExported] = (0, import_react21.useState)(void 0);
+  const sequence = (0, import_react21.useRef)(0);
+  const load = () => {
+    const mine = ++sequence.current;
+    void api.list().then((listed) => {
+      if (mine !== sequence.current) return;
+      setView(listed.items.length === 0 ? { kind: "empty" } : { kind: "ready", items: listed.items });
+    }).catch((error) => {
+      if (mine !== sequence.current) return;
+      setView({ kind: "error", message: errorText9(error) });
+    });
+  };
   (0, import_react21.useEffect)(() => {
     if (seeded) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const listed = await api.list();
-        if (cancelled) return;
-        setView(listed.items.length === 0 ? { kind: "empty" } : { kind: "ready", items: listed.items });
-      } catch (error) {
-        if (!cancelled) setView({ kind: "error", message: errorText9(error) });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    load();
   }, [api, seeded]);
   const onCreate = () => {
     setBusy(true);
@@ -9063,9 +9076,12 @@ function WorkflowPanel({ api, navigate, preloaded }) {
       createError
     ] }) : null,
     view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: "正在读工作流列表…" }) : null,
-    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", role: "alert", children: [
-      "工作流列表读不出来：",
-      view.message
+    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__alert", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", children: [
+        "工作流列表读不出来：",
+        view.message
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__retry", "data-xuanshu-action": "retry-list", onClick: load, children: "重试" })
     ] }) : null,
     view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: "还没有工作流：点上面的「创建工作流」说清要求，用会话里的 coding 工具真跑一遍，你觉得跑通了再来导出。" }) : null,
     running.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__group", children: [
@@ -9140,6 +9156,9 @@ function installWorkflowStyle() {
     ".xs-workflow__title{margin:0;font-size:18px}",
     ".xs-workflow__note,.xs-workflow__hint,.xs-workflow__rule{margin:8px 0;opacity:.8;font-size:13px}",
     ".xs-workflow__error{color:var(--xs-state-error-fg)}",
+    ".xs-workflow__alert{display:flex;gap:8px;align-items:center;flex-wrap:wrap}",
+    ".xs-workflow__alert .xs-workflow__error{margin:8px 0}",
+    ".xs-workflow__retry{font:inherit;padding:6px 12px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}",
     ".xs-workflow__group{margin-top:18px;border-top:1px solid var(--xs-edge-divider);padding-top:12px}",
     ".xs-workflow__groupTitle{margin:0 0 8px;font-size:14px;opacity:.85}",
     ".xs-workflow__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}",
@@ -9267,7 +9286,7 @@ function puPaths(slug, dataDir) {
   };
 }
 function confirmGate(input) {
-  if (input.busy) return { ok: false, reason: "正在写入，请稍候（写入期间按钮不可再点）。" };
+  if (input.busy) return { ok: false, reason: "正在写入（写入期间按钮不可再点）。" };
   if (input.hasDraft !== true) return { ok: false, reason: "还没有草稿：先点 [导出汇总]。" };
   if (input.targetSlug === "") return { ok: false, reason: "还没有目标谱：沉淀只能写进谱（工作区 / 工作流不是谱）。" };
   if (input.stale) return { ok: false, reason: "目标谱在预览后被改动，请先 [重新预览]（本页不会覆盖你没看过的内容）。" };
@@ -9807,7 +9826,10 @@ function XsShijiSaveEntry({ sessionId, api, navigate }) {
           children: "打开底稿 →"
         }
       )
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__error", role: "alert", "data-xuanshu-alert": "shiji", children: `没有存成：${result.message}` })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("p", { className: "xs-shiji__error", role: "alert", "data-xuanshu-alert": "shiji", children: [
+      `没有存成：${result.message}`,
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", className: "xs-shiji__retry", "data-xuanshu-action": "shiji-save-retry", disabled: busy, onClick: save, children: "重试" })
+    ] })
   ] });
 }
 function installShiji(ctx, deps) {
@@ -9892,7 +9914,10 @@ function XsShijiSettingsSection({ state, actions }) {
         /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", "data-xuanshu-action": "add-excluded-dir", disabled: state.busy, onClick: actions.onAddExcludedDir, children: "添加" })
       ] })
     ] }),
-    state.error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__error", role: "alert", "data-xuanshu-setting-error": "shiji", children: state.error }),
+    state.error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("p", { className: "xs-shiji__error", role: "alert", "data-xuanshu-setting-error": "shiji", children: [
+      state.error,
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", className: "xs-shiji__retry", "data-xuanshu-action": "shiji-settings-reload", disabled: state.busy, onClick: actions.onReload, children: "重试" })
+    ] }),
     state.note === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", role: "status", "data-xuanshu-notice": "shiji", children: state.note })
   ] });
 }
@@ -9915,7 +9940,7 @@ function ShijiSettingsHost({ api }) {
         excludedDirs: Array.isArray(settings.excludedDirs) ? settings.excludedDirs : []
       }));
     }).catch((reason) => {
-      setState((previous) => ({ ...previous, loading: false, error: `读不到事记设置：${errorText12(reason)}` }));
+      setState((previous) => ({ ...previous, loading: false, error: `读不到事记设置：${errorText12(reason)}（点下面的「重试」再读一次；一直读不到就先看宿主的 shiji 服务在不在。）` }));
     });
   };
   (0, import_react23.useEffect)(() => {
@@ -9961,7 +9986,9 @@ function ShijiSettingsHost({ api }) {
           }).catch((reason) => {
             setState((previous) => ({ ...previous, busy: false, error: errorText12(reason) }));
           });
-        }
+        },
+        // 错误行旁边的出路：重读一次（`load` 会先清掉 error，再按宿主的真实回包落状态）。
+        onReload: load
       }
     }
   );
@@ -10003,6 +10030,8 @@ function installShijiStyle() {
 .xs-shiji__row button:disabled{opacity:.5;cursor:not-allowed}
 .xs-shiji__settings input[type="text"]{font:inherit;margin-left:6px;padding:4px 8px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);background:var(--xs-surface-card);color:inherit}
 .xs-shiji__error{color:var(--xs-text-secondary)}
+.xs-shiji__retry{font:inherit;margin-left:8px;padding:2px 10px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-shiji__retry:disabled{opacity:.5;cursor:not-allowed}
 `);
   installXuanshuStyles();
 }
@@ -10021,6 +10050,11 @@ var OVERVIEW_CSS = `
   overflow: auto;
   background: var(--xs-surface-panel);
   color: var(--xs-text-body);
+  /* 正文下限钉在**面板根**上（判据 C-001）：宿主在容器上定义了
+     --dsh-content-font-size（真浏览器实测 14px），所以 var(…, 16px) 的 fallback 永远不生效 ——
+     只有 max() 能把下限压住。放根上而不是逐条写：标题 / 段落 / 卡片正文都是从这条继承的，
+     元信息自己声明 12–14px，不受影响（层级不塌）。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-overview__header {
   display: flex;
@@ -10031,7 +10065,9 @@ var OVERVIEW_CSS = `
 }
 .xs-overview__title {
   margin: 0;
-  font-size: var(--dsh-content-font-size, 16px);
+  /* 标题档 18px（type-scale §2 title），不是正文档：卡片标题也落在 16px，
+     两档同号同字重就等于没有标题 —— L-001 要防的正是这个。下限仍按 max() 钉。 */
+  font-size: max(18px, var(--dsh-content-font-size, 16px));
   font-weight: 600;
   color: var(--xs-text-title);
 }
@@ -10041,7 +10077,10 @@ var OVERVIEW_CSS = `
 }
 .xs-overview__localnote {
   margin: 0;
-  color: var(--xs-text-tertiary);
+  /* 这里是 13px 级的路径正文，落在白底上：走 tertiary（bluish-600）只有 3.71:1，不到 AA 的 4.5:1。
+     改用 secondary（bluish-700）= 5.80:1。为什么不把 tertiary 整体调深：它被全站共用，
+     动一次就把所有面的观感一起改了，超出这张票（#64 / UX-02）的范围。 */
+  color: var(--xs-text-secondary);
   font-size: var(--dsh-content-font-size-secondary, 14px);
   font-family: var(--ds-font-family-code, ui-monospace, monospace);
 }
@@ -10084,7 +10123,7 @@ var OVERVIEW_CSS = `
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--dsh-content-font-size, 16px);
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
   font-weight: 600;
   color: var(--xs-text-heading);
 }
@@ -10122,11 +10161,16 @@ var OVERVIEW_CSS = `
 .xs-empty__why {
   margin: 0;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size, 16px);
+  /* 空态「为什么空」是正文（人要先读懂这句才能决定下一步），不是元信息。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-empty__sub {
   margin: 0;
-  color: var(--xs-text-tertiary);
+  /* 空态副行是这一面原先的最低对比度：tertiary 在空态底（--xs-surface-empty）上只有 3.42:1。
+     它 13px、整句都是要读的信息，属「正文级」，因此按 WCAG AA 提到 secondary = 5.36:1。
+     与 .xs-empty__why 同档：空态块里两行都是说明句，弱化不再靠「再暗一档」而是靠括号 / 位置
+     （token 字典目前没有 tertiary 与 secondary 之间的中间档，见台账 §17.7.2 的字阶重排）。 */
+  color: var(--xs-text-secondary);
   font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 
@@ -10264,7 +10308,10 @@ var OVERVIEW_CSS = `
 }
 .xs-pillar__name {
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 柱名与柱值同一行相邻两档：字重分（值 600 / 名 400），字号都吃 16px 下限。
+     原先走 -secondary（14px）：它既不是 tag/badge，也不是路径/计数，判据按正文量，
+     量出来就是 14px 红（ux-reports 2026-10-31T11-42-28 的 C-001 证据）。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-pillar__value {
   color: var(--xs-text-heading);
@@ -10275,7 +10322,8 @@ var OVERVIEW_CSS = `
   gap: var(--xs-space-row);
   flex-wrap: wrap;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 依据行是正文（读得懂才敢信数），不是元信息：同样吃 16px 下限。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-lines {
   display: flex;
@@ -10304,7 +10352,8 @@ var OVERVIEW_CSS = `
   gap: var(--xs-space-toolbar);
   flex-wrap: wrap;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 出处链接文字是正文：这是「凭什么是这个结论」的入口，不吃小字。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 
 .xs-quicklinks {
@@ -10342,14 +10391,17 @@ var OVERVIEW_CSS = `
 }
 .xs-cell__subtitle {
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 快捷入口的副标题与标题相邻两档：字重分（标题 600 / 副标题 400），字号都吃 16px 下限。
+     __subtitle 不在元信息词表里（词表按 sub / note 这类整词匹配），判据按正文量。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-cell[disabled] .xs-cell__subtitle {
   color: var(--xs-text-disabled);
 }
 .xs-quicklinks__note {
   margin: var(--xs-space-stack-md) 0 0;
-  color: var(--xs-text-tertiary);
+  /* 同 .xs-overview__localnote：13px 小字落卡面白底，tertiary 只有 3.71:1 → secondary = 5.80:1。 */
+  color: var(--xs-text-secondary);
   font-size: var(--dsh-content-font-size-secondary, 14px);
   text-align: right;
 }

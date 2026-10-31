@@ -140,7 +140,13 @@ export function XsDataSection({ state, actions }: { state: DataSectionState; act
           </section>
           <section className="xs-data__block">
             <h3>分类体积</h3>
-            <GroupTable overview={state.overview} />
+            {state.overview.groups.length === 0 ? (
+              <p className="xs-data__note xs-data__empty" role="note" data-xs-state="empty">
+                还没有可统计的数据：这一次连一个分类都没读到（数据目录可能还没建）。先去用一次——写一条谱、藏或事记——再回到本页，这里就会按分类列出体积与文件数。
+              </p>
+            ) : (
+              <GroupTable overview={state.overview} />
+            )}
             {state.overview.notes.length === 0 ? null : (
               <ul className="xs-data__note" data-xuanshu-data-notes>
                 {state.overview.notes.map((note) => (

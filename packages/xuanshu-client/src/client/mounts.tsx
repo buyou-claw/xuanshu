@@ -30,7 +30,9 @@ export function installMountsStyle(): void {
     '.xs-mounts__section{margin:12px 0;padding:10px;border:1px solid var(--xs-edge-card);border-radius:8px}',
     '.xs-mounts__section-head{display:flex;align-items:center;justify-content:space-between;gap:8px}',
     // 说明行是正文（16px），只有 note 是元信息（13px）—— 原来一行 12px 让两者一起偏小。
-    '.xs-mounts__summary{margin:6px 0;opacity:.8;font-size:16px}',
+    // 写成 max() 而不是字面 16px：宿主把 --dsh-content-font-size 抬到 20 时它也要跟着抬，
+    // 而宿主定在 14px 时（实测值）下限仍压得住 —— 判据 C-001 量的是渲染值。
+    '.xs-mounts__summary{margin:6px 0;opacity:.8;font-size:max(16px,var(--dsh-content-font-size,16px))}',
     '.xs-mounts__note{margin:6px 0;opacity:.8;font-size:13px}',
     // 状态栏是读数不是按钮（#69）：去掉 `cursor:pointer` —— 一个不接点击的读数不该摆出可点的样子。
     '.xs-mounts__status{background:none;border:0;padding:0;color:inherit;opacity:.85;font-size:12px}',

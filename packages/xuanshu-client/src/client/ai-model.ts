@@ -436,7 +436,7 @@ function missingReason(
   if (target.modelCount === 0) {
     return {
       code: 'no-model',
-      text: `${target.name ?? target.id} 已注册，但模型清单是空的（没有可用模型）。`,
+      text: `${target.name ?? target.id} 已注册，但模型清单里还没有可用的模型。`,
       next: `打开 DSH「${AI_SETTINGS_PATH}」给这家加一个模型。`,
     }
   }

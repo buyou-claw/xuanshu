@@ -363,35 +363,41 @@ describe('票 06 · 全仓真跑：25 个界面面 × 三条 S 判据', () => {
     expect(counts['collection-failed']).toBe(0)
   })
 
-  it('实测缺态数：空 1 面 / 载 1 面 / 错 1 面（数字变了就说明有人修了或有人放宽了口径）', () => {
+  it('实测缺态数：空 0 面 / 载 0 面 / 错 0 面（数字变了就说明有人修了或有人放宽了口径）', () => {
     const failing = (criterionId) => sVerdicts.filter((verdict) => verdict.criterionId === criterionId && verdict.status === 'fail')
-    // 两票合流后的实测：票 UX-03（#65）把三个合参面（浮层 / 设置项 / 输入框触发器）的空态补齐（空 5 → 2），
-    // 票 UX-06（#68）把藏库抽屉的空态与「藏库 / 挂载账本」两个抽屉的错误态补齐（空 2 → 1、错 3 → 1）。
-    expect(failing('S-001')).toHaveLength(1)
-    expect(failing('S-002')).toHaveLength(1)
-    expect(failing('S-003')).toHaveLength(1)
+    // 三票合流后的实测：票 UX-03（#65）补三个合参面空态、票 UX-06（#68）补两个抽屉、票 UX-04（#66）补
+    // 我的数据空态 / 触达开关加载态 / 命盘卡详情错误态 —— S 族在 22 个有渲染位置的面上一片绿。
+    // 数字再变，只可能是有人放宽了口径（修无可修了）。
+    expect(failing('S-001')).toHaveLength(0)
+    expect(failing('S-002')).toHaveLength(0)
+    expect(failing('S-003')).toHaveLength(0)
   })
 
-  it('每条红都指得出「哪个面 + 缺哪一态 + 哪一行」', () => {
-    for (const verdict of sVerdicts.filter((item) => item.status === 'fail')) {
-      expect(verdict.evidence.length).toBeGreaterThan(0)
-      for (const item of verdict.evidence) {
-        expect(item.file).toMatch(/^packages\/xuanshu-client\/src\//)
-        expect(item.line).toBeGreaterThan(0)
-        expect(item.detail).toMatch(/缺(空态|加载态|错误态)/)
-      }
+  it('每条红都指得出「哪个面 + 缺哪一态 + 哪一行」（清单空了也照样钉：用夹具喂一条缺态面）', () => {
+    // 三票合流后真仓已无缺态红，这条断言若继续遍历真 verdict 会变成空循环（假绿）。
+    // 换成夹具：意图不随仓库进度变空 —— 缺陷行必须带 file:line，且说清缺的是哪一态。
+    const ctx = fixture({ 'a.tsx': ['export function A() {', '  return <p>你好</p>;', '}'].join('\n') })
+    const { facts, evidence } = runProbe('S-001', ctx)
+    expect(facts.present).toBe(false)
+    expect(evidence.length).toBeGreaterThan(0)
+    for (const item of evidence) {
+      expect(item.file).toBe('a.tsx')
+      expect(item.line).toBeGreaterThan(0)
+      expect(item.detail).toMatch(/缺(空态|加载态|错误态)/)
     }
   })
 
-  it('X-001 在有渲染面的 22 个面上逐一判定：实测 5 面红（读取中 2 + 错误行没下一步 2 + 零文案 1）', () => {
+  it('X-001 在有渲染面的 22 个面上逐一判定：#67 修完，实测 0 面红', () => {
     expect(xVerdicts).toHaveLength(22)
-    expect(xVerdicts.filter((verdict) => verdict.status === 'fail')).toHaveLength(5)
-    const redFaces = xVerdicts.filter((verdict) => verdict.status === 'fail').map((verdict) => verdict.face)
-    expect(redFaces).toContain('panel:rikke')
-    expect(redFaces).toContain('panel:wansheng')
-    expect(redFaces).toContain('panel:workflow')
-    // 命令面不再参与：它没有 DOM，文案一致性在它身上量不出东西。
-    expect(redFaces.some((face) => face.startsWith('command:'))).toBe(false)
+    // 这里曾经是 5 条红：读取中 2（日课 / 晚省）+ 错误行没下一步 3（门厅 / 事记两个面同源）。
+    // #67（票 19）把五个面一起转绿，所以这条改成钉「全绿」——谁再新造一个同义词、
+    // 或者再写一条没有出路的错误行，它会先红。那是想要的，不是噪音。
+    const red = xVerdicts
+      .filter((verdict) => verdict.status === 'fail')
+      .map((verdict) => `${verdict.face}: ${verdict.message}`)
+    expect(red).toEqual([])
+    // 命令面不参与：它没有 DOM，文案一致性在它身上量不出东西。
+    expect(xVerdicts.some((verdict) => verdict.face.startsWith('command:'))).toBe(false)
   })
 })
 
@@ -404,13 +410,11 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
     generatedAt: '2026-10-31T00:00:00.000Z',
   })
 
-  it('机读报告带 missingStates：3 个面缺态，空 1 / 载 1 / 错 1（同一面缺两态只算一个面）', () => {
-    // #65 + #68 合流：8 面 / 空 5 → 3 面（我的数据缺空态、触达开关缺加载态、命盘卡详情缺错误态）。
-    expect(report.missingStates.totals).toEqual({ faces: 3, empty: 1, loading: 1, error: 1, applicable: 66 })
-    // 修好的抽屉已从清单里消失 —— 藏库抽屉原本是「同一面缺两态」的样本，修好后就该整行不见。
-    const missingFaces = report.missingStates.faces.map((row) => row.face)
-    expect(missingFaces).not.toContain('slot:shell.overlay#xuanshu-cang-drawer')
-    expect(missingFaces).not.toContain('slot:shell.overlay#xuanshu-mounts-drawer')
+  it('机读报告带 missingStates：0 个面缺态，空 0 / 载 0 / 错 0（同一面缺两态只算一个面）', () => {
+    // #65 + #68 + #66 三票合流：S 族在 22 个有渲染位置的面上一片绿，缺态清单**整张空**。
+    // 这张清单是本票要看的成果物，所以这里钉死「空」而不是留一句「差不多」。
+    expect(report.missingStates.totals).toEqual({ faces: 0, empty: 0, loading: 0, error: 0, applicable: 66 })
+    expect(report.missingStates.faces).toEqual([])
   })
 
   it('共用源文件的几个面各自出现在清单里（findings 去重不会把它们压成一行）', () => {
@@ -429,11 +433,18 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
     ])
   })
 
-  it('人读报告里有这一节，且列出合计与逐面缺失态', () => {
+  it('人读报告里有这一节；清单为空时写「无」而不是留一段空白', () => {
     const markdown = renderMarkdown(report)
-    expect(markdown).toContain('## 附：缺态界面面（S 族 · 空 / 载 / 错）')
-    expect(markdown).toContain('3 个界面面缺态')
-    expect(markdown).toContain('`panel:mingpan` 命盘卡详情 · 缺：错误态')
+    expect(markdown).toContain('## 附：缺态界面面（S 族 · 空 / 载 / 错）\n- 无。')
+    // 三票修好的面一个都不该再被点名（钉死方向：只有回退才会再出现）。
+    for (const face of [
+      '`panel:mingpan`',
+      '`slot:settings.section#xuanshu.data`',
+      '`slot:settings.general.item#xuanshu.touch`',
+      '`slot:shell.overlay#xuanshu-cang-drawer`',
+    ]) {
+      expect(markdown).not.toContain(face)
+    }
   })
 
   it('missingStatesOf 是纯函数：只剩通过时清单为空、合计归零', () => {

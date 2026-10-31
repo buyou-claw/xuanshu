@@ -746,7 +746,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 ```
 # pnpm test:inventory（profile 已装；main 全量复核打磨后，见 §16.8）
-[inventory] 用例 2199 条（基线 2199）/ 文件 191 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2247 条（基线 2247）/ 文件 198 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -756,7 +756,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 529056B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 535742B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（2199 / 191）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（2247 / 198）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -930,7 +930,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 | E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
 
 **验证（数字抄工具输出；本行随当前验证块刷新，原轮次基线见下一行）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
-`[doc-numbers] OK：2199 条用例 / 191 个文件 / 529056 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+`[doc-numbers] OK：2247 条用例 / 198 个文件 / 535742 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
 E1/E3 与两轴复核修复新增 25 条用例后基线 `--update` 为 **1839 条 / 167 文件**，文档数字由新门核对。
 
 **这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
@@ -957,16 +957,16 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 
 ```
 # pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）
-[inventory] 用例 2199 条（基线 2199）/ 文件 191 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2247 条（基线 2247）/ 文件 198 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
-[doc-numbers] OK：2199 条用例 / 191 个文件 / 529056 B
+[doc-numbers] OK：2247 条用例 / 198 个文件 / 535742 B
 
 # pnpm verify:isolation
 结果：8/8 通过，exit 0（6503ms）
 
 # pnpm verify:assembly → exit 1，仅 S1 既有上游缺陷
 [S2] PASS 192 行挂载；xuanshu-host.state=2 xuanshu-client.state=2
-[S3] PASS 客户端产物 529056B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 535742B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL unrecognized Loader tree carrier（同 §16.3）
@@ -1244,9 +1244,13 @@ spec 003 与票 01 写的「10 面板 + 18 寄生 = 30 面」是把 `4+2+2+3+1+3
 - **判据侧同步收紧**：C-001 只判正文，`role=meta`（tag / badge / 状态行 / 路径 / 计数）不参与
   16px 下限 —— 否则唯一「通过」方式是把整屏调成同号，层级会塌（L-001 要防的正是这个）。
   采集器加了 `role` 字段（类名先判、标签兜底）。
-- **仍未清偿**：宿主在容器上覆盖了 `--dsh-content-font-size`（实测 14px），`var(…, 16px)` 的
-  fallback 不生效，`panel:overview` 仍有 11/13 个正文级文字不足 16px，`panel:consult` 6/10。
-  下一手用 `max(16px, var(--dsh-content-font-size, 16px))` 钉死下限。**不许靠调低阈值转绿。**
+- **已钉下限（票 #63 / UX-01）**：宿主在容器上覆盖了 `--dsh-content-font-size`（实测 14px），
+  `var(…, 16px)` 的 fallback 不生效。改法是把下限钉在**面板根**上——
+  `font-size: max(16px, var(--dsh-content-font-size, 16px))`（`style.ts` 的 `.xs-overview`、
+  `consult.tsx` 的 `.xs-consult`），继承链上的正文都吃这条；写死 rem 的 `h3`/`h4`/字段标签/
+  `__round-head` 各钉一次，`mounts` 的说明行也改成同一条 `max()`。元信息仍自带 12–14px。
+  **浏览器侧复测未做**（worktree 起不来，§17.6 第 2 条）：C-001 是否转绿以主仓 `--browser` 为准。
+  **不许靠调低阈值转绿。**
 
 **本轮实测（抄工具输出）**
 
