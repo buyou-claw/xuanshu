@@ -363,11 +363,11 @@ describe('票 06 · 全仓真跑：25 个界面面 × 三条 S 判据', () => {
     expect(counts['collection-failed']).toBe(0)
   })
 
-  it('实测缺态数：空 4 面 / 载 1 面 / 错 1 面（数字变了就说明有人修了或有人放宽了口径）', () => {
+  it('实测缺态数：空 1 面 / 载 1 面 / 错 1 面（数字变了就说明有人修了或有人放宽了口径）', () => {
     const failing = (criterionId) => sVerdicts.filter((verdict) => verdict.criterionId === criterionId && verdict.status === 'fail')
-    // 票 68（UX-06）把藏库抽屉的空态与「藏库 / 挂载账本」两个抽屉的错误态补齐：
-    // 空 5 → 4、错 3 → 1。数字再变要回来看这一行是被谁改的。
-    expect(failing('S-001')).toHaveLength(4)
+    // 两票合流后的实测：票 UX-03（#65）把三个合参面（浮层 / 设置项 / 输入框触发器）的空态补齐（空 5 → 2），
+    // 票 UX-06（#68）把藏库抽屉的空态与「藏库 / 挂载账本」两个抽屉的错误态补齐（空 2 → 1、错 3 → 1）。
+    expect(failing('S-001')).toHaveLength(1)
     expect(failing('S-002')).toHaveLength(1)
     expect(failing('S-003')).toHaveLength(1)
   })
@@ -404,17 +404,25 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
     generatedAt: '2026-10-31T00:00:00.000Z',
   })
 
-  it('机读报告带 missingStates：6 个面缺态，空 4 / 载 1 / 错 1（同一面缺两态只算一个面）', () => {
-    expect(report.missingStates.totals).toEqual({ faces: 6, empty: 4, loading: 1, error: 1, applicable: 66 })
-    // 票 68 修的两个抽屉已从清单里消失 —— 它们是「同一面缺两态」的样本，修好后就该整行不见。
+  it('机读报告带 missingStates：3 个面缺态，空 1 / 载 1 / 错 1（同一面缺两态只算一个面）', () => {
+    // #65 + #68 合流：8 面 / 空 5 → 3 面（我的数据缺空态、触达开关缺加载态、命盘卡详情缺错误态）。
+    expect(report.missingStates.totals).toEqual({ faces: 3, empty: 1, loading: 1, error: 1, applicable: 66 })
+    // 修好的抽屉已从清单里消失 —— 藏库抽屉原本是「同一面缺两态」的样本，修好后就该整行不见。
     const missingFaces = report.missingStates.faces.map((row) => row.face)
     expect(missingFaces).not.toContain('slot:shell.overlay#xuanshu-cang-drawer')
     expect(missingFaces).not.toContain('slot:shell.overlay#xuanshu-mounts-drawer')
   })
 
   it('共用源文件的几个面各自出现在清单里（findings 去重不会把它们压成一行）', () => {
-    const bestofFaces = report.missingStates.faces.filter((row) => row.face.startsWith('slot:') && row.face.includes('bestof'))
-    expect(bestofFaces.map((row) => row.face).sort()).toEqual([
+    // #65 之后三个合参面都转绿了，真仓里已经没有「共用同一份源文件、又各自缺态」的例子；
+    // 所以这条改成喂一份**合成的判定**：意图（去重不许把三个面压成一行）不随仓库进度漂走。
+    const shared = [
+      { criterionId: 'S-001', face: 'slot:shell.overlay#xuanshu-bestof-overlay', status: 'fail' },
+      { criterionId: 'S-001', face: 'slot:settings.general.item#xuanshu.bestof', status: 'fail' },
+      { criterionId: 'S-001', face: 'slot:conversation.composer.dock#xuanshu-bestof-trigger', status: 'fail' },
+    ]
+    const summary = missingStatesOf(shared, FACES)
+    expect(summary.faces.map((row) => row.face).sort()).toEqual([
       'slot:conversation.composer.dock#xuanshu-bestof-trigger',
       'slot:settings.general.item#xuanshu.bestof',
       'slot:shell.overlay#xuanshu-bestof-overlay',
@@ -424,7 +432,7 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
   it('人读报告里有这一节，且列出合计与逐面缺失态', () => {
     const markdown = renderMarkdown(report)
     expect(markdown).toContain('## 附：缺态界面面（S 族 · 空 / 载 / 错）')
-    expect(markdown).toContain('6 个界面面缺态')
+    expect(markdown).toContain('3 个界面面缺态')
     expect(markdown).toContain('`panel:mingpan` 命盘卡详情 · 缺：错误态')
   })
 
