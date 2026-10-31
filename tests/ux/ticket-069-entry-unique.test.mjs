@@ -169,12 +169,16 @@ describe('票 69 · panel:pus：谱管理的那一跳只留侧栏行', () => {
 
 /* ───────────────────────── cang-drawer ───────────────────────── */
 
-describe('票 69 · cang-drawer：登记藏只有一个门（空态不再多一个）', () => {
-  it('空态：只有空态里那一个「登记第一个藏」，工具条不再并排第二个', () => {
+describe('票 69 · cang-drawer：登记藏只有一个门，且两个状态同名', () => {
+  it('空态：只有空态里那一个门，且与有藏时同名「登记藏」', () => {
     const html = render(h(CangPanel, { api: {}, controller: CANG_CONTROLLER, initialData: { registryPath: 'registry.jsonl', entries: [] } }))
     const doors = doorsFor(html, 'cang-drawer')
 
-    expect(doors.map((door) => door.label)).toEqual(['登记第一个藏'])
+    // 名字必须两个状态一致：采集器按 label 认动作，而 census 是**跨采样并集**
+    // （browser-nav.mjs 的 census 把多次采样的入口累加进同一张表）。
+    // 空态叫「登记第一个藏」、有藏叫「登记藏」，两个真的同时出现过就被算成两个入口 —— 那不是界面重复，
+    // 是同一动作两个名字。统一成「登记藏」之后，并集按 key 去重，只剩一个门。
+    expect(doors.map((door) => door.label)).toEqual(['登记藏'])
     const verdict = judgeN001('slot:shell.overlay#xuanshu-cang-drawer', doors)
     expect(verdict.pass, verdict.message).toBe(true)
   })

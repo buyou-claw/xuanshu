@@ -93,7 +93,7 @@ export function CangPanel({ api, controller, initialData }: CangPanelProps) {
     {loading && <p role="status">正在读取藏库注册表…</p>}
     {error && <div role="alert"><p>注册表读取失败：{error}</p><button type="button" onClick={() => setReload(value => value + 1)}>重试</button></div>}
     {notice && <p role="alert">{notice}</p>}
-    {empty && <div className="xs-cang__empty"><p>你还没有登记任何藏。藏只登记指针，不复制文件。</p><button type="button" onClick={() => controller.edit(newCangDraft())}>登记第一个藏</button></div>}
+    {empty && <div className="xs-cang__empty"><p>你还没有登记任何藏。藏只登记指针，不复制文件。</p><button type="button" onClick={() => controller.edit(newCangDraft())}>登记藏</button></div>}
     {!loading && !error && !!entries.length && !filtered.length && <p>没有匹配的藏名或签。</p>}
     {!loading && !error && [...groups].map(([label, items]) => <details open key={label} className="xs-cang__group"><summary>签「{label}」（{items.length}）</summary>{items.map(entry => <article className="xs-cang__card" key={entry.id} data-cang-id={entry.id}>
       <h2>{entry.name} <span className="xs-cang__status">已登记</span></h2>
