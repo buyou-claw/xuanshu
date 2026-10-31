@@ -173,6 +173,24 @@ function cardOf(html, name) {
   return html.slice(start, end === -1 ? undefined : end)
 }
 
+/** 数一个字符串在 HTML 里出现几次（D-002 问的是「一屏有几个」）。 */
+function countOf(html, needle) {
+  return html.split(needle).length - 1
+}
+
+/**
+ * 取某个动作按钮的**完整开始标签**（`<button …>`）。
+ *
+ * 为什么不从 `data-xuanshu-action` 起切：`class` 排在 `data-*` **之前**，从属性起切会漏掉类名，
+ * 而这张票要断言的正是类名（主/次权重）。所以回到最近的 `<button` 再切到 `>`。
+ */
+function buttonTagOf(html, action) {
+  const marker = `data-xuanshu-action="${action}"`
+  const at = html.indexOf(marker)
+  expect(at, `没有按钮：${action}`).toBeGreaterThanOrEqual(0)
+  return html.slice(html.lastIndexOf('<button', at), html.indexOf('>', at) + 1)
+}
+
 /* ───────────────────────── 1. 首屏 / 默认面板 / 纯加性 ───────────────────────── */
 
 describe('票 07 · 首屏 = 自我总览（产物物化）', () => {
@@ -421,6 +439,21 @@ describe('票 07 · 五卡渲染（冷启动空态；#25 加第 5 张晚省）',
     expect(card).toContain('data-xuanshu-nav="schedules"')
     // 「补」徽标是 ready 态的事实，不在空态出现（不冒充生成过）。
     expect(card).not.toContain('data-xuanshu-badge="missed"')
+  })
+
+  it('#64 · 冷启动一屏只有一个主操作（D-002）：命盘卡领主权重，底稿卡同动作降为次要、按钮仍在', () => {
+    // 判据 D-002 问的是「任一时刻一屏可见的主操作 ≤1」，与「哪张卡」无关；
+    // 而「两个按钮都还在、动作名不变」是这张票的另一半 —— 降级只改视觉权重，不改功能。
+    expect(countOf(html, 'xs-btn--primary'), '冷启动门厅只能有一个主操作').toBe(1)
+    // 读序第一张卡（命盘）占主权重：冷启动的主要目的就是「去填一次出生信息」。
+    expect(buttonTagOf(cardOf(html, 'mingpan'), 'start-onboarding')).toContain('xs-btn--primary')
+    // 底稿卡是同一个动作的第二个入口：功能留着，权重降一档（次要按钮）。
+    const digaoStart = buttonTagOf(cardOf(html, 'digao'), 'start-onboarding')
+    expect(digaoStart, '底稿卡的同一动作降为次要按钮').not.toContain('xs-btn--primary')
+    expect(digaoStart, '降级后仍是按钮类，不是换了标签').toContain('xs-btn')
+    // 功能不变：动作名与文案逐字相同，点下去仍是同一件事。
+    expect(digaoStart).toContain('data-xuanshu-action="start-onboarding"')
+    expect(cardOf(html, 'digao')).toContain('开始填写出生信息 -&gt;')
   })
 
   it('fail-soft 是结构性的：目标装配后（快照含 consult/workflow）两格自动点亮', () => {

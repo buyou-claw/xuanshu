@@ -1,6 +1,6 @@
 {
   "note": "用例清单基线：收集到的用例数（含 skip）。--update 刷新；knownRed 之外的失败 = 违规。",
-  "total": 2199,
+  "total": 2204,
   "files": {
     "tests/assembly/ai-readiness-api.test.mjs": 3,
     "tests/assembly/ai-readiness-controller.test.mjs": 8,
@@ -32,7 +32,8 @@
     "tests/assembly/onboarding-contract.test.mjs": 12,
     "tests/assembly/onboarding-model.test.mjs": 16,
     "tests/assembly/onboarding-wizard.test.mjs": 30,
-    "tests/assembly/overview-contract.test.mjs": 29,
+    "tests/assembly/overview-contract.test.mjs": 30,
+    "tests/assembly/overview-contrast.test.mjs": 4,
     "tests/assembly/overview-hash.test.mjs": 7,
     "tests/assembly/parsers.test.mjs": 13,
     "tests/assembly/pu-management.test.mjs": 6,

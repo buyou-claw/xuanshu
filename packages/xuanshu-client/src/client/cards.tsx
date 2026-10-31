@@ -640,9 +640,12 @@ export function XsDigaoCard({
                 立即刷新
               </ActionButton>
             ) : (
+              // 空因 (a)：冷启动。这个按钮与命盘卡空态**同一个动作**（去填出生信息）——
+              // 两者同时可见时不再各给一份主权重（判据 D-002：一屏至多一个主操作）。
+              // 读序第一张卡（命盘）承担主行动，这里降为次要按钮：动作、文案、回调都不变，
+              // 变的只有视觉权重，用户仍然能从这张卡直接进向导。
               <ActionButton
                 action="start-onboarding"
-                primary
                 disabled={onboardingDisabled}
                 reason={DISABLED_REASON.onboarding}
                 onClick={onStartOnboarding}
