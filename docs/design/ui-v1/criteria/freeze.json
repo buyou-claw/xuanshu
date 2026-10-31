@@ -7,7 +7,7 @@
     "criteriaCount": 17,
     "familyCount": 7
   },
-  "frozenAt": "2026-10-30T18:29:04.578Z",
-  "approvedBy": "integration-owner",
-  "note": "L-001 human-only + T-002 文本对齐后重签"
+  "frozenAt": "2026-10-31T09:54:47.129Z",
+  "approvedBy": "buyou",
+  "note": "Spec 003 判据集 v1 定稿：17 条 / 7 族由集成方投影、人（buyou）逐条确认后重签；type-scale 正文按 16px 目标判红，14px 记待清偿债"
 }

@@ -1191,6 +1191,34 @@ spec 003 与票 01 写的「10 面板 + 18 寄生 = 30 面」是把 `4+2+2+3+1+3
    `${BREAKPOINT_*_PX}px` 判为「来自 token」，不判字面 —— 否则把值搬进常量也照样红，等于逼人留字面值。
 4. **清理带 junction 的临时 home**：先 `cmd /c rmdir <link>` 摘链接，再递归删目录。直接递归删会跟穿到仓库 `profile/`。
 
+### 17.7 签字与两处口径定稿（2026-10-31）
+
+1. **判据集 v1 的签字人改为 `buyou`**。此前 `freeze.json` 的 `approvedBy` 是集成期间临时写的
+   `integration-owner`——那是机器身份，按 ADR-0015 第 7 条签字点①本该是人。重签只改
+   `frozenAt` / `approvedBy` / `note` 三个字段，`version` 仍是 `14f8e05d83ff…`，17 条 / 7 族一字未动。
+
+2. **`type-scale.md` 的 14px 与 spec §21 的「正文 ≥16px」冲突，裁决为：16px 是目标，14px 是现状**。
+   设计稿不改表（表里是当前实现的取值），差额登记为待清偿债；清偿时整条阶梯一起重排
+   （body 16 / secondary 14 / tertiary 13 / caption 12，层级靠字重与间距分），并同改那张表。
+   在此之前 C-001 照现状判红——**不许靠调低阈值把红变成绿**。裁决原文追加在
+   `docs/design/ui-v1/assets/tokens/type-scale.md` §5。
+
+3. **已知缺陷（登记待办，本轮未修）**：两个修复护栏的缺省基准是 `feat/spec-003-integration`
+   （`scripts/ux/repair-channel.mjs:30`），在这个分支上跑等于自己比自己 → `commits=0`、真空绿。
+   换成真实范围立刻是红的：
+
+   ```powershell
+   node scripts/check-ux-authority.mjs --since main    # 40 个提交 / 19 个动生效区 → ✗ 9 条
+   node scripts/check-ux-fix-notes.mjs --since main    # 40 个提交 / 跳 16 个合并 → ✗ 1 条
+   ```
+
+   9 条里 8 条是「票在自己的 worktree 里改 `rules/`、集成时统一签字」的正常中间态，第 9 条是
+   `a4a4772` 合并时签字哈希对不上（`636f87fd…` → `0795319…`）；`fix-notes` 那 1 条是 spec 002
+   继承来的 `8fdaa4b`（改了 11 个客户端文件、没有 `UX-FIX` 行）。
+   正解是缺省基准按「当前分支是否集成分支」动态解析到 `main`，并把上述历史中间态写成**带理由的
+   显式豁免清单**（逐条打出来，不静默忽略）；豁免条目指向的 sha 在范围里找不到时也要报——否则
+   清单会退化成永久黑名单。下一张票做。
+
 
 
 
