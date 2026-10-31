@@ -1435,6 +1435,7 @@ function CangDrawer({ api, controller, initial }) {
   const [picker, setPicker] = (0, import_react4.useState)(false);
   const [busy, setBusy] = (0, import_react4.useState)(false);
   const [error, setError] = (0, import_react4.useState)("");
+  const [empty, setEmpty] = (0, import_react4.useState)(false);
   const dialog = (0, import_react4.useRef)(null);
   (0, import_react4.useEffect)(() => {
     const abort = new AbortController();
@@ -1458,6 +1459,14 @@ function CangDrawer({ api, controller, initial }) {
       abort.abort();
       previous?.focus();
     };
+  }, [api]);
+  (0, import_react4.useEffect)(() => {
+    const abort = new AbortController();
+    api.list(abort.signal).then((list) => {
+      if (!abort.signal.aborted) setEmpty(list.entries.length === 0);
+    }).catch(() => {
+    });
+    return () => abort.abort();
   }, [api]);
   function changePath(path) {
     const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) ?? "";
@@ -1512,6 +1521,7 @@ function CangDrawer({ api, controller, initial }) {
   }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { id: "xs-cang-drawer-title", children: draft.id ? "编辑登记" : "登记藏" }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-cang__boundary", children: CANG_AI_FREE }),
+    empty && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-cang__empty", children: "藏库里还没有任何登记 —— 这是第一条：先给本地路径（或点「选择文件夹…」），校验通过、起好名字，再点「登记」。" }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("form", { onSubmit: (event) => {
       event.preventDefault();
       if (pointer?.valid && draft.name.trim() && !busy) void submit();
@@ -1542,7 +1552,7 @@ function CangDrawer({ api, controller, initial }) {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: "校验只做路径可达性判断，不读取内容、不列目录、不算大小、不建索引。" }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { role: "status", children: !draft.path.trim() ? "请选择或粘贴本地路径。" : !pointer ? "正在校验指针…" : pointer.valid ? `指针有效 · 类型=${pointer.kind === "directory" ? "文件夹" : "文件"} · 玄枢未读取` : pointer.reason }),
-      error && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { role: "alert", children: error }),
+      error && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { role: "alert", children: `登记没有成功：读不到这个指针，或注册表拒绝了这次写入 —— ${error}。请检查路径是否还在、有没有权限，然后重新点「${draft.id ? "保存登记" : "登记"}」；还是不通就换个路径。` }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-cang__toolbar", children: [
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "submit", disabled: busy || !pointer?.valid || !draft.name.trim(), children: busy ? "正在处理…" : draft.id ? "保存登记" : "登记" }),
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", onClick: controller.close, disabled: busy, children: "取消" })
@@ -6314,8 +6324,9 @@ function XsMountDrawer({
     /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "xs-mounts__group", "data-xuanshu-group": "preview", children: [
       /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h3", { children: "本轮挂载上下文（预览）" }),
       error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "xs-mounts__error", "data-xuanshu-error": "mounts", role: "alert", children: [
-        error,
-        onRetry === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "xs-mounts__ghost", onClick: onRetry, children: "重试" })
+        `读不到本轮挂载的预览：${error}。请检查工作区是否还在，然后`,
+        onRetry === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "xs-mounts__ghost", onClick: onRetry, children: "重试" }),
+        "；还是不通就先回门厅、换个工作区再挂。"
       ] }),
       busy && preview === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mounts__note", "data-xuanshu-note": "mounts-loading", children: "正在读挂载内容…" }) : null,
       rows.length === 0 && !busy ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mounts__note", "data-xuanshu-note": "preview-empty", children: "还没有挂载任何对象：选上面的工作区（选入即挂载），这里会逐层列出将被注入的内容。" }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ul", { className: "xs-mounts__layers", children: rows.map((row) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(LayerRowView, { row, open: foldOpen(row.layer.id), onToggle: () => {

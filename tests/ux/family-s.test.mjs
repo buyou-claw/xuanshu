@@ -363,11 +363,13 @@ describe('票 06 · 全仓真跑：25 个界面面 × 三条 S 判据', () => {
     expect(counts['collection-failed']).toBe(0)
   })
 
-  it('实测缺态数：空 5 面 / 载 1 面 / 错 3 面（数字变了就说明有人修了或有人放宽了口径）', () => {
+  it('实测缺态数：空 4 面 / 载 1 面 / 错 1 面（数字变了就说明有人修了或有人放宽了口径）', () => {
     const failing = (criterionId) => sVerdicts.filter((verdict) => verdict.criterionId === criterionId && verdict.status === 'fail')
-    expect(failing('S-001')).toHaveLength(5)
+    // 票 68（UX-06）把藏库抽屉的空态与「藏库 / 挂载账本」两个抽屉的错误态补齐：
+    // 空 5 → 4、错 3 → 1。数字再变要回来看这一行是被谁改的。
+    expect(failing('S-001')).toHaveLength(4)
     expect(failing('S-002')).toHaveLength(1)
-    expect(failing('S-003')).toHaveLength(3)
+    expect(failing('S-003')).toHaveLength(1)
   })
 
   it('每条红都指得出「哪个面 + 缺哪一态 + 哪一行」', () => {
@@ -402,11 +404,12 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
     generatedAt: '2026-10-31T00:00:00.000Z',
   })
 
-  it('机读报告带 missingStates：8 个面缺态，空 5 / 载 1 / 错 3（同一面缺两态只算一个面）', () => {
-    expect(report.missingStates.totals).toEqual({ faces: 8, empty: 5, loading: 1, error: 3, applicable: 66 })
-    const drawer = report.missingStates.faces.find((row) => row.face === 'slot:shell.overlay#xuanshu-cang-drawer')
-    expect(drawer.missing).toEqual(['empty', 'error'])
-    expect(drawer.missingLabels).toEqual(['空态', '错误态'])
+  it('机读报告带 missingStates：6 个面缺态，空 4 / 载 1 / 错 1（同一面缺两态只算一个面）', () => {
+    expect(report.missingStates.totals).toEqual({ faces: 6, empty: 4, loading: 1, error: 1, applicable: 66 })
+    // 票 68 修的两个抽屉已从清单里消失 —— 它们是「同一面缺两态」的样本，修好后就该整行不见。
+    const missingFaces = report.missingStates.faces.map((row) => row.face)
+    expect(missingFaces).not.toContain('slot:shell.overlay#xuanshu-cang-drawer')
+    expect(missingFaces).not.toContain('slot:shell.overlay#xuanshu-mounts-drawer')
   })
 
   it('共用源文件的几个面各自出现在清单里（findings 去重不会把它们压成一行）', () => {
@@ -421,7 +424,7 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
   it('人读报告里有这一节，且列出合计与逐面缺失态', () => {
     const markdown = renderMarkdown(report)
     expect(markdown).toContain('## 附：缺态界面面（S 族 · 空 / 载 / 错）')
-    expect(markdown).toContain('8 个界面面缺态')
+    expect(markdown).toContain('6 个界面面缺态')
     expect(markdown).toContain('`panel:mingpan` 命盘卡详情 · 缺：错误态')
   })
 
