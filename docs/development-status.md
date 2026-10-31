@@ -1244,9 +1244,13 @@ spec 003 与票 01 写的「10 面板 + 18 寄生 = 30 面」是把 `4+2+2+3+1+3
 - **判据侧同步收紧**：C-001 只判正文，`role=meta`（tag / badge / 状态行 / 路径 / 计数）不参与
   16px 下限 —— 否则唯一「通过」方式是把整屏调成同号，层级会塌（L-001 要防的正是这个）。
   采集器加了 `role` 字段（类名先判、标签兜底）。
-- **仍未清偿**：宿主在容器上覆盖了 `--dsh-content-font-size`（实测 14px），`var(…, 16px)` 的
-  fallback 不生效，`panel:overview` 仍有 11/13 个正文级文字不足 16px，`panel:consult` 6/10。
-  下一手用 `max(16px, var(--dsh-content-font-size, 16px))` 钉死下限。**不许靠调低阈值转绿。**
+- **已钉下限（票 #63 / UX-01）**：宿主在容器上覆盖了 `--dsh-content-font-size`（实测 14px），
+  `var(…, 16px)` 的 fallback 不生效。改法是把下限钉在**面板根**上——
+  `font-size: max(16px, var(--dsh-content-font-size, 16px))`（`style.ts` 的 `.xs-overview`、
+  `consult.tsx` 的 `.xs-consult`），继承链上的正文都吃这条；写死 rem 的 `h3`/`h4`/字段标签/
+  `__round-head` 各钉一次，`mounts` 的说明行也改成同一条 `max()`。元信息仍自带 12–14px。
+  **浏览器侧复测未做**（worktree 起不来，§17.6 第 2 条）：C-001 是否转绿以主仓 `--browser` 为准。
+  **不许靠调低阈值转绿。**
 
 **本轮实测（抄工具输出）**
 

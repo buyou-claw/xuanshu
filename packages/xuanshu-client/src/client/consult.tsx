@@ -423,8 +423,13 @@ export function installConsult(ctx: Context & RpcContext, deps: ConsultInstallDe
  */
 function installConsultStyle(): void {
   registerStyleSheet("xuanshu-consult-style", `
-.xs-consult{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
-.xs-consult h1,.xs-consult h3,.xs-consult h4{font-weight:600}.xs-consult h1{font-size:1.15rem}.xs-consult h3{font-size:.98rem;margin:16px 0 6px}.xs-consult h4{font-size:.85rem;margin:12px 0 4px;color:var(--xs-text-secondary)}
+.xs-consult{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body);font-size:max(16px,var(--dsh-content-font-size,16px))}
+/* 正文下限钉在面板根上（判据 C-001）：宿主在容器上定义了 --dsh-content-font-size（实测 14px），
+   所以 var(…, 16px) 的 fallback 永远不生效，只有 max() 能压住。放根上而不是逐条写，
+   是因为 summary / text / 列表正文这些「没有自己 font-size」的句子全靠继承拿字号。
+   h3 / h4 是例外：它们原先写死 rem（.98rem = 15.68px、.85rem = 13.6px），绝对值不继承，
+   所以各自也要钉一次；两档同为 heading（16px / 600），靠颜色与嵌套分，不靠字号。 */
+.xs-consult h1,.xs-consult h3,.xs-consult h4{font-weight:600}.xs-consult h1{font-size:1.15rem}.xs-consult h3{font-size:max(16px,var(--dsh-content-font-size,16px));margin:16px 0 6px}.xs-consult h4{font-size:max(16px,var(--dsh-content-font-size,16px));margin:12px 0 4px;color:var(--xs-text-secondary)}
 .xs-consult__head,.xs-consult__toolbar,.xs-consult__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .xs-consult__head{justify-content:space-between}
 .xs-consult button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
@@ -442,12 +447,12 @@ function installConsultStyle(): void {
 .xs-consult__badge{font-size:.72rem;padding:2px 8px;border:1px solid var(--xs-edge-card);border-radius:999px;color:var(--xs-text-secondary)}
 .xs-consult__note{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6}
 .xs-consult__field{display:block;margin:10px 0}
-.xs-consult__field>span{display:block;margin-bottom:4px;font-size:.85rem}
+.xs-consult__field>span{display:block;margin-bottom:4px;font-size:max(16px,var(--dsh-content-font-size,16px))}
 .xs-consult__locked{list-style:none;margin:0;padding:0}
 .xs-consult__rows{list-style:none;margin:0;padding:0}
 .xs-consult__row-hit{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left}
 .xs-consult__shortid{font-family:var(--font-mono,monospace);color:var(--xs-text-code);font-size:.85rem}
-.xs-consult__summary{line-height:1.7}
+.xs-consult__summary{line-height:1.7;font-size:max(16px,var(--dsh-content-font-size,16px))}
 .xs-consult__nudge,.xs-consult__error{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:12px;margin:10px 0}
 .xs-consult__nudge-title{font-weight:600;margin:0 0 6px}
 .xs-consult__paths{margin:0 0 8px;padding-left:20px;line-height:1.7}
@@ -455,7 +460,7 @@ function installConsultStyle(): void {
 .xs-consult__empty-why{font-weight:600;margin:0 0 6px}
 .xs-consult__messages{margin-top:12px}
 .xs-consult__round{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px;margin:12px 0}
-.xs-consult__round-head{font-size:.85rem;margin:0 0 4px;color:var(--xs-text-secondary)}
+.xs-consult__round-head{font-size:max(16px,var(--dsh-content-font-size,16px));margin:0 0 4px;color:var(--xs-text-secondary)}
 .xs-consult__message{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:10px 0;border-bottom:1px solid var(--xs-edge-card)}
 /* 角色占第一列；徽标 / 来源 / 正文一律第二列（否则混合行会把正文挤进 44px 那一列）。 */
 .xs-consult__message>.xs-consult__badge,.xs-consult__message>.xs-consult__note,.xs-consult__message>.xs-consult__text{grid-column:2}
