@@ -62,6 +62,17 @@ function newestMtime(directory) {
 
 /**
  * 客户端产物是否落后于源码。落后就不许采集（spec 003 §13）。
+ *
+ * **为什么留 1 秒容差**：全新检出（CI / 新 clone / `git worktree add`）里 git 在几毫秒内写完
+ * 全部文件，`src/**` 里某个文件的 mtime 天然可能比 `lib/client.js` 晚 1–3 毫秒 —— 于是巡检
+ * 在**完全干净**的工作区上拒绝采集。CI 实测：`npm ci` 后立刻跑，两条浏览器用例红。
+ * 真实场景里「改了 src 忘了重建」至少是秒级差异，1 秒吃得下抖动、吃不掉真落后。
+ * 它只是快速前置：权威判据是 `pnpm verify:all` 里的 `build-client --check`（逐字节比较），
+ * 那条一个字节不对就红，容差影响不到它。
+ */
+const MTIME_TOLERANCE_MS = 1_000
+
+/**
  * @param {{repoRoot: string}} input
  * @returns {{fresh: boolean, artifactAt: number, sourceAt: number, reason?: string}}
  */
@@ -72,7 +83,7 @@ export function checkClientArtifact({ repoRoot }) {
   }
   const artifactAt = statSync(artifact).mtimeMs
   const sourceAt = newestMtime(join(repoRoot, CLIENT_SRC_DIR))
-  if (sourceAt > artifactAt) {
+  if (sourceAt > artifactAt + MTIME_TOLERANCE_MS) {
     return {
       fresh: false,
       artifactAt,

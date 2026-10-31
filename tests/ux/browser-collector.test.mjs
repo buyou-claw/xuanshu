@@ -52,6 +52,30 @@ describe('票 07 · 产物落后于源码就拒绝采集', () => {
     expect(checkClientArtifact({ repoRoot: root })).toMatchObject({ fresh: true })
   })
 
+  it('源码只比产物晚几百毫秒 → 仍算新鲜（全新检出的 mtime 抖动）', () => {
+    // 反证：CI 检出 / git clone / worktree add 时全部文件在同一秒内写完，
+    // 毫秒级先后不说明「改了源码没重建」；按旧口径这里会拒绝采集（CI 真红过）。
+    const root = artifactRepo({ artifactOlderThanSource: false })
+    const artifact = join(root, 'packages/xuanshu-client/lib/client.js')
+    const source = join(root, 'packages/xuanshu-client/src/client/index.tsx')
+    const base = Date.now() / 1000
+    utimesSync(artifact, base, base)
+    utimesSync(source, base + 0.4, base + 0.4)
+    expect(checkClientArtifact({ repoRoot: root })).toMatchObject({ fresh: true })
+  })
+
+  it('源码比产物晚 3 秒 → 不新鲜（容差吃不掉真落后）', () => {
+    const root = artifactRepo({ artifactOlderThanSource: false })
+    const artifact = join(root, 'packages/xuanshu-client/lib/client.js')
+    const source = join(root, 'packages/xuanshu-client/src/client/index.tsx')
+    const base = Date.now() / 1000
+    utimesSync(artifact, base, base)
+    utimesSync(source, base + 3, base + 3)
+    const result = checkClientArtifact({ repoRoot: root })
+    expect(result.fresh).toBe(false)
+    expect(result.reason).toContain('落后')
+  })
+
   it('产物不存在 → 不新鲜（不是「没问题」）', () => {
     const root = mkdtempSync(join(tmpdir(), 'ux-artifact-none-'))
     const result = checkClientArtifact({ repoRoot: root })
