@@ -363,9 +363,10 @@ describe('票 06 · 全仓真跑：25 个界面面 × 三条 S 判据', () => {
     expect(counts['collection-failed']).toBe(0)
   })
 
-  it('实测缺态数：空 5 面 / 载 1 面 / 错 3 面（数字变了就说明有人修了或有人放宽了口径）', () => {
+  it('实测缺态数：空 2 面 / 载 1 面 / 错 3 面（数字变了就说明有人修了或有人放宽了口径）', () => {
     const failing = (criterionId) => sVerdicts.filter((verdict) => verdict.criterionId === criterionId && verdict.status === 'fail')
-    expect(failing('S-001')).toHaveLength(5)
+    // 空态 5 → 2：票 UX-03（#65）把三个合参面（浮层 / 设置项 / 输入框触发器）的空态补齐了。
+    expect(failing('S-001')).toHaveLength(2)
     expect(failing('S-002')).toHaveLength(1)
     expect(failing('S-003')).toHaveLength(3)
   })
@@ -402,16 +403,24 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
     generatedAt: '2026-10-31T00:00:00.000Z',
   })
 
-  it('机读报告带 missingStates：8 个面缺态，空 5 / 载 1 / 错 3（同一面缺两态只算一个面）', () => {
-    expect(report.missingStates.totals).toEqual({ faces: 8, empty: 5, loading: 1, error: 3, applicable: 66 })
+  it('机读报告带 missingStates：5 个面缺态，空 2 / 载 1 / 错 3（同一面缺两态只算一个面）', () => {
+    // #65 之后三个合参面转绿：8 面 / 空 5 → 5 面 / 空 2。
+    expect(report.missingStates.totals).toEqual({ faces: 5, empty: 2, loading: 1, error: 3, applicable: 66 })
     const drawer = report.missingStates.faces.find((row) => row.face === 'slot:shell.overlay#xuanshu-cang-drawer')
     expect(drawer.missing).toEqual(['empty', 'error'])
     expect(drawer.missingLabels).toEqual(['空态', '错误态'])
   })
 
   it('共用源文件的几个面各自出现在清单里（findings 去重不会把它们压成一行）', () => {
-    const bestofFaces = report.missingStates.faces.filter((row) => row.face.startsWith('slot:') && row.face.includes('bestof'))
-    expect(bestofFaces.map((row) => row.face).sort()).toEqual([
+    // #65 之后三个合参面都转绿了，真仓里已经没有「共用同一份源文件、又各自缺态」的例子；
+    // 所以这条改成喂一份**合成的判定**：意图（去重不许把三个面压成一行）不随仓库进度漂走。
+    const shared = [
+      { criterionId: 'S-001', face: 'slot:shell.overlay#xuanshu-bestof-overlay', status: 'fail' },
+      { criterionId: 'S-001', face: 'slot:settings.general.item#xuanshu.bestof', status: 'fail' },
+      { criterionId: 'S-001', face: 'slot:conversation.composer.dock#xuanshu-bestof-trigger', status: 'fail' },
+    ]
+    const summary = missingStatesOf(shared, FACES)
+    expect(summary.faces.map((row) => row.face).sort()).toEqual([
       'slot:conversation.composer.dock#xuanshu-bestof-trigger',
       'slot:settings.general.item#xuanshu.bestof',
       'slot:shell.overlay#xuanshu-bestof-overlay',
@@ -421,7 +430,7 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
   it('人读报告里有这一节，且列出合计与逐面缺失态', () => {
     const markdown = renderMarkdown(report)
     expect(markdown).toContain('## 附：缺态界面面（S 族 · 空 / 载 / 错）')
-    expect(markdown).toContain('8 个界面面缺态')
+    expect(markdown).toContain('5 个界面面缺态')
     expect(markdown).toContain('`panel:mingpan` 命盘卡详情 · 缺：错误态')
   })
 
