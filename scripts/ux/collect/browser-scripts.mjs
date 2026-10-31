@@ -39,19 +39,33 @@ async function dismissBlockingModals({ page, settle, step }) {
   let dismissed = 0
   const seen = []
   for (let round = 0; round < 6; round += 1) {
-    const maskCount = await page.evaluate(
-      () => [...document.querySelectorAll('[class*="mask"]')].filter((element) => element.getBoundingClientRect().width > 0).length,
-    )
-    if (maskCount === 0) break
+    // 只看**可见**的遮罩。DSH 的 mask 节点常驻 DOM，且实测 `width` 可能是 0（用的是
+    // `inset: 0` + 定位），所以按「存在」判会白转 6 轮、按 width 判会漏掉真正拦住点击的那层。
+    // 这里按「有面积 + 没被样式藏起来」判。
+    const maskVisible = await page.evaluate(() => {
+      for (const element of document.querySelectorAll('[class*="mask"], [aria-hidden="true"][class*="_mask"]')) {
+        const rect = element.getBoundingClientRect()
+        if (rect.width <= 0 || rect.height <= 0) continue
+        const style = getComputedStyle(element)
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) continue
+        return true
+      }
+      return false
+    })
+    if (!maskVisible) break
     let clicked = null
     for (const label of MODAL_DISMISS_LABELS) {
-      const button = page.getByRole('button', { name: label, exact: true })
-      if ((await button.count()) > 0) {
+      const button = page.getByRole('button', { name: label, exact: true }).first()
+      if ((await button.count()) > 0 && (await button.isVisible().catch(() => false))) {
         clicked = label
         break
       }
     }
-    if (clicked === null) break
+    // 遮罩在、但没有可认的按钮：记一笔再停手，别把 6 轮花在点空气上。
+    if (clicked === null) {
+      seen.push('（遮罩可见但认不出关闭按钮）')
+      break
+    }
     seen.push(clicked)
     await page.getByRole('button', { name: clicked, exact: true }).first().click({ force: true })
     dismissed += 1
@@ -213,6 +227,9 @@ export const SCRIPTS = {
       step('open-pu-panel', { visible: /谱管理/.test(await mainText(page)) })
 
       // ③ 创建向导：① 给资料 → ② 定义谱名 → ③ AI 转换中
+      // 首跑模态可能在「点进谱面板之后」才异步挂上（实测踩到：遮罩拦住这一次点击，
+      // 整个剧本退化成 collection-failed）。所以每次要点的东西之前都兜一次底。
+      await dismissBlockingModals({ page, settle, step })
       await page.getByRole('button', { name: /创建新谱/ }).first().click()
       await settle(page)
       const material = page.getByPlaceholder('把你知道的先写进来')

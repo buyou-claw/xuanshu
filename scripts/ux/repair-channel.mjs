@@ -21,13 +21,14 @@ export const FIX_NOTE_PREFIX = 'UX-FIX:'
 export const FIX_NOTE_SHAPE = 'UX-FIX: <判据 id> | <改了什么> | <证据 file:line>'
 
 /**
- * 修复通道的缺省基线：spec 003 的集成分支。
+ * 修复通道的**缺省基线**已搬到 `scripts/ux/guard-base.mjs`。
  *
- * 为什么默认是它而不是 `main`：每张票的分支都从这里切出去（AGENTS「并行实现」），
- * 从 `main` 起算会把整条 spec 分支的历史都算成「本票的修复提交」——守卫第一天就红一片，
- * 第二天所有人都会加 `--since` 绕开它。别的分支用 `--since <ref>` 显式给。
+ * 这里曾经写死 `feat/spec-003-integration`，理由是对的：票分支都从它切出去，从 `main` 起算
+ * 会把整条 spec 分支算成「本票的改动」。但它有个副作用 —— **在集成分支自己身上跑**时，
+ * 范围是 `feat/spec-003-integration..HEAD` = 空集，检查真空通过（`commits=0`，2026-10-31 实测）。
+ * 现在由 `resolveBaseRef()` 按当前分支决定：集成分支 → `main`；票分支 → 集成分支。
+ * 本文件只留词表（路径前缀 / 说明形状 / 基线落点），不再持有基准 ref。
  */
-export const DEFAULT_BASE_REF = 'feat/spec-003-integration'
 
 /** 报告与基线的落点（被 `.gitignore` 覆盖；基线**不进历史**）。 */
 export const BASELINE_ROOT = 'ux-reports/'

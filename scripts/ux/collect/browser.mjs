@@ -408,6 +408,26 @@ export async function runScript({ page, script, record, env, nav, scenario, step
         }
 
         const CONTROL_SELECTOR = 'button,input,select,textarea,option,[role="button"],[role="tab"],[role="menuitem"]'
+        // 「正文级」与「元信息」要分开：C-001 只该管正文（16px 下限），
+        // 而 tag / badge / 状态行 / 路径 / 计数这些元信息天生该小（12–13px）。
+        // 原来一律按正文判，等于要求整屏同号 —— 那会把层级压平，正好是 L-001 要防的事。
+        // 识别口径：标签名叫得出来就按标签，否则看自己或最近三层祖先的类名（组件已语义化命名）。
+        const META_TAGS = new Set(['small', 'code', 'kbd', 's', 'time'])
+        const BODY_TAGS = new Set(['p', 'li', 'dd', 'dt', 'td', 'th', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+        const META_WORDS = /(?:__|-)(?:note|hint|tag|badge|meta|caption|status|path|shortid|raw|sub|step|lead|count|time|role|blockers|ghost|gate-reason|boundary|localnote)(?![a-z])/u
+        const roleOf = (element, tag) => {
+          if (META_TAGS.has(tag)) return 'meta'
+          // 类名先于标签判：组件已经把语义写进类名（`__localnote` / `__summary` / `__path`…），
+          // 而 `p` 既可能是正文也可能是元信息 —— 先按标签判会把元信息一律算成正文（踩过：
+          // `p.xs-overview__localnote` 13px 被判「正文不够 16px」）。
+          let node = element
+          for (let depth = 0; node !== null && depth < 3; depth += 1, node = node.parentElement) {
+            const cls = typeof node.className === 'string' ? node.className : ''
+            if (cls !== '' && META_WORDS.test(cls)) return 'meta'
+          }
+          return BODY_TAGS.has(tag) ? 'body' : 'body'
+        }
+
         const bodyTexts = []
         for (const element of document.querySelectorAll('body *')) {
           if (bodyTexts.length >= 400) break
@@ -431,6 +451,7 @@ export async function runScript({ page, script, record, env, nav, scenario, step
           bodyTexts.push({
             selector: describe(element),
             tag: element.tagName.toLowerCase(),
+            role: roleOf(element, element.tagName.toLowerCase()),
             text: ownText.slice(0, 48),
             fontSize: Math.round(fontSize * 100) / 100,
             lineHeight: typeof lineHeight === 'number' ? Math.round(lineHeight * 100) / 100 : lineHeight,

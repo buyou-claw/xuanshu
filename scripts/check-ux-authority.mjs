@@ -40,13 +40,20 @@ import { CriteriaError, readNormalizedText } from './ux/project.mjs'
 import { CriteriaFrozenError, guardCriteria } from './ux/freeze.mjs'
 import {
   BASELINE_ROOT,
-  DEFAULT_BASE_REF,
   EFFECTIVE_CRITERIA,
   EFFECTIVE_FREEZE,
   EFFECTIVE_RULES_DIR,
   isBaselinePath,
   isEffectiveCriteriaPath,
 } from './ux/repair-channel.mjs'
+import { resolveBaseRef } from './ux/guard-base.mjs'
+import {
+  WaiverError,
+  applyWaivers,
+  describeStaleWaiver,
+  describeWaiver,
+  readWaivers,
+} from './ux/waivers.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const DEFAULT_REPO_ROOT = resolve(HERE, '..')
@@ -169,8 +176,11 @@ function stateViolations({ repoRoot }) {
  *   violations: {kind: string, message: string, sha?: string, subject?: string, path?: string, paths?: string[]}[],
  * }}
  */
-export function checkAuthority({ repoRoot, since = DEFAULT_BASE_REF }) {
-  const commits = listCommits({ repoRoot, since })
+export function checkAuthority({ repoRoot, since }) {
+  // 缺省基准按当前分支解析：集成分支 → main；票分支 → 集成分支（见 guard-base.mjs）。
+  // 写死任何一个都会出事：写死集成分支时在它自己身上是空集（真空通过），写死 main 时票分支红一片。
+  const base = resolveBaseRef({ repoRoot, explicit: since })
+  const commits = listCommits({ repoRoot, since: base.ref })
   const violations = []
   const effectiveCommits = []
 
@@ -234,12 +244,19 @@ export function checkAuthority({ repoRoot, since = DEFAULT_BASE_REF }) {
 
   violations.push(...stateViolations({ repoRoot }))
 
+  // 历史中间态由清单放行，但每一条都会在输出里原样打印（不静默跳过）。
+  const waivers = readWaivers({ repoRoot })
+  const applied = applyWaivers({ violations, waivers, guard: 'authority' })
+
   return {
-    since,
-    range: since.includes('..') ? since : `${since}..HEAD`,
+    since: base.ref,
+    base,
+    range: `${base.ref}..HEAD`,
     commits: commits.length,
     effectiveCommits,
-    violations,
+    violations: applied.kept,
+    waived: applied.waived,
+    stale: applied.stale,
   }
 }
 
@@ -250,7 +267,7 @@ export function describeViolation(violation) {
 }
 
 function parseArgs(argv) {
-  const options = { since: DEFAULT_BASE_REF, repoRoot: DEFAULT_REPO_ROOT, help: false }
+  const options = { since: undefined, repoRoot: DEFAULT_REPO_ROOT, help: false }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--help' || arg === '-h') options.help = true
@@ -279,14 +296,15 @@ async function main() {
     console.log('用法：node scripts/check-ux-authority.mjs [--since <ref>] [--repo <dir>]')
     console.log('  判据生效区（criteria.json / rules/** / freeze.json）的改动必须与 freeze.json 同现，且签字算得通；')
     console.log(`  ${BASELINE_ROOT}**/baseline(s)/** 不许进提交；${BASELINE_ROOT} 必须仍被 .gitignore 覆盖。`)
-    console.log(`  缺省范围：${DEFAULT_BASE_REF}..HEAD（--since 可换成任意 ref）`)
-    console.log('退出码：0 = 写入面干净；1 = 有人绕过了签字 / 基线进了历史；2 = 工具没跑成')
+    console.log(`  缺省基准：按当前分支解析（集成分支上 → main；票分支上 → 集成分支）；--since 可显式指定`)
+    console.log('退出码：0 = 写入面干净；1 = 有人绕过了签字 / 基线进了历史 / 豁免清单过期；2 = 工具没跑成')
     return 0
   }
 
   try {
     const repoRoot = resolveRepoRoot({ cwd: options.repoRoot })
     const result = checkAuthority({ repoRoot, since: options.since })
+    console.log(`[ux:authority] 基准 ${result.base.branch} → ${result.base.ref}：${result.base.reason}`)
     console.log(
       `[ux:authority] 范围 ${result.range}：${result.commits} 个提交（其中 ${result.effectiveCommits.length} 个动了判据生效区）`,
     )
@@ -294,16 +312,24 @@ async function main() {
       '[ux:authority] 写入面：可写 = 源码 / criteria/proposals/ / ux-reports/ 报告与基线；'
         + '不可写 = 判据生效区（criteria.json、rules/**、freeze.json）',
     )
-    if (result.violations.length === 0) {
-      console.log('[ux:authority] ✅ 通过：生效区的每处改动都有对得上的冻结签字；基线没有进历史；ux-reports/ 仍被 .gitignore 覆盖。')
+    for (const hit of result.waived) console.log(describeWaiver(hit))
+    if (result.stale.length > 0) {
+      console.error(`[ux:authority] ✗ 豁免清单过期 ${result.stale.length} 条：`)
+      for (const waiver of result.stale) console.error(describeStaleWaiver(waiver))
+    }
+    if (result.violations.length === 0 && result.stale.length === 0) {
+      const waivedNote = result.waived.length === 0 ? '' : `（另有 ${result.waived.length} 条历史中间态按清单放行）`
+      console.log(`[ux:authority] ✅ 通过：生效区的每处改动都有对得上的冻结签字；基线没有进历史；ux-reports/ 仍被 .gitignore 覆盖。${waivedNote}`)
       return 0
     }
-    console.error(`[ux:authority] ✗ 写入面违规 ${result.violations.length} 条：`)
-    for (const violation of result.violations) console.error(describeViolation(violation))
-    console.error('[ux:authority] 判据的变更权在人：新判据先落 criteria/proposals/，由人搬进 rules/ 后重投影 + 重新冻结。')
+    if (result.violations.length > 0) {
+      console.error(`[ux:authority] ✗ 写入面违规 ${result.violations.length} 条：`)
+      for (const violation of result.violations) console.error(describeViolation(violation))
+      console.error('[ux:authority] 判据的变更权在人：新判据先落 criteria/proposals/，由人搬进 rules/ 后重投影 + 重新冻结。')
+    }
     return 1
   } catch (error) {
-    if (error instanceof AuthorityError || error instanceof GitRangeError) {
+    if (error instanceof AuthorityError || error instanceof GitRangeError || error instanceof WaiverError) {
       console.error(`[ux:authority] 检查没跑成：${error.message}`)
       return 2
     }

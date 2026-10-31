@@ -20,14 +20,37 @@ export const STYLE_TAG_ID = 'xuanshu-client/styles.css';
 /** id → CSS 文本。模块加载时登记；同 id 重复登记以后者为准（幂等，热重载安全）。 */
 const SHEETS = new Map<string, string>();
 
+/**
+ * 基础段：**所有**玄枢元素共享的排版下限。
+ *
+ * 为什么放在消费层而不是各 `*-style.ts`：这是跨全部面板的一条纪律（判据 C-002 要求行高比 ≥1.5）。
+ * 复制到 6 个风格文件里就会漂；而它又必须**早于**各段落地，让具体规则仍能覆盖它。
+ * 实测（2026-10-31）：不加这条时 `line-height: normal` 在 overview 是 22/22、pus 14/14 —— 全屏都没给比值。
+ */
+const BASE_SHEET = `
+[class^="xs-"], [class*=" xs-"] { line-height: 1.6; }
+
+/* 可点目标的下限（判据 D-001：44×44）。放在基础段是因为它是**跨面**的一条纪律；
+   各面板自己的 padding 仍然生效，这条只是兜住「做小了没人拦」的底。 */
+[class^="xs-"] button, [class*=" xs-"] button,
+[class^="xs-"] a[href], [class*=" xs-"] a[href],
+[class^="xs-"] select, [class*=" xs-"] select,
+[class^="xs-"] input:not([type="hidden"]), [class*=" xs-"] input:not([type="hidden"]),
+[class^="xs-"] textarea, [class*=" xs-"] textarea,
+[class^="xs-"] [role="button"], [class*=" xs-"] [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+`;
+
 /** 登记一段样式（不碰 DOM）。 */
 export function registerStyleSheet(id: string, css: string): void {
   SHEETS.set(id, css);
 }
 
-/** 合成后的 CSS（按登记顺序；测试与诊断用）。 */
+/** 合成后的 CSS（基础段在前；测试与诊断用）。 */
 export function composedStyleText(): string {
-  return [...SHEETS.values()].join('\n');
+  return [BASE_SHEET, ...SHEETS.values()].join('\n');
 }
 
 /**

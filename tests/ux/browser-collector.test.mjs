@@ -177,10 +177,10 @@ describe('票 07 · 唯一条端到端：隔离实例 + 三条剧本（建谱 / 
       expect(observed.map((verdict) => verdict.face).sort()).toEqual(['panel:cang', 'panel:consult', 'panel:overview', 'panel:pus'])
       // 报告如实写「没走到那些面」而不是假装通过
       expect(browserVerdicts.filter((verdict) => verdict.status === 'not-collected').length).toBeGreaterThan(0)
-      // D-001 至少在一个面上是红（实测：32–39px 的按钮不少），且 message 带尺寸
-      const failing = observed.filter((verdict) => verdict.status === 'fail')
-      expect(failing.length).toBeGreaterThan(0)
-      expect(failing[0].message).toMatch(/\d+×\d+/)
+      // D-001 在四个面上都要有判定，且消息里带真实尺寸（证明是量出来的，不是编的）。
+      // 曾经这里断言「至少一面红」（实测 32–39px 的按钮不少）；基础段补了 44px 下限之后
+      // 全绿了 —— 所以两种结局都认，但**必须**带尺寸证据，否则量没量就说不清。
+      for (const verdict of observed) expect(verdict.message).toMatch(/\d+×\d+/)
     },
     180_000,
   )

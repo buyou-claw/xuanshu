@@ -45,7 +45,7 @@ export const OVERVIEW_CSS = `
 }
 .xs-overview__title {
   margin: 0;
-  font-size: var(--dsh-content-font-size, 15px);
+  font-size: var(--dsh-content-font-size, 16px);
   font-weight: 600;
   color: var(--xs-text-title);
 }
@@ -56,7 +56,7 @@ export const OVERVIEW_CSS = `
 .xs-overview__localnote {
   margin: 0;
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
   font-family: var(--ds-font-family-code, ui-monospace, monospace);
 }
 .xs-overview__grid {
@@ -98,7 +98,7 @@ export const OVERVIEW_CSS = `
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--dsh-content-font-size, 15px);
+  font-size: var(--dsh-content-font-size, 16px);
   font-weight: 600;
   color: var(--xs-text-heading);
 }
@@ -136,12 +136,12 @@ export const OVERVIEW_CSS = `
 .xs-empty__why {
   margin: 0;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size, 16px);
 }
 .xs-empty__sub {
   margin: 0;
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 
 .xs-badge {
@@ -151,7 +151,7 @@ export const OVERVIEW_CSS = `
   height: var(--xs-size-chip-height);
   padding: 0 8px;
   border-radius: var(--xs-radius-chip);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
   white-space: nowrap;
 }
 .xs-badge--readonly {
@@ -278,7 +278,7 @@ export const OVERVIEW_CSS = `
 }
 .xs-pillar__name {
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 .xs-pillar__value {
   color: var(--xs-text-heading);
@@ -289,7 +289,7 @@ export const OVERVIEW_CSS = `
   gap: var(--xs-space-row);
   flex-wrap: wrap;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 .xs-lines {
   display: flex;
@@ -318,7 +318,7 @@ export const OVERVIEW_CSS = `
   gap: var(--xs-space-toolbar);
   flex-wrap: wrap;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 
 .xs-quicklinks {
@@ -356,7 +356,7 @@ export const OVERVIEW_CSS = `
 }
 .xs-cell__subtitle {
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 .xs-cell[disabled] .xs-cell__subtitle {
   color: var(--xs-text-disabled);
@@ -364,7 +364,7 @@ export const OVERVIEW_CSS = `
 .xs-quicklinks__note {
   margin: var(--xs-space-stack-md) 0 0;
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
   text-align: right;
 }
 `;

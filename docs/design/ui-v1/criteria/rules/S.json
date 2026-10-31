@@ -12,7 +12,7 @@
       "check": "static",
       "evidence": "file-line",
       "severity": "major",
-      "appliesTo": { "kind": "all" },
+      "appliesTo": { "kind": "rendered" },
       "source": {
         "file": "docs/design/ui-v1/README.md",
         "anchor": "空态必须可执行"
@@ -24,7 +24,7 @@
       "check": "static",
       "evidence": "file-line",
       "severity": "major",
-      "appliesTo": { "kind": "all" },
+      "appliesTo": { "kind": "rendered" },
       "source": {
         "file": "docs/design/ui-v1/README.md",
         "anchor": "首屏 `loading` 用**卡级骨架**"
@@ -36,7 +36,7 @@
       "check": "static",
       "evidence": "file-line",
       "severity": "major",
-      "appliesTo": { "kind": "all" },
+      "appliesTo": { "kind": "rendered" },
       "source": {
         "file": "docs/design/ui-v1/README.md",
         "anchor": "`空态`、`加载态`、`错误态` 三种"

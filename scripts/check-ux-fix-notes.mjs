@@ -32,11 +32,18 @@ import { GitRangeError, commitPaths, listCommits, resolveRepoRoot, shortSha } fr
 import { CRITERIA_FILE, readNormalizedText } from './ux/project.mjs'
 import {
   CLIENT_SCOPE,
-  DEFAULT_BASE_REF,
   FIX_NOTE_PREFIX,
   FIX_NOTE_SHAPE,
   isClientPath,
 } from './ux/repair-channel.mjs'
+import { resolveBaseRef } from './ux/guard-base.mjs'
+import {
+  WaiverError,
+  applyWaivers,
+  describeStaleWaiver,
+  describeWaiver,
+  readWaivers,
+} from './ux/waivers.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const DEFAULT_REPO_ROOT = resolve(HERE, '..')
@@ -179,8 +186,10 @@ function loadCriteriaIds({ repoRoot, criteriaFile = CRITERIA_FILE }) {
  *   }[],
  * }}
  */
-export function checkFixNotes({ repoRoot, since = DEFAULT_BASE_REF, criteriaIds = null }) {
-  const commits = listCommits({ repoRoot, since })
+export function checkFixNotes({ repoRoot, since, criteriaIds = null }) {
+  // 缺省基准按当前分支解析（见 guard-base.mjs）：集成分支 → main；票分支 → 集成分支。
+  const base = resolveBaseRef({ repoRoot, explicit: since })
+  const commits = listCommits({ repoRoot, since: base.ref })
   const violations = []
   let merges = 0
   let clientCommits = 0
@@ -226,14 +235,20 @@ export function checkFixNotes({ repoRoot, since = DEFAULT_BASE_REF, criteriaIds 
     }
   }
 
+  const waivers = readWaivers({ repoRoot })
+  const applied = applyWaivers({ violations, waivers, guard: 'fix-notes' })
+
   return {
-    since,
-    range: since.includes('..') ? since : `${since}..HEAD`,
+    since: base.ref,
+    base,
+    range: `${base.ref}..HEAD`,
     commits: commits.length,
     merges,
     clientCommits,
     notes: noteCount,
-    violations,
+    violations: applied.kept,
+    waived: applied.waived,
+    stale: applied.stale,
   }
 }
 
@@ -253,7 +268,7 @@ function describeViolation(violation) {
 }
 
 function parseArgs(argv) {
-  const options = { since: DEFAULT_BASE_REF, repoRoot: DEFAULT_REPO_ROOT, criteriaFile: CRITERIA_FILE, help: false }
+  const options = { since: undefined, repoRoot: DEFAULT_REPO_ROOT, criteriaFile: CRITERIA_FILE, help: false }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--help' || arg === '-h') options.help = true
@@ -286,8 +301,8 @@ async function main() {
     console.log('用法：node scripts/check-ux-fix-notes.mjs [--since <ref>] [--repo <dir>] [--criteria <file>]')
     console.log(`  ${FIX_NOTE_SHAPE}`)
     console.log('  一行一条、可多条；只有动了 packages/xuanshu-client/** 的提交需要说明（合并提交跳过）。')
-    console.log(`  缺省范围：${DEFAULT_BASE_REF}..HEAD（--since 可换成任意 ref）`)
-    console.log('退出码：0 = 都有说明；1 = 有提交缺说明 / 说明不完整；2 = 工具没跑成（不是 git 仓库 / 判据集读不出来）')
+    console.log(`  缺省基准：按当前分支解析（集成分支上 → main；票分支上 → 集成分支）；--since 可显式指定`)
+    console.log('退出码：0 = 都有说明；1 = 有提交缺说明 / 说明不完整 / 豁免清单过期；2 = 工具没跑成（不是 git 仓库 / 判据集读不出来）')
     return 0
   }
 
@@ -295,20 +310,27 @@ async function main() {
     const repoRoot = resolveRepoRoot({ cwd: options.repoRoot })
     const criteriaIds = loadCriteriaIds({ repoRoot, criteriaFile: options.criteriaFile })
     const result = checkFixNotes({ repoRoot, since: options.since, criteriaIds })
+    console.log(`[ux:fix-notes] 基准 ${result.base.branch} → ${result.base.ref}：${result.base.reason}`)
     console.log(
       `[ux:fix-notes] 范围 ${result.range}：${result.commits} 个提交（合并提交跳过 ${result.merges} 个；`
         + `动了 ${CLIENT_SCOPE}** 的 ${result.clientCommits} 个）`,
     )
-    if (result.violations.length === 0) {
-      console.log(`[ux:fix-notes] ✅ 通过：每个动了客户端的提交都带了修复说明（共 ${result.notes} 条 UX-FIX）。`)
+    for (const hit of result.waived) console.log(describeWaiver(hit))
+    if (result.stale.length > 0) {
+      console.error(`[ux:fix-notes] ✗ 豁免清单过期 ${result.stale.length} 条：`)
+      for (const waiver of result.stale) console.error(describeStaleWaiver(waiver))
+    }
+    if (result.violations.length === 0 && result.stale.length === 0) {
+      const waivedNote = result.waived.length === 0 ? '' : `（另有 ${result.waived.length} 条历史中间态按清单放行）`
+      console.log(`[ux:fix-notes] ✅ 通过：每个动了客户端的提交都带了修复说明（共 ${result.notes} 条 UX-FIX）。${waivedNote}`)
       return 0
     }
-    console.error(`[ux:fix-notes] ✗ 修复说明违规 ${result.violations.length} 条：`)
+    if (result.violations.length > 0) console.error(`[ux:fix-notes] ✗ 修复说明违规 ${result.violations.length} 条：`)
     for (const violation of result.violations) console.error(describeViolation(violation))
     console.error(`[ux:fix-notes] 每条修复提交都要写：${FIX_NOTE_SHAPE}；一条一行、可多条。不含客户端的提交不需要。`)
     return 1
   } catch (error) {
-    if (error instanceof FixNotesError || error instanceof GitRangeError) {
+    if (error instanceof FixNotesError || error instanceof GitRangeError || error instanceof WaiverError) {
       console.error(`[ux:fix-notes] 检查没跑成：${error.message}`)
       return 2
     }

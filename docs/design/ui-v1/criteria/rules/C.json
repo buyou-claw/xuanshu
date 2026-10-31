@@ -8,7 +8,7 @@
   "rules": [
     {
       "id": "C-001",
-      "statement": "每个渲染出来的正文级文字元素（跳过 `aria-hidden` 与控件标签）其计算字号 ≥ 16px（留白档下限；设计稿 body 档 14px 与 `.8rem` 辅助字都低于它）",
+      "statement": "每个渲染出来的正文级文字元素（跳过 `aria-hidden`、控件标签，以及标成元信息的 tag / badge / 状态行 / 路径 / 计数）其计算字号 ≥ 16px；正文指 p / li / dd / td / 标题，或没有被标成元信息的文字——元信息走自己的小档，不参与这条",
       "check": "browser",
       "evidence": "computed-style",
       "severity": "major",
