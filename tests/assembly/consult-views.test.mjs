@@ -267,7 +267,7 @@ describe('票 10 · 历史列表（S7 §2.1 / §2.3 / §6）', () => {
     onOpen: () => {},
     onBack: () => {},
     onStart: () => {},
-    onManagePu: () => {},
+    onCreatePu: () => {},
     onRetry: () => {},
     ...over,
   })
@@ -301,7 +301,9 @@ describe('票 10 · 历史列表（S7 §2.1 / §2.3 / §6）', () => {
     expect(blockOf(html, 'data-xuanshu-state="empty"')).toContain('还没有问事记录')
     expect(html).toContain('每次问事都会自动存成本地文件，随时能回来接着读。')
     expect(blockOf(html, 'data-xuanshu-state="empty"')).toContain('data-xuanshu-action="start-consult"')
-    expect(html).toContain('data-xuanshu-action="manage-pu"')
+    // 次按钮（S7:65「先建谱」）：动作是**建一个谱**，不是「去谱管理」（判据 N-001 的重复入口）。
+    expect(html).toContain('data-xuanshu-action="create-pu"')
+    expect(html).toContain('先建一个谱')
     expect(html).not.toContain('暂无数据')
   })
 
