@@ -565,7 +565,7 @@ function createBestofController({ api, pollMs = 400 }) {
       if (token !== estimateToken) return;
       estimateFor = question;
       const selected = state.routes ?? estimate.routes.map(({ provider, model }) => ({ provider, model }));
-      set({ ...catalog === void 0 ? {} : { catalog }, estimate, estimateError: void 0, routes: selected });
+      set({ ...catalog === void 0 ? {} : { catalog }, estimate, estimateError: void 0, routes: selected, routesKnown: true });
     } catch (error) {
       if (token !== estimateToken) return;
       set({ estimate: void 0, estimateError: message(error) });
@@ -589,6 +589,26 @@ function createBestofController({ api, pollMs = 400 }) {
       void poll(runId);
     }, pollMs);
   }
+  let catalogInFlight;
+  async function loadRoutes(signal) {
+    if (state.routesKnown === true) return;
+    if (catalogInFlight !== void 0) return catalogInFlight;
+    if (typeof api.listRoutes !== "function") {
+      set({ routesKnown: true });
+      return;
+    }
+    catalogInFlight = (async () => {
+      try {
+        const catalog = await api.listRoutes(signal);
+        set({ catalog, routes: state.routes ?? defaultRouteSelection(catalog), routesKnown: true });
+      } catch (error) {
+        set({ routesKnown: true, estimateError: message(error) });
+      } finally {
+        catalogInFlight = void 0;
+      }
+    })();
+    return catalogInFlight;
+  }
   return {
     snapshot: () => state,
     subscribe(listener) {
@@ -604,13 +624,15 @@ function createBestofController({ api, pollMs = 400 }) {
     ask({ question, sessionId }) {
       stoppedByUser = false;
       if (!state.enabled) {
-        set({ phase: "disabled", question, sessionId, view: void 0, error: void 0, notice: "多 AI 合参当前是关的：去 设置 · 通用 里打开它。" });
+        set({ phase: "disabled", question, sessionId, sessionKnown: true, view: void 0, error: void 0, notice: "多 AI 合参当前是关的：去 设置 · 通用 里打开它。" });
         return;
       }
       set({
         phase: "confirm",
         question,
         sessionId,
+        // 这一次触发已经给出了会话 id（哪怕是空串 = 确实没有）：从此别再说「还不知道」。
+        sessionKnown: true,
         view: void 0,
         error: void 0,
         notice: void 0,
@@ -621,6 +643,14 @@ function createBestofController({ api, pollMs = 400 }) {
       });
       estimateFor = void 0;
       void loadEstimate();
+    },
+    probeSession(sessionId) {
+      const known = state.sessionId;
+      const resolved = sessionId ?? "";
+      set({ ...known === void 0 || known === "" ? { sessionId: resolved } : {}, sessionKnown: true });
+    },
+    async loadRoutes(signal) {
+      await loadRoutes(signal);
     },
     editQuestion(question) {
       const stale = estimateFor !== void 0 && estimateFor !== question.trim();
@@ -1128,14 +1158,15 @@ function bestofActions(deps) {
   };
 }
 function bestofEmptyOf(state) {
-  if (state.sessionId === "") {
+  const sessionMissing = state.sessionId === "" || state.sessionId === void 0 && state.sessionKnown === true;
+  if (sessionMissing) {
     return {
       kind: "no-session",
       text: "还没有问事会话：合参要挂在一个问事会话上。",
       next: "先去「问事」开一次会话，再回来点「多 AI 合参」。"
     };
   }
-  if (state.routes !== void 0 && state.routes.length < BESTOF_MIN_ROUTES) {
+  if (state.routesKnown === true && Array.isArray(state.routes) && state.routes.length < BESTOF_MIN_ROUTES) {
     return {
       kind: "no-route",
       text: `还没有两路可并列（现在 ${state.routes.length} 路）。`,
@@ -1180,10 +1211,14 @@ function BestofOverlayHost({ controller, openSettings }) {
 }
 function BestofSettingsRowHost({ controller }) {
   const state = (0, import_react.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
+  (0, import_react.useEffect)(() => {
+    void controller.loadRoutes();
+  }, [controller]);
   const empty = bestofEmptyOf(state);
   const routeGap = empty !== void 0 && empty.kind === "no-route" ? empty : void 0;
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofSettingsRow, { state, actions: { onToggle: (enabled) => controller.setEnabled(enabled) } }),
+    state.routesKnown !== true && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "xs-bestof__note", role: "status", children: "正在读取模型目录…" }),
     routeGap !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofEmptyNotice, { empty: routeGap })
   ] });
 }
@@ -1232,17 +1267,45 @@ function installBestOf(ctx, deps) {
   ctx.slots.inject(
     "conversation.composer.dock",
     () => ctx.slots.register(
-      { name: "conversation.composer.dock", id: BESTOF_TRIGGER_ID, inject: () => ({ onTrigger: trigger, controller: deps.controller }) },
+      {
+        name: "conversation.composer.dock",
+        id: BESTOF_TRIGGER_ID,
+        // `resolveSessionId` 一起注入：空态要在挂载时就问一次「有没有会话」，
+        // 只在点击时问意味着首屏永远不显示「还没有问事会话」。
+        inject: () => ({
+          onTrigger: trigger,
+          controller: deps.controller,
+          ...deps.resolveSessionId === void 0 ? {} : { resolveSessionId: deps.resolveSessionId }
+        })
+      },
       BestofTriggerHost
     )
   );
 }
-function BestofTriggerHost({ controller, onTrigger }) {
+function BestofTriggerHost({ controller, onTrigger, resolveSessionId }) {
   const state = (0, import_react.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
+  (0, import_react.useEffect)(() => {
+    let alive = true;
+    if (resolveSessionId === void 0) {
+      controller.probeSession(void 0);
+      return () => {
+        alive = false;
+      };
+    }
+    void resolveSessionId().then((sessionId) => {
+      if (alive) controller.probeSession(sessionId);
+    }).catch(() => {
+      if (alive) controller.probeSession(void 0);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [controller, resolveSessionId]);
   const empty = bestofEmptyOf(state);
   const sessionGap = empty !== void 0 && empty.kind === "no-session" ? empty : void 0;
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofTriggerButton, { onTrigger }),
+    state.sessionKnown !== true && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "xs-bestof__note", role: "status", children: "正在读取最近一次问事会话…" }),
     sessionGap !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofEmptyNotice, { empty: sessionGap })
   ] });
 }
@@ -1414,7 +1477,7 @@ function CangPanel({ api, controller, initialData }) {
     notice && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { role: "alert", children: notice }),
     empty && /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "xs-cang__empty", children: [
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "你还没有登记任何藏。藏只登记指针，不复制文件。" }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", onClick: () => controller.edit(newCangDraft()), children: "登记藏" })
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", onClick: () => controller.edit(newCangDraft()), children: "登记第一个藏" })
     ] }),
     !loading && !error && !!entries.length && !filtered.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "没有匹配的藏名或签。" }),
     !loading && !error && [...groups].map(([label, items]) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("details", { open: true, className: "xs-cang__group", children: [
@@ -1498,6 +1561,8 @@ function CangDrawer({ api, controller, initial }) {
   const [busy, setBusy] = (0, import_react4.useState)(false);
   const [error, setError] = (0, import_react4.useState)("");
   const [empty, setEmpty] = (0, import_react4.useState)(false);
+  const [listError, setListError] = (0, import_react4.useState)("");
+  const [listRetry, setListRetry] = (0, import_react4.useState)(0);
   const dialog = (0, import_react4.useRef)(null);
   (0, import_react4.useEffect)(() => {
     const abort = new AbortController();
@@ -1525,11 +1590,17 @@ function CangDrawer({ api, controller, initial }) {
   (0, import_react4.useEffect)(() => {
     const abort = new AbortController();
     api.list(abort.signal).then((list) => {
-      if (!abort.signal.aborted) setEmpty(list.entries.length === 0);
-    }).catch(() => {
+      if (!abort.signal.aborted) {
+        setEmpty(list.entries.length === 0);
+        setListError("");
+      }
+    }).catch((reason) => {
+      if (abort.signal.aborted) return;
+      setEmpty(false);
+      setListError(String(reason?.message ?? reason));
     });
     return () => abort.abort();
-  }, [api]);
+  }, [api, listRetry]);
   function changePath(path) {
     const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) ?? "";
     setDraft((value) => ({ ...value, path, name: nameTouched ? value.name : name }));
@@ -1584,6 +1655,12 @@ function CangDrawer({ api, controller, initial }) {
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { id: "xs-cang-drawer-title", children: draft.id ? "编辑登记" : "登记藏" }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-cang__boundary", children: CANG_AI_FREE }),
     empty && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-cang__empty", children: "藏库里还没有任何登记 —— 这是第一条：先给本地路径（或点「选择文件夹…」），校验通过、起好名字，再点「登记」。" }),
+    listError !== "" && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("p", { role: "alert", className: "xs-cang__empty-note", children: [
+      "藏库清单读不到（首次登记提示因此先不说）：",
+      listError,
+      "。请点下面的「重新读取」再试一次；还读不到就稍后再开这张表 —— 登记本身不依赖这份清单。",
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", onClick: () => setListRetry((value) => value + 1), children: "重新读取" })
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("form", { onSubmit: (event) => {
       event.preventDefault();
       if (pointer?.valid && draft.name.trim() && !busy) void submit();

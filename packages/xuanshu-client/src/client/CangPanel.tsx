@@ -24,6 +24,9 @@
  *      「藏 vs 谱」这句边界话留着（它是信息，不是门），只是把去路说成侧栏行。
  *   6. **空态只有一扇登记门**：工具条的「登记藏」在空态不渲染（不是置灰 —— 置灰仍是一个门）。
  *      空态自带「登记第一个藏」那一个 CTA（#68 补的可执行空态），两个并排就是 N-001 的重复入口。
+ *      两扇门**名字不同是有意的**：它们互斥（同一时刻只出现一扇），判据按**同一时刻**数门
+ *      （`browser-nav.mjs` 的 `entriesInWorstSnapshot`），所以不需要、也不该靠「同名」让并集去重 ——
+ *      同名只会把「这里其实有两扇门」这件事藏起来（用户在不同状态看到不同的门，找不到同一个按钮）。
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { CangApi, CangController, CangEntry, CangList } from './cang-model.js';
@@ -93,7 +96,7 @@ export function CangPanel({ api, controller, initialData }: CangPanelProps) {
     {loading && <p role="status">正在读取藏库注册表…</p>}
     {error && <div role="alert"><p>注册表读取失败：{error}</p><button type="button" onClick={() => setReload(value => value + 1)}>重试</button></div>}
     {notice && <p role="alert">{notice}</p>}
-    {empty && <div className="xs-cang__empty"><p>你还没有登记任何藏。藏只登记指针，不复制文件。</p><button type="button" onClick={() => controller.edit(newCangDraft())}>登记藏</button></div>}
+    {empty && <div className="xs-cang__empty"><p>你还没有登记任何藏。藏只登记指针，不复制文件。</p><button type="button" onClick={() => controller.edit(newCangDraft())}>登记第一个藏</button></div>}
     {!loading && !error && !!entries.length && !filtered.length && <p>没有匹配的藏名或签。</p>}
     {!loading && !error && [...groups].map(([label, items]) => <details open key={label} className="xs-cang__group"><summary>签「{label}」（{items.length}）</summary>{items.map(entry => <article className="xs-cang__card" key={entry.id} data-cang-id={entry.id}>
       <h2>{entry.name} <span className="xs-cang__status">已登记</span></h2>

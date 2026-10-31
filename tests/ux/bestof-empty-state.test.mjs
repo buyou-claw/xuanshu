@@ -16,7 +16,8 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { BestofOverlayHost, BestofSettingsRowHost, BestofTriggerHost } from '../../packages/xuanshu-client/src/client/bestof.tsx';
+import { BestofOverlayHost, BestofSettingsRowHost, BestofTriggerHost, bestofEmptyOf } from '../../packages/xuanshu-client/src/client/bestof.tsx';
+import { createBestofController } from '../../packages/xuanshu-client/src/client/bestof-model.ts';
 import { collectStatic } from '../../scripts/ux/collect/static.mjs';
 import { run as judgeRun } from '../../scripts/ux/judge.mjs';
 import { projectCriteria } from '../../scripts/ux/project.mjs';
@@ -87,6 +88,8 @@ describe('票 UX-03 · 设置项（slot:settings.general.item）：凑不到两�
       enabled: true,
       question: '问',
       sessionId: 'session-1',
+      // 目录**真读过**（`routesKnown`）才够说「凑不到两路」：没读过时 `routes` 只是还没填。
+      routesKnown: true,
       routes: [{ provider: 'deepseek', model: 'deepseek-chat' }],
     };
     const html = render(h(BestofSettingsRowHost, { controller: controllerOf(state), api: {} }));
@@ -100,6 +103,7 @@ describe('票 UX-03 · 设置项（slot:settings.general.item）：凑不到两�
       enabled: true,
       question: '问',
       sessionId: 'session-1',
+      routesKnown: true,
       routes: [{ provider: 'deepseek', model: 'deepseek-chat' }, { provider: 'glm', model: 'glm-4' }],
     };
     const html = render(h(BestofSettingsRowHost, { controller: controllerOf(state), api: {} }));
@@ -121,6 +125,88 @@ describe('票 UX-03 · 输入框触发器（slot:conversation.composer.dock）�
     expect(html).toContain('多 AI 合参');
     expect(html).not.toContain('还没有');
   });
+});
+
+/* ───────────────────────── 真实初始状态（票 03 收口） ───────────────────────── */
+
+/**
+ * 真实初始快照 = `createBestofController()` 造出来的那一份（**不是**手写的 state）：
+ * `phase:'idle'`、`enabled:false`、`question:''`，`sessionId` / `routes` 都**缺席**。
+ *
+ * 这一节钉的正是 2026-10-31 复核发现的那个洞：空态判定原来读 `sessionId === ''` / `routes`，
+ * 而初始快照里两者是 `undefined`（`routes` 还要等估算成功才写），于是静态判据 S-001 绿着、
+ * 用户看到的却永远是空白。修法是把「未加载」与「确实没有」分成两个位（`sessionKnown` / `routesKnown`），
+ * 两个宿主在挂载时各问一次（`probeSession` / `loadRoutes`），问过之后空态才开口。
+ * SSR 不跑 effect，所以这里用控制器 API 复现那一次问话，渲染的还是**同一个宿主组件**。
+ */
+const ONE_ROUTE_CATALOG = {
+  schema: 'xuanshu/routes@1',
+  ok: true,
+  default: { provider: 'deepseek', model: 'deepseek-chat' },
+  providers: [{
+    id: 'deepseek',
+    name: 'DeepSeek',
+    registered: true,
+    keyConfigured: true,
+    isDefault: true,
+    modelsKnown: true,
+    models: [{ id: 'deepseek-chat', name: 'deepseek-chat', isDefault: true }],
+  }],
+  configurable: [],
+  failures: [],
+}
+
+/** 只提供控制器会用到的那几个方法；别的面在本节不该被碰到。 */
+const apiOf = (over = {}) => ({ listRoutes: async () => ONE_ROUTE_CATALOG, ...over })
+
+describe('票 UX-03 收口 · 两条空态在真实初始状态下可达', () => {
+  it('初始快照：`sessionId` / `routes` 缺席，且空态判定**不**替用户说「没有」', () => {
+    const controller = createBestofController({ api: apiOf() })
+    const state = controller.snapshot()
+    expect(state.sessionId, '初始快照的 sessionId 不再是 undefined：这条用例要跟着改').toBeUndefined()
+    expect(state.routes).toBeUndefined()
+    expect(state.sessionKnown).toBeUndefined()
+    expect(state.routesKnown).toBeUndefined()
+    // 没问过 = 还不知道：既不判「没有会话」，也不判「凑不到两路」。
+    expect(bestofEmptyOf(state)).toBeUndefined()
+  })
+
+  it('触发器：首屏说「正在读」，问过一次之后才说「还没有问事会话」', () => {
+    const controller = createBestofController({ api: apiOf() })
+    const before = render(h(BestofTriggerHost, { controller, onTrigger: () => {} }))
+    expect(before, '还没问过会话就断言「还没有」= 替用户编事实').not.toContain('还没有问事会话')
+    expect(before, '未加载时要说清「正在读」，不能一片空白').toContain('正在读取最近一次问事会话');
+
+    // 这就是 `BestofTriggerHost` 挂载时做的那一次探测（`resolveSessionId` 给不出会话）。
+    controller.probeSession(undefined)
+    const after = render(h(BestofTriggerHost, { controller, onTrigger: () => {} }))
+    expect(after, '问过、确实没有 → 空态必须真的出现（否则这条空态永远不可达）').toContain('还没有问事会话')
+    expect(after).toContain('先去「问事」开一次会话')
+  })
+
+  it('设置项：没读过目录不说「凑不到两路」，读到只有一路才说（空态可达）', async () => {
+    const controller = createBestofController({ api: apiOf() })
+    const before = render(h(BestofSettingsRowHost, { controller }))
+    expect(before, '还没读目录就说「凑不到两路」= 拿猜测占屏').not.toContain('还没有两路可并列')
+    expect(before).toContain('正在读取模型目录');
+
+    // 这就是 `BestofSettingsRowHost` 挂载时读的那一次目录（只有一路）。
+    await controller.loadRoutes()
+    expect(controller.snapshot().routesKnown).toBe(true)
+    expect(controller.snapshot().routes).toEqual([{ provider: 'deepseek', model: 'deepseek-chat' }])
+    const after = render(h(BestofSettingsRowHost, { controller }))
+    expect(after, '读过目录、确实只有一路 → 空态必须真的出现').toContain('还没有两路可并列（现在 1 路）')
+    expect(after).not.toContain('正在读取模型目录')
+  })
+
+  it('设置项：老宿主没有 `routes.list` → 记「问过了」但不冒充「零路」', async () => {
+    const controller = createBestofController({ api: apiOf({ listRoutes: undefined }) })
+    await controller.loadRoutes()
+    expect(controller.snapshot().routesKnown).toBe(true)
+    expect(controller.snapshot().routes).toBeUndefined()
+    const html = render(h(BestofSettingsRowHost, { controller }))
+    expect(html, '读不到 ≠ 只有零路：不许把「拿不到目录」说成「凑不到两路」').not.toContain('还没有两路可并列')
+  })
 });
 
 describe('票 UX-03 · 采集口径：S-001 在这三个面上判绿', () => {

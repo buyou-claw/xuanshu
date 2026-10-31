@@ -4,7 +4,8 @@
  *
  * 三条判据要的事实都只有真浏览器给得出来，所以采样只做三件事、一件都不判：
  *   1. `census()`：把当前页面上**所有能点且点得通的入口**收一遍（谁 → 哪个面 → 哪个原语），
- *      跨多次采样累加成一棵「入口 → 面」的表（N-001 的原料）；
+ *      每采一次就记一份**快照**（同一时刻的那一组门），另外再累加成一棵跨采样的「入口 → 面」表。
+ *      N-001 的原料是**快照**，不是累加表 —— 理由见 `entriesInWorstSnapshot()`；
  *   2. `landing()`：此刻**站在哪个界面面**上（`data-xuanshu-panel` / `role="dialog"` 认）；
  *      剧本关掉抽屉 / 退回子页之后调它，就是 N-002 的「落点」；
  *   3. `keyboard()` / `esc()`：在本面里 Tab 走一遍、按 Esc 关抽屉，记下每一步的焦点与描边（N-003 的原料）。
@@ -159,7 +160,17 @@ function pageActive(selector) {
 
 /** 一次采集的入口表 / 关闭事件 / 键盘走查都落在这里（跨剧本累加：同一次运行 = 同一次观察）。 */
 export function createNavStore() {
-  return { entries: new Map(), closes: [], keyboards: new Map(), samples: 0, panels: new Set(), primitives: new Set() }
+  return {
+    /** 跨采样累加的入口（同一扇门采两遍只算一条）：给「这面一共出现过哪些门」用。 */
+    entries: new Map(),
+    /** 逐次采样的**快照**（每次 `census()` 一组）：给「同一时刻有几扇门」用（N-001）。 */
+    snapshots: [],
+    closes: [],
+    keyboards: new Map(),
+    samples: 0,
+    panels: new Set(),
+    primitives: new Set(),
+  }
 }
 
 /** 采样覆盖面的自述（报告要能说「命令原语没观测到」）。 */
@@ -180,10 +191,14 @@ export function coverageOf(store) {
 export function createNav({ page, store, settle }) {
   const spec = serializeActions()
 
-  /** 收一遍入口（累加进 store；返回这一次的原始条目，剧本可据它写 step）。 */
+  /** 收一遍入口（记一份快照 + 累加进 store；返回这一次的原始条目，剧本可据它写 step）。 */
   const census = async (tag) => {
     const entries = await page.evaluate(pageCensus, spec)
     store.samples += 1
+    // 快照是 N-001 的原料：判据原文「同一动作名出现在两个及以上入口即红」说的是**同一时刻**。
+    // 跨采样并集会把「空态一扇门 / 有藏态一扇门」这种**互斥**的两扇并成一条重复入口，
+    // 于是要么误报红（逼人把两扇门起同一个名字来骗过判据），要么判据从此没有牙。
+    store.snapshots.push(entries.map((entry) => ({ ...entry })))
     for (const entry of entries) {
       const key = `${entry.face}\u0000${entry.primitive}\u0000${entry.label}`
       if (!store.entries.has(key)) store.entries.set(key, { ...entry, firstSeenAt: tag })
@@ -248,17 +263,51 @@ export function createNav({ page, store, settle }) {
   return { census, landing, recordClose, keyboard, esc }
 }
 
-/** 入口表 → 按原语顺序、再按文案排好的数组（同一批事实必须给同一份字节）。 */
-export function entriesFor(store, face) {
-  if (store === null || store === undefined) return []
+/** 入口的固定排序（按原语顺序、再按文案；同一批事实必须给同一份字节）。 */
+function sortedEntries(entries) {
   const order = (primitive) => {
     const index = ENTRY_PRIMITIVES.indexOf(primitive)
     return index === -1 ? ENTRY_PRIMITIVES.length : index
   }
-  return [...store.entries.values()]
-    .filter((entry) => entry.face === face)
+  return [...entries]
     .sort((left, right) => order(left.primitive) - order(right.primitive) || left.label.localeCompare(right.label, 'zh-CN'))
     .map((entry) => ({ primitive: entry.primitive, label: entry.label, panel: entry.panel, via: entry.via }))
+}
+
+/** 跨采样累加表 → 按原语顺序、再按文案排好的数组。 */
+export function entriesFor(store, face) {
+  if (store === null || store === undefined) return []
+  return sortedEntries([...store.entries.values()].filter((entry) => entry.face === face))
+}
+
+/**
+ * **某一面最糟的那一次采样**：所有快照里「同一动作的入口数」最多的那一份（并列取靠前的）。
+ *
+ * 为什么是快照而不是并集：判据 N-001 说的是「同一动作名出现在两个及以上入口」——
+ * 那只能是**同一时刻**的两扇门。互斥的两个状态各有一扇同名/异名的门，并集会把它们算成
+ * 「重复入口」，于是修法退化成「把两个门改成同一个名字让并集去重」：门没少，判据没了牙。
+ *
+ * @param {ReturnType<typeof createNavStore>} store
+ * @param {string} face 界面面 id
+ * @returns {{primitive: string, label: string, panel: string, via: string}[]} 那一份快照里这一面的门
+ */
+export function entriesInWorstSnapshot(store, face) {
+  return worstSnapshotOf(store, face).entries
+}
+
+/**
+ * 最糟快照 + 它是第几次采样（报告要能说「判的是哪一次」，否则红没法复现）。
+ * @returns {{index: number, entries: object[], samples: number}}
+ */
+function worstSnapshotOf(store, face) {
+  const snapshots = Array.isArray(store?.snapshots) ? store.snapshots : []
+  let worst = { index: -1, entries: [] }
+  snapshots.forEach((snapshot, index) => {
+    const doors = sortedEntries(snapshot.filter((entry) => entry.face === face))
+    // 严格大于：并列时留**靠前**的那一份（先看到的那次，报告里先说）。
+    if (doors.length > worst.entries.length) worst = { index, entries: doors }
+  })
+  return { ...worst, samples: snapshots.length }
 }
 
 /**
@@ -275,13 +324,16 @@ export function entriesFor(store, face) {
 export function navFactsFor(criterionId, face, store) {
   if (store === null || store === undefined) return null
   if (criterionId === 'N-001') {
-    const entries = entriesFor(store, face)
-    if (entries.length === 0) return null
+    // 快照口径：判「同一时刻有几扇门」，不判「这个面一共出现过哪些门」（见 `entriesInWorstSnapshot`）。
+    const worst = worstSnapshotOf(store, face)
+    if (worst.entries.length === 0) return null
     const action = NAV_ACTIONS.find((candidate) => candidate.face === face)
     return {
       face,
       action: action === undefined ? null : { id: action.id, label: action.label },
-      entries,
+      entries: worst.entries,
+      // 「判的是哪一次」是证据的一部分：并列取靠前，报告里要能对上步骤记录。
+      snapshot: { index: worst.index, doors: worst.entries.length, samples: worst.samples },
       coverage: coverageOf(store),
     }
   }

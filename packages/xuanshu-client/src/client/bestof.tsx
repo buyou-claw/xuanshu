@@ -16,9 +16,14 @@
  * **票 UX-03（#65）· 三个入口的空态**：浮层、设置项、输入框触发器都会出现「什么都没有」的时刻
  * （没有会话 / 凑不到两路 / 一轮跑完 0 份候选）。判定只写在 `bestofEmptyOf()` 一处，
  * 三个宿主各挑自己那一格渲染 —— 空态因此不会随三个面漂成三种口径。
+ *
+ * **两个宿主在挂载时各问一次**（2026-10-31 收口）：设置项读一次路由目录、触发器探一次问事会话。
+ * 不问的话初始快照里 `sessionId` / `routes` 都是 `undefined`，两条空态**永远命中不了** ——
+ * 静态判据（S-001）绿着，用户看到的仍是空白。所以「未加载」与「确实没有」在状态里是两个位
+ * （`sessionKnown` / `routesKnown`）：没问过 → 「正在读…」；问过且确实没有 → 空态 + 下一步。
  */
 import type { Context } from '@deepseek-ai/cordis';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
 import type { BestofApi } from './bestof-api.js';
 import { readService } from './ctx-service.js';
@@ -110,15 +115,19 @@ export interface BestofEmpty {
  */
 export function bestofEmptyOf(state: BestofUiState): BestofEmpty | undefined {
   // ① 输入框触发器那条路径拿不到 sessionId（`resolveSessionId` 也给不出）——先要有会话可挂。
-  if (state.sessionId === '') {
+  //    `undefined` 且**没问过**只是「还不知道」（首屏），不是「没有」：混成一个会让空态要么永不出现，
+  //    要么在没问之前就替用户断言「你还没有会话」。
+  const sessionMissing = state.sessionId === '' || (state.sessionId === undefined && state.sessionKnown === true);
+  if (sessionMissing) {
     return {
       kind: 'no-session',
       text: '还没有问事会话：合参要挂在一个问事会话上。',
       next: '先去「问事」开一次会话，再回来点「多 AI 合参」。',
     };
   }
-  // ② 路由目录读到了，但凑不到两路：这时候「跑一轮」也只有一个视角，谈不上并列。
-  if (state.routes !== undefined && state.routes.length < BESTOF_MIN_ROUTES) {
+  // ② 路由目录**真读过**、且确实凑不到两路：这时候「跑一轮」也只有一个视角，谈不上并列。
+  //    `routes === undefined` 可能只是「还没读」或老宿主没有 `routes.list` —— 那两种都不是空态。
+  if (state.routesKnown === true && Array.isArray(state.routes) && state.routes.length < BESTOF_MIN_ROUTES) {
     return {
       kind: 'no-route',
       text: `还没有两路可并列（现在 ${state.routes.length} 路）。`,
@@ -178,11 +187,18 @@ export function BestofOverlayHost({ controller, openSettings }: BestofInstallDep
 /** 设置里的一行开关（外加一条只在「凑不到两路」时出现的空态）。 */
 export function BestofSettingsRowHost({ controller }: BestofInstallDeps) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  // 挂载时读一次路由目录：不读，`routes` 就永远是 `undefined`（它原先只在估算成功后才有），
+  // 「还没有两路可并列」这条空态在首屏就永远不可能出现 —— 静态判据绿、用户看到的还是空白。
+  useEffect(() => {
+    void controller.loadRoutes();
+  }, [controller]);
   const empty = bestofEmptyOf(state);
   const routeGap = empty !== undefined && empty.kind === 'no-route' ? empty : undefined;
   return (
     <>
       <XsBestofSettingsRow state={state} actions={{ onToggle: (enabled) => controller.setEnabled(enabled) }} />
+      {/* 还没读过目录时只说「正在读」，不冒充空态（未加载 ≠ 确实没有）。 */}
+      {state.routesKnown !== true && <p className="xs-bestof__note" role="status">正在读取模型目录…</p>}
       {routeGap !== undefined && <XsBestofEmptyNotice empty={routeGap} />}
     </>
   );
@@ -244,7 +260,17 @@ export function installBestOf(ctx: Context, deps: BestofInstallDeps): void {
   };
   ctx.slots.inject('conversation.composer.dock', () =>
     ctx.slots.register(
-      { name: 'conversation.composer.dock', id: BESTOF_TRIGGER_ID, inject: () => ({ onTrigger: trigger, controller: deps.controller }) },
+      {
+        name: 'conversation.composer.dock',
+        id: BESTOF_TRIGGER_ID,
+        // `resolveSessionId` 一起注入：空态要在挂载时就问一次「有没有会话」，
+        // 只在点击时问意味着首屏永远不显示「还没有问事会话」。
+        inject: () => ({
+          onTrigger: trigger,
+          controller: deps.controller,
+          ...(deps.resolveSessionId === undefined ? {} : { resolveSessionId: deps.resolveSessionId }),
+        }),
+      },
       BestofTriggerHost as never,
     ),
   );
@@ -255,14 +281,30 @@ export function installBestOf(ctx: Context, deps: BestofInstallDeps): void {
  *
  * 票 UX-03：这个入口唯一会「空着」的情况是**拿不到问事会话** —— 点下去会开到确认屏，
  * 人要写完问题、点「开始合参」才知道「还没有会话」。所以空态提前长在按钮旁边。
+ * 「有没有会话」在挂载时问一次（`resolveSessionId`）：不问的话首屏的 `sessionId` 是 `undefined`，
+ * 空态永远不出现 —— 静态判据绿着，用户看到的还是什么都没有。
  */
-export function BestofTriggerHost({ controller, onTrigger }: { controller: BestofController; onTrigger(): void }) {
+export function BestofTriggerHost({ controller, onTrigger, resolveSessionId }: { controller: BestofController; onTrigger(): void; resolveSessionId?(): Promise<string | undefined> }) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  useEffect(() => {
+    // SSR 不跑 effect：首屏按「还没问过」渲染（下一行那句「正在读」），问过之后才敢说「没有」。
+    let alive = true;
+    if (resolveSessionId === undefined) {
+      controller.probeSession(undefined);
+      return () => { alive = false; };
+    }
+    void resolveSessionId()
+      .then((sessionId) => { if (alive) controller.probeSession(sessionId); })
+      .catch(() => { if (alive) controller.probeSession(undefined); });
+    return () => { alive = false; };
+  }, [controller, resolveSessionId]);
   const empty = bestofEmptyOf(state);
   const sessionGap = empty !== undefined && empty.kind === 'no-session' ? empty : undefined;
   return (
     <>
       <XsBestofTriggerButton onTrigger={onTrigger} />
+      {/* 还没问过会话时只说「正在读」，不说「还没有」（那是替用户编事实）。 */}
+      {state.sessionKnown !== true && <p className="xs-bestof__note" role="status">正在读取最近一次问事会话…</p>}
       {sessionGap !== undefined && <XsBestofEmptyNotice empty={sessionGap} />}
     </>
   );

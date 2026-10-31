@@ -567,6 +567,8 @@ export async function collectBrowser({ repoRoot, criteria, faces, scriptIds, log
       for (const face of faces) {
         // N 族的事实只来自 `nav` 采样（入口表 / 关闭落点 / Tab 走查）；D 族来自 `measure()` 量的矩形。
         // 没有这一面的观察 = 不产证据 = 判定为「未采到」（空 facts 会被谓词判成没问题，那是最危险的假绿）。
+        // N-001 的 facts 里还带一份 `snapshot`（判的是第几次采样、那一次有几扇门）：它是**快照**口径的
+        // 证据，不是跨采样并集 —— evidence 原样带出去，报告与复现才能对上「同一时刻」这四个字。
         const facts = NAV_CRITERIA.includes(criterion.id)
           ? navFactsFor(criterion.id, face.id, navStore)
           : (samples.has(face.id) ? samples.get(face.id) : null)
