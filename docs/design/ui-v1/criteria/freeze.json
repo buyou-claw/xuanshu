@@ -1,13 +1,13 @@
 {
   "schema": "xuanshu/ux-criteria-freeze@1",
-  "version": "14f8e05d83ff886fbf22ccdf63d6ca7a85bbd9ccaa1bc95a56ad6078afbe4bfd",
+  "version": "50ed6179a32ee09b5353345539f9334427e307f6ce959bdd723436c4651fa0c9",
   "criteria": {
     "file": "docs/design/ui-v1/criteria/criteria.json",
-    "sha256": "be4b5c0dde1e45a19c4942713a1ee8dfb6b8a522550b6110ee2ce91620d3f40c",
+    "sha256": "cb44f5cbc76d3e5c79f4722f33104413d185d60625ee0b4b4afb46d49c43d408",
     "criteriaCount": 17,
     "familyCount": 7
   },
-  "frozenAt": "2026-10-31T09:54:47.129Z",
+  "frozenAt": "2026-10-31T10:45:15.753Z",
   "approvedBy": "buyou",
-  "note": "Spec 003 判据集 v1 定稿：17 条 / 7 族由集成方投影、人（buyou）逐条确认后重签；type-scale 正文按 16px 目标判红，14px 记待清偿债"
+  "note": "S/X 的 appliesTo 收到 rendered（命令面没有 DOM，缺态判据在它上面只会产生不可行动的 12 条红）；C-001 明确元信息不参与 16px 下限；type-scale 正文档提到 16px（§5 裁决清偿）"
 }

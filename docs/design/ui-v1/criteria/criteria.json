@@ -143,7 +143,7 @@
       "evidence": "file-line",
       "severity": "major",
       "appliesTo": {
-        "kind": "all"
+        "kind": "rendered"
       },
       "source": {
         "file": "docs/design/ui-v1/README.md",
@@ -160,7 +160,7 @@
       "evidence": "file-line",
       "severity": "major",
       "appliesTo": {
-        "kind": "all"
+        "kind": "rendered"
       },
       "source": {
         "file": "docs/design/ui-v1/README.md",
@@ -177,7 +177,7 @@
       "evidence": "file-line",
       "severity": "major",
       "appliesTo": {
-        "kind": "all"
+        "kind": "rendered"
       },
       "source": {
         "file": "docs/design/ui-v1/README.md",
@@ -240,7 +240,7 @@
     {
       "id": "C-001",
       "family": "C",
-      "statement": "每个渲染出来的正文级文字元素（跳过 `aria-hidden` 与控件标签）其计算字号 ≥ 16px（留白档下限；设计稿 body 档 14px 与 `.8rem` 辅助字都低于它）",
+      "statement": "每个渲染出来的正文级文字元素（跳过 `aria-hidden`、控件标签，以及标成元信息的 tag / badge / 状态行 / 路径 / 计数）其计算字号 ≥ 16px；正文指 p / li / dd / td / 标题，或没有被标成元信息的文字——元信息走自己的小档，不参与这条",
       "check": "browser",
       "evidence": "computed-style",
       "severity": "major",
@@ -347,7 +347,7 @@
       "evidence": "file-line",
       "severity": "major",
       "appliesTo": {
-        "kind": "all"
+        "kind": "rendered"
       },
       "source": {
         "file": "docs/design/ui-v1/README.md",
@@ -357,11 +357,11 @@
       "tombstone": false
     }
   ],
-  "version": "14f8e05d83ff886fbf22ccdf63d6ca7a85bbd9ccaa1bc95a56ad6078afbe4bfd",
+  "version": "50ed6179a32ee09b5353345539f9334427e307f6ce959bdd723436c4651fa0c9",
   "ruleFiles": [
     {
       "file": "docs/design/ui-v1/criteria/rules/C.json",
-      "sha256": "2f501561bf44f113bf1467e41e062972ff2c21222513d85f96fb164fb0eb7373"
+      "sha256": "960dceadb792c88914d992200136503366530737e7cdb93ad7f7bb317cc2967e"
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/D.json",
@@ -377,7 +377,7 @@
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/S.json",
-      "sha256": "7473dd8cff23f9531f0f29a77d14490f8305564ad50180d856a07360890999ab"
+      "sha256": "564dabfa551b358167c8c38e64725a9c78a8245d60c289125569275b370ea909"
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/T.json",
@@ -385,7 +385,7 @@
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/X.json",
-      "sha256": "0a282964e3438588a1057b44cc25199ba314d95442db5c85b94f2d72b5da9e47"
+      "sha256": "9e947e1256d6ddc7925d2fef199607ed1f2f4631dcf512f265065ec0db2f1faa"
     }
   ]
 }

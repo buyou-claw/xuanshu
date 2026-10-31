@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 
 import { collectStatic } from '../../scripts/ux/collect/static.mjs'
 import { projectCriteria } from '../../scripts/ux/project.mjs'
+import { applicablePairs } from '../../scripts/ux/scope.mjs'
 import { faceManifest } from '../assembly/lib/panel-surface.mjs'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..')
@@ -47,8 +48,12 @@ describe('票 02 · 静态半边如实点名字面色值', () => {
       expect(Array.isArray(item.evidence)).toBe(true)
       expect(item.facts).toBeTruthy()
     }
-    // 票 04 起：静态判据（T-001..T-004）× 全部界面面，一个 (判据, 面) 一份证据，不重不漏
-    expect(evidence).toHaveLength(staticCriteria.length * FACES.length)
+    // 静态判据（T-001..T-004 + S + X）× 各自适用的界面面，一个 (判据, 面) 一份证据，不重不漏。
+    // 分母不能写成 `staticCriteria.length * FACES.length`：S/X 的 appliesTo 是 `rendered`，
+    // 3 个命令面没有 DOM 不参与 —— 写死乘法会在加族 / 改范围时静默过期。
+    const staticIds = new Set(staticCriteria.map((criterion) => criterion.id))
+    const expectedPairs = applicablePairs(CRITERIA, FACES).filter((pair) => staticIds.has(pair.criterionId)).length
+    expect(evidence).toHaveLength(expectedPairs)
   })
 
   it('清偿后（票 11）：全仓 0 处字面色值；采集器仍然逐个面去采（不是「不采了」）', () => {

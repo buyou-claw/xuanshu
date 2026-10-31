@@ -122,20 +122,33 @@ const EMPTY = '没有量到任何文字元素（正文级）：这个面当时�
 export const C_ASSERTIONS = {
   /**
    * C-001：正文级文字的计算字号 ≥ 16px（留白档下限）。
-   * @param {{bodyTexts: {selector: string, fontSize: number, text: string}[]}} facts
+   *
+   * **只判正文**：`role === 'meta'` 的文字（tag / badge / 状态行 / 路径 / 计数）天生该小，
+   * 不参与 16px 下限 —— 否则唯一的「通过」方式是把整屏调成同号，那会压平层级（L-001 要防的正是这个）。
+   * 没有 `role` 字段的旧证据按正文处理（保守：宁可判红，也不悄悄放过）。
+   * @param {{bodyTexts: {selector: string, fontSize: number, text: string, role?: string}[]}} facts
    */
   'C-001': (facts) => {
-    const texts = bodyTextsOf(facts)
-    if (texts.length === 0) return { pass: false, message: EMPTY }
+    const all = bodyTextsOf(facts)
+    if (all.length === 0) return { pass: false, message: EMPTY }
+    const texts = all.filter((text) => text.role !== 'meta')
+    const metaCount = all.length - texts.length
+    if (texts.length === 0) {
+      return { pass: true, message: `本面 ${all.length} 个文字元素全是元信息（tag / 状态 / 路径），没有正文级文字` }
+    }
     const small = texts.filter((text) => !(Number(text.fontSize) >= V.MIN_BODY_FONT_SIZE))
     if (small.length === 0) {
-      return { pass: true, message: `全部 ${texts.length} 个文字元素都 ≥ ${V.MIN_BODY_FONT_SIZE}px` }
+      return {
+        pass: true,
+        message: `正文级 ${texts.length} 个都 ≥ ${V.MIN_BODY_FONT_SIZE}px（另有 ${metaCount} 个元信息不参与）`,
+      }
     }
     const worst = smallestBy(small, (text) => Number(text.fontSize))
     const named = worst.map((entry) => `${entry.value}px ${nameOf(entry.text)}`).join('、')
     return {
       pass: false,
-      message: `${small.length}/${texts.length} 个文字元素字号小于 ${V.MIN_BODY_FONT_SIZE}px，最小的几个：${named}`,
+      message: `${small.length}/${texts.length} 个正文级文字字号小于 ${V.MIN_BODY_FONT_SIZE}px，最小的几个：${named}`
+        + `（另有 ${metaCount} 个元信息不参与这条判据）`,
     }
   },
 

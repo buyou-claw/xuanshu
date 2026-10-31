@@ -752,11 +752,26 @@ var import_react = require("react");
 // src/client/styles.ts
 var STYLE_TAG_ID = "xuanshu-client/styles.css";
 var SHEETS = /* @__PURE__ */ new Map();
+var BASE_SHEET = `
+[class^="xs-"], [class*=" xs-"] { line-height: 1.6; }
+
+/* 可点目标的下限（判据 D-001：44×44）。放在基础段是因为它是**跨面**的一条纪律；
+   各面板自己的 padding 仍然生效，这条只是兜住「做小了没人拦」的底。 */
+[class^="xs-"] button, [class*=" xs-"] button,
+[class^="xs-"] a[href], [class*=" xs-"] a[href],
+[class^="xs-"] select, [class*=" xs-"] select,
+[class^="xs-"] input:not([type="hidden"]), [class*=" xs-"] input:not([type="hidden"]),
+[class^="xs-"] textarea, [class*=" xs-"] textarea,
+[class^="xs-"] [role="button"], [class*=" xs-"] [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+`;
 function registerStyleSheet(id, css) {
   SHEETS.set(id, css);
 }
 function composedStyleText() {
-  return [...SHEETS.values()].join("\n");
+  return [BASE_SHEET, ...SHEETS.values()].join("\n");
 }
 function installXuanshuStyles() {
   if (typeof document === "undefined") return false;
@@ -6332,7 +6347,9 @@ function installMountsStyle() {
   registerStyleSheet("xuanshu-mounts-style", [
     ".xs-mounts__section{margin:12px 0;padding:10px;border:1px solid var(--xs-edge-card);border-radius:8px}",
     ".xs-mounts__section-head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
-    ".xs-mounts__summary,.xs-mounts__note{margin:6px 0;opacity:.8;font-size:12px}",
+    // 说明行是正文（16px），只有 note 是元信息（13px）—— 原来一行 12px 让两者一起偏小。
+    ".xs-mounts__summary{margin:6px 0;opacity:.8;font-size:16px}",
+    ".xs-mounts__note{margin:6px 0;opacity:.8;font-size:13px}",
     ".xs-mounts__status{background:none;border:0;padding:0;color:inherit;opacity:.85;cursor:pointer;font-size:12px}",
     ".xs-mounts__overlay{position:fixed;inset:0;background:var(--xs-surface-overlay-mask);display:flex;justify-content:flex-end;z-index:60}",
     ".xs-mounts__drawer{width:min(720px,92vw);height:100%;overflow:auto;background:var(--xs-surface-overlay);padding:16px;display:flex;flex-direction:column;gap:12px}",
@@ -9956,7 +9973,7 @@ var OVERVIEW_CSS = `
 }
 .xs-overview__title {
   margin: 0;
-  font-size: var(--dsh-content-font-size, 15px);
+  font-size: var(--dsh-content-font-size, 16px);
   font-weight: 600;
   color: var(--xs-text-title);
 }
@@ -9967,7 +9984,7 @@ var OVERVIEW_CSS = `
 .xs-overview__localnote {
   margin: 0;
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
   font-family: var(--ds-font-family-code, ui-monospace, monospace);
 }
 .xs-overview__grid {
@@ -10009,7 +10026,7 @@ var OVERVIEW_CSS = `
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--dsh-content-font-size, 15px);
+  font-size: var(--dsh-content-font-size, 16px);
   font-weight: 600;
   color: var(--xs-text-heading);
 }
@@ -10047,12 +10064,12 @@ var OVERVIEW_CSS = `
 .xs-empty__why {
   margin: 0;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size, 16px);
 }
 .xs-empty__sub {
   margin: 0;
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 
 .xs-badge {
@@ -10062,7 +10079,7 @@ var OVERVIEW_CSS = `
   height: var(--xs-size-chip-height);
   padding: 0 8px;
   border-radius: var(--xs-radius-chip);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
   white-space: nowrap;
 }
 .xs-badge--readonly {
@@ -10189,7 +10206,7 @@ var OVERVIEW_CSS = `
 }
 .xs-pillar__name {
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 .xs-pillar__value {
   color: var(--xs-text-heading);
@@ -10200,7 +10217,7 @@ var OVERVIEW_CSS = `
   gap: var(--xs-space-row);
   flex-wrap: wrap;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 .xs-lines {
   display: flex;
@@ -10229,7 +10246,7 @@ var OVERVIEW_CSS = `
   gap: var(--xs-space-toolbar);
   flex-wrap: wrap;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 
 .xs-quicklinks {
@@ -10267,7 +10284,7 @@ var OVERVIEW_CSS = `
 }
 .xs-cell__subtitle {
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 .xs-cell[disabled] .xs-cell__subtitle {
   color: var(--xs-text-disabled);
@@ -10275,7 +10292,7 @@ var OVERVIEW_CSS = `
 .xs-quicklinks__note {
   margin: var(--xs-space-stack-md) 0 0;
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  font-size: var(--dsh-content-font-size-secondary, 14px);
   text-align: right;
 }
 `;

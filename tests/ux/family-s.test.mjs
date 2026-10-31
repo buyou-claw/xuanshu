@@ -67,14 +67,16 @@ function auditRepo() {
 }
 
 describe('票 06 · 判据族 S / X 已登记（加判据 = 改四处，缺一处就报错）', () => {
-  it('四条判据都投影进了判据集，且 check=static / severity=major / appliesTo=all', () => {
+  it('四条判据都投影进了判据集，且 check=static / severity=major / appliesTo=rendered', () => {
     const byId = new Map(CRITERIA.criteria.map((criterion) => [criterion.id, criterion]))
     for (const id of [...S_IDS, ...X_IDS]) {
       const criterion = byId.get(id)
       expect(criterion, `${id} 没进判据集`).toBeTruthy()
       expect(criterion.check).toBe('static')
       expect(criterion.severity).toBe('major')
-      expect(criterion.appliesTo).toEqual({ kind: 'all' })
+      // rendered 而不是 all：命令面（多模型 / 合参 / bestof）没有 DOM，
+      // 在它上面要求三态与文案一致性只会产出不可行动的红（3 命令 × 4 判据 = 12 条）。
+      expect(criterion.appliesTo).toEqual({ kind: 'rendered' })
       expect(criterion.family).toBe(id.slice(0, 1))
     }
   })
@@ -267,19 +269,20 @@ describe('票 06 · 缺态判红、全态判绿、证据指回组件入口', () 
     }
   })
 
-  it('缺态不会被当成「不适用」：appliesTo=all 的判据在命令面上也判定', () => {
+  it('范围收在 rendered：命令面不参与判定（它没有 DOM，判出来的红不可行动）', () => {
     const commandFace = FACES.filter((face) => face.kind === 'command')
     expect(commandFace).toHaveLength(3)
     const { verdicts } = auditRepo()
     for (const face of commandFace) {
-      for (const id of S_IDS) {
+      for (const id of [...S_IDS, ...X_IDS]) {
         const verdict = verdicts.find((item) => item.face === face.id && item.criterionId === id)
-        expect(verdict, `${face.id} × ${id} 没有判定`).toBeTruthy()
-        expect(verdict.status).toBe('fail') // 命令面自身不承载状态：三维全红是事实，不是开天窗
-        expect(verdict.evidence[0].file).toMatch(/^packages\/xuanshu-client\/src\//)
-        expect(verdict.evidence[0].line).toBeGreaterThan(0)
+        // 不是「不适用」的沉默，是**明确的排除**：分母里没有它，报告里也不会有它的红。
+        expect(verdict, `${face.id} × ${id} 不该出现在判定里`).toBeUndefined()
       }
     }
+    // 反向保证：面板面仍然照判（否则这条测试会因为「谁都不判」而永远绿）。
+    const panelVerdicts = verdicts.filter((item) => item.face === 'panel:mingpan' && item.criterionId === 'S-003')
+    expect(panelVerdicts).toHaveLength(1)
   })
 })
 
@@ -353,16 +356,18 @@ describe('票 06 · 全仓真跑：25 个界面面 × 三条 S 判据', () => {
 
   it('分母 = 25 面 × 3 判据 = 75 条，逐面逐态都判定（没有 not-collected）', () => {
     expect(FACES).toHaveLength(25)
-    expect(sVerdicts).toHaveLength(75)
+    // S 族从「全部 25 面」收到「有渲染位置的 22 面」：命令面（多模型 / 合参 / bestof）没有 DOM，
+    // 在它上面要求空/载/错三态只会产生不可行动的红（12 条）。22 × 3 = 66。
+    expect(sVerdicts).toHaveLength(66)
     expect(sVerdicts.filter((verdict) => verdict.status === 'not-collected')).toEqual([])
     expect(counts['collection-failed']).toBe(0)
   })
 
-  it('实测缺态数：空 8 面 / 载 4 面 / 错 6 面（数字变了就说明有人修了或有人放宽了口径）', () => {
+  it('实测缺态数：空 5 面 / 载 1 面 / 错 3 面（数字变了就说明有人修了或有人放宽了口径）', () => {
     const failing = (criterionId) => sVerdicts.filter((verdict) => verdict.criterionId === criterionId && verdict.status === 'fail')
-    expect(failing('S-001')).toHaveLength(8)
-    expect(failing('S-002')).toHaveLength(4)
-    expect(failing('S-003')).toHaveLength(6)
+    expect(failing('S-001')).toHaveLength(5)
+    expect(failing('S-002')).toHaveLength(1)
+    expect(failing('S-003')).toHaveLength(3)
   })
 
   it('每条红都指得出「哪个面 + 缺哪一态 + 哪一行」', () => {
@@ -376,14 +381,15 @@ describe('票 06 · 全仓真跑：25 个界面面 × 三条 S 判据', () => {
     }
   })
 
-  it('X-001 在 25 个面上逐一判定：实测 8 面红（读取中 2 + 错误行没下一步 2 + 零文案 4）', () => {
-    expect(xVerdicts).toHaveLength(25)
-    expect(xVerdicts.filter((verdict) => verdict.status === 'fail')).toHaveLength(8)
+  it('X-001 在有渲染面的 22 个面上逐一判定：实测 5 面红（读取中 2 + 错误行没下一步 2 + 零文案 1）', () => {
+    expect(xVerdicts).toHaveLength(22)
+    expect(xVerdicts.filter((verdict) => verdict.status === 'fail')).toHaveLength(5)
     const redFaces = xVerdicts.filter((verdict) => verdict.status === 'fail').map((verdict) => verdict.face)
     expect(redFaces).toContain('panel:rikke')
     expect(redFaces).toContain('panel:wansheng')
     expect(redFaces).toContain('panel:workflow')
-    expect(redFaces).toContain('command:多模型')
+    // 命令面不再参与：它没有 DOM，文案一致性在它身上量不出东西。
+    expect(redFaces.some((face) => face.startsWith('command:'))).toBe(false)
   })
 })
 
@@ -396,8 +402,8 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
     generatedAt: '2026-10-31T00:00:00.000Z',
   })
 
-  it('机读报告带 missingStates：11 个面缺态，空 8 / 载 4 / 错 6（同一面缺两态只算一个面）', () => {
-    expect(report.missingStates.totals).toEqual({ faces: 11, empty: 8, loading: 4, error: 6, applicable: 75 })
+  it('机读报告带 missingStates：8 个面缺态，空 5 / 载 1 / 错 3（同一面缺两态只算一个面）', () => {
+    expect(report.missingStates.totals).toEqual({ faces: 8, empty: 5, loading: 1, error: 3, applicable: 66 })
     const drawer = report.missingStates.faces.find((row) => row.face === 'slot:shell.overlay#xuanshu-cang-drawer')
     expect(drawer.missing).toEqual(['empty', 'error'])
     expect(drawer.missingLabels).toEqual(['空态', '错误态'])
@@ -415,7 +421,7 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
   it('人读报告里有这一节，且列出合计与逐面缺失态', () => {
     const markdown = renderMarkdown(report)
     expect(markdown).toContain('## 附：缺态界面面（S 族 · 空 / 载 / 错）')
-    expect(markdown).toContain('11 个界面面缺态')
+    expect(markdown).toContain('8 个界面面缺态')
     expect(markdown).toContain('`panel:mingpan` 命盘卡详情 · 缺：错误态')
   })
 
@@ -425,7 +431,7 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
       .map((verdict) => ({ ...verdict, status: 'pass' }))
     const summary = missingStatesOf(passing, FACES)
     expect(summary.faces).toEqual([])
-    expect(summary.totals).toEqual({ faces: 0, empty: 0, loading: 0, error: 0, applicable: 75 })
+    expect(summary.totals).toEqual({ faces: 0, empty: 0, loading: 0, error: 0, applicable: 66 })
   })
 })
 

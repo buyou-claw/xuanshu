@@ -746,7 +746,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 ```
 # pnpm test:inventory（profile 已装；main 全量复核打磨后，见 §16.8）
-[inventory] 用例 2184 条（基线 2184）/ 文件 190 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2199 条（基线 2199）/ 文件 191 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -756,7 +756,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 523964B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 524813B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（2184 / 190）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（2199 / 191）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -930,7 +930,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 | E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
 
 **验证（数字抄工具输出；本行随当前验证块刷新，原轮次基线见下一行）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
-`[doc-numbers] OK：2184 条用例 / 190 个文件 / 523964 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+`[doc-numbers] OK：2199 条用例 / 191 个文件 / 524813 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
 E1/E3 与两轴复核修复新增 25 条用例后基线 `--update` 为 **1839 条 / 167 文件**，文档数字由新门核对。
 
 **这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
@@ -957,16 +957,16 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 
 ```
 # pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）
-[inventory] 用例 2184 条（基线 2184）/ 文件 190 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2199 条（基线 2199）/ 文件 191 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
-[doc-numbers] OK：2184 条用例 / 190 个文件 / 523964 B
+[doc-numbers] OK：2199 条用例 / 191 个文件 / 524813 B
 
 # pnpm verify:isolation
 结果：8/8 通过，exit 0（6503ms）
 
 # pnpm verify:assembly → exit 1，仅 S1 既有上游缺陷
 [S2] PASS 192 行挂载；xuanshu-host.state=2 xuanshu-client.state=2
-[S3] PASS 客户端产物 523964B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 524813B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL unrecognized Loader tree carrier（同 §16.3）
@@ -1218,6 +1218,57 @@ spec 003 与票 01 写的「10 面板 + 18 寄生 = 30 面」是把 `4+2+2+3+1+3
    正解是缺省基准按「当前分支是否集成分支」动态解析到 `main`，并把上述历史中间态写成**带理由的
    显式豁免清单**（逐条打出来，不静默忽略）；豁免条目指向的 sha 在范围里找不到时也要报——否则
    清单会退化成永久黑名单。下一张票做。
+
+### 17.8 三件遗留的处置（2026-10-31 晚）
+
+§17.7 记的三件事全部落地，另一件只做了一半，如实记在这里。
+
+**① S/X 的适用范围收到 `rendered`**（`rules/S.json`、`rules/X.json`）。命令面（多模型 / 合参 / bestof）
+没有 DOM，在它上面要求「三空态 + 文案一致」只会产出 12 条不可行动的红。分母 376 → 364。
+`appliesTo=all` 的相关用例改成断言「命令面**不**出现在判定里」，并补一条反向保证
+（面板面仍照判）—— 否则「谁都不判」也能让那条测试绿。
+
+**② 护栏基准改按分支解析**（新 `scripts/ux/guard-base.mjs`）：集成分支 → 主干；票分支 → 集成分支；
+主干 → 主干（范围为空是正确答案）。`DEFAULT_BASE_REF` 从 `repair-channel.mjs` 删除，理由留在原处。
+配套新 `scripts/ux/waivers.mjs` + `docs/design/ui-v1/guardrail-waivers.json`：历史中间态逐条写理由放行、
+逐条打印，**对不上任何违规的条目算过期（按红处理）**，避免清单长成黑名单。
+实测：主干上跑 → 基准主干、0 提交、工作区仍检查；票分支上跑 → 基准集成分支。
+合并之后那 10 条历史红不再被计入（它们随 merge commit 进了主干），所以清单当前为空。
+
+**③ 字号与可点目标**（做了一部分）：
+
+- `styles.ts` 加基础段（跨全部面板）：`line-height: 1.6`；可点目标 `min-height/min-width: 44px`。
+  效果：**D-001 从 4 面红 → 全绿**，最小点击目标 70×21 → 74×44。
+- `type-scale.md` §2 阶梯重排（title 18 / heading 16 / body 16 / secondary 14 / tertiary 13 / caption 12）；
+  `style.ts` 正文 fallback 提到 16、次要提到 14；`mounts` 说明行 12px → 16px。
+- **判据侧同步收紧**：C-001 只判正文，`role=meta`（tag / badge / 状态行 / 路径 / 计数）不参与
+  16px 下限 —— 否则唯一「通过」方式是把整屏调成同号，层级会塌（L-001 要防的正是这个）。
+  采集器加了 `role` 字段（类名先判、标签兜底）。
+- **仍未清偿**：宿主在容器上覆盖了 `--dsh-content-font-size`（实测 14px），`var(…, 16px)` 的
+  fallback 不生效，`panel:overview` 仍有 11/13 个正文级文字不足 16px，`panel:consult` 6/10。
+  下一手用 `max(16px, var(--dsh-content-font-size, 16px))` 钉死下限。**不许靠调低阈值转绿。**
+
+**本轮实测（抄工具输出）**
+
+```
+静态       ：174/364 = 47.8%   pass 174 · fail 14 · human-only 22 · not-collected 176
+加 --browser：204/364 = 56.0%   pass 204 · fail 21 · human-only 22 · not-collected 139
+视觉档     ：最小点击目标 74×44（此前 70×21）· 最低对比度 3.42:1 · 同屏主操作最多 2 个
+剩余红     ：S-001 5 · S-003 3 · X-001 5 · S-002 1 · C-001 2 · C-003 1 · D-002 1 · N-001 3
+```
+
+**这轮新踩到的坑**
+
+1. **宿主 token 会盖掉 fallback**：`--dsh-content-font-size` 在某个容器上有值（14px），
+   所以 `var(…, 16px)` 不会退回 16 —— 要设下限只能用 `max()`，或直接写字号。
+2. **`roleOf` 的顺序会静默吃掉类名判定**：先按标签判 `p → body` 会让 `p.xs-overview__localnote`
+   永远进不了 meta 分支。**类名先于标签**才对。
+3. **首跑模态会让整轮浏览器采集退化**：点「创建新谱」时被 `aria-hidden` 遮罩拦住，
+   整套剧本记 `collection-failed`（176 条全「未采到」）。遮罩判断要按「有面积 + 没被样式藏起来」，
+   且每次要点的东西之前都兜一次底 —— modal 是异步挂上来的。
+4. **CI 上 mtime 抖动会判「产物落后」**：全新检出时全部文件在同一秒内写完，`src` 的某个文件
+   比 `lib/client.js` 晚 1–3 毫秒，巡检在干净工作区上拒绝采集。已加 1 秒容差（权威判据仍是
+   `build-client --check` 的逐字节比较）。
 
 
 

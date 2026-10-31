@@ -12,7 +12,7 @@
       "check": "static",
       "evidence": "file-line",
       "severity": "major",
-      "appliesTo": { "kind": "all" },
+      "appliesTo": { "kind": "rendered" },
       "source": {
         "file": "docs/design/ui-v1/README.md",
         "anchor": "在同一屏内复用，不新造同义词"

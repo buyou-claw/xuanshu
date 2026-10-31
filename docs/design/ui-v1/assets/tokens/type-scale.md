@@ -21,16 +21,17 @@
 
 ## 2. 字号 / 字重 / 行高 语义档位（6 档，对齐 Plugin Manager 节奏）
 
-> 基准：正文 14px；间距阶梯 4 / 8 / 12 / 16 / 20 / 24（见 [`xs-tokens.css`](xs-tokens.css) `--xs-space-*`），管理列表行模式照 Plugin Manager 页（`dsh-agent-preset/skills/cordis-plugin-development/references/practices.md:34`）。字号分「语义档」，实现票在组件里**点名档位 token，不写死 px**。
+> 基准：正文 **16px**（见 §5 的裁决）；间距阶梯 4 / 8 / 12 / 16 / 20 / 24（见 [`xs-tokens.css`](xs-tokens.css) `--xs-space-*`），管理列表行模式照 Plugin Manager 页（`dsh-agent-preset/skills/cordis-plugin-development/references/practices.md:34`）。字号分「语义档」，实现票在组件里**点名档位 token，不写死 px**。
 
 | 档位（对应 `--xs-text-*`） | 字号 | 字重 | 行高 | 用途（屏） |
 |---|---|---|---|---|
 | `brand` | 20px | 700 | 1.2 | 品牌名「玄枢」（S1 标题、侧栏品牌名） |
-| `title` | 16px | 600 | 1.35 | 屏/卡主标题（S1 卡名、S5 谱名、S2 抽屉标题、S13 底稿标题） |
-| `heading` | 14px | 600 | 1.4 | 区块小标题（S1 卡内分节、S10 分区标题） |
-| `body` | 14px | 400 | 1.6 | 正文（S2 命盘要点、S13 底稿正文、S10 diff 正文） |
-| `secondary` | 13px | 400 | 1.5 | 次要文字（S5 谱卡描述、S8 账本副文、S11 跳转说明） |
-| `tertiary` / `caption` | 12px | 400 | 1.5 / 1.4 | 元信息/时间/字数（`tertiary`）、Tag 内文字与勾选计数（`caption`） |
+| `title` | 18px | 600 | 1.35 | 屏/卡主标题（S1 卡名、S5 谱名、S2 抽屉标题、S13 底稿标题） |
+| `heading` | 16px | 600 | 1.4 | 区块小标题（S1 卡内分节、S10 分区标题）；与正文同号、靠字重分 |
+| `body` | 16px | 400 | 1.6 | 正文（S2 命盘要点、S13 底稿正文、S10 diff 正文） |
+| `secondary` | 14px | 400 | 1.5 | 次要文字（S5 谱卡描述、S8 账本副文、S11 跳转说明） |
+| `tertiary` | 13px | 400 | 1.5 | 元信息（时间 / 字数 / 路径 / 计数） |
+| `caption` | 12px | 400 | 1.4 | Tag 内文字、勾选计数这类最小标注 |
 | `code` | 13px | 400 | 1.5 | 等宽（`--xs-text-code`；mono 字族） |
 | `link` | 继承正文 | 400 + 下划线 | 继承 | 跨屏跳转文字（S2/S11/S13） |
 | `on-accent` | 继承所在控件 | 500 | 继承 | 主按钮文字（S3「下一步」等，字号随 `--xs-size-control-height`） |
@@ -53,18 +54,24 @@
 | 与 `--xs-text-*` 颜色侧分工明确、无字号重复定义 | ☑ |
 | 不含像素级视觉精修、不含实现代码 | ☑ |
 
-## 5. 正文下限的裁决（2026-10-31）
+## 5. 正文下限的裁决与清偿（2026-10-31）
 
-spec 003 §21 要求「正文 ≥16px」，而本表 `§2` 的 `body` 档写的是 **14px**——两边都是权威，
-实测会把巡检判据 C-001 卡在自相矛盾上（判据量的是渲染值，实现照表落 14px，于是每条正文都红）。
+spec 003 §21 要求「正文 ≥16px」，而本表 `§2` 原先的 `body` 档写的是 **14px**——两边都是权威，
+实测会把巡检判据 C-001 卡在自相矛盾上（判据量渲染值，实现照表落 14px，于是每条正文都红）。
 
-**裁决：16px 是目标值，14px 是当前实现的取值。**
+**裁决：16px 是目标，14px 是原实现的取值。** 已按下面这条路径清偿：
 
-- 本表 `§2` 保持现状取值不动（它描述的是**已经落地的六个档位**，不是目标），
-- `body` / `heading` 的 14px 差额登记为待清偿债，
-- 清偿时整条阶梯一起重排（`body` 16 / `secondary` 14 / `tertiary` 13 / `caption` 12，
-  层级改由字重与间距承担），并同改本表——只改一行会让 body 与 title 同号、层级塌掉，
-  这正是判据 L-001（人看层级）要防的事，
-- 在清偿完成之前，判据 C-001 照现状判红：**不许靠调低阈值把红变成绿**。
+- 本表 `§2` 改成新阶梯（`title` 18 / `heading` 16 / `body` 16 / `secondary` 14 /
+  `tertiary` 13 / `caption` 12），`heading` 与 `body` 同号、**靠字重分**（600 vs 400），
+  否则只抬 body 会让正文与标题同号、层级塌掉——那正是判据 L-001 要防的事；
+- 实现侧：`style.ts` 的正文落到 `--dsh-content-font-size`（fallback 16）、次要落到
+  `-secondary`（fallback 14）；`mounts` 的说明行从 12px 提到 16px，`note` 留 13px；
+- **判据侧同步收紧**：C-001 只判正文，`role=meta`（tag / badge / 状态行 / 路径 / 计数）
+  不参与 16px 下限——否则唯一的「通过」方式是把整屏调成同号。
+
+**仍未清偿的部分（如实记账）**：宿主在容器上覆盖了 `--dsh-content-font-size`（实测取值 14px），
+所以 `var(…, 16px)` 的 fallback 不生效，`panel:overview` 仍有 11/13 个正文级文字不足 16px。
+下一手应当用 `max(16px, var(--dsh-content-font-size, 16px))` 把下限钉死（而不是靠 fallback），
+或与 DSH 主题侧约定该 token 的下限。**在此之前 C-001 照现状判红，不许调低阈值转绿。**
 
 依据：spec 003 §21 + WCAG AA 正文可读性 + 本轮定下的视觉方向 A（Apple 式克制留白，正文不吃小字）。
