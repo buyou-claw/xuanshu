@@ -3275,7 +3275,7 @@ function XsDataSection({ state, actions }) {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "xs-data__block", children: [
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { children: "分类体积" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(GroupTable, { overview: state.overview }),
+        state.overview.groups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "xs-data__note xs-data__empty", role: "note", "data-xs-state": "empty", children: "还没有可统计的数据：这一次连一个分类都没读到（数据目录可能还没建）。先去用一次——写一条谱、藏或事记——再回到本页，这里就会按分类列出体积与文件数。" }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(GroupTable, { overview: state.overview }),
         state.overview.notes.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "xs-data__note", "data-xuanshu-data-notes": true, children: state.overview.notes.map((note) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("li", { children: note }, note)) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ExcludedList, { overview: state.overview })
@@ -3816,7 +3816,7 @@ function TouchSettingsHost({ rikke, notify }) {
     };
   }, [rikke, notify]);
   if (state === void 0) {
-    return error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-touch__note", role: "alert", "data-xuanshu-setting-error": "read", children: error });
+    return error === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-touch__note", "data-xs-state": "loading", children: "正在读触达开关…" }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-touch__note", role: "alert", "data-xuanshu-setting-error": "read", children: error });
   }
   const writeShell = (patch) => {
     const before = state.shell;
@@ -5830,7 +5830,9 @@ function MingpanPanel({
       /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "xs-mingpan__actions", children: startOnboarding })
     ] }) : null,
     view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("section", { className: "xs-mingpan__error", "data-xuanshu-view": "error", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: "排盘失败：读不到命盘快照。下面是宿主给的原因。" }),
       /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: view.message }),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "xs-mingpan__hint", children: "可以先点「重试」再读一次；如果还是读不到，就去补出生信息——重录会重新出盘并原子替换底座谱。" }),
       /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "xs-mingpan__actions", children: [
         /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", "data-xuanshu-action": "retry", onClick: () => {
           controller.invalidate();

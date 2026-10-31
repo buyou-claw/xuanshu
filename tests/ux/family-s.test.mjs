@@ -363,11 +363,12 @@ describe('票 06 · 全仓真跑：25 个界面面 × 三条 S 判据', () => {
     expect(counts['collection-failed']).toBe(0)
   })
 
-  it('实测缺态数：空 5 面 / 载 1 面 / 错 3 面（数字变了就说明有人修了或有人放宽了口径）', () => {
+  it('实测缺态数：空 4 面 / 载 0 面 / 错 2 面（数字变了就说明有人修了或有人放宽了口径）', () => {
     const failing = (criterionId) => sVerdicts.filter((verdict) => verdict.criterionId === criterionId && verdict.status === 'fail')
-    expect(failing('S-001')).toHaveLength(5)
-    expect(failing('S-002')).toHaveLength(1)
-    expect(failing('S-003')).toHaveLength(3)
+    // #66（UX-04）清了三条：data 空态 / touch 加载态 / mingpan 错误态 —— 5→4、1→0、3→2。
+    expect(failing('S-001')).toHaveLength(4)
+    expect(failing('S-002')).toHaveLength(0)
+    expect(failing('S-003')).toHaveLength(2)
   })
 
   it('每条红都指得出「哪个面 + 缺哪一态 + 哪一行」', () => {
@@ -402,8 +403,9 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
     generatedAt: '2026-10-31T00:00:00.000Z',
   })
 
-  it('机读报告带 missingStates：8 个面缺态，空 5 / 载 1 / 错 3（同一面缺两态只算一个面）', () => {
-    expect(report.missingStates.totals).toEqual({ faces: 8, empty: 5, loading: 1, error: 3, applicable: 66 })
+  it('机读报告带 missingStates：5 个面缺态，空 4 / 载 0 / 错 2（同一面缺两态只算一个面）', () => {
+    // #66（UX-04）之后重算：data / touch / mingpan 三面各自补齐，合计 8→5。
+    expect(report.missingStates.totals).toEqual({ faces: 5, empty: 4, loading: 0, error: 2, applicable: 66 })
     const drawer = report.missingStates.faces.find((row) => row.face === 'slot:shell.overlay#xuanshu-cang-drawer')
     expect(drawer.missing).toEqual(['empty', 'error'])
     expect(drawer.missingLabels).toEqual(['空态', '错误态'])
@@ -421,8 +423,10 @@ describe('票 06 · 报告给出「缺态界面面清单与缺失态类型」', 
   it('人读报告里有这一节，且列出合计与逐面缺失态', () => {
     const markdown = renderMarkdown(report)
     expect(markdown).toContain('## 附：缺态界面面（S 族 · 空 / 载 / 错）')
-    expect(markdown).toContain('8 个界面面缺态')
-    expect(markdown).toContain('`panel:mingpan` 命盘卡详情 · 缺：错误态')
+    expect(markdown).toContain('5 个界面面缺态')
+    // #66（UX-04）把 `panel:mingpan` 从这一节里摘掉了（错误态补齐）——改成钉一个仍在清单里的面。
+    expect(markdown).toContain('`slot:shell.overlay#xuanshu-cang-drawer` 藏库抽屉 · 缺：空态 / 错误态')
+    expect(markdown).not.toContain('`panel:mingpan` 命盘卡详情 · 缺：错误态')
   })
 
   it('missingStatesOf 是纯函数：只剩通过时清单为空、合计归零', () => {
