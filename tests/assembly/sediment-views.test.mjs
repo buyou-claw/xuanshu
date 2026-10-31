@@ -228,7 +228,7 @@ describe('票 15 · 草稿卡：字数 / 未写入 / 预览 / 目标谱 + 人点
     await pending
   })
 
-  it('done 态：说清写到哪本谱 + [查看谱]（跳 S5，不新开 main key）', async () => {
+  it('done 态：说清写到哪本谱 + [看这张谱]（带打开意图进那张谱详情，不新开 main key）', async () => {
     const { calls, api, controller } = await readyController()
     const outcome = await controller.commit(SESSION)
     expect(outcome.ok).toBe(true)
@@ -236,7 +236,11 @@ describe('票 15 · 草稿卡：字数 / 未写入 / 预览 / 目标谱 + 人点
     const html = render(h(XsSedimentDraftCard, { sessionId: SESSION, api, controller, navigate: () => {} }))
     expect(html).toContain('data-xs-state="done"')
     expect(html).toContain('已更新到谱')
-    expect(html).toContain('data-xuanshu-nav="pus"')
+    // 动作换成「打开刚写进的这张谱」（`requestPuOpenAndGo`），所以不再挂 `data-xuanshu-nav="pus"`：
+    // 谱管理那扇门只有侧栏行「谱」一个（判据 N-001），挂上去等于把同一动作再指一次。
+    expect(html).toContain('data-xuanshu-action="sediment-open-pu"')
+    expect(html).toContain('看这张谱 -&gt;')
+    expect(html).not.toContain('data-xuanshu-nav="pus"')
   })
 })
 
@@ -315,7 +319,7 @@ describe('票 15 · 结果通知：无内容时 return null（自动 click-throu
     expect(render(h(XsSedimentNotice, { controller, navigate: () => {} }))).toBe('')
   })
 
-  it('写入成功后：通知里说清写到了哪本谱 + [查看谱]；可以关掉', async () => {
+  it('写入成功后：通知里说清写到了哪本谱 + [看这张谱]；可以关掉', async () => {
     const { api, controller } = await readyController()
     void api
     await controller.commit(SESSION)
@@ -323,7 +327,9 @@ describe('票 15 · 结果通知：无内容时 return null（自动 click-throu
     expect(html).toContain('data-xuanshu-notice="sediment"')
     expect(html).toContain('已更新到谱')
     expect(html).toContain('事业与行业')
-    expect(html).toContain('data-xuanshu-nav="pus"')
+    // 通知手里拿得到那张谱（`SedimentNotice.pu`），所以这一处也是**打开意图**而不是裸跳。
+    expect(html).toContain('data-xuanshu-action="sediment-open-pu"')
+    expect(html).not.toContain('data-xuanshu-nav="pus"')
     expect(html).toContain('data-xuanshu-action="sediment-dismiss"')
     controller.dismissNotice()
     expect(render(h(XsSedimentNotice, { controller, navigate: () => {} }))).toBe('')

@@ -30,6 +30,7 @@ import {
 } from './consult-views.js';
 import { CONSULT_ID, CONSULT_LABEL, CONSULT_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
+import { requestPuCreateAndGo } from './PuPanel.js';
 import { useHomePaths } from './home-paths.js';
 import type { HomePathsWatch } from './home-paths.js';
 import type { RpcContext } from './rpc.js';
@@ -335,7 +336,7 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
           onOpen={openRow}
           onBack={() => { setView('lobby'); }}
           onStart={() => { setView('lobby'); }}
-          onManagePu={() => { navigate('pus'); }}
+          onCreatePu={() => { requestPuCreateAndGo(navigate); }}
           onRetry={reloadItems}
         />
       ) : null}

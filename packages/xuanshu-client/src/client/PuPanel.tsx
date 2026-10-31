@@ -5,6 +5,7 @@ import { rpcCall } from './rpc.js';
 import type { RpcContext } from './rpc.js';
 import { installXuanshuStyles, registerStyleSheet } from './styles.js'
 import { BREAKPOINT_WIDE_PX } from './breakpoints.js'
+import type { PanelNavTarget } from './panel.js'
 
 type Level = 'base' | 'optional';
 interface Pu { slug: string; name: string; level: Level; description: string; body: string; summary: string; source: string; updatedAt: string; stale?: boolean; error?: string }
@@ -23,6 +24,96 @@ type PuClient = Omit<Context, 'uiWorkspace'> &
 let pendingJob: Job | undefined;
 let pendingView: 'create' | 'detail' = 'create';
 let pendingSelected: Pu | undefined;
+
+/**
+ * ── 跨面板**意图**：谱面板的第二个模块级槽（`pendingJob` / `pendingView` 那套的同款写法，
+ *    不另造一套机制）────────────────────────────────────────────────────────────
+ *
+ * **为什么要有它**（要解决的不是「实现没写完」，是**两个权威打架**）：
+ *   - 判据 N-001：同一个动作出现在两个及以上入口即红 —— 谱面板的门只能有侧栏行「谱」那一扇；
+ *   - 设计稿 S7（`docs/design/ui-v1/screens/S7-问事历史回看.md:65`）：历史首次空态**必须**有
+ *     「主按钮（去开一次问事）+ 次按钮（先建谱）」；沉淀刚写完那一刻的追问路径也不能删。
+ * 三处调用点原先都只做 `navigate('pus')`，于是它们就是同一动作的第二、第三扇门：门数没少，
+ * 只是换了个位置。让它们变成**真正不同的动作**（建一个新谱 / 打开刚写进的那张谱）之后，
+ * 「谱管理」才重新只剩侧栏那一扇门，而 S7 要的那颗次按钮也留得下来。
+ *
+ * **为什么不给 `navigate()` 加参数**：`navigate` 是从根一路当 prop 透传下来的（12 个组件的
+ * props 里都有），改签名会波及全部透传点；而这两个意图只跟谱面板有关，模块级一个槽就够。
+ *
+ * **消费纪律**：
+ *   - 设意图与跳面板是**两件事**，由调用点成对做（`requestPuCreateAndGo` / `requestPuOpenAndGo`）；
+ *   - 谱面板挂载时**只读**一次（`peekPuIntent()`）算初始视图，挂载完成后才销账（`consumePuIntent()`）：
+ *     严格模式会把组件函数连同 `useState` 初始化器跑两遍，若在初始化器里就地清空，
+ *     第二遍就读不到意图 —— 向导被吃掉一次；
+ *   - 面板**已经挂在墙上**时切回来不会重跑初始化器，所以另订阅一份通知（同一次意图只生效一次）。
+ */
+export interface PuRef {
+  slug: string;
+  name: string;
+  body: string;
+  /**
+   * 其余字段可缺省：沉淀那边递过来的是一份刚写回的谱视图（`SedimentPuView`，`level` 是
+   * `string`、其余可选）。硬套面板的 `Pu` 只会逼调用点写 `as`，缺的按「可选输入级 + 空」补齐。
+   */
+  level?: string;
+  description?: string;
+  summary?: string;
+  source?: string;
+  updatedAt?: string;
+}
+export type PuIntent = { kind: 'create' } | { kind: 'open'; pu: PuRef };
+let pendingIntent: PuIntent | undefined;
+const intentListeners = new Set<() => void>();
+
+/** 把递进来的谱视图补成面板详情页能直接渲染的 `Pu`（受控 `select` 不能拿 `undefined` 当值）。 */
+function toPuPoint(ref: PuRef): Pu {
+  return {
+    slug: ref.slug,
+    name: ref.name,
+    body: ref.body,
+    level: ref.level === 'base' ? 'base' : 'optional',
+    description: ref.description ?? '',
+    summary: ref.summary ?? '',
+    source: ref.source ?? '',
+    updatedAt: ref.updatedAt ?? '',
+  };
+}
+/** 读一眼意图，**不清空**：给首次挂载算初始视图（清空的事交给挂载后的那一遍）。 */
+function peekPuIntent(): PuIntent | undefined { return pendingIntent; }
+/**
+ * 取走并清空：**消费一次即消失**，否则下次切回谱面板又会自动弹向导。
+ * 导出是因为面板挂载后由 effect 调它，而 effect 在 SSR 里不跑 —— 用例要点得到这条纪律。
+ */
+export function consumePuIntent(): PuIntent | undefined {
+  const taken = pendingIntent;
+  pendingIntent = undefined;
+  return taken;
+}
+function announcePuIntent(): void { for (const listener of [...intentListeners]) listener(); }
+
+/** 「建一个谱」：谱面板一进来就是建谱向导第 1 步（S7:65 的次按钮走这条）。 */
+export function requestPuCreate(): void { pendingIntent = { kind: 'create' }; announcePuIntent(); }
+/** 「打开这张谱」：谱面板一进来就是这张谱的详情（沉淀刚写完的那一跳走这条）。 */
+export function requestPuOpen(pu: PuRef): void { pendingIntent = { kind: 'open', pu }; announcePuIntent(); }
+
+/**
+ * 「设意图 + 跳面板」成对的两条接线（导出是为了让用例点得到这条链：SSR 拿不到 onClick，
+ * 只能从元素树上取按钮再手动触发它的处理器）。
+ */
+export function requestPuCreateAndGo(navigate: (target: PanelNavTarget) => void): void {
+  requestPuCreate(); navigate('pus');
+}
+export function requestPuOpenAndGo(pu: PuRef, navigate: (target: PanelNavTarget) => void): void {
+  requestPuOpen(pu); navigate('pus');
+}
+
+/** 初始视图：`pendingJob` 优先（沿用现在的行为：一进就回原来那步），其次建谱意图，再次打开意图。 */
+function initialViewOf(intent: PuIntent | undefined): 'list' | 'create' | 'detail' {
+  if (pendingJob !== undefined) return pendingView;
+  if (intent === undefined) return 'list';
+  return intent.kind === 'create' ? 'create' : 'detail';
+}
+
 const blank: Draft = { name: '', level: 'optional', description: '', body: '# 概览\n', summary: '' };
 const errorText = (error: unknown): string => error instanceof Error ? error.message : String(error);
 async function fileData(file: File): Promise<{ name: string; data: string }> {
@@ -34,11 +125,27 @@ async function fileData(file: File): Promise<{ name: string; data: string }> {
 function PuPanel({ ctx, openSession }: { ctx: PuClient; openSession?: (sessionId: string) => void }) {
   const [rows, setRows] = useState<Pu[]>([]); const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState(''); const [level, setLevel] = useState(''); const [source, setSource] = useState('');
-  const [view, setView] = useState<'list' | 'detail' | 'create'>(pendingJob ? pendingView : 'list');
+  /**
+   * 挂载那一眼：只**读**意图（不清空），据此算初始视图与初始选中。
+   *
+   * 为什么不在 `useState` 初始化器里就地 `consumePuIntent()`：严格模式会把组件函数连同初始化器
+   * 跑两遍 —— 第一遍清空、第二遍读到空，向导被吃掉一次。清空放在挂载后的 effect 里做，
+   * 两遍读到的是同一份意图（「别让一次意图被吃掉又被弹两次」那条就靠这个分工）。
+   */
+  const [mount] = useState(() => {
+    const intent = peekPuIntent();
+    const view = initialViewOf(intent);
+    // 打开意图带着谱；有进行中的转换作业时仍以 `pendingSelected` 为准（那是作业自己的落点）。
+    const selected = intent !== undefined && intent.kind === 'open' && pendingJob === undefined
+      ? toPuPoint(intent.pu)
+      : pendingSelected;
+    return { intent, view, selected, draft: view === 'detail' && selected !== undefined ? selected : blank };
+  });
+  const [view, setView] = useState<'list' | 'detail' | 'create'>(mount.view);
   const [step, setStep] = useState(pendingJob ? 3 : 1); const [job, setJob] = useState<Job | undefined>(pendingJob);
   const [text, setText] = useState(''); const [files, setFiles] = useState<File[]>([]);
-  const [draft, setDraft] = useState<Draft>(pendingJob && pendingView === 'detail' && pendingSelected ? pendingSelected : blank); const [selected, setSelected] = useState<Pu | undefined>(pendingSelected);
-  const [original, setOriginal] = useState(pendingSelected ? JSON.stringify(pendingSelected) : ''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<Draft>(mount.draft); const [selected, setSelected] = useState<Pu | undefined>(mount.selected);
+  const [original, setOriginal] = useState(mount.selected === undefined ? '' : JSON.stringify(mount.selected)); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const call = <T,>(method: string, payload?: unknown) => rpcCall<T>(ctx, method, payload);
   const reload = async () => {
     setLoading(true); setError('');
@@ -62,6 +169,32 @@ function PuPanel({ ctx, openSession }: { ctx: PuClient; openSession?: (sessionId
   useEffect(() => {
     if (job?.status === 'ready' && job.draft && step === 3 && view === 'create') { setDraft(job.draft); setStep(4); }
   }, [job, step]);
+  /**
+   * 意图的两处消费点（同一份 `pendingIntent`，一进一出）：
+   *
+   *   ① **首次挂载**：初始化时只读过它（`peekPuIntent`），这里正式销账 —— 一次意图只生效一次，
+   *      否则下次切回谱面板又自动弹向导。
+   *   ② **面板已经在墙上**：切回来不会重跑 `useState` 初始化器，所以订阅一份；收到就把视图切过去
+   *      并当场清空。两处都走 `consumePuIntent()`，语义只有一份。
+   */
+  useEffect(() => {
+    if (mount.intent !== undefined && peekPuIntent() === mount.intent) consumePuIntent();
+    const applyIntent = () => {
+      const intent = consumePuIntent();
+      if (intent === undefined) return;
+      setError('');
+      if (intent.kind === 'create') {
+        // 建谱：第 1 步从头开始；进行中的转换作业仍然接着走（`pendingJob` 比新点的按钮更重要）。
+        setSelected(undefined); setDraft(blank); setOriginal('');
+        setJob(pendingJob); setStep(pendingJob ? 3 : 1); setView('create');
+        return;
+      }
+      const pu = toPuPoint(intent.pu);
+      setSelected(pu); setDraft(pu); setOriginal(JSON.stringify(pu)); setView('detail');
+    };
+    intentListeners.add(applyIntent);
+    return () => { intentListeners.delete(applyIntent); };
+  }, []);
   const run = async (operation: () => Promise<void>) => { setBusy(true); setError(''); try { await operation(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } };
   const open = (slug: string) => void run(async () => {
     const pu = await call<Pu>('pu.read', { slug }); setSelected(pu); setDraft(pu); setOriginal(JSON.stringify(pu)); setView('detail');

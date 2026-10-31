@@ -33,6 +33,7 @@ import { confirmGate, countWords, diffParagraphs, isConsultSessionId, previewTex
 import { dataDirPath, useHomePaths } from './home-paths.js';
 import type { HomePathsWatch } from './home-paths.js';
 import type { PanelNavTarget } from './panel.js';
+import { requestPuOpenAndGo } from './PuPanel.js';
 import { installXuanshuStyles, registerStyleSheet } from './styles.js'
 import { BREAKPOINT_WIDE_PX } from './breakpoints.js'
 
@@ -50,7 +51,11 @@ export interface SedimentInstallDeps {
   api: SedimentApi;
   /** 跨槽共享状态；**人点才跑**的结构保证在它身上（见 `sediment-model.ts`）。 */
   controller: SedimentController;
-  /** 面板导航（[查看谱] → S5 谱管理；不新开 main key）。 */
+  /**
+   * 面板导航（[看这张谱] → 谱面板的**那张谱详情**；不新开 main key）。
+   * 光跳过去是不够的：谱管理那扇门只有侧栏行「谱」一个（判据 N-001），所以这一跳带
+   * `requestPuOpenAndGo` 的打开意图 —— 动作从「去谱管理」变成「打开刚写进的那张谱」。
+   */
   navigate: (target: PanelNavTarget) => void;
   /**
    * 宿主回传的数据目录（`data.overview.dataDir`，产品 `~/.xuanshu/xuanshu` /
@@ -204,6 +209,12 @@ export function XsSedimentDraftCard({ sessionId, api, controller, navigate, data
   const draft = state.answer?.draft;
   const target = state.answer?.target;
   const slug = target?.slug;
+  /**
+   * `done` 态手里那张**刚写进去的谱**（[看这张谱] 的打开意图用它）。
+   * 提成 const 是因为它还要在 `onClick` 这个闭包里用：`state.pu` 是属性访问，闭包里 narrowing 会失效
+   * （`SedimentState.done` 的 `pu` 本身也是可选的）；const 一收，判定与用法只看同一份。
+   */
+  const committedPu = state.kind === 'done' ? state.pu : undefined;
 
   // 打开弹窗后读一次目标谱现状：diff / 字数 / 陈旧判定的基准都从它来。
   // 静态预置（SSR 断言）给了 `preloadedTargetView` 就不再取数。
@@ -318,12 +329,15 @@ export function XsSedimentDraftCard({ sessionId, api, controller, navigate, data
         </>
       ) : null}
 
-      {state.kind === 'done' && state.pu !== undefined ? (
+      {committedPu !== undefined ? (
         <div className="xs-sediment__done">
-          <p data-xuanshu-state="committed">{`已更新到谱「${state.pu.name}」。`}</p>
-          <p className="xs-sediment__note">{`写入路径：${puPaths(state.pu.slug, localDataDir).content}`}</p>
+          <p data-xuanshu-state="committed">{`已更新到谱「${committedPu.name}」。`}</p>
+          <p className="xs-sediment__note">{`写入路径：${puPaths(committedPu.slug, localDataDir).content}`}</p>
           <div className="xs-sediment__actions">
-            <button type="button" data-xuanshu-nav="pus" onClick={() => { navigate('pus'); }}>查看谱 -&gt;</button>
+            {/* 「看这张谱」不是「去谱管理」：它带着**这张刚写进的谱**进详情（`requestPuOpenAndGo`）。
+                也**不挂** `data-xuanshu-nav="pus"` —— 谱管理那扇门只有侧栏行「谱」一个（判据 N-001），
+                挂上去等于把同一个动作再指一次；换了动作名之后它也不必再借那一扇门的名义。 */}
+            <button type="button" data-xuanshu-action="sediment-open-pu" onClick={() => { requestPuOpenAndGo(committedPu, navigate); }}>看这张谱 -&gt;</button>
           </div>
         </div>
       ) : null}
@@ -465,7 +479,9 @@ export function XsSedimentNotice({ controller, navigate }: SedimentNoticeProps) 
     <div className="xs-sediment__notice" data-xuanshu-notice="sediment" role="status">
       <p>{`已更新到谱「${notice.pu.name}」（${countWords(notice.pu.body)} 字）。`}</p>
       <div className="xs-sediment__actions">
-        <button type="button" data-xuanshu-nav="pus" onClick={() => { navigate('pus'); controller.dismissNotice(); }}>查看谱 -&gt;</button>
+        {/* 通知手里**拿得到那张谱**（`SedimentNotice.pu`，`sediment-model.ts`）：所以这里也用打开意图，
+            不是裸跳。关通知仍排在后面 —— 先设意图再关，人看到的是「谱面板已经翻到这张谱」。 */}
+        <button type="button" data-xuanshu-action="sediment-open-pu" onClick={() => { requestPuOpenAndGo(notice.pu, navigate); controller.dismissNotice(); }}>看这张谱 -&gt;</button>
         <button type="button" data-xuanshu-action="sediment-dismiss" onClick={() => { controller.dismissNotice(); }}>关闭</button>
       </div>
     </div>

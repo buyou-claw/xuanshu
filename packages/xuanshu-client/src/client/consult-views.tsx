@@ -331,7 +331,13 @@ export interface XsConsultHistoryListProps {
   onOpen: (sessionId: string) => void;
   onBack: () => void;
   onStart: () => void;
-  onManagePu: () => void;
+  /**
+   * 空态的次按钮：**建一个谱**（S7:65 明文要求的「次按钮（先建谱）」）。
+   *
+   * 从前的名字是 `onManagePu`（跳去谱管理）——那与侧栏行「谱」是同一个动作的第二扇门（判据 N-001）。
+   * 现在它带一条**建谱意图**进谱面板：门还在，动作不一样了（要不要建谱由人决定，不由跳转决定）。
+   */
+  onCreatePu: () => void;
   onRetry: () => void;
 }
 
@@ -348,7 +354,7 @@ export function XsConsultHistoryList({
   onOpen,
   onBack,
   onStart,
-  onManagePu,
+  onCreatePu,
   onRetry,
 }: XsConsultHistoryListProps) {
   const filtered = filterHistory(items, query, range, now);
@@ -416,8 +422,11 @@ export function XsConsultHistoryList({
             <button type="button" className="xs-btn xs-btn--primary" data-xuanshu-action="start-consult" onClick={onStart}>
               {'＋ 开一次问事 ▸ S6'}
             </button>
-            <button type="button" data-xuanshu-action="manage-pu" onClick={onManagePu}>
-              {'管理谱 ▸ S5'}
+            {/* 次按钮（S7:65）：**建一个谱**，不是「去谱管理」。谱管理那扇门只有侧栏行「谱」一个
+                （判据 N-001）；这里换成建谱意图之后，S7 要的第二颗按钮留下来了，动作却不再重复。
+                也**不挂** `data-xuanshu-nav`：它不是谱面板的那扇门，挂上去等于再指一次同一个动作。 */}
+            <button type="button" data-xuanshu-action="create-pu" onClick={onCreatePu}>
+              {'先建一个谱'}
             </button>
           </div>
         </div>
