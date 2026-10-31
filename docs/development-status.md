@@ -746,7 +746,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 ```
 # pnpm test:inventory（profile 已装；main 全量复核打磨后，见 §16.8）
-[inventory] 用例 2216 条（基线 2240）/ 文件 194 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2216 条（基线 2240）/ 文件 197 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -957,7 +957,7 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 
 ```
 # pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）
-[inventory] 用例 2216 条（基线 2240）/ 文件 194 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2216 条（基线 2240）/ 文件 197 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 [doc-numbers] OK：2240 条用例 / 197 个文件 / 536165 B
 
