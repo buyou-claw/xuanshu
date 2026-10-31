@@ -35,6 +35,11 @@ export const OVERVIEW_CSS = `
   overflow: auto;
   background: var(--xs-surface-panel);
   color: var(--xs-text-body);
+  /* 正文下限钉在**面板根**上（判据 C-001）：宿主在容器上定义了
+     --dsh-content-font-size（真浏览器实测 14px），所以 var(…, 16px) 的 fallback 永远不生效 ——
+     只有 max() 能把下限压住。放根上而不是逐条写：标题 / 段落 / 卡片正文都是从这条继承的，
+     元信息自己声明 12–14px，不受影响（层级不塌）。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-overview__header {
   display: flex;
@@ -45,7 +50,9 @@ export const OVERVIEW_CSS = `
 }
 .xs-overview__title {
   margin: 0;
-  font-size: var(--dsh-content-font-size, 16px);
+  /* 标题档 18px（type-scale §2 title），不是正文档：卡片标题也落在 16px，
+     两档同号同字重就等于没有标题 —— L-001 要防的正是这个。下限仍按 max() 钉。 */
+  font-size: max(18px, var(--dsh-content-font-size, 16px));
   font-weight: 600;
   color: var(--xs-text-title);
 }
@@ -98,7 +105,7 @@ export const OVERVIEW_CSS = `
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--dsh-content-font-size, 16px);
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
   font-weight: 600;
   color: var(--xs-text-heading);
 }
@@ -136,7 +143,8 @@ export const OVERVIEW_CSS = `
 .xs-empty__why {
   margin: 0;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size, 16px);
+  /* 空态「为什么空」是正文（人要先读懂这句才能决定下一步），不是元信息。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-empty__sub {
   margin: 0;
@@ -278,7 +286,10 @@ export const OVERVIEW_CSS = `
 }
 .xs-pillar__name {
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 柱名与柱值同一行相邻两档：字重分（值 600 / 名 400），字号都吃 16px 下限。
+     原先走 -secondary（14px）：它既不是 tag/badge，也不是路径/计数，判据按正文量，
+     量出来就是 14px 红（ux-reports 2026-10-31T11-42-28 的 C-001 证据）。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-pillar__value {
   color: var(--xs-text-heading);
@@ -289,7 +300,8 @@ export const OVERVIEW_CSS = `
   gap: var(--xs-space-row);
   flex-wrap: wrap;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 依据行是正文（读得懂才敢信数），不是元信息：同样吃 16px 下限。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-lines {
   display: flex;
@@ -318,7 +330,8 @@ export const OVERVIEW_CSS = `
   gap: var(--xs-space-toolbar);
   flex-wrap: wrap;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 出处链接文字是正文：这是「凭什么是这个结论」的入口，不吃小字。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 
 .xs-quicklinks {
@@ -356,7 +369,9 @@ export const OVERVIEW_CSS = `
 }
 .xs-cell__subtitle {
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 快捷入口的副标题与标题相邻两档：字重分（标题 600 / 副标题 400），字号都吃 16px 下限。
+     __subtitle 不在元信息词表里（词表按 sub / note 这类整词匹配），判据按正文量。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-cell[disabled] .xs-cell__subtitle {
   color: var(--xs-text-disabled);

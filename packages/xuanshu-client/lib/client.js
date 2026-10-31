@@ -3122,8 +3122,13 @@ function installConsult(ctx, deps) {
 }
 function installConsultStyle() {
   registerStyleSheet("xuanshu-consult-style", `
-.xs-consult{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body)}
-.xs-consult h1,.xs-consult h3,.xs-consult h4{font-weight:600}.xs-consult h1{font-size:1.15rem}.xs-consult h3{font-size:.98rem;margin:16px 0 6px}.xs-consult h4{font-size:.85rem;margin:12px 0 4px;color:var(--xs-text-secondary)}
+.xs-consult{padding:var(--xs-space-page);max-width:var(--xs-size-panel-content-max);margin:auto;overflow:auto;height:100%;box-sizing:border-box;color:var(--xs-text-body);font-size:max(16px,var(--dsh-content-font-size,16px))}
+/* 正文下限钉在面板根上（判据 C-001）：宿主在容器上定义了 --dsh-content-font-size（实测 14px），
+   所以 var(…, 16px) 的 fallback 永远不生效，只有 max() 能压住。放根上而不是逐条写，
+   是因为 summary / text / 列表正文这些「没有自己 font-size」的句子全靠继承拿字号。
+   h3 / h4 是例外：它们原先写死 rem（.98rem = 15.68px、.85rem = 13.6px），绝对值不继承，
+   所以各自也要钉一次；两档同为 heading（16px / 600），靠颜色与嵌套分，不靠字号。 */
+.xs-consult h1,.xs-consult h3,.xs-consult h4{font-weight:600}.xs-consult h1{font-size:1.15rem}.xs-consult h3{font-size:max(16px,var(--dsh-content-font-size,16px));margin:16px 0 6px}.xs-consult h4{font-size:max(16px,var(--dsh-content-font-size,16px));margin:12px 0 4px;color:var(--xs-text-secondary)}
 .xs-consult__head,.xs-consult__toolbar,.xs-consult__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .xs-consult__head{justify-content:space-between}
 .xs-consult button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
@@ -3141,12 +3146,12 @@ function installConsultStyle() {
 .xs-consult__badge{font-size:.72rem;padding:2px 8px;border:1px solid var(--xs-edge-card);border-radius:999px;color:var(--xs-text-secondary)}
 .xs-consult__note{font-size:.8rem;color:var(--xs-text-secondary);line-height:1.6}
 .xs-consult__field{display:block;margin:10px 0}
-.xs-consult__field>span{display:block;margin-bottom:4px;font-size:.85rem}
+.xs-consult__field>span{display:block;margin-bottom:4px;font-size:max(16px,var(--dsh-content-font-size,16px))}
 .xs-consult__locked{list-style:none;margin:0;padding:0}
 .xs-consult__rows{list-style:none;margin:0;padding:0}
 .xs-consult__row-hit{display:flex;gap:10px;align-items:baseline;width:100%;text-align:left}
 .xs-consult__shortid{font-family:var(--font-mono,monospace);color:var(--xs-text-code);font-size:.85rem}
-.xs-consult__summary{line-height:1.7}
+.xs-consult__summary{line-height:1.7;font-size:max(16px,var(--dsh-content-font-size,16px))}
 .xs-consult__nudge,.xs-consult__error{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:12px;margin:10px 0}
 .xs-consult__nudge-title{font-weight:600;margin:0 0 6px}
 .xs-consult__paths{margin:0 0 8px;padding-left:20px;line-height:1.7}
@@ -3154,7 +3159,7 @@ function installConsultStyle() {
 .xs-consult__empty-why{font-weight:600;margin:0 0 6px}
 .xs-consult__messages{margin-top:12px}
 .xs-consult__round{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:8px 10px;margin:12px 0}
-.xs-consult__round-head{font-size:.85rem;margin:0 0 4px;color:var(--xs-text-secondary)}
+.xs-consult__round-head{font-size:max(16px,var(--dsh-content-font-size,16px));margin:0 0 4px;color:var(--xs-text-secondary)}
 .xs-consult__message{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:10px 0;border-bottom:1px solid var(--xs-edge-card)}
 /* 角色占第一列；徽标 / 来源 / 正文一律第二列（否则混合行会把正文挤进 44px 那一列）。 */
 .xs-consult__message>.xs-consult__badge,.xs-consult__message>.xs-consult__note,.xs-consult__message>.xs-consult__text{grid-column:2}
@@ -6348,7 +6353,9 @@ function installMountsStyle() {
     ".xs-mounts__section{margin:12px 0;padding:10px;border:1px solid var(--xs-edge-card);border-radius:8px}",
     ".xs-mounts__section-head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
     // 说明行是正文（16px），只有 note 是元信息（13px）—— 原来一行 12px 让两者一起偏小。
-    ".xs-mounts__summary{margin:6px 0;opacity:.8;font-size:16px}",
+    // 写成 max() 而不是字面 16px：宿主把 --dsh-content-font-size 抬到 20 时它也要跟着抬，
+    // 而宿主定在 14px 时（实测值）下限仍压得住 —— 判据 C-001 量的是渲染值。
+    ".xs-mounts__summary{margin:6px 0;opacity:.8;font-size:max(16px,var(--dsh-content-font-size,16px))}",
     ".xs-mounts__note{margin:6px 0;opacity:.8;font-size:13px}",
     ".xs-mounts__status{background:none;border:0;padding:0;color:inherit;opacity:.85;cursor:pointer;font-size:12px}",
     ".xs-mounts__overlay{position:fixed;inset:0;background:var(--xs-surface-overlay-mask);display:flex;justify-content:flex-end;z-index:60}",
@@ -9963,6 +9970,11 @@ var OVERVIEW_CSS = `
   overflow: auto;
   background: var(--xs-surface-panel);
   color: var(--xs-text-body);
+  /* 正文下限钉在**面板根**上（判据 C-001）：宿主在容器上定义了
+     --dsh-content-font-size（真浏览器实测 14px），所以 var(…, 16px) 的 fallback 永远不生效 ——
+     只有 max() 能把下限压住。放根上而不是逐条写：标题 / 段落 / 卡片正文都是从这条继承的，
+     元信息自己声明 12–14px，不受影响（层级不塌）。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-overview__header {
   display: flex;
@@ -9973,7 +9985,9 @@ var OVERVIEW_CSS = `
 }
 .xs-overview__title {
   margin: 0;
-  font-size: var(--dsh-content-font-size, 16px);
+  /* 标题档 18px（type-scale §2 title），不是正文档：卡片标题也落在 16px，
+     两档同号同字重就等于没有标题 —— L-001 要防的正是这个。下限仍按 max() 钉。 */
+  font-size: max(18px, var(--dsh-content-font-size, 16px));
   font-weight: 600;
   color: var(--xs-text-title);
 }
@@ -10026,7 +10040,7 @@ var OVERVIEW_CSS = `
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--dsh-content-font-size, 16px);
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
   font-weight: 600;
   color: var(--xs-text-heading);
 }
@@ -10064,7 +10078,8 @@ var OVERVIEW_CSS = `
 .xs-empty__why {
   margin: 0;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size, 16px);
+  /* 空态「为什么空」是正文（人要先读懂这句才能决定下一步），不是元信息。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-empty__sub {
   margin: 0;
@@ -10206,7 +10221,10 @@ var OVERVIEW_CSS = `
 }
 .xs-pillar__name {
   color: var(--xs-text-tertiary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 柱名与柱值同一行相邻两档：字重分（值 600 / 名 400），字号都吃 16px 下限。
+     原先走 -secondary（14px）：它既不是 tag/badge，也不是路径/计数，判据按正文量，
+     量出来就是 14px 红（ux-reports 2026-10-31T11-42-28 的 C-001 证据）。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-pillar__value {
   color: var(--xs-text-heading);
@@ -10217,7 +10235,8 @@ var OVERVIEW_CSS = `
   gap: var(--xs-space-row);
   flex-wrap: wrap;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 依据行是正文（读得懂才敢信数），不是元信息：同样吃 16px 下限。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-lines {
   display: flex;
@@ -10246,7 +10265,8 @@ var OVERVIEW_CSS = `
   gap: var(--xs-space-toolbar);
   flex-wrap: wrap;
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 出处链接文字是正文：这是「凭什么是这个结论」的入口，不吃小字。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 
 .xs-quicklinks {
@@ -10284,7 +10304,9 @@ var OVERVIEW_CSS = `
 }
 .xs-cell__subtitle {
   color: var(--xs-text-secondary);
-  font-size: var(--dsh-content-font-size-secondary, 14px);
+  /* 快捷入口的副标题与标题相邻两档：字重分（标题 600 / 副标题 400），字号都吃 16px 下限。
+     __subtitle 不在元信息词表里（词表按 sub / note 这类整词匹配），判据按正文量。 */
+  font-size: max(16px, var(--dsh-content-font-size, 16px));
 }
 .xs-cell[disabled] .xs-cell__subtitle {
   color: var(--xs-text-disabled);
