@@ -223,10 +223,12 @@ export function XsMountDrawer({
         {/* ④ 本轮挂载上下文（预览） */}
         <section className="xs-mounts__group" data-xuanshu-group="preview">
           <h3>{'本轮挂载上下文（预览）'}</h3>
+          {/* 错误态：先说人话（读不到），再给下一步（重试 / 换个工作区）；宿主原话附在后面（不吞错）。 */}
           {error === undefined ? null : (
             <p className="xs-mounts__error" data-xuanshu-error="mounts" role="alert">
-              {error}
+              {`读不到本轮挂载的预览：${error}。请检查工作区是否还在，然后`}
               {onRetry === undefined ? null : <button type="button" className="xs-mounts__ghost" onClick={onRetry}>重试</button>}
+              {'；还是不通就先回门厅、换个工作区再挂。'}
             </p>
           )}
           {busy && preview === undefined ? <p className="xs-mounts__note" data-xuanshu-note="mounts-loading">正在读挂载内容…</p> : null}
