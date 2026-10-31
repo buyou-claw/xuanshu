@@ -282,6 +282,21 @@ export interface BestofUiState {
   question: string;
   sessionId?: string;
   view?: BestofView;
+  /**
+   * 「有没有问事会话」这件事**问过一次**吗（`probeSession()` / `ask()` 会给）。
+   *
+   * 为什么要这个位：`sessionId === undefined` 只说明**还没问过**，不是「没有会话」。
+   * 把两者混成一个，空态就永远不显示（首屏 `undefined`），或者反过来在还没问的时候
+   * 就对用户说「你还没有会话」—— 前者是空态不可达，后者是编事实。
+   */
+  sessionKnown?: boolean;
+  /**
+   * 路由目录**读过一次**了吗（`loadRoutes()` / 估算成功会给）。
+   *
+   * 同一道理：`routes === undefined` 可能是「还没读」，也可能是「老宿主没有 `routes.list`」。
+   * 只有**真读过**且确实 < 2 路，才够说「还没有两路可并列」。
+   */
+  routesKnown?: boolean;
   /** 可读失败（能力门 / 未知方法 / 网络）。 */
   error?: string;
   /** 一句提示（停不下来的降级、禁用态等）。 */
@@ -323,6 +338,18 @@ export interface BestofController {
   setEnabled(enabled: boolean): void;
   /** 命令 / 按钮触发：带问题直接进费用确认；不带问题先停在输入。 */
   ask(input: { question: string; sessionId: string }): void;
+  /**
+   * 报告一次「有没有问事会话」的探测结果（触发按钮挂载时问一次）。
+   *
+   * 只补「还不知道」的那一格：`undefined` = 探过、确实没有（触发路径拿不到会话）；
+   * 已经有非空 `sessionId` 时不被这次探测覆盖（命令面给的 id 更准）。
+   */
+  probeSession(sessionId: string | undefined): void;
+  /**
+   * 读一次路由目录（设置项挂载时调；只读、不花钱）。
+   * 没有 `routes.list` 的老宿主也记 `routesKnown`，但**不**把「拿不到」说成「只有零路」。
+   */
+  loadRoutes(signal?: AbortSignal): Promise<void>;
   /** 改问题（按钮触发时的那一行输入）。 */
   editQuestion(question: string): void;
   /** 重新读路由目录 + 重算 estimate（纯只读；确认屏打开时自动调一次）。 */
@@ -396,7 +423,8 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
       if (token !== estimateToken) return;
       estimateFor = question;
       const selected = state.routes ?? estimate.routes.map(({ provider, model }) => ({ provider, model }));
-      set({ ...(catalog === undefined ? {} : { catalog }), estimate, estimateError: undefined, routes: selected });
+      // 估算拿到手 = 路由是**真读过**的一版，从此「有没有两路」可以据实说（空态才敢开口）。
+      set({ ...(catalog === undefined ? {} : { catalog }), estimate, estimateError: undefined, routes: selected, routesKnown: true });
     } catch (error) {
       if (token !== estimateToken) return;
       set({ estimate: undefined, estimateError: message(error) });
@@ -424,6 +452,38 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
     }, pollMs);
   }
 
+  /** 在同一轮里只发一次目录读（设置行与浮层可能同时挂载；重复读没有意义）。 */
+  let catalogInFlight: Promise<void> | undefined;
+
+  /**
+   * 读一次路由目录（**只读**，不算 estimate、不花钱）。
+   *
+   * 为什么需要它：`routes` 原先只在 `loadEstimate()`（要问题 + 会话）成功后才有值，
+   * 所以设置项在首屏永远是空白 —— 空态写着「还没有两路可并列」，却一次都没去读过目录。
+   * 这条路径让人一打开设置就能得到真答案：确实不足两路 → 空态；读不到 → `routesKnown` 置位
+   * 但 `routes` 保持缺席（不冒充「零路」）。
+   */
+  async function loadRoutes(signal?: AbortSignal): Promise<void> {
+    if (state.routesKnown === true) return;
+    if (catalogInFlight !== undefined) return catalogInFlight;
+    if (typeof api.listRoutes !== 'function') {
+      // 老宿主没有 `routes.list`：读不到 ≠ 只有零路，如实记「问过了、拿不到」。
+      set({ routesKnown: true });
+      return;
+    }
+    catalogInFlight = (async () => {
+      try {
+        const catalog = await api.listRoutes(signal);
+        set({ catalog, routes: state.routes ?? defaultRouteSelection(catalog), routesKnown: true });
+      } catch (error) {
+        set({ routesKnown: true, estimateError: message(error) });
+      } finally {
+        catalogInFlight = undefined;
+      }
+    })();
+    return catalogInFlight;
+  }
+
   return {
     snapshot: () => state,
     subscribe(listener) {
@@ -440,7 +500,7 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
       stoppedByUser = false;
       if (!state.enabled) {
         // S9 §6 禁用态：不静默改走普通问答，也不假装开始。
-        set({ phase: 'disabled', question, sessionId, view: undefined, error: undefined, notice: '多 AI 合参当前是关的：去 设置 · 通用 里打开它。' });
+        set({ phase: 'disabled', question, sessionId, sessionKnown: true, view: undefined, error: undefined, notice: '多 AI 合参当前是关的：去 设置 · 通用 里打开它。' });
         return;
       }
       // 确认屏先开，**只读**的 estimate 在后台补上（不调 run；人点「开始合参」才跑）。
@@ -448,6 +508,8 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
         phase: 'confirm',
         question,
         sessionId,
+        // 这一次触发已经给出了会话 id（哪怕是空串 = 确实没有）：从此别再说「还不知道」。
+        sessionKnown: true,
         view: undefined,
         error: undefined,
         notice: undefined,
@@ -458,6 +520,15 @@ export function createBestofController({ api, pollMs = 400 }: { api: BestofApi; 
       });
       estimateFor = undefined;
       void loadEstimate();
+    },
+    probeSession(sessionId) {
+      // 只补「还不知道」的那一格：已经有的会话（命令面 / 触发面给过）不许被一次探测覆盖。
+      const known = state.sessionId;
+      const resolved = sessionId ?? '';
+      set({ ...(known === undefined || known === '' ? { sessionId: resolved } : {}), sessionKnown: true });
+    },
+    async loadRoutes(signal) {
+      await loadRoutes(signal);
     },
     editQuestion(question) {
       // 问题一变，「≈ N tokens」就作废；但**不在每次按键都发请求**（下一次 confirm 会补算）。

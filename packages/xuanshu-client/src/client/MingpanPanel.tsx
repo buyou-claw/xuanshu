@@ -176,7 +176,15 @@ export function MingpanPanel({
 
       {view.kind === 'error' ? (
         <section className="xs-mingpan__error" data-xuanshu-view="error" role="alert">
+          {/*
+            先一句人话（这一屏发生了什么），再贴宿主给的原因原文 —— 顺序反了就是「变量原样输出」：
+            人会先看到「命盘快照读不出来（文件缺失或格式不符）」却不知道该做什么。
+          */}
+          <p>排盘失败：读不到命盘快照。下面是宿主给的原因。</p>
           <p>{view.message}</p>
+          <p className="xs-mingpan__hint">
+            可以先点「重试」再读一次；如果还是读不到，就去补出生信息——重录会重新出盘并原子替换底座谱。
+          </p>
           <div className="xs-mingpan__actions">
             <button type="button" data-xuanshu-action="retry" onClick={() => { controller.invalidate(); }}>
               重试

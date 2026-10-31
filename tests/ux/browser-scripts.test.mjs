@@ -110,21 +110,31 @@ describe('票 08 · 采集器只收证据（判定只在 assertions）', () => {
 })
 
 describe('票 08 · 导航族的证据形状（store → facts）', () => {
-  function storeWith(entries = [], closes = [], walks = []) {
+  /**
+   * 造一份 store。
+   *
+   * `samples` = 逐次采样的快照（缺省 = 「一次采样就采到 `entries` 里全部入口」）。
+   * N-001 吃的是快照（`entriesInWorstSnapshot`），累加表只是另一条路，两条都照 `census()` 灌。
+   */
+  function storeWith(entries = [], closes = [], walks = [], samples = null) {
     const store = createNavStore()
-    for (const entry of entries) {
-      const key = `${entry.face}\u0000${entry.primitive}\u0000${entry.label}`
-      store.entries.set(key, { ...entry, firstSeenAt: 'fixture' })
+    const take = (sample) => {
       store.samples += 1
-      store.panels.add(entry.panel ?? 'overview')
-      store.primitives.add(entry.primitive)
+      store.snapshots.push(sample.map((entry) => ({ ...entry })))
+      for (const entry of sample) {
+        const key = `${entry.face}\u0000${entry.primitive}\u0000${entry.label}`
+        store.entries.set(key, { ...entry, firstSeenAt: 'fixture' })
+        store.panels.add(entry.panel ?? 'overview')
+        store.primitives.add(entry.primitive)
+      }
     }
+    for (const sample of samples ?? (entries.length === 0 ? [] : [entries])) take(sample)
     store.closes.push(...closes)
     for (const walk of walks) store.keyboards.set(walk.face, walk)
     return store
   }
 
-  it('N-001 的 facts：同一动作的入口按原语顺序排好，没有的 face 不产证据', () => {
+  it('N-001 的 facts：取「入口最多的那一次采样」，按原语顺序排好，没有的 face 不产证据', () => {
     const store = storeWith([
       { face: 'panel:pus', primitive: 'panel', label: '查看谱', panel: 'cang', via: 'label' },
       { face: 'panel:pus', primitive: 'sidebar-row', label: '谱', panel: 'overview', via: 'label' },
@@ -137,8 +147,22 @@ describe('票 08 · 导航族的证据形状（store → facts）', () => {
       'panel:查看谱',
       'panel:管理谱 ▸ S5',
     ])
+    // 判的是哪一次：一次采样时 index=0、samples=1（报告据此说「只有一次观察」）。
+    expect(facts.snapshot).toEqual({ index: 0, doors: 3, samples: 1 })
     expect(facts.coverage.primitives).toEqual(['sidebar-row', 'panel'])
     expect(navFactsFor('N-001', 'panel:cang', store)).toBeNull()
+  })
+
+  it('N-001 的 facts：两次采样各一扇门 → 取靠前的、并集不参与（互斥的门不算重复入口）', () => {
+    const store = storeWith([], [], [], [
+      [{ face: 'panel:cang', primitive: 'panel', label: '登记第一个藏', panel: 'cang', via: 'label' }],
+      [{ face: 'panel:cang', primitive: 'panel', label: '登记藏', panel: 'cang', via: 'label' }],
+    ])
+    const facts = navFactsFor('N-001', 'panel:cang', store)
+    expect(facts.entries.map((entry) => entry.label)).toEqual(['登记第一个藏'])
+    expect(facts.snapshot).toEqual({ index: 0, doors: 1, samples: 2 })
+    // 累加表里两条都在：并集口径会把它们算成两处重复入口 —— 那正是不能用并集判 N-001 的理由。
+    expect(entriesFor(store, 'panel:cang')).toHaveLength(2)
   })
 
   it('N-002 的 facts：只收「被关掉的那个面」的关闭事件', () => {
@@ -169,11 +193,11 @@ describe('票 08 · 导航族的证据形状（store → facts）', () => {
   })
 
   it('入口表跨多次采样去重（同一入口采两遍还是一条）', () => {
-    const store = storeWith([
-      { face: 'panel:pus', primitive: 'sidebar-row', label: '谱', panel: 'overview' },
-      { face: 'panel:pus', primitive: 'sidebar-row', label: '谱', panel: 'overview' },
-    ])
+    const door = { face: 'panel:pus', primitive: 'sidebar-row', label: '谱', panel: 'overview' }
+    // 同一个门被采到两次（两次采样各一次）——快照有两份，累加表只有一条。
+    const store = storeWith([door], [], [], [[door], [door]])
     expect(entriesFor(store, 'panel:pus')).toHaveLength(1)
+    expect(store.snapshots).toHaveLength(2)
     // 采样次数照样是两次（同一次运行里采了两遍页面）：去重的是**入口**，不是采样的历史。
     expect(navFactsFor('N-001', 'panel:pus', store).coverage.samples).toBe(2)
   })

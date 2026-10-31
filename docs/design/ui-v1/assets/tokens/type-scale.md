@@ -69,9 +69,13 @@ spec 003 §21 要求「正文 ≥16px」，而本表 `§2` 原先的 `body` 档�
 - **判据侧同步收紧**：C-001 只判正文，`role=meta`（tag / badge / 状态行 / 路径 / 计数）
   不参与 16px 下限——否则唯一的「通过」方式是把整屏调成同号。
 
-**仍未清偿的部分（如实记账）**：宿主在容器上覆盖了 `--dsh-content-font-size`（实测取值 14px），
-所以 `var(…, 16px)` 的 fallback 不生效，`panel:overview` 仍有 11/13 个正文级文字不足 16px。
-下一手应当用 `max(16px, var(--dsh-content-font-size, 16px))` 把下限钉死（而不是靠 fallback），
-或与 DSH 主题侧约定该 token 的下限。**在此之前 C-001 照现状判红，不许调低阈值转绿。**
+**已钉下限（票 #63 / UX-01，2026-10-31）**：宿主在容器上覆盖了 `--dsh-content-font-size`
+（实测取值 14px），所以 `var(…, 16px)` 的 fallback 不生效 —— 改法不是调 fallback，而是把下限
+钉在**面板根**上：`font-size: max(16px, var(--dsh-content-font-size, 16px))`
+（`style.ts` 的 `.xs-overview`、`consult.tsx` 的 `.xs-consult`）。继承链上的正文都吃这条，
+元信息仍自带 12–14px（tag / badge / 状态行 / 路径 / 计数），层级不塌。
+写死 rem 的标题级选择器（`.xs-consult h3` / `h4`、字段标签、`__round-head`）各钉一次，
+因为 rem 是绝对值、不参与继承。**判据照旧、阈值未动**：C-001 是否转绿以主仓
+`--browser` 实测为准（worktree 里浏览器半边起不来，见 `docs/development-status.md` §17.6 第 2 条）。
 
 依据：spec 003 §21 + WCAG AA 正文可读性 + 本轮定下的视觉方向 A（Apple 式克制留白，正文不吃小字）。

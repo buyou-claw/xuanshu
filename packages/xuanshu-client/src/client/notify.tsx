@@ -416,8 +416,9 @@ export function TouchSettingsHost({ rikke, notify }: { rikke: RikkeApi; notify: 
   }, [rikke, notify]);
 
   if (state === undefined) {
+    // 首读还没回来：说一句「正在读…」，而不是整行空白（空白看起来像「这台机器没有这些开关」）。
     return error === undefined
-      ? null
+      ? <p className="xs-touch__note" data-xs-state="loading">正在读触达开关…</p>
       : <p className="xs-touch__note" role="alert" data-xuanshu-setting-error="read">{error}</p>;
   }
 

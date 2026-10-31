@@ -383,12 +383,10 @@ export const SCRIPTS = {
       //    开不出来就如实记「入口置灰 / 点了没开 = 这一面未采到」，不是通过。
       if (stillConsult) {
         const from = await nav.landing()
-        // 两个入口都在门厅的挂载区里：标题旁的「临时挂载…」与状态栏的「挂载 N 字 / 预算 M 字」。
-        // 谁启用了就点谁（没有会话时两个都置灰 —— 那不是失败，是没有可挂的账本）。
-        const candidates = [
-          `${CONSULT} [data-xuanshu-action="open-mounts"]`,
-          `${CONSULT} [data-xuanshu-mount-status="1"]`,
-        ]
+        // 门厅的挂载区里只有**一扇**门：标题旁的「临时挂载…」（#69 / N-001 之后状态栏退回纯读数，
+        // 从前它也能点开同一个抽屉 —— 两个入口指同一动作，判据会红）。所以这里只认这一个选择器；
+        // 没有会话时它置灰 —— 那不是失败，是没有可挂的账本。
+        const candidates = [`${CONSULT} [data-xuanshu-action="open-mounts"]`]
         let entry = null
         for (const selector of candidates) {
           const candidate = page.locator(selector).first()
@@ -498,10 +496,17 @@ export const SCRIPTS = {
       //     （这一支放在键盘走查之前是有意的：读不出来时「登记藏」按设计就是禁用的，
       //      不能再拿它当 N-003 的主操作去判 —— 那会把一个正确的禁用判成红。）
       const canRegister = scenario !== 'load-failed'
+      // 登记入口的名字**随状态变**（2026-10-31 · #69）：空态只留「登记第一个藏」，工具条那个不渲染
+      // （不是置灰 —— 置灰仍算一个门）。剧本原来写死「登记藏」，空态下必然 30 秒超时、整轮采集退化。
+      const registerLabel = (await page.evaluate(() => {
+        const texts = [...document.querySelectorAll('button')].map((b) => (b.textContent ?? '').trim())
+        if (texts.includes('登记第一个藏')) return '登记第一个藏'
+        return texts.includes('登记藏') ? '登记藏' : null
+      })) ?? '登记藏' // 错误态可能一个都没渲染：回退旧名，保持「点它试试」的原行为，别在这里断言
       const walk = await nav.keyboard('panel:cang', {
         root: CANG,
         tabs: 10,
-        expect: canRegister ? ['登记藏'] : [],
+        expect: canRegister ? [registerLabel] : [],
       })
       step('keyboard-cang', {
         controls: walk.controls,
@@ -519,7 +524,8 @@ export const SCRIPTS = {
       }
 
       // ③ 打开登记抽屉：量一遍入口与键盘（抽屉自己的 Tab 圈与 Esc）。
-      await page.getByRole('button', { name: '登记藏', exact: true }).first().click({ force: true })
+      //     点的是上面探到的那个入口名（空态「登记第一个藏」/ 非空态「登记藏」不同名）。
+      await page.getByRole('button', { name: registerLabel, exact: true }).first().click({ force: true })
       await settle(page, 1000)
       const drawerFace = await nav.landing()
       await nav.census('cang-drawer')

@@ -246,7 +246,7 @@ export function WanshengPanel({
         <h1>{`晚省 · ${date}`}</h1>
         {status?.missed === true ? <XsMissedMark /> : null}
         <span className="xs-wansheng__note" data-xuanshu-state={view.kind}>
-          {view.kind === 'ready' ? '今天的晚省已到' : view.kind === 'empty' ? '今天还没有晚省' : view.kind === 'error' ? '读取失败' : '读取中…'}
+          {view.kind === 'ready' ? '今天的晚省已到' : view.kind === 'empty' ? '今天还没有晚省' : view.kind === 'error' ? '读取失败' : '正在读晚省…'}
         </span>
       </header>
 

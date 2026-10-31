@@ -27,17 +27,26 @@ function faceText(face, faces) {
 
 export const N_ASSERTIONS = {
   /**
-   * N-001：同一个动作只有一个入口。
+   * N-001：同一个动作在**同一时刻**只有一个入口。
    *
-   * 红的口径：这个面被 ≥2 个入口指着（跨原语、或同一原语里两处都算 —— 「同一动作出现在多个入口」
-   * 的字面含义）。message 逐个点名，让修的人知道该删哪一个。
+   * 红的口径：某一次采样里，这个面被 ≥2 个入口指着（跨原语、或同一原语里两处都算 ——
+   * 「同一动作出现在多个入口」的字面含义）。message 逐个点名，让修的人知道该删哪一个。
    *
-   * @param {{face: string, action: {id: string, label: string} | null, entries: {primitive: string, label: string, panel: string}[], coverage?: object}} facts
+   * `facts.entries` 必须来自采集器的**快照**口径（`browser-nav.mjs` 的 `entriesInWorstSnapshot`）：
+   * 互斥的两个状态各一扇门不是重复入口，把它们并成一份再判红，只会逼人用「两个门起同一个名字」
+   * 去骗过判据 —— 门没少，判据反而没了牙。
+   *
+   * @param {{face: string, action: {id: string, label: string} | null, entries: {primitive: string, label: string, panel: string}[], snapshot?: {index: number, doors: number, samples: number}, coverage?: object}} facts
    */
   'N-001': (facts) => {
     const entries = Array.isArray(facts?.entries) ? facts.entries : []
     const face = facts?.face ?? '(未知面)'
     const actionLabel = facts?.action?.label ?? faceLabelOf(face)
+    const snapshot = facts?.snapshot
+    // 「判的是哪一次采样」：只在真采过多次时说出来（一次采样没有比较的意义）。
+    const when = typeof snapshot?.samples === 'number' && snapshot.samples > 1
+      ? `（第 ${snapshot.index + 1} 次采样：${snapshot.samples} 次里入口最多的那一次）`
+      : ''
     if (entries.length === 0) {
       // 一个入口都没采到：这不是「唯一」，是没采到（采集器本该在不产证据时留空）。
       return { pass: false, message: `${faceText(face)}：没有采到任何入口，证据不足以判「入口唯一」` }
@@ -45,12 +54,12 @@ export const N_ASSERTIONS = {
     const primitives = [...new Set(entries.map((entry) => entry.primitive))]
     const where = entries.map((entry) => `${entryText(entry)}（在 ${entry.panel}）`).join('、')
     if (entries.length === 1) {
-      return { pass: true, message: `动作「${actionLabel}」只有一个入口：${entryText(entries[0])}` }
+      return { pass: true, message: `动作「${actionLabel}」只有一个入口：${entryText(entries[0])}${when}` }
     }
     const crossPrimitive = primitives.length > 1
     return {
       pass: false,
-      message: `动作「${actionLabel}」→ ${faceText(face)} 有 ${entries.length} 个入口`
+      message: `动作「${actionLabel}」→ ${faceText(face)} 同一次采样里有 ${entries.length} 个入口${when}`
         + `（${crossPrimitive ? `跨 ${primitives.length} 种原语（${primitives.map(primitiveLabelOf).join(' / ')}）` : '同一个原语里就有多处'}）：`
         + `${where}；期望只留一个`,
     }

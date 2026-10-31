@@ -113,16 +113,35 @@ export function resolvePlaywright() {
   return null
 }
 
-/** OS 挑一个空闲端口（不占 19387 / 19388 这两个既定位）。 */
-function reserveFreePort() {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer((_req, res) => res.end(''))
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address()
-      server.close(() => resolvePort(port))
+/**
+ * Chromium 会拒绝访问的一批端口（`net::ERR_UNSAFE_PORT`）。
+ *
+ * 为什么需要它：端口是 OS 挑的，而 4045 / 2049 / 6000 / 6665-6669 / 10080 这些「知名服务端口」
+ * 被 Chromium 硬编码封禁。实测撞过一次 4045：实例起得来、`page.goto` 直接被浏览器拒掉，
+ * 于是整轮采集退化成 176 条 `collection-failed` —— 看起来像巡检坏了，其实是端口运气不好。
+ */
+const BLOCKED_PORTS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95,
+  101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179,
+  389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601,
+  636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 5060, 5061, 6000, 6566,
+  6665, 6666, 6667, 6668, 6669, 6697, 10080,
+])
+
+/** OS 挑一个空闲端口（避开 Chromium 的封禁端口；不占 19387 / 19388 这两个既定位）。 */
+async function reserveFreePort() {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const port = await new Promise((resolvePort, reject) => {
+      const server = createServer((_req, res) => res.end(''))
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', () => {
+        const { port: picked } = server.address()
+        server.close(() => resolvePort(picked))
+      })
     })
-  })
+    if (!BLOCKED_PORTS.has(port)) return port
+  }
+  throw new BrowserCollectorError('连续 8 次都挑到 Chromium 封禁端口（ERR_UNSAFE_PORT），换个环境重试')
 }
 
 function httpGet(target, cookie) {
@@ -548,6 +567,8 @@ export async function collectBrowser({ repoRoot, criteria, faces, scriptIds, log
       for (const face of faces) {
         // N 族的事实只来自 `nav` 采样（入口表 / 关闭落点 / Tab 走查）；D 族来自 `measure()` 量的矩形。
         // 没有这一面的观察 = 不产证据 = 判定为「未采到」（空 facts 会被谓词判成没问题，那是最危险的假绿）。
+        // N-001 的 facts 里还带一份 `snapshot`（判的是第几次采样、那一次有几扇门）：它是**快照**口径的
+        // 证据，不是跨采样并集 —— evidence 原样带出去，报告与复现才能对上「同一时刻」这四个字。
         const facts = NAV_CRITERIA.includes(criterion.id)
           ? navFactsFor(criterion.id, face.id, navStore)
           : (samples.has(face.id) ? samples.get(face.id) : null)

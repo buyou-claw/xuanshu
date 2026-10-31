@@ -35,6 +35,13 @@ export function CangDrawer({ api, controller, initial }: { api: CangApi; control
   const [picker, setPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // 空态：库里一条登记都没有（首次登记）时，抽屉先给一句「这是第一条」——
+  // 否则新用户面对的是一片空表单，不知道自己该从哪儿开始。
+  const [empty, setEmpty] = useState(false);
+  /** 清单读不到时的可读原因（**不吞**：读不到 ≠ 库是空的，那一支要能被看到、也修得动）。 */
+  const [listError, setListError] = useState('');
+  /** 「重新读取」的重试计数（错误行的下一步得真的能点）。 */
+  const [listRetry, setListRetry] = useState(0);
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // 路径一变就重探（旧请求 abort）：只探指针，不读内容 —— 见文件头第 2 条。
@@ -52,6 +59,20 @@ export function CangDrawer({ api, controller, initial }: { api: CangApi; control
     dialog.current?.querySelector<HTMLInputElement>('input')?.focus();
     return () => { abort.abort(); previous?.focus(); };
   }, [api]);
+  useEffect(() => {
+    // 空态要先知道「库里是不是一条都没有」：只**读**一次清单（不写、不建索引、不读文件内容）。
+    // 读不到就走错误态：既不声称「还没有」（那是编事实），也不静默吞掉 ——
+    // 票 06 要的错误态那一支必须真的可复现，否则「读不到清单」会既不算空态也不算失败。
+    const abort = new AbortController();
+    api.list(abort.signal)
+      .then(list => { if (!abort.signal.aborted) { setEmpty(list.entries.length === 0); setListError(''); } })
+      .catch(reason => {
+        if (abort.signal.aborted) return;
+        setEmpty(false);
+        setListError(String((reason as Error)?.message ?? reason));
+      });
+    return () => abort.abort();
+  }, [api, listRetry]);
   /** 路径 → 名称兜底：取最后一段（去掉尾部斜杠），仅在用户没手动改过名字时生效。 */
   function changePath(path: string) {
     const name = path.replace(/[\\/]+$/, '').split(/[\\/]/).at(-1) ?? '';
@@ -83,6 +104,11 @@ export function CangDrawer({ api, controller, initial }: { api: CangApi; control
     }}>
       <h2 id="xs-cang-drawer-title">{draft.id ? '编辑登记' : '登记藏'}</h2>
       <p className="xs-cang__boundary">{CANG_AI_FREE}</p>
+      {/* 空态（首次登记）：先说清楚「库里还是空的」，再给下一步（填路径 → 起名 → 登记）。 */}
+      {empty && <p className="xs-cang__empty">藏库里还没有任何登记 —— 这是第一条：先给本地路径（或点「选择文件夹…」），校验通过、起好名字，再点「登记」。</p>}
+      {/* 读不到清单：人话 + 下一步（重新读取）。**不**因为读不到就说「还没有」，
+          也不装作什么都没发生 —— 那种静默会让「首次登记提示」与「读失败」这两件事都消失。 */}
+      {listError !== '' && <p role="alert" className="xs-cang__empty-note">藏库清单读不到（首次登记提示因此先不说）：{listError}。请点下面的「重新读取」再试一次；还读不到就稍后再开这张表 —— 登记本身不依赖这份清单。<button type="button" onClick={() => setListRetry(value => value + 1)}>重新读取</button></p>}
       <form onSubmit={event => { event.preventDefault(); if (pointer?.valid && draft.name.trim() && !busy) void submit(); }}>
         <label>本地文件 / 文件夹路径<input value={draft.path} onChange={event => changePath(event.target.value)} disabled={busy} required /></label>
         {/* 没有系统选择器时不渲染成「能点但报错」：禁用 + title 说明怎么绕（粘贴路径）。 */}
@@ -95,7 +121,9 @@ export function CangDrawer({ api, controller, initial }: { api: CangApi; control
         <p>校验只做路径可达性判断，不读取内容、不列目录、不算大小、不建索引。</p>
         {/* 状态行把「正在校验 / 指针有效 / 为什么失效」说清楚；有效时也明写「玄枢未读取」。 */}
         <p role="status">{!draft.path.trim() ? '请选择或粘贴本地路径。' : !pointer ? '正在校验指针…' : pointer.valid ? `指针有效 · 类型=${pointer.kind === 'directory' ? '文件夹' : '文件'} · 玄枢未读取` : pointer.reason}</p>
-        {error && <p role="alert">{error}</p>}
+        {/* 错误态：先说人话（读不到 / 失败），再给下一步；宿主的原话附在后面（不吞错），
+            但**不**把 `error` 变量原样吐出来当唯一说明 —— 那只让人对着失败干瞪眼。 */}
+        {error && <p role="alert">{`登记没有成功：读不到这个指针，或注册表拒绝了这次写入 —— ${error}。请检查路径是否还在、有没有权限，然后重新点「${draft.id ? '保存登记' : '登记'}」；还是不通就换个路径。`}</p>}
         <div className="xs-cang__toolbar"><button type="submit" disabled={busy || !pointer?.valid || !draft.name.trim()}>{busy ? '正在处理…' : draft.id ? '保存登记' : '登记'}</button><button type="button" onClick={controller.close} disabled={busy}>取消</button></div>
       </form>
     </div>

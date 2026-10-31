@@ -35,27 +35,29 @@ import {
   type MountStatus,
 } from './mounts-model.js';
 
-/** 状态栏（常驻锚点）：`挂载 N 字 / 预算 M 字`；点了重开抽屉看账本。 */
-export function XsMountStatusBar({ status, budgetSource, hint, onOpen }: {
+/**
+ * 状态栏：`挂载 N 字 / 预算 M 字` 的**读数**（C7⑤ 要它常驻，门厅与会话面板同一口径）。
+ *
+ * 它不是门（#69 / 判据 N-001）：从前它带 `onOpen`，点一下就地重开同一个抽屉 —— 门厅里于是有
+ * 「临时挂载…」和它两扇门指同一个动作，用户要在两个地方决定点哪个。现在门只留给「临时挂载…」，
+ * 这里退回纯读数：数字照旧常驻、`title` 照旧解释来源，只是不再可点。
+ */
+export function XsMountStatusBar({ status, budgetSource, hint }: {
   status?: MountStatus;
   budgetSource?: 'config' | 'model-window' | 'unknown';
   /** 还没读过预览时的说明（S8 loading 态：预算先显示，字数待算）。 */
   hint?: string;
-  onOpen?: () => void;
 }) {
   const text = status === undefined ? (hint ?? '挂载 … 字 / 预算 …') : statusLine(status);
   return (
-    <button
-      type="button"
+    <span
       className="xs-mounts__status"
       data-xuanshu-mount-status="1"
       data-xuanshu-budget-unknown={status?.budget === null ? '1' : '0'}
-      onClick={onOpen}
-      disabled={onOpen === undefined}
       title={status?.budget === null ? BUDGET_UNKNOWN_NOTE : `本次挂载的裁剪结果（来源：${budgetSource ?? 'unknown'}）`}
     >
       {text}
-    </button>
+    </span>
   );
 }
 
@@ -80,7 +82,8 @@ export function XsMountSection({ mounts, status, canMount, reason, revision, onO
       </header>
       <p className="xs-mounts__summary" data-xuanshu-mount-summary="1">{mountsSummary(mounts)}</p>
       {canMount ? null : <p className="xs-mounts__note" data-xuanshu-note="mounts-need-session">{reason ?? '先生成一次问事，再临时挂载：挂载落在那次问事的清单上。'}</p>}
-      <XsMountStatusBar status={status} onOpen={canMount ? onOpen : undefined} hint={canMount ? undefined : '挂载 0 字 / 预算 …'} />
+      {/* 门只有上面那一扇「临时挂载…」：状态栏只报账（#69 / N-001，见 `XsMountStatusBar` 的注释）。 */}
+      <XsMountStatusBar status={status} hint={canMount ? undefined : '挂载 0 字 / 预算 …'} />
     </section>
   );
 }
@@ -223,10 +226,12 @@ export function XsMountDrawer({
         {/* ④ 本轮挂载上下文（预览） */}
         <section className="xs-mounts__group" data-xuanshu-group="preview">
           <h3>{'本轮挂载上下文（预览）'}</h3>
+          {/* 错误态：先说人话（读不到），再给下一步（重试 / 换个工作区）；宿主原话附在后面（不吞错）。 */}
           {error === undefined ? null : (
             <p className="xs-mounts__error" data-xuanshu-error="mounts" role="alert">
-              {error}
+              {`读不到本轮挂载的预览：${error}。请检查工作区是否还在，然后`}
               {onRetry === undefined ? null : <button type="button" className="xs-mounts__ghost" onClick={onRetry}>重试</button>}
+              {'；还是不通就先回门厅、换个工作区再挂。'}
             </p>
           )}
           {busy && preview === undefined ? <p className="xs-mounts__note" data-xuanshu-note="mounts-loading">正在读挂载内容…</p> : null}

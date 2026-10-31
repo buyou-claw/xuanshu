@@ -149,6 +149,8 @@ export function XsShijiSaveEntry({ sessionId, api, navigate }: XsShijiSaveEntryP
       ) : (
         <p className="xs-shiji__error" role="alert" data-xuanshu-alert="shiji">
           {`没有存成：${result.message}`}
+          {/* 错误行旁边就是出路：同一份文案喂两个面（入口条 / 设置分区），两处各点得到。 */}
+          <button type="button" className="xs-shiji__retry" data-xuanshu-action="shiji-save-retry" disabled={busy} onClick={save}>重试</button>
         </p>
       )}
     </div>
@@ -230,12 +232,14 @@ export interface ShijiSettingsState {
   note?: string;
 }
 
-/** 分区的动作（四个写入口，分别对应 restore / settings.set 的四条调用）。 */
+/** 分区的动作（四个写入口，分别对应 restore / settings.set 的四条调用；外加错误行旁边的重读）。 */
 export interface ShijiSettingsActions {
   onDraftDirChange(value: string): void;
   onAddExcludedDir(): void;
   onRemoveExcludedDir(dir: string): void;
   onRestore(id: string): void;
+  /** 重读一次（错误行旁边的出路：写失败之后先再问一次宿主，别让人对着红字干瞪眼）。 */
+  onReload(): void;
 }
 
 /**
@@ -334,7 +338,10 @@ export function XsShijiSettingsSection({ state, actions }: { state: ShijiSetting
       </section>
 
       {state.error === undefined ? null : (
-        <p className="xs-shiji__error" role="alert" data-xuanshu-setting-error="shiji">{state.error}</p>
+        <p className="xs-shiji__error" role="alert" data-xuanshu-setting-error="shiji">
+          {state.error}
+          <button type="button" className="xs-shiji__retry" data-xuanshu-action="shiji-settings-reload" disabled={state.busy} onClick={actions.onReload}>重试</button>
+        </p>
       )}
       {state.note === undefined ? null : (
         <p className="xs-shiji__note" role="status" data-xuanshu-notice="shiji">{state.note}</p>
@@ -366,7 +373,7 @@ export function ShijiSettingsHost({ api }: { api: ShijiApi }) {
         }));
       })
       .catch((reason: unknown) => {
-        setState((previous) => ({ ...previous, loading: false, error: `读不到事记设置：${errorText(reason)}` }));
+        setState((previous) => ({ ...previous, loading: false, error: `读不到事记设置：${errorText(reason)}（点下面的「重试」再读一次；一直读不到就先看宿主的 shiji 服务在不在。）` }));
       });
   };
 
@@ -426,6 +433,8 @@ export function ShijiSettingsHost({ api }: { api: ShijiApi }) {
               setState((previous) => ({ ...previous, busy: false, error: errorText(reason) }));
             });
         },
+        // 错误行旁边的出路：重读一次（`load` 会先清掉 error，再按宿主的真实回包落状态）。
+        onReload: load,
       }}
     />
   );
@@ -477,6 +486,8 @@ function installShijiStyle(): void {
 .xs-shiji__row button:disabled{opacity:.5;cursor:not-allowed}
 .xs-shiji__settings input[type="text"]{font:inherit;margin-left:6px;padding:4px 8px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);background:var(--xs-surface-card);color:inherit}
 .xs-shiji__error{color:var(--xs-text-secondary)}
+.xs-shiji__retry{font:inherit;margin-left:8px;padding:2px 10px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-shiji__retry:disabled{opacity:.5;cursor:not-allowed}
 `);
   installXuanshuStyles()
 }
