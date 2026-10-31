@@ -208,7 +208,7 @@ export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit
       <header className="xs-rikke__head">
         <h1>{`日课 · ${date}`}</h1>
         <span className="xs-rikke__note" data-xuanshu-state={view.kind}>
-          {view.kind === 'ready' ? '今日日课已到' : view.kind === 'empty' ? '今天还没有生成日课' : view.kind === 'error' ? '生成失败' : '读取中…'}
+          {view.kind === 'ready' ? '今日日课已到' : view.kind === 'empty' ? '今天还没有生成日课' : view.kind === 'error' ? '生成失败' : '正在读日课…'}
         </span>
       </header>
 

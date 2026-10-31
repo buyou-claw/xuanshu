@@ -381,15 +381,17 @@ describe('票 06 · 全仓真跑：25 个界面面 × 三条 S 判据', () => {
     }
   })
 
-  it('X-001 在有渲染面的 22 个面上逐一判定：实测 5 面红（读取中 2 + 错误行没下一步 2 + 零文案 1）', () => {
+  it('X-001 在有渲染面的 22 个面上逐一判定：#67 修完，实测 0 面红', () => {
     expect(xVerdicts).toHaveLength(22)
-    expect(xVerdicts.filter((verdict) => verdict.status === 'fail')).toHaveLength(5)
-    const redFaces = xVerdicts.filter((verdict) => verdict.status === 'fail').map((verdict) => verdict.face)
-    expect(redFaces).toContain('panel:rikke')
-    expect(redFaces).toContain('panel:wansheng')
-    expect(redFaces).toContain('panel:workflow')
-    // 命令面不再参与：它没有 DOM，文案一致性在它身上量不出东西。
-    expect(redFaces.some((face) => face.startsWith('command:'))).toBe(false)
+    // 这里曾经是 5 条红：读取中 2（日课 / 晚省）+ 错误行没下一步 3（门厅 / 事记两个面同源）。
+    // #67（票 19）把五个面一起转绿，所以这条改成钉「全绿」——谁再新造一个同义词、
+    // 或者再写一条没有出路的错误行，它会先红。那是想要的，不是噪音。
+    const red = xVerdicts
+      .filter((verdict) => verdict.status === 'fail')
+      .map((verdict) => `${verdict.face}: ${verdict.message}`)
+    expect(red).toEqual([])
+    // 命令面不参与：它没有 DOM，文案一致性在它身上量不出东西。
+    expect(xVerdicts.some((verdict) => verdict.face.startsWith('command:'))).toBe(false)
   })
 })
 

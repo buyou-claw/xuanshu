@@ -18,7 +18,7 @@
  * 已知与设计稿的差距（明写在案）：S12 D5 把向导条 / 判定条放在**会话内**的
  * `conversation.input.dock`；本次把导出表单落在门厅（会话内坞位是另一处槽位面，见交接说明）。
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 
 import type { PanelNavTarget } from '../panel.js';
@@ -74,20 +74,34 @@ export function WorkflowPanel({ api, navigate, preloaded }: WorkflowPanelProps) 
   const [draft, setDraft] = useState({ sessionId: '', name: '', description: '', content: '' });
   const [exportError, setExportError] = useState<string | undefined>(undefined);
   const [exported, setExported] = useState<{ path: string; name: string } | undefined>(undefined);
+  /** 取数代次：早到的回包不许盖掉晚到的（与日课 / 底稿面板同法）。 */
+  const sequence = useRef(0);
+
+  /**
+   * 只读取数：`workflow.list`（effect 里**只**允许这一件事）。
+   *
+   * `[重试]` 与挂载后的首读走同一条：错误行旁边的出路必须真能再问一次，
+   * 不能只写一句「失败了」让人对着屏幕干瞪眼（X-001 的第二个子句）。
+   */
+  const load = (): void => {
+    const mine = ++sequence.current;
+    void api
+      .list()
+      .then((listed) => {
+        if (mine !== sequence.current) return;
+        setView(listed.items.length === 0 ? { kind: 'empty' } : { kind: 'ready', items: listed.items });
+      })
+      .catch((error: unknown) => {
+        if (mine !== sequence.current) return;
+        setView({ kind: 'error', message: errorText(error) });
+      });
+  };
 
   useEffect(() => {
-    if (seeded) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const listed = await api.list();
-        if (cancelled) return;
-        setView(listed.items.length === 0 ? { kind: 'empty' } : { kind: 'ready', items: listed.items });
-      } catch (error) {
-        if (!cancelled) setView({ kind: 'error', message: errorText(error) });
-      }
-    })();
-    return () => { cancelled = true; };
+    if (seeded) return; // 静态预置：不取数
+    load();
+    // `load` 是每渲染重建的闭包；依赖只留数据面与预置标记（与日课 / 底稿面板同法）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, seeded]);
 
   /** 人点 `[创建工作流]`：建会话 → 进会话（向导本体在会话里）。 */
@@ -144,7 +158,14 @@ export function WorkflowPanel({ api, navigate, preloaded }: WorkflowPanelProps) 
       {createError !== undefined ? <p className="xs-workflow__error" role="alert">创建工作流失败：{createError}</p> : null}
 
       {view.kind === 'loading' ? <p className="xs-workflow__hint">正在读工作流列表…</p> : null}
-      {view.kind === 'error' ? <p className="xs-workflow__error" role="alert">工作流列表读不出来：{view.message}</p> : null}
+      {view.kind === 'error' ? (
+        <div className="xs-workflow__alert" role="alert">
+          <p className="xs-workflow__error">工作流列表读不出来：{view.message}</p>
+          <button type="button" className="xs-workflow__retry" data-xuanshu-action="retry-list" onClick={load}>
+            重试
+          </button>
+        </div>
+      ) : null}
       {view.kind === 'empty' ? (
         <p className="xs-workflow__hint">还没有工作流：点上面的「创建工作流」说清要求，用会话里的 coding 工具真跑一遍，你觉得跑通了再来导出。</p>
       ) : null}
@@ -241,6 +262,9 @@ export function installWorkflowStyle(): void {
     '.xs-workflow__title{margin:0;font-size:18px}',
     '.xs-workflow__note,.xs-workflow__hint,.xs-workflow__rule{margin:8px 0;opacity:.8;font-size:13px}',
     '.xs-workflow__error{color:var(--xs-state-error-fg)}',
+    '.xs-workflow__alert{display:flex;gap:8px;align-items:center;flex-wrap:wrap}',
+    '.xs-workflow__alert .xs-workflow__error{margin:8px 0}',
+    '.xs-workflow__retry{font:inherit;padding:6px 12px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}',
     '.xs-workflow__group{margin-top:18px;border-top:1px solid var(--xs-edge-divider);padding-top:12px}',
     '.xs-workflow__groupTitle{margin:0 0 8px;font-size:14px;opacity:.85}',
     '.xs-workflow__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}',
