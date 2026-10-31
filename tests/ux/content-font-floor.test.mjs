@@ -103,11 +103,17 @@ function resolvePx(raw, hostContentPx) {
   return Number.NaN
 }
 
-/** 一条选择器「在宿主 token = 14 时的字号」：没有声明就返回 null（走继承，由根节点那条兜）。 */
+/**
+ * 一条选择器「在宿主 token = 14 时的字号」：没有声明就返回 null（走继承，由根节点那条兜）。
+ *
+ * 同一选择器可能被多处登记（基础段 / `@media` / 后注册的段落）。取**最小值**而不是最大值：
+ * 后注册的规则会盖掉先注册的，取最小才是「实际可能渲染到的最坏值」——
+ * 用最大值的话，将来有人在后面补一条 14px 就能悄悄压回下限而测试仍绿。
+ */
 function sizeUnderHostToken(css, selector, hostContentPx = HOST_CONTENT_PX) {
   const sizes = fontSizesOf(css, selector)
   if (sizes.length === 0) return null
-  return Math.max(...sizes.map((raw) => resolvePx(raw, hostContentPx)))
+  return Math.min(...sizes.map((raw) => resolvePx(raw, hostContentPx)))
 }
 
 /**
