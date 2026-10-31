@@ -1127,13 +1127,65 @@ function bestofActions(deps) {
     ...deps.openSettings === void 0 ? {} : { onOpenSettings: deps.openSettings }
   };
 }
+function bestofEmptyOf(state) {
+  if (state.sessionId === "") {
+    return {
+      kind: "no-session",
+      text: "还没有问事会话：合参要挂在一个问事会话上。",
+      next: "先去「问事」开一次会话，再回来点「多 AI 合参」。"
+    };
+  }
+  if (state.routes !== void 0 && state.routes.length < BESTOF_MIN_ROUTES) {
+    return {
+      kind: "no-route",
+      text: `还没有两路可并列（现在 ${state.routes.length} 路）。`,
+      next: "去 DSH「设置 → 模型」里再加一家 provider 或 model：合参至少要两路。"
+    };
+  }
+  if (state.view !== void 0 && state.view.finished === true && state.view.candidates.length === 0) {
+    return {
+      kind: "no-candidate",
+      text: "这一轮还没有任何候选回来（几路都没有产出）。",
+      next: "点「重试合参」再跑一轮；若还是这样，去 DSH「设置 → 模型」里换一家 provider。"
+    };
+  }
+  return void 0;
+}
+function XsBestofEmptyNotice({ empty }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "xs-bestof__warn", "data-xs-bestof": "empty", "data-xuanshu-view": "empty", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "xs-bestof__note", children: empty.text }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "xs-bestof__note", children: empty.next })
+  ] });
+}
 function BestofOverlayHost({ controller, openSettings }) {
   const state = (0, import_react.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofOverlay, { state, actions: bestofActions({ controller, ...openSettings === void 0 ? {} : { openSettings } }) });
+  const actions = bestofActions({ controller, ...openSettings === void 0 ? {} : { openSettings } });
+  if (state.phase === "idle") return null;
+  const empty = bestofEmptyOf(state);
+  if (empty !== void 0 && empty.kind === "no-candidate") {
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "xs-bestof-backdrop", role: "dialog", "aria-label": "多 AI 合参", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "xs-bestof", "data-xs-bestof": "empty", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "xs-bestof__head", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h3", { children: "多 AI 合参" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "xs-bestof__tag", children: "这一轮 0 路" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofEmptyNotice, { empty }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "xs-bestof__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", className: "xs-btn--primary", onClick: actions.onRetry, children: "重试合参" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: actions.onReject, children: "否决本轮" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: actions.onCancel, children: "收起" })
+      ] })
+    ] }) });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofOverlay, { state, actions });
 }
 function BestofSettingsRowHost({ controller }) {
   const state = (0, import_react.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofSettingsRow, { state, actions: { onToggle: (enabled) => controller.setEnabled(enabled) } });
+  const empty = bestofEmptyOf(state);
+  const routeGap = empty !== void 0 && empty.kind === "no-route" ? empty : void 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofSettingsRow, { state, actions: { onToggle: (enabled) => controller.setEnabled(enabled) } }),
+    routeGap !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofEmptyNotice, { empty: routeGap })
+  ] });
 }
 function installBestOf(ctx, deps) {
   installBestofStyle();
@@ -1179,11 +1231,20 @@ function installBestOf(ctx, deps) {
   };
   ctx.slots.inject(
     "conversation.composer.dock",
-    () => ctx.slots.register({ name: "conversation.composer.dock", id: BESTOF_TRIGGER_ID, inject: () => ({ onTrigger: trigger }) }, BestofTriggerHost)
+    () => ctx.slots.register(
+      { name: "conversation.composer.dock", id: BESTOF_TRIGGER_ID, inject: () => ({ onTrigger: trigger, controller: deps.controller }) },
+      BestofTriggerHost
+    )
   );
 }
-function BestofTriggerHost({ onTrigger }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofTriggerButton, { onTrigger });
+function BestofTriggerHost({ controller, onTrigger }) {
+  const state = (0, import_react.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
+  const empty = bestofEmptyOf(state);
+  const sessionGap = empty !== void 0 && empty.kind === "no-session" ? empty : void 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofTriggerButton, { onTrigger }),
+    sessionGap !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofEmptyNotice, { empty: sessionGap })
+  ] });
 }
 
 // src/client/CangPanel.tsx
