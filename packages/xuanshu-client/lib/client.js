@@ -352,7 +352,7 @@ function missingReason(providers, defaultModel) {
   if (target.modelCount === 0) {
     return {
       code: "no-model",
-      text: `${target.name ?? target.id} 已注册，但模型清单是空的（没有可用模型）。`,
+      text: `${target.name ?? target.id} 已注册，但模型清单里还没有可用的模型。`,
       next: `打开 DSH「${AI_SETTINGS_PATH}」给这家加一个模型。`
     };
   }
@@ -8523,7 +8523,7 @@ function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }) {
   return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("main", { className: "xs-rikke", "data-xuanshu-panel": RIKKE_ID, children: [
     /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("header", { className: "xs-rikke__head", children: [
       /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("h1", { children: `日课 · ${date}` }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-rikke__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今日日课已到" : view.kind === "empty" ? "今天还没有生成日课" : view.kind === "error" ? "生成失败" : "读取中…" })
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-rikke__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今日日课已到" : view.kind === "empty" ? "今天还没有生成日课" : view.kind === "error" ? "生成失败" : "正在读日课…" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__basis", "data-xuanshu-note": "time-basis", children: `时间基准：${date} ${status?.generatedAt ?? "（生成时刻未回传）"} · ${status?.zone ?? "（时区未回传）"} · 本机时钟` }),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__basis xs-rikke__no-network", "data-xuanshu-note": "no-network", children: RIKKE_NO_NETWORK_NOTE }),
@@ -8865,7 +8865,7 @@ function WanshengPanel({
     /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("header", { className: "xs-wansheng__head", children: [
       /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("h1", { children: `晚省 · ${date}` }),
       status?.missed === true ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(XsMissedMark, {}) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今天的晚省已到" : view.kind === "empty" ? "今天还没有晚省" : view.kind === "error" ? "读取失败" : "读取中…" })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今天的晚省已到" : view.kind === "empty" ? "今天还没有晚省" : view.kind === "error" ? "读取失败" : "正在读晚省…" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "schedule", children: schedule === void 0 ? "计划时刻：宿主未回传（在「自动化任务」面板里看这条 daily 任务）" : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用` }),
     status?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "generated-at", children: `生成于 ${status.generatedAt}` }),
@@ -9020,21 +9020,20 @@ function WorkflowPanel({ api, navigate, preloaded }) {
   const [draft, setDraft] = (0, import_react21.useState)({ sessionId: "", name: "", description: "", content: "" });
   const [exportError, setExportError] = (0, import_react21.useState)(void 0);
   const [exported, setExported] = (0, import_react21.useState)(void 0);
+  const sequence = (0, import_react21.useRef)(0);
+  const load = () => {
+    const mine = ++sequence.current;
+    void api.list().then((listed) => {
+      if (mine !== sequence.current) return;
+      setView(listed.items.length === 0 ? { kind: "empty" } : { kind: "ready", items: listed.items });
+    }).catch((error) => {
+      if (mine !== sequence.current) return;
+      setView({ kind: "error", message: errorText9(error) });
+    });
+  };
   (0, import_react21.useEffect)(() => {
     if (seeded) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const listed = await api.list();
-        if (cancelled) return;
-        setView(listed.items.length === 0 ? { kind: "empty" } : { kind: "ready", items: listed.items });
-      } catch (error) {
-        if (!cancelled) setView({ kind: "error", message: errorText9(error) });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    load();
   }, [api, seeded]);
   const onCreate = () => {
     setBusy(true);
@@ -9084,9 +9083,12 @@ function WorkflowPanel({ api, navigate, preloaded }) {
       createError
     ] }) : null,
     view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: "正在读工作流列表…" }) : null,
-    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", role: "alert", children: [
-      "工作流列表读不出来：",
-      view.message
+    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__alert", role: "alert", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", children: [
+        "工作流列表读不出来：",
+        view.message
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__retry", "data-xuanshu-action": "retry-list", onClick: load, children: "重试" })
     ] }) : null,
     view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: "还没有工作流：点上面的「创建工作流」说清要求，用会话里的 coding 工具真跑一遍，你觉得跑通了再来导出。" }) : null,
     running.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__group", children: [
@@ -9161,6 +9163,9 @@ function installWorkflowStyle() {
     ".xs-workflow__title{margin:0;font-size:18px}",
     ".xs-workflow__note,.xs-workflow__hint,.xs-workflow__rule{margin:8px 0;opacity:.8;font-size:13px}",
     ".xs-workflow__error{color:var(--xs-state-error-fg)}",
+    ".xs-workflow__alert{display:flex;gap:8px;align-items:center;flex-wrap:wrap}",
+    ".xs-workflow__alert .xs-workflow__error{margin:8px 0}",
+    ".xs-workflow__retry{font:inherit;padding:6px 12px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}",
     ".xs-workflow__group{margin-top:18px;border-top:1px solid var(--xs-edge-divider);padding-top:12px}",
     ".xs-workflow__groupTitle{margin:0 0 8px;font-size:14px;opacity:.85}",
     ".xs-workflow__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}",
@@ -9288,7 +9293,7 @@ function puPaths(slug, dataDir) {
   };
 }
 function confirmGate(input) {
-  if (input.busy) return { ok: false, reason: "正在写入，请稍候（写入期间按钮不可再点）。" };
+  if (input.busy) return { ok: false, reason: "正在写入（写入期间按钮不可再点）。" };
   if (input.hasDraft !== true) return { ok: false, reason: "还没有草稿：先点 [导出汇总]。" };
   if (input.targetSlug === "") return { ok: false, reason: "还没有目标谱：沉淀只能写进谱（工作区 / 工作流不是谱）。" };
   if (input.stale) return { ok: false, reason: "目标谱在预览后被改动，请先 [重新预览]（本页不会覆盖你没看过的内容）。" };
@@ -9828,7 +9833,10 @@ function XsShijiSaveEntry({ sessionId, api, navigate }) {
           children: "打开底稿 →"
         }
       )
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__error", role: "alert", "data-xuanshu-alert": "shiji", children: `没有存成：${result.message}` })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("p", { className: "xs-shiji__error", role: "alert", "data-xuanshu-alert": "shiji", children: [
+      `没有存成：${result.message}`,
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", className: "xs-shiji__retry", "data-xuanshu-action": "shiji-save-retry", disabled: busy, onClick: save, children: "重试" })
+    ] })
   ] });
 }
 function installShiji(ctx, deps) {
@@ -9913,7 +9921,10 @@ function XsShijiSettingsSection({ state, actions }) {
         /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", "data-xuanshu-action": "add-excluded-dir", disabled: state.busy, onClick: actions.onAddExcludedDir, children: "添加" })
       ] })
     ] }),
-    state.error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__error", role: "alert", "data-xuanshu-setting-error": "shiji", children: state.error }),
+    state.error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("p", { className: "xs-shiji__error", role: "alert", "data-xuanshu-setting-error": "shiji", children: [
+      state.error,
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", className: "xs-shiji__retry", "data-xuanshu-action": "shiji-settings-reload", disabled: state.busy, onClick: actions.onReload, children: "重试" })
+    ] }),
     state.note === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("p", { className: "xs-shiji__note", role: "status", "data-xuanshu-notice": "shiji", children: state.note })
   ] });
 }
@@ -9936,7 +9947,7 @@ function ShijiSettingsHost({ api }) {
         excludedDirs: Array.isArray(settings.excludedDirs) ? settings.excludedDirs : []
       }));
     }).catch((reason) => {
-      setState((previous) => ({ ...previous, loading: false, error: `读不到事记设置：${errorText12(reason)}` }));
+      setState((previous) => ({ ...previous, loading: false, error: `读不到事记设置：${errorText12(reason)}（点下面的「重试」再读一次；一直读不到就先看宿主的 shiji 服务在不在。）` }));
     });
   };
   (0, import_react23.useEffect)(() => {
@@ -9982,7 +9993,9 @@ function ShijiSettingsHost({ api }) {
           }).catch((reason) => {
             setState((previous) => ({ ...previous, busy: false, error: errorText12(reason) }));
           });
-        }
+        },
+        // 错误行旁边的出路：重读一次（`load` 会先清掉 error，再按宿主的真实回包落状态）。
+        onReload: load
       }
     }
   );
@@ -10024,6 +10037,8 @@ function installShijiStyle() {
 .xs-shiji__row button:disabled{opacity:.5;cursor:not-allowed}
 .xs-shiji__settings input[type="text"]{font:inherit;margin-left:6px;padding:4px 8px;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);background:var(--xs-surface-card);color:inherit}
 .xs-shiji__error{color:var(--xs-text-secondary)}
+.xs-shiji__retry{font:inherit;margin-left:8px;padding:2px 10px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-shiji__retry:disabled{opacity:.5;cursor:not-allowed}
 `);
   installXuanshuStyles();
 }

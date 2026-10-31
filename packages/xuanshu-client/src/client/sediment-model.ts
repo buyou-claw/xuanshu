@@ -189,7 +189,7 @@ export interface ConfirmGateInput {
  * 返回的 `reason` 直接渲染在按钮下面 —— 置灰而不说为什么，等于把闸门藏起来。
  */
 export function confirmGate(input: ConfirmGateInput): { ok: boolean; reason?: string } {
-  if (input.busy) return { ok: false, reason: '正在写入，请稍候（写入期间按钮不可再点）。' };
+  if (input.busy) return { ok: false, reason: '正在写入（写入期间按钮不可再点）。' };
   if (input.hasDraft !== true) return { ok: false, reason: '还没有草稿：先点 [导出汇总]。' };
   if (input.targetSlug === '') return { ok: false, reason: '还没有目标谱：沉淀只能写进谱（工作区 / 工作流不是谱）。' };
   if (input.stale) return { ok: false, reason: '目标谱在预览后被改动，请先 [重新预览]（本页不会覆盖你没看过的内容）。' };
