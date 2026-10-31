@@ -1,4 +1,4 @@
-# 开发进度（Spec 001 装配基座 / Spec 002 住进去）
+﻿# 开发进度（Spec 001 装配基座 / Spec 002 住进去）
 
 核对日期：2026-10-15（Spec 001）/ 2026-10-17（Spec 002，见 §16）。集成分支：Spec 001 = `codex/spec-001-integration`（**已推 origin**）；Spec 002 = `feat/spec-002-integration`（票 #22–#31，见 §16）。
 
