@@ -62,7 +62,10 @@ export const OVERVIEW_CSS = `
 }
 .xs-overview__localnote {
   margin: 0;
-  color: var(--xs-text-tertiary);
+  /* 这里是 13px 级的路径正文，落在白底上：走 tertiary（bluish-600）只有 3.71:1，不到 AA 的 4.5:1。
+     改用 secondary（bluish-700）= 5.80:1。为什么不把 tertiary 整体调深：它被全站共用，
+     动一次就把所有面的观感一起改了，超出这张票（#64 / UX-02）的范围。 */
+  color: var(--xs-text-secondary);
   font-size: var(--dsh-content-font-size-secondary, 14px);
   font-family: var(--ds-font-family-code, ui-monospace, monospace);
 }
@@ -148,7 +151,11 @@ export const OVERVIEW_CSS = `
 }
 .xs-empty__sub {
   margin: 0;
-  color: var(--xs-text-tertiary);
+  /* 空态副行是这一面原先的最低对比度：tertiary 在空态底（--xs-surface-empty）上只有 3.42:1。
+     它 13px、整句都是要读的信息，属「正文级」，因此按 WCAG AA 提到 secondary = 5.36:1。
+     与 .xs-empty__why 同档：空态块里两行都是说明句，弱化不再靠「再暗一档」而是靠括号 / 位置
+     （token 字典目前没有 tertiary 与 secondary 之间的中间档，见台账 §17.7.2 的字阶重排）。 */
+  color: var(--xs-text-secondary);
   font-size: var(--dsh-content-font-size-secondary, 14px);
 }
 
@@ -378,7 +385,8 @@ export const OVERVIEW_CSS = `
 }
 .xs-quicklinks__note {
   margin: var(--xs-space-stack-md) 0 0;
-  color: var(--xs-text-tertiary);
+  /* 同 .xs-overview__localnote：13px 小字落卡面白底，tertiary 只有 3.71:1 → secondary = 5.80:1。 */
+  color: var(--xs-text-secondary);
   font-size: var(--dsh-content-font-size-secondary, 14px);
   text-align: right;
 }
