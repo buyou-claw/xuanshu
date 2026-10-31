@@ -48,12 +48,11 @@ export interface XsConsultPickerProps {
   optional: readonly OptionalSource[];
   selected: readonly string[];
   onToggle: (slug: string) => void;
-  onManagePu: () => void;
   /** 底座说明卡里的去路（改出生信息走命盘详情的「重新录制」）。 */
   onOpenDetail?: () => void;
 }
 
-export function XsConsultPicker({ required, optional, selected, onToggle, onManagePu, onOpenDetail }: XsConsultPickerProps) {
+export function XsConsultPicker({ required, optional, selected, onToggle, onOpenDetail }: XsConsultPickerProps) {
   const groups = groupOptional(optional);
   /** 当前展开的说明卡（`undefined` = 都收起；锁定行不给任何取消途径）。 */
   const [explaining, setExplaining] = useState<string | undefined>(undefined);
@@ -98,11 +97,11 @@ export function XsConsultPicker({ required, optional, selected, onToggle, onMana
               <div className="xs-consult__actions">
                 {source.kind === 'digao' ? (
                   <>
-                    <button type="button" data-xuanshu-action="locked-goto-pu" onClick={onManagePu}>
-                      {'去谱管理 ▸'}
-                    </button>
-                    <span className="xs-consult__note">
-                      三个源头：谱（在谱管理里改）/ 工作区 / 工作流；底稿本身在底稿面板看。
+                    {/* #69 / 判据 N-001：这里原本还有一枚「去谱管理 ▸」。谱管理的门只有侧栏行「谱」
+                        一个 —— 面板里再放一个就是同一动作的第二扇门。要改源头这件事仍然说清，
+                        只是去路写成侧栏行（能力没丢：侧栏行一直在、且是十个面板共用的那一行）。 */}
+                    <span className="xs-consult__note" data-xuanshu-note="goto-pu-sidebar">
+                      三个源头：谱（点侧栏「谱」改）/ 工作区 / 工作流；底稿本身在底稿面板看。
                     </span>
                   </>
                 ) : (
@@ -142,11 +141,11 @@ export function XsConsultPicker({ required, optional, selected, onToggle, onMana
           {historyEmptyCopy.noneOptionalPu}
         </p>
       ) : null}
-      <div className="xs-consult__actions">
-        <button type="button" data-xuanshu-action="manage-pu" onClick={onManagePu}>
-          {'管理谱 ▸ S5'}
-        </button>
-      </div>
+      {/* #69 / 判据 N-001：这里原本是「管理谱 ▸ S5」那枚按钮 —— 与侧栏行「谱」指同一个动作。
+          现在只留一句去路（话还在，门只剩侧栏那一扇）。 */}
+      <p className="xs-consult__note" data-xuanshu-note="goto-pu-sidebar">
+        {'要改谱：点侧栏「谱」（谱管理只有那一个入口）。'}
+      </p>
     </section>
   );
 }
