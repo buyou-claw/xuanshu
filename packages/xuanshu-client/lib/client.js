@@ -1127,13 +1127,65 @@ function bestofActions(deps) {
     ...deps.openSettings === void 0 ? {} : { onOpenSettings: deps.openSettings }
   };
 }
+function bestofEmptyOf(state) {
+  if (state.sessionId === "") {
+    return {
+      kind: "no-session",
+      text: "还没有问事会话：合参要挂在一个问事会话上。",
+      next: "先去「问事」开一次会话，再回来点「多 AI 合参」。"
+    };
+  }
+  if (state.routes !== void 0 && state.routes.length < BESTOF_MIN_ROUTES) {
+    return {
+      kind: "no-route",
+      text: `还没有两路可并列（现在 ${state.routes.length} 路）。`,
+      next: "去 DSH「设置 → 模型」里再加一家 provider 或 model：合参至少要两路。"
+    };
+  }
+  if (state.view !== void 0 && state.view.finished === true && state.view.candidates.length === 0) {
+    return {
+      kind: "no-candidate",
+      text: "这一轮还没有任何候选回来（几路都没有产出）。",
+      next: "点「重试合参」再跑一轮；若还是这样，去 DSH「设置 → 模型」里换一家 provider。"
+    };
+  }
+  return void 0;
+}
+function XsBestofEmptyNotice({ empty }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "xs-bestof__warn", "data-xs-bestof": "empty", "data-xuanshu-view": "empty", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "xs-bestof__note", children: empty.text }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "xs-bestof__note", children: empty.next })
+  ] });
+}
 function BestofOverlayHost({ controller, openSettings }) {
   const state = (0, import_react.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofOverlay, { state, actions: bestofActions({ controller, ...openSettings === void 0 ? {} : { openSettings } }) });
+  const actions = bestofActions({ controller, ...openSettings === void 0 ? {} : { openSettings } });
+  if (state.phase === "idle") return null;
+  const empty = bestofEmptyOf(state);
+  if (empty !== void 0 && empty.kind === "no-candidate") {
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "xs-bestof-backdrop", role: "dialog", "aria-label": "多 AI 合参", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "xs-bestof", "data-xs-bestof": "empty", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "xs-bestof__head", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h3", { children: "多 AI 合参" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "xs-bestof__tag", children: "这一轮 0 路" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofEmptyNotice, { empty }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "xs-bestof__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", className: "xs-btn--primary", onClick: actions.onRetry, children: "重试合参" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: actions.onReject, children: "否决本轮" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: actions.onCancel, children: "收起" })
+      ] })
+    ] }) });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofOverlay, { state, actions });
 }
 function BestofSettingsRowHost({ controller }) {
   const state = (0, import_react.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofSettingsRow, { state, actions: { onToggle: (enabled) => controller.setEnabled(enabled) } });
+  const empty = bestofEmptyOf(state);
+  const routeGap = empty !== void 0 && empty.kind === "no-route" ? empty : void 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofSettingsRow, { state, actions: { onToggle: (enabled) => controller.setEnabled(enabled) } }),
+    routeGap !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofEmptyNotice, { empty: routeGap })
+  ] });
 }
 function installBestOf(ctx, deps) {
   installBestofStyle();
@@ -1179,11 +1231,20 @@ function installBestOf(ctx, deps) {
   };
   ctx.slots.inject(
     "conversation.composer.dock",
-    () => ctx.slots.register({ name: "conversation.composer.dock", id: BESTOF_TRIGGER_ID, inject: () => ({ onTrigger: trigger }) }, BestofTriggerHost)
+    () => ctx.slots.register(
+      { name: "conversation.composer.dock", id: BESTOF_TRIGGER_ID, inject: () => ({ onTrigger: trigger, controller: deps.controller }) },
+      BestofTriggerHost
+    )
   );
 }
-function BestofTriggerHost({ onTrigger }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofTriggerButton, { onTrigger });
+function BestofTriggerHost({ controller, onTrigger }) {
+  const state = (0, import_react.useSyncExternalStore)(controller.subscribe, controller.snapshot, controller.snapshot);
+  const empty = bestofEmptyOf(state);
+  const sessionGap = empty !== void 0 && empty.kind === "no-session" ? empty : void 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofTriggerButton, { onTrigger }),
+    sessionGap !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(XsBestofEmptyNotice, { empty: sessionGap })
+  ] });
 }
 
 // src/client/CangPanel.tsx
@@ -1435,6 +1496,7 @@ function CangDrawer({ api, controller, initial }) {
   const [picker, setPicker] = (0, import_react4.useState)(false);
   const [busy, setBusy] = (0, import_react4.useState)(false);
   const [error, setError] = (0, import_react4.useState)("");
+  const [empty, setEmpty] = (0, import_react4.useState)(false);
   const dialog = (0, import_react4.useRef)(null);
   (0, import_react4.useEffect)(() => {
     const abort = new AbortController();
@@ -1458,6 +1520,14 @@ function CangDrawer({ api, controller, initial }) {
       abort.abort();
       previous?.focus();
     };
+  }, [api]);
+  (0, import_react4.useEffect)(() => {
+    const abort = new AbortController();
+    api.list(abort.signal).then((list) => {
+      if (!abort.signal.aborted) setEmpty(list.entries.length === 0);
+    }).catch(() => {
+    });
+    return () => abort.abort();
   }, [api]);
   function changePath(path) {
     const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) ?? "";
@@ -1512,6 +1582,7 @@ function CangDrawer({ api, controller, initial }) {
   }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { id: "xs-cang-drawer-title", children: draft.id ? "编辑登记" : "登记藏" }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-cang__boundary", children: CANG_AI_FREE }),
+    empty && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "xs-cang__empty", children: "藏库里还没有任何登记 —— 这是第一条：先给本地路径（或点「选择文件夹…」），校验通过、起好名字，再点「登记」。" }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("form", { onSubmit: (event) => {
       event.preventDefault();
       if (pointer?.valid && draft.name.trim() && !busy) void submit();
@@ -1542,7 +1613,7 @@ function CangDrawer({ api, controller, initial }) {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: "校验只做路径可达性判断，不读取内容、不列目录、不算大小、不建索引。" }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { role: "status", children: !draft.path.trim() ? "请选择或粘贴本地路径。" : !pointer ? "正在校验指针…" : pointer.valid ? `指针有效 · 类型=${pointer.kind === "directory" ? "文件夹" : "文件"} · 玄枢未读取` : pointer.reason }),
-      error && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { role: "alert", children: error }),
+      error && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { role: "alert", children: `登记没有成功：读不到这个指针，或注册表拒绝了这次写入 —— ${error}。请检查路径是否还在、有没有权限，然后重新点「${draft.id ? "保存登记" : "登记"}」；还是不通就换个路径。` }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "xs-cang__toolbar", children: [
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "submit", disabled: busy || !pointer?.valid || !draft.name.trim(), children: busy ? "正在处理…" : draft.id ? "保存登记" : "登记" }),
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", onClick: controller.close, disabled: busy, children: "取消" })
@@ -6314,8 +6385,9 @@ function XsMountDrawer({
     /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "xs-mounts__group", "data-xuanshu-group": "preview", children: [
       /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h3", { children: "本轮挂载上下文（预览）" }),
       error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "xs-mounts__error", "data-xuanshu-error": "mounts", role: "alert", children: [
-        error,
-        onRetry === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "xs-mounts__ghost", onClick: onRetry, children: "重试" })
+        `读不到本轮挂载的预览：${error}。请检查工作区是否还在，然后`,
+        onRetry === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", className: "xs-mounts__ghost", onClick: onRetry, children: "重试" }),
+        "；还是不通就先回门厅、换个工作区再挂。"
       ] }),
       busy && preview === void 0 ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mounts__note", "data-xuanshu-note": "mounts-loading", children: "正在读挂载内容…" }) : null,
       rows.length === 0 && !busy ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mounts__note", "data-xuanshu-note": "preview-empty", children: "还没有挂载任何对象：选上面的工作区（选入即挂载），这里会逐层列出将被注入的内容。" }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ul", { className: "xs-mounts__layers", children: rows.map((row) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(LayerRowView, { row, open: foldOpen(row.layer.id), onToggle: () => {

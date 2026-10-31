@@ -45,8 +45,16 @@ describe('票 02 · 一条命令跑完全链路', () => {
       expect(finding.file).toMatch(/^packages\/xuanshu-client\/src\//)
       expect(finding.line).toBeGreaterThan(0)
     }
-    // 去重后的位置数 = 判定失败面 × 证据的去重结果（不是乘积）
-    expect(report.findings.length).toBeLessThan(
+    // 去重后的位置数 ≤ 各失败面的证据条数之和（去重只会变少，不会变多）。
+    //
+    // 这里曾经写的是「严格小于」，隐含前提是「至少有一处重复」。红清到只剩三条、
+    // 每条失败面各带一行证据时，`findings` 与证据总数都等于 3 —— 严格小于不成立，
+    // 而那并不是缺陷（没有可去重的东西）。所以改成守住真正的不变式：
+    //   · 每个位置只出现一次（去重真的发生了）；
+    //   · 位置数不超过证据总数（没有凭空造出的位置）。
+    const positions = report.findings.map((finding) => `${finding.file}:${finding.line}`)
+    expect(new Set(positions).size).toBe(positions.length)
+    expect(report.findings.length).toBeLessThanOrEqual(
       report.verdicts.filter((verdict) => verdict.status === 'fail').reduce((sum, verdict) => sum + verdict.evidence.length, 0),
     )
   })

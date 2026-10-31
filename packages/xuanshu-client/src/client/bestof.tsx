@@ -12,14 +12,18 @@
  * （`dsh-client-ui-commands` 的 `invoke()` 把 `segment` 自己消费掉、不传给 `run`），所以浮层自带一个
  * 问题输入框 —— `/多模型 <问题>` 里那截文本进不来。`parseBestofCommand()` 已按 S9 §2.1 的规则
  * 实现并测好（命令名到第一个空白为界、`//` 不算命令），等有带文本的触发面直接接上。
+ *
+ * **票 UX-03（#65）· 三个入口的空态**：浮层、设置项、输入框触发器都会出现「什么都没有」的时刻
+ * （没有会话 / 凑不到两路 / 一轮跑完 0 份候选）。判定只写在 `bestofEmptyOf()` 一处，
+ * 三个宿主各挑自己那一格渲染 —— 空态因此不会随三个面漂成三种口径。
  */
 import type { Context } from '@deepseek-ai/cordis';
 import { useSyncExternalStore } from 'react';
 
 import type { BestofApi } from './bestof-api.js';
 import { readService } from './ctx-service.js';
-import { BESTOF_COMMAND_NAMES, createBestofController } from './bestof-model.js';
-import type { BestofController } from './bestof-model.js';
+import { BESTOF_COMMAND_NAMES, BESTOF_MIN_ROUTES, createBestofController } from './bestof-model.js';
+import type { BestofController, BestofUiState } from './bestof-model.js';
 import { installBestofStyle } from './bestof-style.js';
 import { XsBestofOverlay, XsBestofSettingsRow, XsBestofTriggerButton } from './bestof-views.js';
 import type { BestofOverlayActions } from './bestof-views.js';
@@ -77,16 +81,111 @@ export function bestofActions(deps: Pick<BestofInstallDeps, 'controller' | 'open
   };
 }
 
+/**
+ * 票 UX-03（#65）· 空态的种类。
+ *
+ * 三个入口（浮层 / 设置项 / 输入框触发器）各自的「空」不是同一件事，但**判定只在这一处**：
+ * 谁空着、空成什么样，由 `bestofEmptyOf()` 一张表说完；三个宿主只挑自己那一格去渲染。
+ * 于是「空态」不会随着三个面各写一份判断而漂成三种口径。
+ */
+export type BestofEmptyKind = 'no-session' | 'no-route' | 'no-candidate';
+
+/** 一条空态：一句人话（只许「还没有…」）+ 一步可执行的下一步。 */
+export interface BestofEmpty {
+  kind: BestofEmptyKind;
+  /** 人话（词表：空态只许「还没有…」「没有…」，`scripts/ux/state-vocabulary.mjs`）。 */
+  text: string;
+  /** 下一步：没有这一步的空态等于把闸门藏起来。 */
+  next: string;
+}
+
+/**
+ * 三面共用的空态判定（按「挡住合参的第一件事」排先后）。
+ *
+ * 顺序是有意的：没有会话就没法算跑前估算（`loadEstimate` 直接返回），所以「没有会话」
+ * 排在「凑不到两路」之前；「这一轮没有候选」是跑完之后的事，排最后。
+ *
+ * @param state 控制器快照（浮层 / 设置行 / 触发器共用一份）
+ * @returns 空态；`undefined` = 不空（有内容、正在跑、或本来就该收起）
+ */
+export function bestofEmptyOf(state: BestofUiState): BestofEmpty | undefined {
+  // ① 输入框触发器那条路径拿不到 sessionId（`resolveSessionId` 也给不出）——先要有会话可挂。
+  if (state.sessionId === '') {
+    return {
+      kind: 'no-session',
+      text: '还没有问事会话：合参要挂在一个问事会话上。',
+      next: '先去「问事」开一次会话，再回来点「多 AI 合参」。',
+    };
+  }
+  // ② 路由目录读到了，但凑不到两路：这时候「跑一轮」也只有一个视角，谈不上并列。
+  if (state.routes !== undefined && state.routes.length < BESTOF_MIN_ROUTES) {
+    return {
+      kind: 'no-route',
+      text: `还没有两路可并列（现在 ${state.routes.length} 路）。`,
+      next: '去 DSH「设置 → 模型」里再加一家 provider 或 model：合参至少要两路。',
+    };
+  }
+  // ③ 一轮跑完了，一份候选都没回来：网格是空的，但这不是「还在加载」。
+  if (state.view !== undefined && state.view.finished === true && state.view.candidates.length === 0) {
+    return {
+      kind: 'no-candidate',
+      text: '这一轮还没有任何候选回来（几路都没有产出）。',
+      next: '点「重试合参」再跑一轮；若还是这样，去 DSH「设置 → 模型」里换一家 provider。',
+    };
+  }
+  return undefined;
+}
+
+/** 空态说明块（三面共用一份标记；`data-xuanshu-view="empty"` 是采集口径认的那个状态标记）。 */
+export function XsBestofEmptyNotice({ empty }: { empty: BestofEmpty }) {
+  return (
+    <div className="xs-bestof__warn" data-xs-bestof="empty" data-xuanshu-view="empty">
+      <p className="xs-bestof__note">{empty.text}</p>
+      <p className="xs-bestof__note">{empty.next}</p>
+    </div>
+  );
+}
+
 /** `shell.overlay` 的浮层本体（注册时由 `inject: () => deps` 注入依赖）。 */
 export function BestofOverlayHost({ controller, openSettings }: BestofInstallDeps) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
-  return <XsBestofOverlay state={state} actions={bestofActions({ controller, ...(openSettings === undefined ? {} : { openSettings }) })} />;
+  const actions = bestofActions({ controller, ...(openSettings === undefined ? {} : { openSettings }) });
+  // click-through 不变：没内容时浮层整块不出现（空态也不许把这一条破坏掉）。
+  if (state.phase === 'idle') return null;
+  const empty = bestofEmptyOf(state);
+  // 一轮跑完却一份候选都没有：原来只留一个空网格，人分不清「没数据」还是「没加载出来」。
+  if (empty !== undefined && empty.kind === 'no-candidate') {
+    return (
+      <div className="xs-bestof-backdrop" role="dialog" aria-label="多 AI 合参">
+        <div className="xs-bestof" data-xs-bestof="empty">
+          <div className="xs-bestof__head">
+            <h3>多 AI 合参</h3>
+            <span className="xs-bestof__tag">这一轮 0 路</span>
+          </div>
+          <XsBestofEmptyNotice empty={empty} />
+          <div className="xs-bestof__actions">
+            <button type="button" className="xs-btn--primary" onClick={actions.onRetry}>重试合参</button>
+            <button type="button" onClick={actions.onReject}>否决本轮</button>
+            <button type="button" onClick={actions.onCancel}>收起</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return <XsBestofOverlay state={state} actions={actions} />;
 }
 
-/** 设置里的一行开关。 */
+/** 设置里的一行开关（外加一条只在「凑不到两路」时出现的空态）。 */
 export function BestofSettingsRowHost({ controller }: BestofInstallDeps) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
-  return <XsBestofSettingsRow state={state} actions={{ onToggle: (enabled) => controller.setEnabled(enabled) }} />;
+  const empty = bestofEmptyOf(state);
+  const routeGap = empty !== undefined && empty.kind === 'no-route' ? empty : undefined;
+  return (
+    <>
+      <XsBestofSettingsRow state={state} actions={{ onToggle: (enabled) => controller.setEnabled(enabled) }} />
+      {routeGap !== undefined && <XsBestofEmptyNotice empty={routeGap} />}
+    </>
+  );
 }
 
 /**
@@ -144,13 +243,29 @@ export function installBestOf(ctx: Context, deps: BestofInstallDeps): void {
     });
   };
   ctx.slots.inject('conversation.composer.dock', () =>
-    ctx.slots.register({ name: 'conversation.composer.dock', id: BESTOF_TRIGGER_ID, inject: () => ({ onTrigger: trigger }) }, BestofTriggerHost as never),
+    ctx.slots.register(
+      { name: 'conversation.composer.dock', id: BESTOF_TRIGGER_ID, inject: () => ({ onTrigger: trigger, controller: deps.controller }) },
+      BestofTriggerHost as never,
+    ),
   );
 }
 
-/** 触发按钮的宿主组件（把 `onTrigger` 传进纯视图）。 */
-export function BestofTriggerHost({ onTrigger }: { onTrigger(): void }) {
-  return <XsBestofTriggerButton onTrigger={onTrigger} />;
+/**
+ * 按钮的宿主组件（把 `onTrigger` 与控制器一起传进纯视图）。
+ *
+ * 票 UX-03：这个入口唯一会「空着」的情况是**拿不到问事会话** —— 点下去会开到确认屏，
+ * 人要写完问题、点「开始合参」才知道「还没有会话」。所以空态提前长在按钮旁边。
+ */
+export function BestofTriggerHost({ controller, onTrigger }: { controller: BestofController; onTrigger(): void }) {
+  const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  const empty = bestofEmptyOf(state);
+  const sessionGap = empty !== undefined && empty.kind === 'no-session' ? empty : undefined;
+  return (
+    <>
+      <XsBestofTriggerButton onTrigger={onTrigger} />
+      {sessionGap !== undefined && <XsBestofEmptyNotice empty={sessionGap} />}
+    </>
+  );
 }
 
 /** 造一个默认关闭的控制器（`index.tsx` 用；断言台也可直接用）。 */
