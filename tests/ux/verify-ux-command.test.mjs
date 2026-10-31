@@ -40,7 +40,15 @@ describe('票 02 · 一条命令跑完全链路', () => {
 
   it('报告点名「字面色值」的具体位置（人能三秒核回源码）', async () => {
     const { report } = await runVerifyUx({ repoRoot: REPO_ROOT, faces: FACES, write: false, generatedAt: 'now' })
-    expect(report.findings.length).toBeGreaterThan(0)
+    // 前提变了（2026-10-31）：静态红被清干净之后，真仓库此刻的 `findings` 可以是 0
+    // （T 族本来就绿、S/X 已全绿、C/D/N 走浏览器落在 not-collected）。
+    // 所以不能拿「至少有一条」当前提。这里守两个不变式：
+    //   · 没有红的时候，不许凭空造出位置；
+    //   · 有红的时候，每个位置都点得回源码、同一个位置只出现一次。
+    if (report.findings.length === 0) {
+      expect(report.verdicts.filter((verdict) => verdict.status === 'fail')).toEqual([])
+      return
+    }
     for (const finding of report.findings) {
       expect(finding.file).toMatch(/^packages\/xuanshu-client\/src\//)
       expect(finding.line).toBeGreaterThan(0)
