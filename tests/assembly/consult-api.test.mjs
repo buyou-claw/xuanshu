@@ -5,26 +5,18 @@
  * （客户端半 / 宿主半），写错一个字符的症状是运行期「方法不存在」，
  * 而两组测试各测各的假 ctx 都发现不了 —— 只有逐字比对契约表格才能。
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { CONSULT_ENDPOINTS, createConsultApi } from '../../packages/xuanshu-client/src/client/consult-api.ts'
+import { installRpcFetch, restoreRpcFetch } from './lib/rpc-fetch.mjs'
 
-/** 记录型假连接：只记 `(channel, method, payload, signal)`，返回调用方指定的值。 */
+// 数据面是同源 fetch（`POST /api/xuanshu`），桩装在 fetch 上；漏还原会污染后面的文件。
+afterEach(restoreRpcFetch)
+
+/** 记录型假数据面：只记 `(channel, endpoint, payload, signal)`，返回调用方指定的值。 */
 function fakeCtx(value = { ok: true }) {
-  const calls = []
-  return {
-    calls,
-    ctx: {
-      connection: {
-        rpc: {
-          async call(...args) {
-            calls.push(args)
-            return { ok: true, value }
-          },
-        },
-      },
-    },
-  }
+  const rpc = installRpcFetch({ value })
+  return { calls: rpc.calls, ctx: {} }
 }
 
 describe('票 10 · 问事数据面的方法名逐字对齐契约 §2', () => {
@@ -50,7 +42,7 @@ describe('票 10 · 问事数据面的方法名逐字对齐契约 §2', () => {
     await api.rename({ sessionId: 'session-xs-consult-x', title: '转岗时机' })
     await api.defaults()
 
-    expect(calls.map((call) => [call[0], call[1]])).toEqual([
+    expect(calls.map((call) => [call.channel, call.endpoint])).toEqual([
       ['/xuanshu', 'consult.create'],
       ['/xuanshu', 'consult.send'],
       ['/xuanshu', 'consult.list'],
@@ -58,28 +50,28 @@ describe('票 10 · 问事数据面的方法名逐字对齐契约 §2', () => {
       ['/xuanshu', 'consult.rename'],
       ['/xuanshu', 'consult.defaults'],
     ])
-    expect(calls[0][2]).toEqual({ pus: ['ziwei-biji'] })
-    expect(calls[1][2]).toEqual({ sessionId: 'session-xs-consult-x', text: '帮我看转岗时机' })
-    expect(calls[3][2]).toEqual({ sessionId: 'session-xs-consult-x' })
-    expect(calls[4][2]).toEqual({ sessionId: 'session-xs-consult-x', title: '转岗时机' })
+    expect(calls[0].payload).toEqual({ pus: ['ziwei-biji'] })
+    expect(calls[1].payload).toEqual({ sessionId: 'session-xs-consult-x', text: '帮我看转岗时机' })
+    expect(calls[3].payload).toEqual({ sessionId: 'session-xs-consult-x' })
+    expect(calls[4].payload).toEqual({ sessionId: 'session-xs-consult-x', title: '转岗时机' })
   })
 
   it('create 的 pus 可省（不勾任何可选谱 = 空手问一句），省掉时不下发这个键', async () => {
     const { calls, ctx } = fakeCtx()
     await createConsultApi(ctx).create()
-    expect(calls[0][2]).toEqual({})
+    expect(calls[0].payload).toEqual({})
   })
 
   it('请求序号 / 取消信号透传（列表与阅读器的过期回包要靠它）', async () => {
     const { calls, ctx } = fakeCtx()
     const controller = new AbortController()
     await createConsultApi(ctx).list(controller.signal)
-    expect(calls[0][3]).toBe(controller.signal)
+    expect(calls[0].signal).toBe(controller.signal)
   })
 
   it('RPC 失败时抛出（由调用方决定降级：门厅错误条 / 阅读器错误态）', async () => {
-    const ctx = { connection: { rpc: { async call() { return { ok: false, error: { message: '会话清单读不到' } } } } } }
-    await expect(createConsultApi(ctx).list()).rejects.toThrow('会话清单读不到')
+    installRpcFetch({ error: { message: '会话清单读不到' } })
+    await expect(createConsultApi({}).list()).rejects.toThrow('会话清单读不到')
   })
 
   it('客户端**不造 sessionId**：id 一律来自 create 的返回（形状断言防回归）', async () => {

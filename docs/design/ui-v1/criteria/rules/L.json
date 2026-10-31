@@ -1,0 +1,23 @@
+{
+  "family": "L",
+  "title": "层级与排版",
+  "source": {
+    "file": "docs/design/ui-v1/shared/设计token字典.md",
+    "anchor": "### 0.4 禁则（写稿人自查）"
+  },
+  "rules": [
+    {
+      "id": "L-001",
+      "statement": "同一屏内的文字层级（标题 / 正文 / 次要 / 元信息）一眼可区分：相邻两级的字号或字重至少有一项不同，且同一级的元素在整屏里用同一档",
+      "check": "human-only",
+      "evidence": "screenshot",
+      "severity": "major",
+      "appliesTo": { "kind": "rendered" },
+      "humanReason": "「一眼能不能分出层级」是审美判断：字号差、字重差都能被机器量（那已由 C-001/C-002 覆盖），但「这屏读起来是不是有层次」没有可复现的阈值。按 spec 003 §判据硬门槛，它只能由人看一次并签字，不许伪装成机器判据。",
+      "source": {
+        "file": "docs/design/ui-v1/assets/tokens/type-scale.md",
+        "anchor": "字号分「语义档」，实现票在组件里**点名档位 token，不写死 px**"
+      }
+    }
+  ]
+}

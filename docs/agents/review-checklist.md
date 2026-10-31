@@ -25,3 +25,9 @@
 **规则**：用例数、文件数、产物字节一律从工具输出抄（`pnpm test:inventory` / `node scripts/build-client.mjs --check` / `pnpm verify:all`），不手算、不手改；当前验证块由 `scripts/check-doc-numbers.mjs` 核对（exit 1 = 漂移、2 = 没验），它已在 `pnpm verify:all` 里。
 **什么算违规**：文档写的数字与 `tests/test-inventory.json` / `lib/client.js` 实况不一致，或绕开门手改数字。
 **本轮实例**：`docs/development-status.md` §15 的基线历史（992 vs 1020）、§「工作方式」的「数字只从工具输出里抄」条、§16.6「同日清理事故与护栏」（1811/164 → 1814/165）两次手抄漂移与成文判据；机器判据本体见 `scripts/check-doc-numbers.mjs` 文件头。
+
+## 5. 客户端只碰真 API：未声明服务用 `ctx.get`，DOM 事件挂对目标
+
+**规则**：客户端 `ctx` 上**没写进 `inject` 的服务，属性访问会抛**（`cannot get property "x" without inject`），类型断言在运行期不生效 —— 可缺席服务一律 `ctx.get(name)`（统一入口 `src/client/ctx-service.ts::readService`）。事件订阅挂在真 EventTarget 上：`hashchange` 属于 `window`，`location` 没有 `addEventListener`。这类异常发生在 `apply()` 里时，DSH web boot 只显示一行 `xuanshu-client: failed`，**所有面板一起消失**。
+**什么算违规**：`(ctx as { x?: T }).x` 这种「靠断言软取」；在 `location` 上 `addEventListener`；只在 `renderToStaticMarkup`/纯函数层验过就认为真机可用。
+**本轮实例**：§16.9（2026-10-18 真机 boot 失败）：`ctx.uiWorkspace` / `workspaces` / `sessions` / `commandUi` 四处 + `overview-hash.ts` 的 `location.addEventListener`。取证用系统 Edge + 全局 playwright 打开真页面收 `console`（本机解压版 Chromium 起不来）。

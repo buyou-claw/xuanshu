@@ -71,9 +71,22 @@ function createTrayIcon(nativeImageApi) {
 
 /**
  * 建一个 electron 适配器（真机用；测试不 import 这个文件）。
+ *
+ * 两条**真机实测**的硬约束（2026-10-18，Windows 11 22631 / electron 38.2.2，都有最小复现）：
+ *
+ * ① **模块加载期不许读路径**：本文件被 `main.mjs` 顶层 import，这时还没 `app.whenReady()`。
+ *    在这种时刻调用 `app.getPath('userData' | 'appData')` 或 `app.getName()`，进程会在
+ *    `whenReady()` 之前**直接退出、退出码 0xFFFF7003（-36861）**，stderr 只有一行
+ *    `crashpad_client_win.cc: not connected`，**没有任何 JS 报错**——现象就是「双击没反应」。
+ *    最小复现：`import { app } from 'electron'; app.getPath('userData')` 两行就崩。
+ *    所以下面这些全部改成 **getter**，只在真正用到时（`bootstrap()` 里，ready 之后）求值。
+ *
+ * ② **appName 用 ASCII**：它决定 `userData` 目录（`%APPDATA%\<appName>`）。显示名走窗口标题
+ *    （`createWindow` 的 `title: '玄枢'`），目录名保持 ASCII，避免非 ASCII 路径带来的平台差异。
+ *
  * @param {{appName?: string}} [options]
  */
-export function createElectronAdapter({ appName = '玄枢' } = {}) {
+export function createElectronAdapter({ appName = 'xuanshu-shell' } = {}) {
   const platform = process.platform
   try {
     app.setName(appName)
@@ -95,9 +108,24 @@ export function createElectronAdapter({ appName = '玄枢' } = {}) {
     pid: process.pid,
     isPackaged: app.isPackaged,
     execPath: process.execPath,
-    appName: app.getName(),
-    userDataPath: app.getPath('userData'),
-    appDataPath: app.getPath('appData'),
+    /**
+     * 下面三个必须是 **getter**（实测踩到，2026-10-18）：
+     * 在 `app.whenReady()` 之前调用 `app.getPath()` / `app.getName()` 会让 Chromium 的 crashpad
+     * 起不来（stderr 只有 `crashpad_client_win.cc: not connected`），主进程在 `whenReady` 之前
+     * **直接退出、退出码 0xFFFF7003（-36861），且没有任何 JS 报错**——现象就是「双击没反应」。
+     * 最小复现：`import { app } from 'electron'; app.getPath('userData')` 两行就崩；
+     * 同样的调用挪到 `await app.whenReady()` 之后正常。
+     * 本文件被 `main.mjs` 顶层 import，所以**模块加载期一律不许读路径**。
+     */
+    get appName() {
+      return app.getName()
+    },
+    get userDataPath() {
+      return app.getPath('userData')
+    },
+    get appDataPath() {
+      return app.getPath('appData')
+    },
     homePathOverride: undefined,
 
     /** app 的最小面（单实例 / 事件 / 退出）。 */

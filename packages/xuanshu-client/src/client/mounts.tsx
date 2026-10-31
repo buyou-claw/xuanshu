@@ -19,42 +19,39 @@ import type { MountRef, MountPreview, MountsApi, WorkspaceCandidate } from './mo
 import { createMountsController as createController, type MountsController } from './mounts-controller.js';
 import { XsMountDrawer, XsMountSection } from './mounts-views.js';
 import { layerRows, statusFromPreview } from './mounts-model.js';
+import { installXuanshuStyles, registerStyleSheet } from './styles.js'
 
 export type { MountsController } from './mounts-controller.js';
 
 /** 样式（一次性注入同名 style；无 document 时**跳过注入**，但注册照常发生）。 */
 export function installMountsStyle(): void {
-  if (typeof document === 'undefined') return;
   const id = 'xuanshu-mounts-style';
-  if (document.getElementById(id) !== null) return;
-  const style = document.createElement('style');
-  style.id = id;
-  style.textContent = [
-    '.xs-mounts__section{margin:12px 0;padding:10px;border:1px solid var(--dsw-alias-border,#333);border-radius:8px}',
+  registerStyleSheet("xuanshu-mounts-style", [
+    '.xs-mounts__section{margin:12px 0;padding:10px;border:1px solid var(--xs-edge-card);border-radius:8px}',
     '.xs-mounts__section-head{display:flex;align-items:center;justify-content:space-between;gap:8px}',
     '.xs-mounts__summary,.xs-mounts__note{margin:6px 0;opacity:.8;font-size:12px}',
     '.xs-mounts__status{background:none;border:0;padding:0;color:inherit;opacity:.85;cursor:pointer;font-size:12px}',
-    '.xs-mounts__overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;justify-content:flex-end;z-index:60}',
-    '.xs-mounts__drawer{width:min(720px,92vw);height:100%;overflow:auto;background:var(--dsw-alias-bg,#111);padding:16px;display:flex;flex-direction:column;gap:12px}',
+    '.xs-mounts__overlay{position:fixed;inset:0;background:var(--xs-surface-overlay-mask);display:flex;justify-content:flex-end;z-index:60}',
+    '.xs-mounts__drawer{width:min(720px,92vw);height:100%;overflow:auto;background:var(--xs-surface-overlay);padding:16px;display:flex;flex-direction:column;gap:12px}',
     '.xs-mounts__head{display:flex;align-items:center;justify-content:space-between}',
-    '.xs-mounts__boundary{margin:0;padding:8px;border-left:3px solid var(--dsw-alias-accent,#888);opacity:.9;font-size:12px}',
+    '.xs-mounts__boundary{margin:0;padding:8px;border-left:3px solid var(--xs-edge-card-strong);opacity:.9;font-size:12px}',
     '.xs-mounts__rows,.xs-mounts__layers{list-style:none;margin:6px 0;padding:0}',
     '.xs-mounts__row label{display:flex;align-items:center;gap:8px;padding:4px 0}',
     '.xs-mounts__row-path{opacity:.7;font-size:12px}',
     '.xs-mounts__row-meta{opacity:.6;font-size:12px;margin-left:auto}',
-    '.xs-mounts__layer{padding:6px 0;border-bottom:1px solid var(--dsw-alias-border,#2a2a2a)}',
+    '.xs-mounts__layer{padding:6px 0;border-bottom:1px solid var(--xs-edge-divider)}',
     '.xs-mounts__layer-head{display:flex;align-items:center;gap:8px}',
     '.xs-mounts__layer-name{flex:1}',
     '.xs-mounts__tag{font-size:12px;padding:1px 6px;border-radius:10px;border:1px solid currentColor}',
-    '.xs-mounts__tag[data-xuanshu-tag="clipped"]{color:#e0a030}',
-    '.xs-mounts__tag[data-xuanshu-tag="dropped"]{color:#e05a5a}',
-    '.xs-mounts__tag[data-xuanshu-tag="error"]{color:#e05a5a}',
-    '.xs-mounts__foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:12px;border-top:1px solid var(--dsw-alias-border,#333)}',
+    '.xs-mounts__tag[data-xuanshu-tag="clipped"]{color:var(--xs-state-warning-fg)}',
+    '.xs-mounts__tag[data-xuanshu-tag="dropped"]{color:var(--xs-state-error-fg)}',
+    '.xs-mounts__tag[data-xuanshu-tag="error"]{color:var(--xs-state-error-fg)}',
+    '.xs-mounts__foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:12px;border-top:1px solid var(--xs-edge-card)}',
     '.xs-mounts__primary{font-weight:600}',
     '.xs-mounts__ghost{background:none;border:0;padding:0;color:inherit;opacity:.75;cursor:pointer;font-size:12px;text-decoration:underline}',
-    '.xs-mounts__error{color:#e05a5a;font-size:12px}',
-  ].join('\n');
-  document.head.appendChild(style);
+    '.xs-mounts__error{color:var(--xs-state-error-fg);font-size:12px}',
+  ].join('\n'));
+  installXuanshuStyles()
 }
 
 /** 浮层组件：没有任何内容时返回 `null`（`shell.overlay` 自动 click-through）。 */

@@ -26,3 +26,6 @@ tests/**/.probe/
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
+
+# 体验质量线巡检报告（产物，不是仓库内容；只报告不挡门）
+ux-reports/

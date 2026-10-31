@@ -79,7 +79,7 @@ async function assemble({ withSchedule = true } = {}) {
 describe('票13 · 六个方法挂在同一条 /xuanshu 通道上（契约 §1/§2）', () => {
   it('通道路径 /xuanshu；digao.* 与 rikke.* 逐字可调，且与 pu/藏/八字合并', async () => {
     const { route } = await assemble()
-    expect(route.path).toBe('/xuanshu')
+    expect(route.path).toBe('/api/xuanshu')
 
     for (const method of ['digao.status', 'digao.read', 'digao.refresh']) {
       const response = await call(route, method, {})

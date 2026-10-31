@@ -20,6 +20,7 @@ import { DIGAO_SECTIONS } from '../digao/skeleton.mjs'
 import { readDigaoMarkdown, readDigaoMeta } from '../digao/store.mjs'
 import { streamText } from '../llm/text.mjs'
 import { createPuRepository } from '../pu/repository.mjs'
+import { getService } from '../soft-service.mjs'
 
 /** AI 段的提示词（只让它写「今天注意什么」，不让它复述宜忌、不让它发挥吉凶）。 */
 export const AI_NOTE_SYSTEM = '你是玄枢的日课提示器。根据用户给的底座谱、最近的底稿与今日黄历三键，'
@@ -129,7 +130,7 @@ export async function composeAiNote({ ctx, dataDir, date, content, enabled = tru
   // 关闭是**显式选择**，不是失败：连 ctx.llm 都不碰（否则关闭也照样付一次调用的代价）。
   if (enabled === false) return { mode: 'off' }
 
-  const llm = ctx?.llm
+  const llm = getService(ctx, 'llm')
   if (!llm || typeof llm.stream !== 'function') {
     return { mode: 'failed', reason: 'ctx.llm 不可得（宿主没装 LLM 服务）' }
   }

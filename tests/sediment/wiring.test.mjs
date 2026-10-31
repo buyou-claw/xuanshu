@@ -68,7 +68,7 @@ function call(route, method, payload = {}) {
 describe('票 15 · 三个方法挂在同一条 /xuanshu 通道上（契约 §3）', () => {
   it('sediment.commit / sediment.draft / sediment.discard 逐字可调，且与既有组合并而不是互相覆盖', async () => {
     const { route } = assemble()
-    expect(route.path).toBe('/xuanshu')
+    expect(route.path).toBe('/api/xuanshu')
 
     // commit：闸门在通道上也拦得住（未确认 = {ok:false}，不是静默成功）。
     const refused = await call(route, 'sediment.commit', { draftId: 'nope', confirmed: false })

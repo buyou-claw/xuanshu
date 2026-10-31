@@ -35,6 +35,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import { createElement as h } from 'react';
 
 import { createBaziApi } from './bazi-api.js';
+import { readService } from './ctx-service.js';
 import { createBaziUiController } from './bazi-controller.js';
 import { createAiApi } from './ai-api.js';
 import { createAiReadinessController } from './ai-model.js';
@@ -180,12 +181,13 @@ export function apply(ctx: Context): void {
   // 客户端 `ctx.sessions` 是 `ISessions`，与宿主 `SessionStore` **同名不同物**（facts §6.3）——
   // 类型桩里还没有这一面，故在此就地收窄一个最小形状（不动 `types/shims.d.ts`，那是作用域外）。
   const consultApi = createConsultApi(rpc);
-  const uiWorkspace = ctx.uiWorkspace;
-  const sessionCatalog = (ctx as unknown as { sessions?: { refresh?: () => Promise<void> } }).sessions;
+  const uiWorkspace = readService<{ openSession?(sessionId: string): void }>(rpc, 'uiWorkspace');
+  const sessionCatalog = readService<{ refresh?: () => Promise<void> }>(rpc, 'sessions');
+  const openSessionFn = uiWorkspace?.openSession;
   const openSession =
-    typeof uiWorkspace?.openSession === 'function'
+    typeof openSessionFn === 'function'
       ? (sessionId: string): void => {
-          uiWorkspace.openSession(sessionId);
+          openSessionFn(sessionId);
         }
       : undefined;
   const refreshSessions =

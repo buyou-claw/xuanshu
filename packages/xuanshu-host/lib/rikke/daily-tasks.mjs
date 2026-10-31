@@ -141,7 +141,7 @@ export async function ensureDailyTask({ ctx, dataDir, kind, title, prompt, time,
     return { ok: true, reused: true, task: scheduleSummary(existing), agent: null, reason: null }
   }
 
-  const agents = softGet(ctx, 'agents') ?? ctx?.agents
+  const agents = softGet(ctx, 'agents')
   if (!agents || typeof agents.create !== 'function') {
     return { ok: false, reused: false, task: null, agent: null, reason: 'ctx.agents 不可得：定时任务必须绑在一个会话上（宿主建会话的能力没就绪）。' }
   }

@@ -1,0 +1,391 @@
+{
+  "schema": "xuanshu/ux-criteria@1",
+  "label": "ux-v1",
+  "families": [
+    {
+      "id": "T",
+      "title": "token 消费",
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "### 0.4 禁则（写稿人自查）"
+      },
+      "ruleCount": 4
+    },
+    {
+      "id": "S",
+      "title": "状态齐全（空 / 载 / 错）",
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "### 3.4 关键状态（验收硬要求）"
+      },
+      "ruleCount": 3
+    },
+    {
+      "id": "L",
+      "title": "层级与排版",
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "### 0.4 禁则（写稿人自查）"
+      },
+      "ruleCount": 1
+    },
+    {
+      "id": "D",
+      "title": "密度与点击目标",
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "点击目标 ≥44×44"
+      },
+      "ruleCount": 2
+    },
+    {
+      "id": "C",
+      "title": "对比度与可读性",
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "视觉档位（克制留白）"
+      },
+      "ruleCount": 3
+    },
+    {
+      "id": "N",
+      "title": "导航（入口唯一 / 返回落点 / 键盘可达）",
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "同时登记一个新判据族：**导航模型**"
+      },
+      "ruleCount": 3
+    },
+    {
+      "id": "X",
+      "title": "文案一致性",
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "状态名一律用同一套稳定名"
+      },
+      "ruleCount": 1
+    }
+  ],
+  "criteria": [
+    {
+      "id": "T-001",
+      "family": "T",
+      "statement": "界面源码的样式里不出现字面色值（hex / rgb() / hsl()），颜色一律从 token 取",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "blocker",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "1. 本文件**不出现**色值（`#rrggbb` / `rgb()` / 颜色名）、px / rem / em 数值。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "T-002",
+      "family": "T",
+      "statement": "样式只有一个注入点：各模块只登记自己的 CSS，注入动作收敛到单一消费层（界面面的源文件里不再自己 `document.createElement('style')` 并挂到 head）",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "2. 线框里**不写 token**（线框只写结构与文案位），token 只出现在组件树与该屏第 9 节。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "T-003",
+      "family": "T",
+      "statement": "断点不写字面值：`@media` 的宽窄屏分界只走 `--xs-size-breakpoint-wide`（1100px）的语义，样式里不出现 `min-width: 1100px` / `max-width: 700px` 这类字面 px",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "、px / rem / em 数值。"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "T-004",
+      "family": "T",
+      "statement": "颜色声明一律从 token 取：`color` / `background` / `border*` / `box-shadow` 的值是 `var(--…)`，或是允许的关键字（transparent / inherit / none / currentColor）",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/shared/设计token字典.md",
+        "anchor": "（`#rrggbb` / `rgb()` / 颜色名）"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "S-001",
+      "family": "S",
+      "statement": "每个界面面的源文件（同一文件内）既有「判空分支」（`kind === 'empty'` / `!x.length` / `x.length === 0` / 状态标记属性）又有一句中文空态说明；只有注释、只有一个字符串常量、或只有类型里的状态名，都算缺空态",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "空态必须可执行"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "S-002",
+      "family": "S",
+      "statement": "每个界面面的源文件（同一文件内）既有「加载 / 进行中分支」（`loading` / `busy` / `running` / `pending` 出现在条件里，或状态标记属性点名 loading / pending）又有可见的加载证据（一句「正在…」或「…中」中文，或骨架屏标记 `xs-skeleton` / `data-xuanshu-skeleton`）；只有一个 loading 变量而没有可见证据，算缺加载态",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "首屏 `loading` 用**卡级骨架**"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "S-003",
+      "family": "S",
+      "statement": "每个界面面的源文件（同一文件内）既有「错误分支」（`error` / `failed` / `failure` 出现在条件里，或错误状态标记属性）又有一句中文失败说明（「失败」「读不到」「打不开」「不可用」等）；错误行只把 `{error}` 变量原样直出、没有一句固定中文说法，算缺错误态",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "`空态`、`加载态`、`错误态` 三种"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "L-001",
+      "family": "L",
+      "statement": "同一屏内的文字层级（标题 / 正文 / 次要 / 元信息）一眼可区分：相邻两级的字号或字重至少有一项不同，且同一级的元素在整屏里用同一档",
+      "check": "human-only",
+      "evidence": "screenshot",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/assets/tokens/type-scale.md",
+        "anchor": "字号分「语义档」，实现票在组件里**点名档位 token，不写死 px**"
+      },
+      "humanReason": "「一眼能不能分出层级」是审美判断：字号差、字重差都能被机器量（那已由 C-001/C-002 覆盖），但「这屏读起来是不是有层次」没有可复现的阈值。按 spec 003 §判据硬门槛，它只能由人看一次并签字，不许伪装成机器判据。",
+      "tombstone": false
+    },
+    {
+      "id": "D-001",
+      "family": "D",
+      "statement": "每个可点目标的可点区域不小于 44×44 CSS 像素（留白档：控件少而大，点得准）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "点击目标 ≥44×44"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "D-002",
+      "family": "D",
+      "statement": "任一时刻一屏可见的主操作（`.xs-btn--primary`）不超过 1 个（留白档：一屏至多一个主操作；同一屏出现并列主操作即违反，同一屏在两个状态里各有一个不算并列）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "单屏主操作 ≤1"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "C-001",
+      "family": "C",
+      "statement": "每个渲染出来的正文级文字元素（跳过 `aria-hidden` 与控件标签）其计算字号 ≥ 16px（留白档下限；设计稿 body 档 14px 与 `.8rem` 辅助字都低于它）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "正文 ≥16px"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "C-002",
+      "family": "C",
+      "statement": "每个渲染出来的正文级文字元素其计算行高与字号之比 ≥ 1.5（`line-height: normal` 没有给出比值，按低于下限算）",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "行高 ≥1.5"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "C-003",
+      "family": "C",
+      "statement": "每个渲染出来的正文级文字元素与其有效背景的对比度达 WCAG AA：正文（字号 < 18.66px 或字重 < 700）≥ 4.5:1，大字（字号 ≥ 24px，或 ≥ 18.66px 且字重 ≥ 700）≥ 3:1",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "对比度达 WCAG AA"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "N-001",
+      "family": "N",
+      "statement": "同一个动作只有一个入口：同一动作名出现在两个及以上入口（侧栏行 / 面板 / 抽屉 / 输入框 dock / 命令）即红，并逐个列出是哪几个入口；置灰的入口不算入口",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "同一个动作只有一个入口"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "N-002",
+      "family": "N",
+      "statement": "关闭抽屉 / 面板后回到来处：关掉之后站的面必须等于打开它时站的面；落回首页（overview）即红",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "从抽屉 / 面板返回时回到我来的地方"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "N-003",
+      "family": "N",
+      "statement": "键盘能走完一条任务：本面里 Tab 顺序可达（至少两个骤停点）、每个焦点都有可见描边（`:focus-visible` 有 outline 或 box-shadow）、抽屉按 Esc 能关",
+      "check": "browser",
+      "evidence": "computed-style",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "rendered"
+      },
+      "source": {
+        "file": "docs/specs/003-ux-quality-line.md",
+        "anchor": "键盘能走完一条完整任务（Tab 顺序、Esc 关抽屉、焦点可见）"
+      },
+      "humanReason": null,
+      "tombstone": false
+    },
+    {
+      "id": "X-001",
+      "family": "X",
+      "statement": "同一状态在所有界面面只用一套说法：空态只许「还没有…」「没有…」，加载态只许「正在…」「…中」，错误态只许「失败」「读不到」「打不开」「不可用」——「暂无」「空的」「加载中」「读取中」「请稍候」「出错」「错误」「异常」这类同义替换不许与它们并存；且错误行旁边必须有可执行的下一步（重试 / 换个 / 请在…），只有一句「失败了」不算",
+      "check": "static",
+      "evidence": "file-line",
+      "severity": "major",
+      "appliesTo": {
+        "kind": "all"
+      },
+      "source": {
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "在同一屏内复用，不新造同义词"
+      },
+      "humanReason": null,
+      "tombstone": false
+    }
+  ],
+  "version": "14f8e05d83ff886fbf22ccdf63d6ca7a85bbd9ccaa1bc95a56ad6078afbe4bfd",
+  "ruleFiles": [
+    {
+      "file": "docs/design/ui-v1/criteria/rules/C.json",
+      "sha256": "2f501561bf44f113bf1467e41e062972ff2c21222513d85f96fb164fb0eb7373"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/D.json",
+      "sha256": "267753b60a7c211b8bbe8572509bb6025d3a9af6b08f252d53180b4415aef4ca"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/L.json",
+      "sha256": "89d0bfe6e8908a454def269ded79669eac64213883bd38d6cf072e4a9f8273fb"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/N.json",
+      "sha256": "ead586c63ee04340b016fa07c86c772e83ab66597280160b3fb030391bdb36ed"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/S.json",
+      "sha256": "7473dd8cff23f9531f0f29a77d14490f8305564ad50180d856a07360890999ab"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/T.json",
+      "sha256": "8a4d8cd1359db5f49562e0062b66dfcb8bf8509ef03c3e62f8ef7b265a292db5"
+    },
+    {
+      "file": "docs/design/ui-v1/criteria/rules/X.json",
+      "sha256": "0a282964e3438588a1057b44cc25199ba314d95442db5c85b94f2d72b5da9e47"
+    }
+  ]
+}

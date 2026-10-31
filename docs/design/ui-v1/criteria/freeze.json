@@ -1,0 +1,13 @@
+{
+  "schema": "xuanshu/ux-criteria-freeze@1",
+  "version": "14f8e05d83ff886fbf22ccdf63d6ca7a85bbd9ccaa1bc95a56ad6078afbe4bfd",
+  "criteria": {
+    "file": "docs/design/ui-v1/criteria/criteria.json",
+    "sha256": "be4b5c0dde1e45a19c4942713a1ee8dfb6b8a522550b6110ee2ce91620d3f40c",
+    "criteriaCount": 17,
+    "familyCount": 7
+  },
+  "frozenAt": "2026-10-31T09:54:47.129Z",
+  "approvedBy": "buyou",
+  "note": "Spec 003 判据集 v1 定稿：17 条 / 7 族由集成方投影、人（buyou）逐条确认后重签；type-scale 正文按 16px 目标判红，14px 记待清偿债"
+}

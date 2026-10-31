@@ -63,7 +63,7 @@ function assemble({ services = {} } = {}) {
 describe('票05 · shiji.* 挂上同一条通道（独立方法组）', () => {
   it('shiji.list / settings.get / settings.set 可调；digao.* 仍是三个、digao.write 不存在', async () => {
     const { route } = assemble()
-    expect(route.path).toBe('/xuanshu')
+    expect(route.path).toBe('/api/xuanshu')
 
     const listed = await call(route, 'shiji.list', {})
     expect(listed.ok).toBe(true)

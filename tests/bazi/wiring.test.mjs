@@ -86,7 +86,7 @@ const CONTRACT_METHODS = ['bazi.status', 'bazi.snapshot', 'bazi.basePu', 'bazi.c
 describe('票 08 · 六个方法挂在同一条 /xuanshu 通道上（契约 §2）', () => {
   it('通道路径 = /xuanshu，六个方法名逐字可调，且与 pu.* / cang.* 合并而不是互相覆盖', async () => {
     const { route } = assemble()
-    expect(route.path).toBe('/xuanshu')
+    expect(route.path).toBe('/api/xuanshu')
 
     for (const method of CONTRACT_METHODS) {
       const response = await call(route, method, method === 'bazi.cast' ? { birth: {}, confirmed: false } : {})

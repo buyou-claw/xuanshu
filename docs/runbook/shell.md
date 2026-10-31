@@ -49,7 +49,26 @@ pnpm --filter xuanshu-shell exec electron --version   # 会报错：说明只有
 ```
 
 这时**纯模块测试仍必须全绿**，但真实窗口/托盘/通知的验收未完成（如实登记，不许写成「已验证」）。
-换一台能下载的机器（或配镜像 `ELECTRON_MIRROR`）后重跑安装即可。
+换一台能下载的机器（或配镜像 `ELECTRON_MIRROR`）后重跑安装即可。本机实测 GitHub 直连会
+`ETIMEDOUT`，用镜像可以：`$env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'; node install.js`
+（在 `packages/xuanshu-shell/node_modules/electron` 下跑）。
+
+### 真机踩到的两个坑（2026-10-18，都有最小复现）
+
+1. **`whenReady()` 之前读路径 = 静默必死**。`app.getPath('userData' | 'appData')` / `app.getName()`
+   在 ready 前调用，进程会在 ready 之前直接退出，退出码 `0xFFFF7003`（-36861），stderr 只有一行
+   `crashpad_client_win.cc: not connected`，**没有任何 JS 报错**——现象就是「双击了没反应」。
+   最小复现：`import { app } from 'electron'; app.getPath('userData')` 两行就崩；把它挪到
+   `await app.whenReady()` 之后一切正常。因此 `electron-adapter.mjs` 里这三个是 **getter**，
+   模块加载期一律不读路径（`createElectronAdapter()` 被 `main.mjs` 顶层调用）。
+2. **这台机器上 Chromium 沙箱起不来**：不带 `--no-sandbox` 时任何 Electron 程序都
+   `0x80000003`（STATUS_BREAKPOINT）退出，12 行的最小程序同样如此。所以本机启动器
+   （`玄枢.lnk` / `玄枢-开发档.cmd`）都带 `--no-sandbox`。这是**机器级**结论，不是壳的缺陷；
+   换机器应重新判定，不要默认把这个开关写进产品默认值。
+
+> 若连最小程序都**卡在 `whenReady()`**（连 profile 目录都不创建），说明机器当前状态下 Chromium
+> 根本初始化不了 —— 先用 `dist\Electron自检.cmd` 判定，再决定是重启机器还是查沙箱/安全软件。
+
 
 ## 手测清单（真实机器）
 

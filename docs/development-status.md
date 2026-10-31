@@ -746,7 +746,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 ```
 # pnpm test:inventory（profile 已装；main 全量复核打磨后，见 §16.8）
-[inventory] 用例 1893 条（基线 1893）/ 文件 171 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2184 条（基线 2184）/ 文件 190 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
 
 # pnpm verify:isolation
@@ -756,7 +756,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 523432B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 523964B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -764,7 +764,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 ```
 
 2 条已知红仍是 `assembly-contract` 的 S1 与连带「CLI 退出码为 0」，`knownRed` 未改。
-`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（1893 / 171）。
+`pnpm verify:all`（tsc + `build-client --check` + 清单门 + 文档数字门）exit 0；清单基线已按最终用例数 `--update`（2184 / 190）。
 
 #### 16.4 本轮新踩到/修掉的操作陷阱（记下来）
 
@@ -930,7 +930,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 | E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
 
 **验证（数字抄工具输出；本行随当前验证块刷新，原轮次基线见下一行）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
-`[doc-numbers] OK：1893 条用例 / 171 个文件 / 523432 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+`[doc-numbers] OK：2184 条用例 / 190 个文件 / 523964 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
 E1/E3 与两轴复核修复新增 25 条用例后基线 `--update` 为 **1839 条 / 167 文件**，文档数字由新门核对。
 
 **这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
@@ -957,16 +957,16 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 
 ```
 # pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）
-[inventory] 用例 1893 条（基线 1893）/ 文件 171 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
+[inventory] 用例 2184 条（基线 2184）/ 文件 190 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
-[doc-numbers] OK：1893 条用例 / 171 个文件 / 523432 B
+[doc-numbers] OK：2184 条用例 / 190 个文件 / 523964 B
 
 # pnpm verify:isolation
 结果：8/8 通过，exit 0（6503ms）
 
 # pnpm verify:assembly → exit 1，仅 S1 既有上游缺陷
 [S2] PASS 192 行挂载；xuanshu-host.state=2 xuanshu-client.state=2
-[S3] PASS 客户端产物 523432B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 523964B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL unrecognized Loader tree carrier（同 §16.3）
@@ -980,4 +980,245 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 备份达到规模上限现在明确失败，需检查目录规模；投影缺席时按需读相关会话日志。
 真实 Electron 窗口/托盘/toast/自启、真实多家 provider、浏览器点击链与 setup 默认档端到端的
 验收边界沿用 §16.5，本轮的模块/装配验证不能代替这些真机验收。
+
+#### 16.9 真机 web boot 修掉客户端两处「一抛就整块不渲染」（2026-10-18）
+
+**现象**：真机打开玄枢（浏览器形态）只显示 `HARNESS / Failed to load plugins / xuanshu-client /
+web boot: 1 entry did not activate / xuanshu-client: failed`。10 个面板一个都不出现。
+DSH 的 boot 只报 fiber 状态，**真实异常被吞掉**（`packages/client/web/src/boot-client.ts:66` 只拼状态名）。
+
+**取证方法（可复用）**：本机解压出来的 Chromium（electron 33/38、playwright 自带 headless shell）
+都起不来（后者报 `ICU: U_INVALID_FORMAT_ERROR`，且它自己的 `icudtl.dat` 头部是全 0），
+改用**系统已装的 Edge**（`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`）+
+全局 playwright（`%APPDATA%\npm\node_modules\playwright`）打开页面、收 `console`/`pageerror`；
+再给 `apply()` 临时加一层 `try/catch` 打出真实栈（定位完立即撤掉，不在产物里留诊断代码）。
+
+**两个根因（都不是环境问题，重启机器不会好）**
+
+1. **客户端 ctx 的未声明服务属性访问会抛**：`ctx.uiWorkspace` / `ctx.workspaces` /
+   `ctx.sessions` / `ctx.commandUi` 这些服务没写进插件的 `inject` 数组时，客户端 cordis 的属性代理
+   **直接抛** `Error: cannot get property "uiWorkspace" without inject`；`as SomeShape` 这类类型断言
+   **运行期什么也不做**。四处命中：`index.tsx`（uiWorkspace、sessions）、`bestof.tsx`（commandUi）、
+   `mounts-api.ts`（workspaces）、`PuPanel.tsx`（渲染期读 `ctx.uiWorkspace`）。
+   修法：新增 `src/client/ctx-service.ts::readService()`，可缺席服务一律走 `ctx.get(name)`
+   （缺席返回 `undefined`，正是各调用点「拿不到就如实降级」要的东西）；`PuPanel` 改成注入
+   `openSession` 回调，组件不再碰 ctx。
+2. **`hashchange` 挂在 `location` 上**：浏览器里 `location` 不是 EventTarget，
+   `location.addEventListener is not a function` —— 又是一抛就整块死。
+   修法：`overview-hash.ts` 的 `listenOn` 单独给，装到 `window`，`location` 只用来读/清 hash。
+
+**为什么以前没发现**：客户端只有 `renderToStaticMarkup` 与纯函数断言（本仓无 jsdom），
+`verify:assembly` 的 S3 是产物物化 + 槽位自检（静态），真机 web 页面从没打开过 ——
+§16.5 早就把「真浏览器点击链」登记为未验证边界，这次是它第一次真的被打开。
+
+**验证（数字抄工具输出）**
+
+```
+# 真机（Edge + playwright 探针，2026-10-18 11:43）
+body: 10 个面板全部渲染（总览/问事/谱/藏/底稿/工作流/填八字/命盘/日课/晚省）+「家 · 自我总览」
+console: 无 boot 失败、无 pageerror
+# node ./node_modules/vitest/vitest.mjs run tests/assembly tests/shell
+Tests  2 failed | 771 passed (773)   # 仅 S1 及其连带（既有已知红）
+# tsc --noEmit exit 0；build-client --check in sync 523964 B；check-doc-numbers OK
+```
+
+**测试侧的配套**：`tests/assembly/bestof-registry.test.mjs` 的两个假 ctx 补了 `get(name)`
+（模拟真 cordis：「可选服务走 `ctx.get`」是 API 事实，不是实现细节），夹具与实现不再两边同错。
+
+**仍然未验的**：真实 Electron 窗口那条线（本机 Chromium 运行时起不来，§16.5 边界不变）。
+
+#### 16.10 数据面整条不通：宿主 RPC 通道注册必抛 + 客户端传输走错路径（2026-10-18 下午）
+
+§16.9 修完两处后**界面出来了，但每张卡都是失败态**（真机截图：命盘「快照读不出来」、
+日课「底座未就绪 / 推送调用失败 —— transport failure for /xuanshu/rikke.status: HTTP 405」）。
+
+**取证**：`dsh web` 的 stderr 里有一行谁都没看的
+`dsh: warning: 1 entry did not activate / xuanshu-host (xuanshu-host): failed to import`；
+给 `installRpc` 临时加日志后拿到真实栈：
+`Error: cannot get property "webServer" without inject`，位置在
+`dsh-client-connection/lib/index.js:656` 的 `owner.webServer.register(route)`。
+
+**两处根因（都是「照着一半 API 写」）**
+
+1. **`connection.rpc.handle(name, handler)` 在 rc.2 里没法用**：它在 `register()` 内部读
+   `owner.webServer`，而 owner 是 connection service 自己的 ctx（没有 inject `webServer`），
+   必然抛。我们的 `apply()` 里这一句抛在 `ctx.inject(['connection','webServer'])` 的回调里，
+   fiber 直接 failed —— 整条数据面（bazi / consult / rikke / digao / data / shiji / workflow / bestof）
+   一条 RPC 都没注册。**rc.2 给扩展的正确入口是 `/api` 前缀路由上的 exact Fetch 路由**：
+   `connection.fetch.register({ path: '/api/<name>', methods, requestBody, fetch })`
+   （先例 `dsh-api-session-controller` 的 `/api/file`），鉴权由 `/api` 统一施加。
+   修法：`packages/xuanshu-host/lib/rpc.mjs` 改成挂 `/api/xuanshu`，信封自持
+   `{method,payload}` → `{ok,value}` / `{ok:false,error}`；派发抽成 `createRpcDispatch()`。
+2. **客户端传输指向了不存在的路径**：`rpcCall` 走 `ctx.connection.rpc.call('/xuanshu', method)`
+   → 浏览器 POST `/xuanshu/<method>`；而宿主只把 `/api` 挂成前缀路由，别的路径都是 SPA 兜底
+   → **HTTP 405**。修法：`packages/xuanshu-client/src/client/rpc.ts` 直接 `fetch('/api/xuanshu')`
+   （同源带会话 cookie），信封与宿主对齐。
+
+**真机验证（Edge + playwright 探针）**
+
+```
+启动日志：无 "did not activate"（此前 xuanshu-host 每次都没起来）
+概览页：数据都在本地 E:\ai_project\XuanShu\.dsh-home\xuanshu\   ← 真 home（占位符问题同时消失）
+命盘：底座还没立起来（如实态）
+日课：今天还没有生成日课。日课默认每天 07:30 生成（底座未立时生成会失败）
+底稿：底座未立，还没有可提炼的来源
+console：无 405、无 pageerror
+```
+
+**代价（如实登记）**：客户端传输换成 `fetch` 之后，`tests/assembly/**` 里 **13 个文件、27 条**
+把 `ctx.connection.rpc.call` 当替身的用例需要迁移到新传输（它们断言的是「方法名 + 载荷」，
+语义不变，只换夹具形状）；连同 S1 的 2 条既有红，`tests/assembly` 当前是红的。
+迁移未在本轮完成 —— 这是下一轮的第一件事，不要把它读成「功能坏了」。
+
+#### 16.11 宿主侧 `ctx?.<service>` 同一类必崩：日课 AI 段「cannot get property "llm" without inject」
+
+**现象**（真机，底座立起来之后）：命盘四柱正常、日课确定性段（宜/忌/流日）正常，
+只有 AI 段写 `AI 建议生成失败：AI 段跑的时候抛了异常（已兜住）：cannot get property "llm" without inject`。
+
+**根因**：与 §16.9 同一个机理（cordis 的 ctx 属性代理对**未 inject 的服务**直接抛），
+但这次在**宿主**侧，而且是 `ctx?.llm` 这种写法 —— `?.` 只挡 ctx 为 null，**挡不住代理抛**。
+命中的 6 处：`digao/llm.mjs`、`rikke/ai-note.mjs`（两处 LLM）、`digao/sources.mjs`（两处 workspaceRegistry）、
+`digao/tasks.mjs`（`?? ctx?.schedule` 兜底）、`rikke/daily-tasks.mjs`（`?? ctx?.agents` 兜底）。
+后两处的形状尤其隐蔽：`softGet(...) ?? ctx?.x` —— 软取拿不到时才走兜底，兜底那一刻才抛。
+
+**修法**：新增 `packages/xuanshu-host/lib/soft-service.mjs::getService(ctx, name)`（唯一软取入口，
+从不抛），把上述 6 处全换成它；不再新增第 26 份 `softGet` 复制。
+
+**真机验证（`rikke.generate` 走真宿主 + 真 DeepSeek）**
+
+```
+ai: { mode: 'ok', text: '今天把范围收小，只推进已经定下的小事…流日为乙丑土日，节奏放慢些…' }
+产物 <dataDir>/rikke/2026-10-18.json 的 ai.mode = 'ok'
+```
+
+**同一条修法顺带修好的**：底稿的 LLM 摘要、事记摘要、合参/问事的 LLM 调用路径（同一个 `getService(ctx,'llm')` 口径）。
+
+---
+
+## 17. Spec 003 体验质量线（判据 / 巡检 / 兑现率）
+
+> 时间：2026-10-31｜工单：#48–#60（13 张）｜ADR：[`adr/0015-ux-quality-line-machine-criteria.md`](adr/0015-ux-quality-line-machine-criteria.md)
+> 真值入口：`pnpm verify:ux`（只报告、不挡门）；判据集在 `docs/design/ui-v1/criteria/`
+
+### 17.1 建成了什么
+
+| 模块 | 位置 | 一句话 |
+|---|---|---|
+| 界面面清单 | `tests/assembly/lib/panel-surface.mjs::faceManifest()` | 分母的唯一来源（注册面派生，不另抄） |
+| 判据投影器 | `scripts/ux/project.mjs` | `rules/*.json` → `criteria.json`（字节确定，`version` = sha256） |
+| 冻结守卫 | `scripts/ux/freeze.mjs` | 判据被改一个字节 → 拒绝运行、退出码 3、不出报告 |
+| 静态采集器 | `scripts/ux/collect/static.mjs` + `probes/*` | 读源码收事实，不判定 |
+| 浏览器采集器 | `scripts/ux/collect/browser.mjs` + `browser-scripts.mjs` | 起隔离实例跑任务剧本，只收证据 |
+| 判定引擎 | `scripts/ux/judge.mjs` + `assertions/*` | **唯一判定点**，纯函数 |
+| 报告器 | `scripts/ux/report.mjs` + `diff.mjs` | 兑现率 / 三分类 diff / 缺态清单 / 人读 + 机读 |
+| 修复护栏 | `scripts/check-ux-fix-notes.mjs` / `check-ux-authority.mjs` / `ux/regreen.mjs` | 修复说明、写入面、转绿断言 |
+
+### 17.2 界面面真值：**25**，不是 30
+
+spec 003 与票 01 写的「10 面板 + 18 寄生 = 30 面」是把 `4+2+2+3+1+3=15` 估成了 18。真实注册面
+（`expectedCells()` + `BESTOF_COMMAND_NAMES`）是：**10 个面板 + 12 个寄生位（4 抽屉 / 2 设置区块 /
+2 设置项 / 3 输入框 dock / 1 回合尾）+ 3 个命令 = 25 面**。分母按真值算；`faceManifest()` 对
+「新增了注册面却没登记 label/sources」直接抛错，所以覆盖面不会因为没人记得而静默缩水。
+
+### 17.3 判据集 v1（17 条 / 7 族）
+
+`T-001..004`（token 消费，static）· `D-001..002`（点击目标 ≥44×44 / 一屏至多一个主操作，browser）·
+`C-001..003`（正文 ≥16 / 行高 ≥1.5 / 对比度 AA，browser）· `S-001..003`（空/载/错，static）·
+`N-001..003`（入口唯一 / 返回落点 / 键盘可达，browser）· `X-001`（文案一致性，static）·
+`L-001`（层级与排版，**human-only**，写明「机器判不了的原因」）。
+阈值与出处：`rules/*.json` 每条都带 `source.anchor`，投影器校验锚必须真的存在于设计稿（或 spec 003 §视觉档位）。
+
+### 17.4 这一轮的数字（抄工具输出）
+
+```
+# node scripts/verify-ux.mjs（静态半边）
+兑现率：174/376 = 46.3% · 判据集 ux-v1 · 25 个界面面 × 17 条判据
+判定：pass 174 / fail 26 / human-only 22 / not-collected 176
+
+# node scripts/verify-ux.mjs --browser（再起隔离实例跑三条剧本）
+兑现率：195/376 = 51.9%
+判定：pass 195 / fail 42 / human-only 22 / not-collected 139
+视觉档实测：最小点击目标 70×21（panel:overview）· 最低对比度 3.42:1 · 同屏主操作最多 2 个
+```
+
+- 族 T 四条**全绿**（票 11 清偿）：字面色值 15 → 0、注入点 12 → 1（`styles.ts` 单一消费层）、
+  字面断点 9 → 0（`breakpoints.ts`）、非 token 颜色声明 8 → 0。
+- 静态半边的 26 条红全在族 S/X（缺空态/加载态/错误态、文案不统一）：**实测结论，不是回归**。
+- `--browser` 多出的 16 条红来自族 D/C/N（视觉档与导航），只覆盖剧本走到的面；其余是 `not-collected`
+  （未采到 ≠ 通过）。导航族实测：`N-001` 5 面红（`pus` 3 个入口 / `onboarding` 2 / `workflow` 2 /
+  藏抽屉 2 / 挂载抽屉 2），`N-002` 观测 2 面全绿，`N-003` 观测 3 面全绿。
+
+**视觉档实测（真 Edge，剧本 1 只走到 overview + pus 两个面）**：最小点击目标 **70×21**、最低对比度
+**3.42:1**、同屏主操作最多 **2 个**。`C-002`（行高 ≥1.5）是唯一**两面全红**的：玄枢这些面板都没设
+`line-height`（computed = `normal` ≈ 1.2），设计稿 type-scale 写的 body 行高 1.6 没落地 —— 真缺陷，
+修法是在 `styles.ts` 统一给正文行高（下一张修复票）。
+
+**一处需要人裁决的自相矛盾**：`assets/tokens/type-scale.md` 的 body 是 14px、caption 12px，而 spec 003 §21
+要求正文 ≥16px。`C-001` 的红有一半来自这条冲突。本 spec 不动设计稿取值（Out of Scope），所以按现状
+如实判红；要么改 type-scale（新 ADR），要么改 spec 的留白档阈值 —— 两条都不该由巡检自己决定。
+这也是 `rules/D.json` / `C.json` 的 `source.file` 指向 spec 003 而不是 ui-v1 的原因（**唯一一处**被允许的
+出处例外，等上面那条裁决完再回改设计稿）。
+
+**已知的口径代价（下一张票该改）**：`S-001..003` / `X-001` 的 `appliesTo` 是 `all`，命令面（`/多模型` 等
+3 个）也在里面 —— 命令没有 DOM，三态只能由它打开的浮层承载，于是产生 9 条**不可直接行动**的红。
+本 spec 选择照判（不开天窗），代价是 26 条红里占 9 条。正确的做法是把 S/X 的 scope 改成 `rendered`
+（与 D/C/N 一致），并同步 `family-s` 的断言。
+
+**巡检顺手抓到的两个真问题**（未做成判据，写进报告 notes）：
+1. **挂载账本抽屉点了不开** —— 门厅挂载区与 `shell.overlay` 浮层各持一个 controller
+   （`index.tsx` 造一个给区、`installMounts` 内部又造一个给浮层），所以 N 族在挂载抽屉记「未采到」。
+2. **藏库卡片的次级入口在闭合的 `<details>` 里**：宽屏下 summary 被藏、内容不在 Tab 序与可访问树，
+   指针也常打不中（boundingBox 0×0）—— 两次运行尺寸不稳定，所以没写成 N-003 判据（会变成抖动的红）。
+
+### 17.5 继承红与顺带修好
+
+- **修好**：`tests/assembly/**` 里 39 条 + `tests/cang/panel` 1 条 API 用例仍按旧传输层
+  （`ctx.connection.rpc.call`）打桩 —— 上一提交把数据面改成同源 `fetch('/api/xuanshu')` 后它们全红。
+  新增 `tests/assembly/lib/rpc-fetch.mjs` 统一打桩，断言口径零放宽，40 条转绿。
+- **修好**：`tests/digao/service.test.mjs`「事记按 lastActiveAt 倒序」是一条**时间债** ——
+  用例把 2026-10-18 当「更晚」，但第二次刷新走没有 `now` 接缝的 RPC，等于用墙上时钟写 `lastActiveAt`；
+  2026-10-18 之后必然翻序（今天 10-31 稳定复现）。修法：第二次也注入同一个扫描时刻，断言口径未放宽。
+- **仍红（与本 spec 无关，已登记）**：`tests/assembly/assembly-contract.test.mjs` 的 S1/CLI 两条
+  （上游 DSH 缺陷，`knownRed`）。
+
+### 17.6 这一轮新踩到的坑（记下来）
+
+1. **`profile/cordis.patch.yml` 会被 DSH 改写**：首跑关掉「预览版说明」时 DSH 往这个**入库件**里追加
+   `welcomeNoticeVersion`。浏览器采集器现在启动前快照、`stop()` 原样写回；手工探针留下的那次改动已 `git checkout` 还原。
+2. **worktree 里跑不了浏览器半边**：`worktree-create` 只链 `packages/*/node_modules`，临时 home 的
+   `profiles/xuanshu` 是 link 到**worktree 的** `profile/`（那份没有 node_modules）。实现者票请只在主仓跑 `--browser`。
+3. **媒体查询吃不了 `var()`**：所以断点只能走 JS 常量 + 模板插值；T-003 的采集口径因此把
+   `${BREAKPOINT_*_PX}px` 判为「来自 token」，不判字面 —— 否则把值搬进常量也照样红，等于逼人留字面值。
+4. **清理带 junction 的临时 home**：先 `cmd /c rmdir <link>` 摘链接，再递归删目录。直接递归删会跟穿到仓库 `profile/`。
+
+### 17.7 签字与两处口径定稿（2026-10-31）
+
+1. **判据集 v1 的签字人改为 `buyou`**。此前 `freeze.json` 的 `approvedBy` 是集成期间临时写的
+   `integration-owner`——那是机器身份，按 ADR-0015 第 7 条签字点①本该是人。重签只改
+   `frozenAt` / `approvedBy` / `note` 三个字段，`version` 仍是 `14f8e05d83ff…`，17 条 / 7 族一字未动。
+
+2. **`type-scale.md` 的 14px 与 spec §21 的「正文 ≥16px」冲突，裁决为：16px 是目标，14px 是现状**。
+   设计稿不改表（表里是当前实现的取值），差额登记为待清偿债；清偿时整条阶梯一起重排
+   （body 16 / secondary 14 / tertiary 13 / caption 12，层级靠字重与间距分），并同改那张表。
+   在此之前 C-001 照现状判红——**不许靠调低阈值把红变成绿**。裁决原文追加在
+   `docs/design/ui-v1/assets/tokens/type-scale.md` §5。
+
+3. **已知缺陷（登记待办，本轮未修）**：两个修复护栏的缺省基准是 `feat/spec-003-integration`
+   （`scripts/ux/repair-channel.mjs:30`），在这个分支上跑等于自己比自己 → `commits=0`、真空绿。
+   换成真实范围立刻是红的：
+
+   ```powershell
+   node scripts/check-ux-authority.mjs --since main    # 40 个提交 / 19 个动生效区 → ✗ 9 条
+   node scripts/check-ux-fix-notes.mjs --since main    # 40 个提交 / 跳 16 个合并 → ✗ 1 条
+   ```
+
+   9 条里 8 条是「票在自己的 worktree 里改 `rules/`、集成时统一签字」的正常中间态，第 9 条是
+   `a4a4772` 合并时签字哈希对不上（`636f87fd…` → `0795319…`）；`fix-notes` 那 1 条是 spec 002
+   继承来的 `8fdaa4b`（改了 11 个客户端文件、没有 `UX-FIX` 行）。
+   正解是缺省基准按「当前分支是否集成分支」动态解析到 `main`，并把上述历史中间态写成**带理由的
+   显式豁免清单**（逐条打出来，不静默忽略）；豁免条目指向的 sha 在范围里找不到时也要报——否则
+   清单会退化成永久黑名单。下一张票做。
+
+
+
 

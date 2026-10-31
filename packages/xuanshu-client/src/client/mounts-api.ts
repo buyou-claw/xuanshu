@@ -80,6 +80,7 @@ export interface WorkspaceCandidate {
 }
 
 /** 最小 RPC 形状：与 `consult-api.ts` 同款，走 `rpcCall`（`/xuanshu` 通道，信封统一在这里拆）。 */
+import { readService } from './ctx-service.js';
 import { rpcCall, type RpcContext } from './rpc.js';
 
 /** 建数据面。 */
@@ -115,7 +116,7 @@ export interface WorkspaceCatalog {
  * （S8 §2.1②：不提供新建工作区入口，那种事去 DSH 原界面）。
  */
 export function createWorkspaceCatalog(ctx: unknown): WorkspaceCatalog {
-  const face = (ctx as { workspaces?: WorkspacesFace }).workspaces;
+  const face = readService<WorkspacesFace>(ctx, 'workspaces');
   const source = face?.list;
   if (typeof source?.getSnapshot !== 'function') {
     return { list: () => [], subscribe: () => () => {}, available: false };

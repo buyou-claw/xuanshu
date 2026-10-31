@@ -117,6 +117,13 @@ describe('票 10 · 无源拦截引导（S6 §5 步骤 5a / §7 同名行）', (
     // 空问题（只是开一个会话）：不拦 —— 引导只在「要发出去」这一刻有意义
     expect(nudgeNeeded({ question: '   ', selected: [], mounts: [] })).toBe(false)
   })
+
+  it('勾选区一个可选谱都没有时不拦（第一次问事：两条去路都是死路）', () => {
+    // 没有可选谱可勾；挂载要挂在会话上、门厅此刻还没会话 → 引导给的两条路都走不通。
+    expect(nudgeNeeded({ question: '帮我看转岗时机', selected: [], mounts: [], selectableCount: 0 })).toBe(false)
+    // 有可选谱：照旧拦（「去勾一个谱」这条路走得通）
+    expect(nudgeNeeded({ question: '帮我看转岗时机', selected: [], mounts: [], selectableCount: 2 })).toBe(true)
+  })
 })
 
 describe('票 10 · 历史列表的分组、过滤与元信息（S7 §2.1 / §3①②③）', () => {

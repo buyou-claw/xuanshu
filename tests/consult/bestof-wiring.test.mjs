@@ -57,7 +57,7 @@ const CONTRACT_METHODS = ['bestof.run', 'bestof.state', 'bestof.adopt']
 describe('票 11 · 三个方法挂在同一条 /xuanshu 通道上（契约 §1）', () => {
   it('三个方法逐字可调，且与 consult.* / pu.* / cang.* / bazi.* 合并而不是互相覆盖', async () => {
     const { route, sandbox, agents } = assemble()
-    expect(route.path).toBe('/xuanshu')
+    expect(route.path).toBe('/api/xuanshu')
 
     const created = await call(route, 'consult.create', { pus: [] })
     expect(created.ok, JSON.stringify(created)).toBe(true)

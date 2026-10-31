@@ -1,0 +1,529 @@
+{
+  "recordedAt": "2026-10-30T17:15:55.105Z",
+  "collector": "browser",
+  "script": "create-pu",
+  "viewport": {
+    "width": 1280,
+    "height": 900
+  },
+  "note": "票 09 (#56) 录制：真浏览器跑剧本 1（建谱）时 measure() 收到的原始事实，原样保存；用例读它走判定，不再起浏览器。",
+  "faces": {
+    "panel:overview": {
+      "targets": [
+        {
+          "tag": "button",
+          "label": "开始填写出生信息 ->",
+          "width": 176,
+          "height": 32
+        },
+        {
+          "tag": "button",
+          "label": "立即生成",
+          "width": 90,
+          "height": 32
+        },
+        {
+          "tag": "button",
+          "label": "改时间 ->",
+          "width": 70,
+          "height": 21
+        },
+        {
+          "tag": "button",
+          "label": "开始填写出生信息 ->",
+          "width": 176,
+          "height": 32
+        },
+        {
+          "tag": "button",
+          "label": "工作区车间",
+          "width": 139,
+          "height": 121
+        },
+        {
+          "tag": "button",
+          "label": "工作流流水线",
+          "width": 139,
+          "height": 121
+        },
+        {
+          "tag": "button",
+          "label": "重试",
+          "width": 58,
+          "height": 32
+        },
+        {
+          "tag": "button",
+          "label": "立即生成",
+          "width": 90,
+          "height": 32
+        },
+        {
+          "tag": "button",
+          "label": "改时间 ->",
+          "width": 70,
+          "height": 21
+        }
+      ],
+      "primaryActions": [
+        {
+          "count": 2,
+          "buttons": [
+            {
+              "tag": "button",
+              "label": "开始填写出生信息 ->"
+            },
+            {
+              "tag": "button",
+              "label": "开始填写出生信息 ->"
+            }
+          ]
+        }
+      ],
+      "bodyTexts": [
+        {
+          "selector": "div.xs-overview > header.xs-overview__header > h1.xs-overview__title",
+          "tag": "h1",
+          "text": "· 自我总览",
+          "fontSize": 14,
+          "lineHeight": "normal",
+          "fontWeight": 600,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "header.xs-overview__header > h1.xs-overview__title > span.xs-overview__home",
+          "tag": "span",
+          "text": "家",
+          "fontSize": 14,
+          "lineHeight": "normal",
+          "fontWeight": 600,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "div.xs-overview > header.xs-overview__header > p.xs-overview__localnote",
+          "tag": "p",
+          "text": "数据都在本地 C:\\Users\\Administrator\\AppData\\Local\\Temp",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(129, 133, 140)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(1) > header.xs-card__head > h2.xs-card__title",
+          "tag": "h2",
+          "text": "命盘 / 八字",
+          "fontSize": 14,
+          "lineHeight": "normal",
+          "fontWeight": 600,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(1) > header.xs-card__head > span.xs-badge",
+          "tag": "span",
+          "text": "只读 · 由出生信息与底座生成",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(97, 102, 107)",
+          "backgroundColor": "rgb(235, 238, 242)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(1) > div.xs-card__empty > p.xs-empty__why:nth-of-type(1)",
+          "tag": "p",
+          "text": "底座还没立起来",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(97, 102, 107)",
+          "backgroundColor": "rgb(245, 246, 247)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(1) > div.xs-card__empty > p.xs-empty__sub:nth-of-type(2)",
+          "tag": "p",
+          "text": "填一次出生信息，命盘就点亮了。（预计 1 分钟；之后不再重复录入）",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(129, 133, 140)",
+          "backgroundColor": "rgb(245, 246, 247)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(2) > header.xs-card__head > h2.xs-card__title",
+          "tag": "h2",
+          "text": "日课 · 今天 2026-10-31",
+          "fontSize": 14,
+          "lineHeight": "normal",
+          "fontWeight": 600,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(2) > div.xs-card__empty > p.xs-empty__why:nth-of-type(1)",
+          "tag": "p",
+          "text": "今天还没有生成日课。日课默认每天 07:30 生成。",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(97, 102, 107)",
+          "backgroundColor": "rgb(245, 246, 247)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(2) > div.xs-card__empty > p.xs-empty__sub:nth-of-type(2)",
+          "tag": "p",
+          "text": "（底座未立时生成会失败）",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(129, 133, 140)",
+          "backgroundColor": "rgb(245, 246, 247)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(3) > header.xs-card__head > h2.xs-card__title",
+          "tag": "h2",
+          "text": "底稿",
+          "fontSize": 14,
+          "lineHeight": "normal",
+          "fontWeight": 600,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(3) > header.xs-card__head > span.xs-badge",
+          "tag": "span",
+          "text": "纯派生 · 不可手改",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(72, 104, 178)",
+          "backgroundColor": "rgb(237, 243, 254)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(3) > div.xs-card__empty > p.xs-empty__why:nth-of-type(1)",
+          "tag": "p",
+          "text": "底座未立，还没有可提炼的来源。",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(97, 102, 107)",
+          "backgroundColor": "rgb(245, 246, 247)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(3) > div.xs-card__empty > p.xs-empty__sub:nth-of-type(2)",
+          "tag": "p",
+          "text": "这里不会先有内容：提炼源是 0。",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(129, 133, 140)",
+          "backgroundColor": "rgb(245, 246, 247)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(4) > header.xs-card__head > h2.xs-card__title",
+          "tag": "h2",
+          "text": "快捷入口",
+          "fontSize": 14,
+          "lineHeight": "normal",
+          "fontWeight": 600,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(4) > div.xs-ai-gate:nth-of-type(2) > p.xs-ai-gate__reason:nth-of-type(1)",
+          "tag": "p",
+          "text": "问事还开不了：DeepSeek 已有模型，但这家没有配置密钥（key）。",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(4) > div.xs-ai-gate:nth-of-type(2) > p.xs-ai-gate__next:nth-of-type(2)",
+          "tag": "p",
+          "text": "打开 DSH「设置 → 模型」给 DeepSeek 填上密钥。",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "div.xs-ai-gate:nth-of-type(2) > div.xs-ai-gate__actions > p.xs-ai__path",
+          "tag": "p",
+          "text": "请打开 DSH「设置 → 模型」配置 provider 与默认模型。",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "div.xs-overview__grid > section.xs-card:nth-of-type(4) > p.xs-quicklinks__note",
+          "tag": "p",
+          "text": "谱 / 藏 / 定时任务是管理入口，在侧栏「库」与设置里，不在本卡。",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(129, 133, 140)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(5) > header.xs-card__head > h2.xs-card__title",
+          "tag": "h2",
+          "text": "晚省 · 今天 2026-10-31",
+          "fontSize": 14,
+          "lineHeight": "normal",
+          "fontWeight": 600,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(5) > div.xs-card__empty > p.xs-empty__why:nth-of-type(1)",
+          "tag": "p",
+          "text": "今天还没有晚省。晚省默认每天 21:30 生成。",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(97, 102, 107)",
+          "backgroundColor": "rgb(245, 246, 247)"
+        },
+        {
+          "selector": "section.xs-card:nth-of-type(5) > div.xs-card__empty > p.xs-empty__sub:nth-of-type(2)",
+          "tag": "p",
+          "text": "（它只摆事实、不替你下结论；点开进问事）",
+          "fontSize": 13,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(129, 133, 140)",
+          "backgroundColor": "rgb(245, 246, 247)"
+        }
+      ]
+    },
+    "panel:pus": {
+      "targets": [
+        {
+          "tag": "input",
+          "label": "搜索谱",
+          "width": 197,
+          "height": 37
+        },
+        {
+          "tag": "select",
+          "label": "级别筛选",
+          "width": 116,
+          "height": 39
+        },
+        {
+          "tag": "select",
+          "label": "来源筛选",
+          "width": 111,
+          "height": 39
+        },
+        {
+          "tag": "button",
+          "label": "＋ 创建新谱",
+          "width": 100,
+          "height": 37
+        },
+        {
+          "tag": "button",
+          "label": "打开",
+          "width": 48,
+          "height": 37
+        },
+        {
+          "tag": "button",
+          "label": "清空筛选",
+          "width": 80,
+          "height": 37
+        },
+        {
+          "tag": "button",
+          "label": "← 返回列表",
+          "width": 98,
+          "height": 37
+        },
+        {
+          "tag": "input",
+          "label": "",
+          "width": 197,
+          "height": 37
+        },
+        {
+          "tag": "select",
+          "label": "基础输入级 base可选输入级 optional",
+          "width": 179,
+          "height": 39
+        },
+        {
+          "tag": "button",
+          "label": "返回改资料",
+          "width": 96,
+          "height": 37
+        },
+        {
+          "tag": "button",
+          "label": "开始转换",
+          "width": 80,
+          "height": 37
+        }
+      ],
+      "primaryActions": [
+        {
+          "count": 0,
+          "buttons": []
+        },
+        {
+          "count": 0,
+          "buttons": []
+        }
+      ],
+      "bodyTexts": [
+        {
+          "selector": "main.xs-pu > header > h1",
+          "tag": "h1",
+          "text": "谱管理",
+          "fontSize": 32,
+          "lineHeight": "normal",
+          "fontWeight": 700,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "main.xs-pu > section:nth-of-type(1) > h2",
+          "tag": "h2",
+          "text": "基础输入级 base · 0 个",
+          "fontSize": 24,
+          "lineHeight": "normal",
+          "fontWeight": 700,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "main.xs-pu > section:nth-of-type(1) > p:nth-of-type(1)",
+          "tag": "p",
+          "text": "进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "main.xs-pu > section:nth-of-type(1) > p:nth-of-type(2)",
+          "tag": "p",
+          "text": "🔒 底座（八字） · 只读 · 由出生信息与底座生成 · 默认在场 · 不可关",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "main.xs-pu > section:nth-of-type(3) > h2",
+          "tag": "h2",
+          "text": "可选输入级 optional · 0 个",
+          "fontSize": 24,
+          "lineHeight": "normal",
+          "fontWeight": 700,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "main.xs-pu > section:nth-of-type(3) > p",
+          "tag": "p",
+          "text": "底稿不采 · 问事时按需追加",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "main.xs-pu > div:nth-of-type(2) > p",
+          "tag": "p",
+          "text": "还没有可选谱：谱由你积累，非必填、不阻塞使用。",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "div > main.xs-pu > p",
+          "tag": "p",
+          "text": "本列表只收谱。工作区 / 工作流与谱并列独立、不是谱。你自己的本地文件在藏库里，永不进 AI。",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "main.xs-pu > header > h1",
+          "tag": "h1",
+          "text": "创建新谱",
+          "fontSize": 32,
+          "lineHeight": "normal",
+          "fontWeight": 700,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "div > main.xs-pu > p:nth-of-type(1)",
+          "tag": "p",
+          "text": "① 给资料 → ② 定义谱名 → ③ AI 转换中 → ④ 生成预览 → ⑤ 确认落盘",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "div > main.xs-pu > label:nth-of-type(1)",
+          "tag": "label",
+          "text": "谱名",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "div > main.xs-pu > label:nth-of-type(2)",
+          "tag": "label",
+          "text": "级别",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "div > main.xs-pu > p:nth-of-type(2)",
+          "tag": "p",
+          "text": "谱名唯一 · 目录名小写、- 连接、可含中文。所有谱均非必填。",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        },
+        {
+          "selector": "div > main.xs-pu > p:nth-of-type(3)",
+          "tag": "p",
+          "text": "预览：pus/ 木工 /",
+          "fontSize": 16,
+          "lineHeight": "normal",
+          "fontWeight": 400,
+          "color": "rgb(15, 17, 21)",
+          "backgroundColor": "rgb(255, 255, 255)"
+        }
+      ]
+    }
+  }
+}
