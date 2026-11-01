@@ -3796,6 +3796,8 @@ function installDataStyle() {
 .xs-data__lead,.xs-data__note{color:var(--xs-text-secondary);font-size:.9rem}
 .xs-data__block{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad);margin:16px 0;background:var(--xs-surface-card)}
 .xs-data__groups{width:100%;border-collapse:collapse;font-size:.9rem}.xs-data__groups th,.xs-data__groups td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--xs-edge-card);vertical-align:top}
+/* 2026-11-02：体积与文件数是短数字，不该被挤成两行（截图里看到「6 个」/「文件」上下断开）。路径列本来就该换行，单独放行。 */
+.xs-data__groups td{white-space:nowrap}.xs-data__groups td:has(code){white-space:normal}
 .xs-data__groups thead th{color:var(--xs-text-secondary);font-weight:500}.xs-data__groups tbody th{font-weight:600;white-space:nowrap}
 .xs-data__total{margin:12px 0 0;font-weight:600}
 .xs-data button{font:inherit;padding:7px 14px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
