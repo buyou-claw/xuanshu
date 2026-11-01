@@ -136,6 +136,13 @@ export function XsTimeStep({ draft, onChange, onNudge, onNow }: XsTimeStepProps)
           value={draft.date}
           onChange={(event) => { onChange({ date: event.target.value }); }}
         />
+        {/*
+          2026-11-02 加：这台机器上 Edge 把原生 date 的占位符渲染成「yyyy-mm-日」
+          （英文 yyyy/mm 混中文「日」）。实测 lang="en" 与 lang="zh-CN" 渲染完全一样，
+          是浏览器跟系统 locale 的行为，不是我们能改的 —— 所以不换成自定义控件，
+          只给一个格式样例，用户不用猜最后那位该填什么。
+        */}
+        <small className="xs-wizard__note" data-xuanshu-note="date-format">格式如 1990-05-20</small>
       </label>
       <label className="xs-wizard__field">
         <span>② 时间</span>

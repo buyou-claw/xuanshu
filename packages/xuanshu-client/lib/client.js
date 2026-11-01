@@ -7419,7 +7419,8 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
                 onChange({ date: event.target.value });
               }
             }
-          )
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("small", { className: "xs-wizard__note", "data-xuanshu-note": "date-format", children: "格式如 1990-05-20" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("label", { className: "xs-wizard__field", children: [
           /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { children: "② 时间" }),
