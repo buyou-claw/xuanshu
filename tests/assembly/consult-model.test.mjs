@@ -103,7 +103,7 @@ describe('票 10 · 勾选谱：锁定项与两组可选谱（S6 §2.1 / §9 C5�
 
   it('一个可选谱都没有时给可执行的追加行（S6 §6 empty）', () => {
     expect(historyEmptyCopy.noneOptionalPu).toContain('谱都非必填')
-    expect(historyEmptyCopy.noneOptionalPu).toContain('去 S5')
+    expect(historyEmptyCopy.noneOptionalPu).toContain('点侧栏「谱」')
   })
 })
 

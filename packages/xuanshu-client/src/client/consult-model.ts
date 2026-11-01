@@ -64,7 +64,9 @@ export function contextSummary(input: { selected: readonly string[]; mounts: rea
 /** 空态与引导文案（S6 §6；逐字固定，便于测试与跨屏一致）。 */
 export const historyEmptyCopy = {
   /** 一个可选谱都没有时的追加行（S6 §6 empty 行）。 */
-  noneOptionalPu: '谱都非必填；你可以先空手问一句，或先去建一个谱（去 S5）。',
+  // 2026-11-01：原来写「（去 S5）」—— S5 是设计稿的屏幕编号，界面上没有这个编号。
+  // 这扇门就是侧栏行「谱」（判据 N-001 只留那一扇），所以直接点名它。
+  noneOptionalPu: '谱都非必填；你可以先空手问一句，或先去建一个谱（点侧栏「谱」）。',
   /** 历史子页首次空态（S7 §2.3①）。 */
   noRecords: '还没有问事记录',
   noRecordsSub: '每次问事都会自动存成本地文件，随时能回来接着读。',
@@ -74,7 +76,9 @@ export const historyEmptyCopy = {
   /** 无源拦截引导的标题与两条去路（S6 §5 步骤 5a）。 */
   nudgeTitle: '需要先给这一问一点依据',
   nudgePathPu: '在勾选区勾一个谱',
-  nudgePathMount: '临时挂载一个工作区 / 工作流（去 S8）',
+  // 2026-11-01：原来写「（去 S8）」—— S8 是设计稿的屏幕编号，界面上没有这个编号。
+  // 改成点名这一屏上真有的那个按钮。
+  nudgePathMount: '临时挂载一个工作区 / 工作流（点「临时挂载…」）',
   /** 末条：显式的泛问出口 —— 不是「没有谱就不能问」。 */
   nudgePlainExit: '只带底座 + 底稿问一次',
 } as const;

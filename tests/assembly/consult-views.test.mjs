@@ -158,7 +158,7 @@ describe('票 10 · 勾选谱：恒定在场项 + 两组可选谱', () => {
       h(XsConsultPicker, { required: defaults().required, optional: [], selected: [], onToggle: () => {}, onManagePu: () => {} }),
     )
     expect(html).toContain('谱都非必填')
-    expect(html).toContain('去 S5')
+    expect(html).toContain('点侧栏「谱」')
     expect(html).not.toContain('data-xuanshu-group="base"')
   })
 })
@@ -214,12 +214,12 @@ describe('票 10 · 门厅：摘要行、挂载展示位与提问区', () => {
     const nudge = blockOf(html, 'data-xuanshu-nudge="no-source"')
     expect(nudge).toContain('需要先给这一问一点依据')
     expect(nudge).toContain('在勾选区勾一个谱')
-    expect(nudge).not.toContain('临时挂载一个工作区 / 工作流（去 S8）')
+    expect(nudge).not.toContain('临时挂载一个工作区 / 工作流（点「临时挂载…」）')
     expect(nudge).toContain('只带底座 + 底稿问一次')
     expect(html).toContain('data-xuanshu-action="plain-ask"')
     // 真有会话可挂时，挂载那条才出现
     expect(blockOf(renderAsk({ mountable: true }), 'data-xuanshu-nudge="no-source"'))
-      .toContain('临时挂载一个工作区 / 工作流（去 S8）')
+      .toContain('临时挂载一个工作区 / 工作流（点「临时挂载…」）')
   })
 
   it('开会话失败：错误条 + [重试] + [改从历史里接着问]（S6 §6 error①）', () => {

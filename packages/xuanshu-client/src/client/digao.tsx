@@ -44,11 +44,18 @@ export const DIGAO_NO_EDIT_NOTE =
 /** 三源头跳转的前缀（S13 §3 ②：文案统一为「要改就改源头」）。 */
 export const DIGAO_JUMP_NOTE = '要改就改源头：';
 
-/** 三个源头跳转的文案（S13 §9 C2：并列在标记右侧）。 */
+/**
+ * 三个源头跳转的文案（S13 §9 C2：并列在标记右侧）。
+ *
+ * 2026-11-01 改：原来写作「改谱 → S5」「改工作流 → S12」—— `S5`/`S12` 是**设计稿里的屏幕编号**，
+ * 只在 `docs/design/ui-v1/screens/` 里有意义，界面上没有这个编号，用户读到只会以为自己漏掉了什么。
+ * 第三个原本是「改工作区 → 工作区」，箭头两边同一个词，同样没信息量。
+ * 现在统一成「改 X」：按钮本身就长在「要改就改源头」那一行里，去向由点击给出。
+ */
 export const DIGAO_JUMPS: readonly { target: PanelNavTarget; label: string }[] = [
-  { target: 'pus', label: '改谱 → S5' },
-  { target: 'conversation', label: '改工作区 → 工作区' },
-  { target: 'workflow', label: '改工作流 → S12' },
+  { target: 'pus', label: '改谱' },
+  { target: 'conversation', label: '改工作区' },
+  { target: 'workflow', label: '改工作流' },
 ];
 
 /** 「下次刷新」的指路文案：值不在本屏（契约 §2 无 schedule 字段），只指到管理面。 */

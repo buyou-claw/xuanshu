@@ -2339,7 +2339,9 @@ function contextSummary(input) {
 }
 var historyEmptyCopy = {
   /** 一个可选谱都没有时的追加行（S6 §6 empty 行）。 */
-  noneOptionalPu: "谱都非必填；你可以先空手问一句，或先去建一个谱（去 S5）。",
+  // 2026-11-01：原来写「（去 S5）」—— S5 是设计稿的屏幕编号，界面上没有这个编号。
+  // 这扇门就是侧栏行「谱」（判据 N-001 只留那一扇），所以直接点名它。
+  noneOptionalPu: "谱都非必填；你可以先空手问一句，或先去建一个谱（点侧栏「谱」）。",
   /** 历史子页首次空态（S7 §2.3①）。 */
   noRecords: "还没有问事记录",
   noRecordsSub: "每次问事都会自动存成本地文件，随时能回来接着读。",
@@ -2349,7 +2351,9 @@ var historyEmptyCopy = {
   /** 无源拦截引导的标题与两条去路（S6 §5 步骤 5a）。 */
   nudgeTitle: "需要先给这一问一点依据",
   nudgePathPu: "在勾选区勾一个谱",
-  nudgePathMount: "临时挂载一个工作区 / 工作流（去 S8）",
+  // 2026-11-01：原来写「（去 S8）」—— S8 是设计稿的屏幕编号，界面上没有这个编号。
+  // 改成点名这一屏上真有的那个按钮。
+  nudgePathMount: "临时挂载一个工作区 / 工作流（点「临时挂载…」）",
   /** 末条：显式的泛问出口 —— 不是「没有谱就不能问」。 */
   nudgePlainExit: "只带底座 + 底稿问一次"
 };
@@ -5672,9 +5676,9 @@ var import_jsx_runtime14 = require("react/jsx-runtime");
 var DIGAO_NO_EDIT_NOTE = "本面板没有编辑框、没有保存按钮：内容由「规则骨架 + AI 摘要」生成；改了源头，刷新即变。唯一能删的是「曾经做过什么」里的事记（删的是账本里的那一条，不是改底稿），删完可在设置里恢复。";
 var DIGAO_JUMP_NOTE = "要改就改源头：";
 var DIGAO_JUMPS = [
-  { target: "pus", label: "改谱 → S5" },
-  { target: "conversation", label: "改工作区 → 工作区" },
-  { target: "workflow", label: "改工作流 → S12" }
+  { target: "pus", label: "改谱" },
+  { target: "conversation", label: "改工作区" },
+  { target: "workflow", label: "改工作流" }
 ];
 var DIGAO_NEXT_REFRESH_NOTE = "下次刷新：由「自动化任务」面板里的底稿 daily 任务决定（播种默认 03:30，可在那里改或停用）。";
 var DIGAO_NO_SHIJI_READ_NOTE = "没有读到事记账本：这一段的条目暂时不能在这里删（正文照原文展示；刷新一次底稿就会写账本）。";
