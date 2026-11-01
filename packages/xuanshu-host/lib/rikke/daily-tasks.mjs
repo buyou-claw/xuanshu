@@ -36,6 +36,9 @@ import {
   WANSHENG_DEFAULT_TIME, WANSHENG_PROMPT, WANSHENG_TASK_TITLE,
   findDailyTask, newSessionId, normalizeDailyTime, scheduleService, scheduleSummary,
 } from '../digao/tasks.mjs'
+// 2026-11-01：`displayTime` 原来只在本文件的 **re-export 列表**里（第 47 行），没进 import 作用域 ——
+// 于是「改时刻」走替代路径时运行时报 `displayTime is not defined`。这里补进 import。
+import { displayTime } from '../digao/tasks.mjs'
 
 // 兼容面：这些名字原来定义在本文件里（`rikke/service.mjs`、`lib/index.js`、`tests/**` 都在用；
 // `digao/service.mjs` 这一轮已改成直接 import 自己的 `./tasks.mjs`，不再绕经 rikke）。
@@ -208,25 +211,67 @@ export async function updateDailyTime({ ctx, title, time }) {
       scheduledAt: observed.scheduledAt,
     }
 
+    // 2026-11-01：值没变就直接返回，别去建一条新任务再删旧的。
+    // 实测过：用户在抽屉里点「保存」但没改时刻时，替代路径照样重建了一次任务（id 变了、投递历史清零）——
+    // 一次纯无谓的写操作，代价却是把历史丢掉。
+    const currentClock = normalizeDailyTime(observed.time)
+    if (currentClock !== null && currentClock === daily) {
+      return { ok: true, schedule: scheduleSummary(observed), reason: null }
+    }
+
     const result = await schedule.update({
       sessionId: observed.sessionId,
       id: observed.id,
       expected,
       change: { kind: 'daily', daily: { time: daily, time_zone: observed.timeZone } },
     })
-    if (result?.updated !== true) {
-      // 2026-11-01 改：原文把 `result.code`（`invalid_rule` 这种内部码）直接拼进用户能读的句子里。
-      // 用户拿这个码什么也做不了；他能做的是「刷新再试」，再不行就是这台机器的定时服务不收这次改动。
-      // 2026-11-01：把 DSH 给的 `message` 留下来（进 diagnostic，不拼进给用户看的那句）。
-      // `invalid_rule` 一个码对应四五条不同校验，丢掉 message 等于丢掉唯一能定位的那句话。
+    if (result?.updated === true) {
+      return { ok: true, schedule: scheduleSummary(result.record ?? observed), reason: null }
+    }
+
+    /**
+     * update 被拒 → 走「先建后删」。
+     *
+     * 2026-11-01：`expected` 已经验到无可验 —— 七个字段、与存储逐字段一致，
+     * 拿 DSH 自己的 `decodeScheduleRecord` 在**离线**与**运行时**两个环境里喂它都返回 ok，
+     * 但 `ScheduleService.update` 内部仍然报 `expected must be a complete valid Schedule record.`。
+     * 说明 `request.expected` 进到 update 里已经不是我们递的那个对象（跨服务边界重建），
+     * 玄枢侧改不动了。所以这里退一步：**新建一条同参数的任务，再删掉旧的**。
+     *
+     * 顺序是「先建后删」，不是「先删后建」：万一 create 失败，旧任务还在（功能退化成"没改成功"），
+     * 而不是把用户的日课任务弄没。最坏情况是两条任务并存（用户能看见、能手动处理）。
+     *
+     * 代价：新任务的 `deliveryHistory` 从空开始（旧的投递记录随旧任务一起删掉）。
+     * 这条写在这里，是因为它是个真实让步，不该藏着。
+     */
+    if (typeof schedule.create !== 'function' || typeof schedule.delete !== 'function') {
       return {
         ok: false,
         schedule: null,
-        reason: '定时时间没改成功：这条 daily 任务可能已被改过或已停用。刷新页面再试一次；还是不行就是这台机器上的定时服务不接受这次改动。',
+        reason: '定时时间没改成功：这台机器上的定时服务不接受这次改动，也不支持替换任务。',
         diagnostic: { code: result?.code ?? null, message: result?.message ?? null },
       }
     }
-    return { ok: true, schedule: scheduleSummary(result.record ?? observed), reason: null }
+    const created = await schedule.create(observed.sessionId, {
+      title: observed.title,
+      prompt: observed.prompt,
+      daily: { time: daily, time_zone: observed.timeZone },
+    })
+    const removed = await schedule.delete({ id: observed.id, sessionId: observed.sessionId })
+    if (removed?.deleted !== true) {
+      // 新的建好了、旧的没删掉：两条都在。别静默 —— 说清楚，用户可以去「自动化任务」删一条。
+      return {
+        ok: true,
+        schedule: { time: displayTime(created?.time ?? daily), timeZone: observed.timeZone, id: String(created?.id ?? '') },
+        reason: null,
+        notice: '时刻已改，但旧的那条任务没删掉（可能已被改过）。现在有两条：去「自动化任务」删掉多的那条。',
+      }
+    }
+    return {
+      ok: true,
+      schedule: { time: displayTime(created?.time ?? daily), timeZone: observed.timeZone, id: String(created?.id ?? '') },
+      reason: null,
+    }
   } catch (error) {
     return { ok: false, schedule: null, reason: `改定时时间失败（${String(error?.message ?? error)}）。` }
   }
