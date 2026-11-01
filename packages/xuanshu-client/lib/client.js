@@ -8913,6 +8913,7 @@ function createWanshengUiController(api) {
 var import_react20 = require("react");
 var import_jsx_runtime23 = require("react/jsx-runtime");
 var WANSHENG_GENERATE_CONFIRM = "将覆盖今天的晚省，继续？";
+var WANSHENG_NO_NETWORK_NOTE = "不联网取外部资讯：晚省只用本机的会话与工作流活动记录，不调模型。";
 function errorText8(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -9041,6 +9042,7 @@ function WanshengPanel({
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "schedule", children: schedule === void 0 ? "计划时刻：暂时读不到（在「自动化任务」面板里看这条 daily 任务）" : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用` }),
     status?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "generated-at", children: `生成于 ${status.generatedAt}` }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "no-network", children: WANSHENG_NO_NETWORK_NOTE }),
     status?.missed === true ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "missed", children: "这是补生成的一份（过去的日期），不是今天的。" }) : null,
     view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-view": "loading", children: "正在读今天的晚省…" }) : null,
     view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("section", { className: "xs-wansheng__empty", "data-xuanshu-view": "empty", children: [

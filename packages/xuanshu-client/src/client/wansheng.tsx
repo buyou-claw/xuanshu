@@ -41,6 +41,15 @@ export type WanshengPreloaded = WanshengStatus | { error: string };
  */
 export const WANSHENG_GENERATE_CONFIRM = '将覆盖今天的晚省，继续？';
 
+/**
+ * 「不联网」声明。
+ *
+ * 2026-11-01 加：日课那屏有一句 `RIKKE_NO_NETWORK_NOTE`（「不联网取外部资讯…」），
+ * 晚省这边**一个字都没写** —— 而晚省同样是本地产物（注释自己写着「确定性事实，不调模型」）。
+ * 用户没有理由知道它联没联网，界面就有责任说。
+ */
+export const WANSHENG_NO_NETWORK_NOTE = '不联网取外部资讯：晚省只用本机的会话与工作流活动记录，不调模型。';
+
 export interface WanshengPanelProps {
   /** 晚省数据面（`index.tsx` 用 `createWanshengApi(ctx)` 造好注入）。 */
   api: WanshengApi;
@@ -265,6 +274,8 @@ export function WanshengPanel({
       {status?.generatedAt === undefined ? null : (
         <p className="xs-wansheng__note" data-xuanshu-note="generated-at">{`生成于 ${status.generatedAt}`}</p>
       )}
+      {/* 2026-11-01：补上「不联网」声明 —— 日课那屏一直有，晚省一直没有（见 WANSHENG_NO_NETWORK_NOTE）。 */}
+      <p className="xs-wansheng__note" data-xuanshu-note="no-network">{WANSHENG_NO_NETWORK_NOTE}</p>
       {status?.missed === true ? (
         <p className="xs-wansheng__note" data-xuanshu-note="missed">
           这是补生成的一份（过去的日期），不是今天的。
