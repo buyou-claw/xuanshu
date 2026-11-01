@@ -117,7 +117,7 @@ export function CangDrawer({ api, controller, initial }: { api: CangApi; control
         <label>名称<input value={draft.name} onChange={event => { setNameTouched(true); setDraft(value => ({ ...value, name: event.target.value })); }} maxLength={200} required disabled={busy} /></label>
         <label>签（用逗号分隔）<input value={tags} onChange={event => setTags(event.target.value)} disabled={busy} /></label>
         {/* 三个入口是**每条登记自己的**能力位（不是全局设置）：关掉的入口在面板上直接不出现。 */}
-        <fieldset disabled={busy}><legend>跳转入口</legend>{(['open', 'reveal', 'copy'] as const).map((key, index) => <label key={key}><input type="checkbox" checked={draft.actions[key]} onChange={event => setDraft(value => ({ ...value, actions: { ...value.actions, [key]: event.target.checked } }))} />{['以默认程序打开', '在文件管理器中显示', '复制路径'][index]}</label>)}</fieldset>
+        <fieldset disabled={busy}><legend>跳转入口</legend>{(['open', 'reveal', 'copy'] as const).map((key, index) => <label key={key}><input type="checkbox" checked={draft.actions[key]} onChange={event => setDraft(value => ({ ...value, actions: { ...value.actions, [key]: event.target.checked } }))} />{['以默认程序打开', '显示所在位置', '复制路径'][index]}</label>)}</fieldset>
         <p>校验只做路径可达性判断，不读取内容、不列目录、不算大小、不建索引。</p>
         {/* 状态行把「正在校验 / 指针有效 / 为什么失效」说清楚；有效时也明写「玄枢未读取」。 */}
         <p role="status">{!draft.path.trim() ? '请选择或粘贴本地路径。' : !pointer ? '正在校验指针…' : pointer.valid ? `指针有效 · 类型=${pointer.kind === 'directory' ? '文件夹' : '文件'} · 玄枢未读取` : pointer.reason}</p>

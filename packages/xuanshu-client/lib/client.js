@@ -1687,7 +1687,7 @@ function CangDrawer({ api, controller, initial }) {
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("legend", { children: "跳转入口" }),
         ["open", "reveal", "copy"].map((key, index) => /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("label", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("input", { type: "checkbox", checked: draft.actions[key], onChange: (event) => setDraft((value) => ({ ...value, actions: { ...value.actions, [key]: event.target.checked } })) }),
-          ["以默认程序打开", "在文件管理器中显示", "复制路径"][index]
+          ["以默认程序打开", "显示所在位置", "复制路径"][index]
         ] }, key))
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { children: "校验只做路径可达性判断，不读取内容、不列目录、不算大小、不建索引。" }),
