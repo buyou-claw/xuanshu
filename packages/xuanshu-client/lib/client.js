@@ -3935,7 +3935,14 @@ function DataSectionHost({ api }) {
     setStage("正在打开目录选择器…");
     void (async () => {
       try {
-        const picked = await api.pickDirectory();
+        const picked = await Promise.race([
+          api.pickDirectory(),
+          new Promise((_, reject) => {
+            setTimeout(() => {
+              reject(new Error("picker-timeout"));
+            }, 12e3);
+          })
+        ]);
         if (typeof picked?.path !== "string" || picked.path === "") {
           setStage(void 0);
           setError("没有选择备份目录（已取消）。");
@@ -3949,7 +3956,10 @@ function DataSectionHost({ api }) {
         }
         setResult(answer);
       } catch (reason) {
-        setError(`备份没有完成：${reason instanceof Error ? reason.message : String(reason)}`);
+        const message = reason instanceof Error ? reason.message : String(reason);
+        setError(
+          message === "picker-timeout" ? "目录选择器 12 秒没有回应 —— 这个环境大概打不开系统「选文件夹」的窗口。换一个能弹窗的桌面环境再试；也可以先手动把数据目录整个复制走（位置在本页上方列着）。" : `备份没有完成：${message}`
+        );
       } finally {
         setBusy(false);
         setStage(void 0);

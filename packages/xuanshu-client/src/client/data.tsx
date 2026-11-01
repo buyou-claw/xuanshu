@@ -250,7 +250,19 @@ export function DataSectionHost({ api }: { api: DataApi }) {
     setStage('正在打开目录选择器…')
     void (async () => {
       try {
-        const picked = await api.pickDirectory()
+        /**
+         * 2026-11-02 加超时：实测点「一键备份」后，有的环境里 `pickDirectory()` 返回一个
+         * **永不 resolve** 的 promise（系统对话框打不开，也不报错）—— 按钮就永远停在
+         * 「正在备份…」+「正在打开目录选择器…」，34 秒后还是那样，除了刷新页面没有出路。
+         *
+         * 12 秒不回来就当「这个环境打不开选择器」，把话说清楚，并让按钮回到可点状态。
+         */
+        const picked = await Promise.race([
+          api.pickDirectory(),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => { reject(new Error('picker-timeout')); }, 12000);
+          }),
+        ])
         if (typeof picked?.path !== 'string' || picked.path === '') {
           setStage(undefined)
           setError('没有选择备份目录（已取消）。')
@@ -264,7 +276,12 @@ export function DataSectionHost({ api }: { api: DataApi }) {
         }
         setResult(answer)
       } catch (reason: unknown) {
-        setError(`备份没有完成：${reason instanceof Error ? reason.message : String(reason)}`)
+        const message = reason instanceof Error ? reason.message : String(reason)
+        setError(
+          message === 'picker-timeout'
+            ? '目录选择器 12 秒没有回应 —— 这个环境大概打不开系统「选文件夹」的窗口。换一个能弹窗的桌面环境再试；也可以先手动把数据目录整个复制走（位置在本页上方列着）。'
+            : `备份没有完成：${message}`,
+        )
       } finally {
         setBusy(false)
         setStage(undefined)
