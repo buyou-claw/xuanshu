@@ -411,6 +411,13 @@ export function classifyBaziEnvelope(envelope) {
     version,
     code,
     message,
-    detail: `信封 ok=false（code=${code ?? '-'}）：${message ? message.slice(0, 300) : '上游没给 message'}。`,
+    /**
+     * 2026-11-02 改：这句会一路冒到界面上，原文是
+     *   `信封 ok=false（code=js_engine.cli_missing）：…`
+     * —— 「信封」是内部对 MCP 响应包的叫法，`code=` 是实现词，用户读不懂。
+     * 改成「出盘引擎返回了失败」，并把上游原文原样带出来（那才是能搜的东西）。
+     */
+    detail: `出盘引擎返回了失败${code === null || code === undefined ? '' : `（错误码 ${code}）`}：`
+      + `${message ? message.slice(0, 300) : '上游没给原因'}。`,
   }
 }

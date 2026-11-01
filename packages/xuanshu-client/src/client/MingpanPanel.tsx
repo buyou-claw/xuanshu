@@ -277,6 +277,19 @@ function MingpanBody({
         <p data-xuanshu-basis="two-clocks">
           {`真太阳时 ${basis.trueSolar ?? '—'}　钟表时 ${basis.clock ?? '—'}　夏令时 ${basis.dst === true ? '有' : '无'}`}
         </p>
+        {/*
+          2026-11-02 加：上面那一行里，两个钟点常常**差将近一小时**（实测 07:19 vs 08:30）。
+          原因是这个时区当时在夏令时，时区中央经线按 +09:00 算成 135°E，
+          而不是 +08:00 的 120°E —— 经度差就多算了 15°，正好一小时。
+          界面原来只并排列出「夏令时 有」，用户得自己把这两件事连起来。
+          这里把差别直接说出来，省掉那道心算。
+        */}
+        {basis.trueSolar === undefined || basis.clock === undefined ? null : (
+          <p className="xs-mingpan__note" data-xuanshu-note="clock-gap">
+            {`两个钟点差这么多，是因为这个时区当时在${basis.dst === true ? '夏令时（夏令时期间时区中央经线按 +09:00 算成 135°E，比 +08:00 的 120°E 多出 15°，正好一小时）' : '非夏令时时段'}；`
+              + '剩下的差值来自出生地经度与均时差。'}
+          </p>
+        )}
       </div>
 
       <h2>④ 快照来源</h2>

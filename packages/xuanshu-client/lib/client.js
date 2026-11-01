@@ -6614,7 +6614,8 @@ function MingpanBody({
         genderLabel("unknown")
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { "data-xuanshu-basis": "other-knobs", children: "其余旋钮 = 引擎缺省（本盘未改）" }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { "data-xuanshu-basis": "two-clocks", children: `真太阳时 ${basis.trueSolar ?? "—"}　钟表时 ${basis.clock ?? "—"}　夏令时 ${basis.dst === true ? "有" : "无"}` })
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { "data-xuanshu-basis": "two-clocks", children: `真太阳时 ${basis.trueSolar ?? "—"}　钟表时 ${basis.clock ?? "—"}　夏令时 ${basis.dst === true ? "有" : "无"}` }),
+      basis.trueSolar === void 0 || basis.clock === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mingpan__note", "data-xuanshu-note": "clock-gap", children: `两个钟点差这么多，是因为这个时区当时在${basis.dst === true ? "夏令时（夏令时期间时区中央经线按 +09:00 算成 135°E，比 +08:00 的 120°E 多出 15°，正好一小时）" : "非夏令时时段"}；剩下的差值来自出生地经度与均时差。` })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h2", { children: "④ 快照来源" }),
     /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mingpan__origin", "data-xuanshu-origin": "snapshot", children: `horosa ${snapshot.horosa?.version ?? "—"} / 出盘于 ${snapshot.generatedAt === void 0 ? "—" : momentOf(snapshot.generatedAt)}` }),
