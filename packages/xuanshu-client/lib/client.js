@@ -5863,10 +5863,10 @@ function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }) {
 function digestLine(meta) {
   const digest = meta?.digest;
   if (digest === "skeleton") {
-    return "生成方式：骨架＝确定性规则 · 摘要＝规则骨架（LLM 不可用或提炼失败，未提炼）";
+    return "生成方式：只有规则骨架（AI 这次用不了或没用成，摘要没生成）";
   }
-  if (digest === "llm") return "生成方式：骨架＝确定性规则 · 摘要＝AI 提炼";
-  return "生成方式：骨架＝确定性规则 · 摘要＝未标注（meta 里没有 digest 这一位，按未提炼对待）";
+  if (digest === "llm") return "生成方式：规则骨架 + AI 摘要";
+  return "生成方式：只有规则骨架（读不到生成记录，按「摘要没生成」处理）";
 }
 function SegmentList({ segments }) {
   return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(import_jsx_runtime14.Fragment, { children: segments.map((segment, index) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("article", { className: "xs-digao__segment", children: [

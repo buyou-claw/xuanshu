@@ -460,10 +460,11 @@ describe('票 13 · 底稿面板（只读视图）', () => {
     expect(html).not.toContain('没有读到事记账本')
   })
 
-  it('摘要来源如实标注（digest=llm → AI 提炼；骨架 = 确定性规则）', () => {
+  it('摘要来源如实标注（digest=llm → 有 AI 摘要；skeleton → 只有规则骨架）', () => {
     const llm = render(h(DigaoPanel, { api: spyApi().api, ...injected(), preloaded: preloadedReady }))
-    expect(llm).toContain('骨架＝确定性规则')
-    expect(llm).toContain('摘要＝AI 提炼')
+    // 2026-11-01：原来断「骨架＝确定性规则」这种等号句式 —— 那是拿等号解释实现。
+    // 现在两句都在回答「这份底稿里，哪一半是算出来的、哪一半没有」。
+    expect(llm).toContain('规则骨架 + AI 摘要')
 
     const skeleton = render(
       h(DigaoPanel, {
@@ -476,9 +477,12 @@ describe('票 13 · 底稿面板（只读视图）', () => {
       }),
     )
     // 降级必须可观察：不许把骨架说成提炼稿。
-    expect(skeleton).toContain('摘要＝规则骨架')
-    expect(skeleton).toContain('LLM 不可用')
-    expect(skeleton).not.toContain('摘要＝AI 提炼')
+    expect(skeleton).toContain('只有规则骨架')
+    expect(skeleton).toContain('摘要没生成')
+    // 负断言要盯「生成方式那一行把骨架说成提炼稿」这个形状。
+    // 不能扫 `AI 摘要` 四个字，也不能扫 `规则骨架 + AI 摘要`：面板顶部那句
+    // 「内容由『规则骨架 + AI 摘要』生成」本来就含它们（那是设计说明，与本次投射无关）。
+    expect(skeleton).not.toContain('生成方式：规则骨架 + AI 摘要')
   })
 
   it('时间信息：上次刷新来自 meta.generatedAt；下次刷新不编造（指向自动化任务面板）', () => {
