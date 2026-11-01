@@ -403,9 +403,18 @@ INFO - create cachefactory with name:bazi, of class:boundless.types.cache.MongoC
 | # | 症状 | 真因 | 处置 |
 |---|---|---|---|
 | c | 请求 60 秒超时 | 本机 27017 **没有任何服务在听** | 起一个 mongod（实测 v8.0.4：`mongod --dbpath <E盘>\mongo-data --port 27017 --bind_ip 127.0.0.1`） |
-| d | Mongo 起来了，**仍然 60 秒超时** | `conf/properties/cache/bazi.properties` 里写的是 **`mongodb.ip=mongodb.host`** —— 一个上游假设的 DNS 名，本机 `No such host is known` | hosts 加一行 **`127.0.0.1 mongodb.host`**（`C:\Windows\System32\drivers\etc\hosts`） |
+| d | Mongo 起来了，**仍然超时**；`error.log` 里是 `java.lang.IllegalArgumentException: Host name may not be empty` | `mongodb.host` 是**一个从未定义的 key**（不是主机名）：10 个 `cache/*.properties` 写 `mongodb.ip=mongodb.host`，而 `spring-config.xml` 的 `PropertyPlaceholder.locations` 只加载 6 个 properties + 1 个 yml，**里面都没有这个键** | **两件事都要做**（见下方 A/B 对照）：① JVM 加 **`-Dmongodb.host=127.0.0.1`**（`PropertyPlaceholder` 会查 Java 系统属性）；② hosts 加 **`127.0.0.1 mongodb.host`**（它同时被当**主机名**解析一次）。只做①会变成 30 秒超时；只做②仍是 60 秒超时 + `Host name may not be empty` |
 
-**d 修完之后，症状从「60 秒超时」直接变成「7 毫秒应答」：**
+**A/B 对照（三组都实跑过，这是唯一能用的组合）**：
+
+| 组合 | `Host name may not be empty` | 请求结果 |
+|---|---|---|
+| hosts 映射 + 无 `-D` | 每次都有 | 60 秒超时 |
+| 无 hosts + 有 `-D` | 0 条 | **仍 30 秒超时** |
+| **hosts 映射 + 有 `-D`** | **0 条** | **187ms / 8ms 正常应答** |
+
+两个修复管的是**两件不同的事**：`-D` 解决「那个 key 是空的」，hosts 解决「那个名字还要被当主机名解析一次」。
+**d 修完之后：`Host name may not be empty` 累计 0 条，Mongo 里出现 `astrochart` / `astrolog` 两个库（`astrolog.astrolog` 2 条记录）—— 连接真的建起来了。** 请求也从「60 秒超时」变成毫秒级应答：
 
 ```
 /common/time  →  HTTP 500, 212ms（第一次）/ 7ms（第二次）/ 9ms（第三次）
