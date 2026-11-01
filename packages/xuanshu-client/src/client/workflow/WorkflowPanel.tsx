@@ -287,7 +287,13 @@ export function installWorkflowStyle(): void {
     '.xs-workflow__group{margin-top:18px;border-top:1px solid var(--xs-edge-divider);padding-top:12px}',
     '.xs-workflow__groupTitle{margin:0 0 8px;font-size:14px;opacity:.85}',
     '.xs-workflow__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}',
-    '.xs-workflow__item{display:flex;align-items:center;gap:10px}',
+    /* 2026-11-02：名字不设宽度约束时会把「打开会话 / 选它导出」挤到第二行（截图里六条全这样）。名字可缩并省略，副标题与按钮固定不缩。 */
+    '.xs-workflow__item{display:flex;align-items:center;gap:10px;flex-wrap:nowrap}',
+    '.xs-workflow__name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.xs-workflow__sub{flex:0 0 auto;white-space:nowrap;margin-left:4px}',
+    /* 按钮靠右：把剩下的空间都推给第一个按钮，而不是让名字去占。 */
+    '.xs-workflow__open{margin-left:auto}',
+    '.xs-workflow__open,.xs-workflow__pick{flex:0 0 auto;white-space:nowrap}',
     '.xs-workflow__sub{opacity:.7;font-size:12px}',
     '.xs-workflow__field{display:flex;gap:8px;align-items:center;margin:6px 0}',
     '.xs-workflow__field input,.xs-workflow__field textarea{flex:1}',
