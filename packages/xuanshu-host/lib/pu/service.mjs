@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createPuRepository, puSlug, validatePuDraft } from './repository.mjs';
+import { waitForTurnEnd } from '../consult/turn.mjs';
 const skill = readFileSync(new URL('./create-pu.md', import.meta.url), 'utf8');
 export function installPuSkill(ctx) {
   return ctx.inject(['skills'], scoped => scoped.skills.register({ name: 'xuanshu-create-pu', description: 'xuanshu:create-pu：将文字或附件转换为谱规范 v1，预览后人确认落盘', source: 'bundled', content: skill }));
@@ -52,26 +53,29 @@ export function createPuMethods(ctx, { dataDir }) {
         await controller.prompt({ requestId: randomUUID(), sessionId, mode: 'queue', content: [{ type: 'text', text: prompt }], clientTimeZone: request.clientTimeZone ?? 'Asia/Shanghai' }, new AbortController().signal);
         const resolved = await controller.resolveAgent(sessionId); if (resolved.error) throw resolved.error;
         /**
-         * 2026-11-02 修时序：原来是 `prompt` 之后**立刻** `whenIdle()` 再取最后一条 assistant 消息。
+         * 2026-11-02 换判据：等 `turn/end`，不是 `whenIdle()`。
          *
-         * `prompt` 只是把消息排进队列；agent 未必已经开跑。这时 `whenIdle()` 立刻返回「已经空闲」，
-         * 于是 `snapshotEvents()` 里连一条 assistant 消息都没有 —— 界面上就是「AI 一句话都没有回应」。
-         * 实测同一个 key、同一份资料，有时能跑（那次 AI 说了「正在读取资料」）、有时不能，
-         * 就是这个竞态。真正的失败信号不是「idle 了」，而是「等了很久一条消息都没有」。
+         * 仓里早就有一条写清楚的结论（`consult/turn.mjs` 文件头）：
+         *   `whenIdle()` 只表示「整个 agent 活动静默」，**不标识某一条消息的结束**
+         *   （`dsh-agent/lib/types/runtime-types.d.ts:164`：does not identify the settlement of
+         *   any particular message）。拿它当「这一问答完了」，症状是记号错位，而且**不报错**。
+         * 正确的判据是会话日志自己的边界事件 `turn/end`。
          *
-         * 所以：先 whenIdle，然后轮询到**真的出现 assistant 消息**为止（最长 3 分钟）；
-         * 期间用户点「中断」就退出。轮完还没有才报「没回应」。
+         * 问事（`consult/service.mjs`）一直用的是 `waitForTurnEnd`，只有这里用了 `whenIdle()` ——
+         * 实测症状就是：prompt 排进去了，`whenIdle()` 立刻返回，会话里一条 assistant 消息都没有，
+         * 界面报「AI 一句话都没有回应」。所以改成复用同一个工具。
          */
-        await resolved.agent.whenIdle();
+        const settled = await waitForTurnEnd(ctx, sessionId, { signal });
+        if (settled.kind === 'aborted' || job.canceled) return;
         const readAssistant = () => {
           const e = [...resolved.agent.session.snapshotEvents()].reverse().find((x) => x.type === 'assistant/message');
           return e?.data?.content?.filter((part) => part.type === 'text').map((part) => part.text).join('\n') ?? '';
         };
         let text = readAssistant();
-        const deadline = Date.now() + 180_000;
+        /** 兜底：`turn/end` 到了但消息还没进快照（极少数时序）时，最多再等 30 秒。 */
+        const deadline = Date.now() + 30_000;
         while (text.trim() === '' && !job.canceled && Date.now() < deadline) {
-          await new Promise((resolve) => { setTimeout(resolve, 3000); });
-          await resolved.agent.whenIdle().catch(() => {});
+          await new Promise((resolve) => { setTimeout(resolve, 2000); });
           text = readAssistant();
         }
         if (job.canceled) return;
@@ -82,9 +86,15 @@ export function createPuMethods(ctx, { dataDir }) {
          * （provider 那侧静默失败）。这时 `text` 是空串，`JSON.parse('')` 报
          * `Unexpected end of JSON input` —— 把人引到「格式不对」上去，其实是「AI 没吭声」。
          * 两种情况的下一步不一样：没回应 → 查模型配没配好；格式不对 → 重试或拆小资料。
+         *
+         * 再把 `turn/end` 给的 reason 一起带上：那一轮为什么结束，答案就在这里
+         * （可能是 provider 报错、可能是要审批、也可能是被中断）。
          */
         if (text.trim() === '') {
-          throw new Error('AI 这次一句话都没有回应（会话建好了，但没有产出内容）。先确认「设置 → 模型」里那家 provider 能用；能用的前提下点「重试」。');
+          const why = settled.kind === 'ended'
+            ? (settled.reason === null ? '这一轮结束了，没有给出原因' : JSON.stringify(settled.reason).slice(0, 300))
+            : '等待被取消';
+          throw new Error(`AI 这一轮没有任何产出（结束原因：${why}）。先确认「设置 → 模型」里那家 provider 能用；能用的前提下点「重试」。`);
         }
         const json = text.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
         let draft;
