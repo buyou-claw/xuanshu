@@ -16,6 +16,11 @@ export function installRikkeStyle(): void {
 .xs-rikke__no-network{color:var(--xs-text-body)}
 .xs-rikke__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
 .xs-rikke button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+/* 2026-11-02：晚省复用本表（installRikkeStyle），但原来这里一条 xs-wansheng 规则都没有，
+   于是晚省动作行的按钮是浏览器默认样式，和日课长得不一样。照日课的写法补齐。 */
+.xs-wansheng__actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.xs-wansheng button{font:inherit;padding:6px 12px;margin:2px;cursor:pointer;background:var(--xs-surface-card);color:inherit;border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control)}
+.xs-wansheng button:disabled{opacity:.55;cursor:default}
 .xs-rikke button:disabled{opacity:.5;cursor:not-allowed}
 .xs-rikke input[type=time]{font:inherit;color:inherit;background:var(--xs-surface-card);border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:6px}
 .xs-rikke__time-edit{border:1px solid var(--xs-constraint-human-gate-fg,var(--xs-edge-card));border-radius:var(--xs-radius-card);padding:10px;margin:8px 0}
