@@ -95,7 +95,7 @@ function cardOf(html, name) {
 
 describe('#25 · 晚省 status → 卡级四态（纯映射，可无 DOM 测）', () => {
   it.each([
-    [undefined, '哪些工作流有活动：未知（宿主没回传）'],
+    [undefined, '哪些工作流有活动：未知（这边暂时读不到）'],
     [[], '今天没有工作流活动'],
     [FACTS.activeWorkflows, '今天 1 个工作流有活动'],
   ])('卡与面板分别如实显示工作流活动：%j', (activeWorkflows, expected) => {
@@ -198,8 +198,8 @@ describe('#25 · 晚省卡：当天事实 + 补徽标 + 去问事', () => {
 
   it('事实拿不到 → 写「未知」，不写 0（不把未知冒充已知）', () => {
     const html = render(h(XsWanshengCard, { state: 'ready', today: '2026-10-15', ...injected() }))
-    expect(html).toContain('今天几场问事：未知（宿主没回传）')
-    expect(html).toContain('哪些项目有活动：未知（宿主没回传）')
+    expect(html).toContain('今天几场问事：未知（这边暂时读不到）')
+    expect(html).toContain('哪些项目有活动：未知（这边暂时读不到）')
   })
 
   it('empty：默认 21:30 的空态文案 + [立即生成]（未接线则置灰给理由）+ [改时间 ->]', () => {
@@ -271,8 +271,8 @@ describe('#25 · 晚省面板：完整事实 + [立即生成] + 投递历史', (
 
   it('事实缺失 → 面板写「未知」（不把拿不到写成 0）', () => {
     const html = panel({ preloaded: { date: '2026-10-15', exists: true, facts: {} } })
-    expect(html).toContain('今天几场问事：未知（宿主没回传）')
-    expect(html).toContain('哪些项目有活动：未知（宿主没回传）')
+    expect(html).toContain('今天几场问事：未知（这边暂时读不到）')
+    expect(html).toContain('哪些项目有活动：未知（这边暂时读不到）')
   })
 
   it('empty / error：各有可读文案；静态渲染不碰写路径', () => {

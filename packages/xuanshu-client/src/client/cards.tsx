@@ -893,7 +893,7 @@ function WanshengConsultLine({ facts }: { facts?: WanshengFacts }) {
     <p className="xs-line" data-xuanshu-fact="consult">
       <span className="xs-line__label">问事</span>
       <span className="xs-line__value">
-        {sessions === undefined ? '今天几场问事：未知（宿主没回传）' : `今天 ${sessions.count} 场问事`}
+        {sessions === undefined ? '今天几场问事：未知（这边暂时读不到）' : `今天 ${sessions.count} 场问事`}
       </span>
     </p>
   );
@@ -910,7 +910,7 @@ function WanshengActivityLines({ facts }: { facts?: WanshengFacts }) {
       <p key={key} className="xs-line" data-xuanshu-fact={key}>
         <span className="xs-line__label">{label}</span>
         <span className="xs-line__value">
-          {items === undefined ? `哪些${label}有活动：未知（宿主没回传）`
+          {items === undefined ? `哪些${label}有活动：未知（这边暂时读不到）`
             : items.length === 0 ? `今天没有${label}活动`
               : `今天 ${items.length} 个${label}有活动`}
         </span>

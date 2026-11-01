@@ -5287,7 +5287,7 @@ function WanshengConsultLine({ facts }) {
   const sessions = facts?.consultSessions;
   return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "xs-line", "data-xuanshu-fact": "consult", children: [
     /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__label", children: "问事" }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__value", children: sessions === void 0 ? "今天几场问事：未知（宿主没回传）" : `今天 ${sessions.count} 场问事` })
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__value", children: sessions === void 0 ? "今天几场问事：未知（这边暂时读不到）" : `今天 ${sessions.count} 场问事` })
   ] });
 }
 function WanshengActivityLines({ facts }) {
@@ -5297,7 +5297,7 @@ function WanshengActivityLines({ facts }) {
   ];
   return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(import_jsx_runtime13.Fragment, { children: groups.map(({ key, label, items }) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "xs-line", "data-xuanshu-fact": key, children: [
     /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__label", children: label }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__value", children: items === void 0 ? `哪些${label}有活动：未知（宿主没回传）` : items.length === 0 ? `今天没有${label}活动` : `今天 ${items.length} 个${label}有活动` })
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__value", children: items === void 0 ? `哪些${label}有活动：未知（这边暂时读不到）` : items.length === 0 ? `今天没有${label}活动` : `今天 ${items.length} 个${label}有活动` })
   ] }, key)) });
 }
 function WanshengArtifactLines({ facts }) {
@@ -8927,7 +8927,7 @@ function touchLines(status) {
 }
 function ActivityList({ items, kind, label }) {
   return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_jsx_runtime23.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": `${kind}s`, children: items === void 0 ? `哪些${label}有活动：未知（宿主没回传）` : items.length === 0 ? `今天没有${label}活动` : `今天 ${items.length} 个${label}有活动` }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": `${kind}s`, children: items === void 0 ? `哪些${label}有活动：未知（这边暂时读不到）` : items.length === 0 ? `今天没有${label}活动` : `今天 ${items.length} 个${label}有活动` }),
     items === void 0 || items.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("ul", { className: "xs-wansheng__workspace-list", children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("li", { ...kind === "workspace" ? { "data-xuanshu-workspace": item.id } : { "data-xuanshu-workflow": item.id }, children: [
       `${item.title} · ${item.sessionCount} 场会话`,
       item.lastActiveAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: ` · 最后活跃 ${item.lastActiveAt}` })
@@ -8938,7 +8938,7 @@ function FactsSection({ facts }) {
   const sessions = facts?.consultSessions;
   return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("section", { className: "xs-wansheng__facts", "data-xuanshu-facts": "wansheng", children: [
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("h2", { children: "今天的事实" }),
-    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "consult", children: sessions === void 0 ? "今天几场问事：未知（宿主没回传）" : `今天 ${sessions.count} 场问事` }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "consult", children: sessions === void 0 ? "今天几场问事：未知（这边暂时读不到）" : `今天 ${sessions.count} 场问事` }),
     sessions === void 0 || sessions.items.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("ul", { className: "xs-wansheng__consult-list", children: sessions.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("li", { "data-xuanshu-consult": item.sessionId, children: [
       item.title,
       item.lastTurnAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: ` · 最后一句 ${item.lastTurnAt}` })

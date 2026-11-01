@@ -94,7 +94,7 @@ function ActivityList({ items, kind, label }: {
 }) {
   return <>
     <p className="xs-wansheng__fact" data-xuanshu-fact={`${kind}s`}>
-      {items === undefined ? `哪些${label}有活动：未知（宿主没回传）`
+      {items === undefined ? `哪些${label}有活动：未知（这边暂时读不到）`
         : items.length === 0 ? `今天没有${label}活动`
           : `今天 ${items.length} 个${label}有活动`}
     </p>
@@ -119,7 +119,7 @@ function FactsSection({ facts }: { facts?: WanshengFacts }) {
       <h2>今天的事实</h2>
       <p className="xs-wansheng__fact" data-xuanshu-fact="consult">
         {sessions === undefined
-          ? '今天几场问事：未知（宿主没回传）'
+          ? '今天几场问事：未知（这边暂时读不到）'
           : `今天 ${sessions.count} 场问事`}
       </p>
       {sessions === undefined || sessions.items.length === 0 ? null : (
