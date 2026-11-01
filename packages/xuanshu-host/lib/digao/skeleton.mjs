@@ -193,7 +193,7 @@ export function renderDigaoMarkdown({ segments, digest, digestText, generatedAt 
   const distillLine = digest === 'llm'
     ? '已提炼：AI 把多段压成一段精简汇总'
     : list.length === 0
-      ? '未提炼：还没有可提炼的来源（谱 / 工作区 / 工作流都还是空的），本份只有规则骨架'
+      ? '未提炼：还没有可提炼的来源（谱 / 工作区 / 工作流都还没内容），本份只有规则骨架'
       : '未提炼：AI 这次用不了或没用成，本份只有规则骨架'
   const recent = list.filter((segment) => segment?.source !== SHIJI_CHAPTER.source)
   const past = list.filter((segment) => segment?.source === SHIJI_CHAPTER.source)

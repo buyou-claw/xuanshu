@@ -369,7 +369,7 @@ export function digestLine(meta: DigaoMeta | null | undefined): string {
      * 用户照「AI 用不了」去查 provider，方向完全错了。没素材时直说没素材。
      */
     return (meta?.segments ?? 0) === 0
-      ? '生成方式：只有规则骨架（还没有可提炼的来源：谱 / 工作区 / 工作流都还是空的）'
+      ? '生成方式：只有规则骨架（还没有可提炼的来源：谱 / 工作区 / 工作流都还没内容）'
       : '生成方式：只有规则骨架（AI 这次用不了或没用成，摘要没生成）';
   }
   if (digest === 'llm') return '生成方式：规则骨架 + AI 摘要';

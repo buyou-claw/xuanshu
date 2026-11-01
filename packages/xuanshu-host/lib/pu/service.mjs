@@ -64,8 +64,15 @@ export function createPuMethods(ctx, { dataDir }) {
          * 问事（`consult/service.mjs`）一直用的是 `waitForTurnEnd`，只有这里用了 `whenIdle()` ——
          * 实测症状就是：prompt 排进去了，`whenIdle()` 立刻返回，会话里一条 assistant 消息都没有，
          * 界面报「AI 一句话都没有回应」。所以改成复用同一个工具。
+         *
+         * **但不能硬依赖**：`waitForTurnEnd` 要求宿主有 `ctx.on`（订阅 `session/event`）。
+         * 没有订阅能力时（某些装配 / 测试桩）它直接 reject，那不该让整次转换失败 ——
+         * 退回「轮询到真的出现 assistant 消息」，能力差一档但结果对。
          */
-        const settled = await waitForTurnEnd(ctx, sessionId, { signal });
+        const canWaitTurn = typeof ctx?.on === 'function';
+        const settled = canWaitTurn
+          ? await waitForTurnEnd(ctx, sessionId, { signal })
+          : { kind: 'ended', turn: null, reason: null };
         if (settled.kind === 'aborted' || job.canceled) return;
         /**
          * 2026-11-02 修路径：`assistant/message` 事件的正文在 `data.message.content`，
@@ -83,8 +90,13 @@ export function createPuMethods(ctx, { dataDir }) {
             : '';
         };
         let text = readAssistant();
-        /** 兜底：`turn/end` 到了但消息还没进快照（极少数时序）时，最多再等 30 秒。 */
-        const deadline = Date.now() + 30_000;
+        /**
+         * 兜底轮询。两种情况下都要轮：
+         *   - 有 `turn/end` 时：极少数时序下事件到了、消息还没进快照（30 秒足够）；
+         *   - **没有** `ctx.on`（退化成 `{kind:'ended'}`）时：这是唯一在等的手段，
+         *     给足 3 分钟 —— 和「真有一轮在跑」的预算一致。
+         */
+        const deadline = Date.now() + (canWaitTurn ? 30_000 : 180_000);
         while (text.trim() === '' && !job.canceled && Date.now() < deadline) {
           await new Promise((resolve) => { setTimeout(resolve, 2000); });
           text = readAssistant();
