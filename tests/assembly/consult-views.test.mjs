@@ -241,14 +241,18 @@ describe('票 10 · 门厅：摘要行、挂载展示位与提问区', () => {
   })
 
   it('最近一次会话摘要卡：短 id + 标题 + 元信息 + [继续这次问事 ▸]，且**不画消息流**', () => {
-    const html = render(h(XsConsultRecentCard, { session: summaryOf(), onContinue: () => {}, onHistory: () => {} }))
+    const html = render(h(XsConsultRecentCard, { session: summaryOf(), onContinue: () => {} }))
     expect(html).toContain('#consult-9f8e7d6c')
     expect(html).toContain('转岗时机')
     expect(html).toContain('data-xuanshu-action="continue-consult"')
     expect(html).toContain('5 轮')
     // F1/D5：门厅不渲染消息流与工具轨迹
     expect(html).not.toContain('data-xuanshu-message=')
-    expect(html).toContain('本面板是「书房门厅」')
+    // 2026-11-01：这两样都从卡里拿掉了 ——
+    //   「历史回看 ▸」与面板 header 那个同名同动作（判据 N-001：一个动作一个入口）；
+    //   「本面板是「书房门厅」」是**整个面板**的说明，主面板的 lobby 块已经有，挂在这张卡下会被读成在说这张卡。
+    expect(html).not.toContain('历史回看')
+    expect(html).not.toContain('本面板是「书房门厅」')
   })
 })
 

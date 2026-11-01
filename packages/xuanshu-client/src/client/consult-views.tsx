@@ -284,10 +284,21 @@ export function XsConsultAsk({
 export interface XsConsultRecentCardProps {
   session: ConsultSummary;
   onContinue: () => void;
-  onHistory: () => void;
 }
 
-export function XsConsultRecentCard({ session, onContinue, onHistory }: XsConsultRecentCardProps) {
+/**
+ * ④ 最近一次会话摘要卡。
+ *
+ * 2026-11-01 改：这张卡原来自带一个「历史回看 ▸」按钮，而面板 header 里已经有一个同名的
+ * —— 同一动作两个入口（判据 N-001 正是这条）。删卡里的，留 header 的导航位。
+ *
+ * 为什么巡检一直没报：干净 home 里没有会话，这张卡根本不渲染。真实使用时
+ * （问过一次之后）它才出现 —— 也就是说这条重复**只有在用过产品之后才看得见**。
+ *
+ * 同时删掉卡底那句「ⓘ 本面板是「书房门厅」…」：那是**整个面板**的说明，
+ * 主面板的 lobby 块已经有一份，挂在「最近一次会话」这张卡下面只会让人以为在说这张卡。
+ */
+export function XsConsultRecentCard({ session, onContinue }: XsConsultRecentCardProps) {
   return (
     <section className="xs-consult__block" data-xuanshu-block="recent">
       <h3>④ 最近一次会话</h3>
@@ -302,13 +313,7 @@ export function XsConsultRecentCard({ session, onContinue, onHistory }: XsConsul
         <button type="button" data-xuanshu-action="continue-consult" onClick={onContinue}>
           {'继续这次问事 ▸'}
         </button>
-        <button type="button" data-xuanshu-action="toggle-history" onClick={onHistory}>
-          {'历史回看 ▸'}
-        </button>
       </div>
-      <p className="xs-consult__note" data-xuanshu-note="lobby-boundary">
-        ⓘ 本面板是「书房门厅」：进会话后切到 DSH 会话面板，工具轨迹与审批卡在那里。
-      </p>
     </section>
   );
 }

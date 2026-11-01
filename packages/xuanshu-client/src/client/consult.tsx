@@ -316,7 +316,6 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
             <XsConsultRecentCard
               session={latest}
               onContinue={() => { enterConversation(latest.sessionId); }}
-              onHistory={() => { setView('history'); }}
             />
           )}
         </>

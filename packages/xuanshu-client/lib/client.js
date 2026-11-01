@@ -2648,7 +2648,7 @@ function XsConsultAsk({
     ] })
   ] });
 }
-function XsConsultRecentCard({ session, onContinue, onHistory }) {
+function XsConsultRecentCard({ session, onContinue }) {
   return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "recent", children: [
     /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h3", { children: "④ 最近一次会话" }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("p", { className: "xs-consult__recent-title", children: [
@@ -2656,11 +2656,7 @@ function XsConsultRecentCard({ session, onContinue, onHistory }) {
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { children: session.title }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("small", { className: "xs-consult__note", children: formatHistoryMeta(session) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__actions", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "continue-consult", onClick: onContinue, children: "继续这次问事 ▸" }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "toggle-history", onClick: onHistory, children: "历史回看 ▸" })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "lobby-boundary", children: "ⓘ 本面板是「书房门厅」：进会话后切到 DSH 会话面板，工具轨迹与审批卡在那里。" })
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-consult__actions", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "continue-consult", onClick: onContinue, children: "继续这次问事 ▸" }) })
   ] });
 }
 function XsConsultHistoryList({
@@ -3584,9 +3580,6 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
           session: latest,
           onContinue: () => {
             enterConversation(latest.sessionId);
-          },
-          onHistory: () => {
-            setView("history");
           }
         }
       )
