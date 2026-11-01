@@ -9330,9 +9330,9 @@ function WorkflowPanel({ api, navigate, preloaded }) {
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h2", { className: "xs-workflow__groupTitle", children: "判定与导出" }),
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__rule", children: WORKFLOW_HUMAN_JUDGE_NOTE }),
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: WORKFLOW_EXPORT_HINT }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("label", { className: "xs-workflow__field", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__field", "data-xuanshu-field": "session", children: [
           /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "会话" }),
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("input", { value: draft.sessionId, onChange: (event) => setDraft((current) => ({ ...current, sessionId: event.target.value })), placeholder: "session-xs-workflow-…" })
+          draft.sessionId === "" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "xs-workflow__hint", "data-xuanshu-note": "session-empty", children: "还没选会话：在上面的「进行中」列表里点「选它导出」。" }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("code", { children: draft.sessionId })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("label", { className: "xs-workflow__field", children: [
           /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "名字" }),

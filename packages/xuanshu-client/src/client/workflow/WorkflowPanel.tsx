@@ -205,10 +205,18 @@ export function WorkflowPanel({ api, navigate, preloaded }: WorkflowPanelProps) 
         <h2 className="xs-workflow__groupTitle">判定与导出</h2>
         <p className="xs-workflow__rule">{WORKFLOW_HUMAN_JUDGE_NOTE}</p>
         <p className="xs-workflow__hint">{WORKFLOW_EXPORT_HINT}</p>
-        <label className="xs-workflow__field">
+        {/*
+          2026-11-02 改：原来是可输入的 `<input placeholder="session-xs-workflow-…">` ——
+          等于让用户手打一个会话 id。用户手上没有那个字符串，也不该有：正确路径是上方列表里
+          点「选它导出」（那会把 sessionId 填进来）。改成只读显示：
+          没选时说清「先去上面选一条」，选了就把它显示出来。
+        */}
+        <p className="xs-workflow__field" data-xuanshu-field="session">
           <span>会话</span>
-          <input value={draft.sessionId} onChange={(event) => setDraft((current) => ({ ...current, sessionId: event.target.value }))} placeholder="session-xs-workflow-…" />
-        </label>
+          {draft.sessionId === ''
+            ? <span className="xs-workflow__hint" data-xuanshu-note="session-empty">还没选会话：在上面的「进行中」列表里点「选它导出」。</span>
+            : <code>{draft.sessionId}</code>}
+        </p>
         <label className="xs-workflow__field">
           <span>名字</span>
           <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="weekly-industry-digest" />
