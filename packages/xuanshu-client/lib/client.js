@@ -2567,7 +2567,7 @@ function XsConsultPicker({ required, optional, selected, onToggle, onOpenDetail 
 function XsConsultMountPlaceholder({ mounts }) {
   return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "xs-consult__block", "data-xuanshu-block": "mounts", children: [
     /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h3", { children: "③ 临时挂载（工作区 / 工作流）" }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "mount-boundary", children: "工作区 / 工作流不是谱：它们是**挂载**，谱是**勾选**。" }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "mount-boundary", children: "工作区 / 工作流不是谱：它们是挂载，谱是勾选。" }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__actions", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
         "button",
@@ -4331,7 +4331,7 @@ function XsTouchSettingsRow({ state, actions }) {
     /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "xs-touch__row", "data-xuanshu-setting": "autostart", children: [
       /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: "开机自启" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "xs-touch__note", children: "登录项优先，其次启动文件夹快捷方式；两条路都不可用时如实显示「不支持」。 下面那行显示的是**这台机器上实际生效**的方式，不是这里勾的值。" })
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "xs-touch__note", children: "登录项优先，其次启动文件夹快捷方式；两条路都不可用时如实显示「不支持」。 下面那行显示的是这台机器上实际生效的方式，不是这里勾的值。" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
@@ -7301,7 +7301,7 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
       title: STEP_TITLES[0],
       hint: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(import_jsx_runtime18.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { children: "▸ 公历即可；农历换算由底座做。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { children: "▸ 「当地时间」是固定小字：你填的是**钟表时间**，不是真太阳时。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { children: "▸ 「当地时间」是固定小字：你填的是钟表时间，不是真太阳时。" }),
         /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { children: "▸ 微调粒度里的「四分钟」= 1° 经度时差，与真太阳时的换算粒度同源。" })
       ] }),
       children: [
@@ -7536,9 +7536,9 @@ function XsTimeAlgStep({ draft, onChange }) {
       step: 4,
       title: STEP_TITLES[3],
       hint: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(import_jsx_runtime18.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { children: "▸ 默认档 = 0（真太阳时）：实现上**省略该键**，不写默认值。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { children: "▸ 默认档 = 0（真太阳时）：实现上省略该键，不写默认值。" }),
         /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { children: "▸ 「春分定卯时（= 2）」上游自身未实现 —— 界面上不出现，也不置灰。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { children: "▸ 换算发生在**引擎内部**：录入层不换算（界面上没有「真太阳时修正」开关，找不到是设计）。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { children: "▸ 换算发生在引擎内部：录入层不换算（界面上没有「真太阳时修正」开关，找不到是设计）。" }),
         /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { children: "▸ 其余旋钮玄枢不给：长生 / 神煞 / 晚子时 / 命宫 / 月律分野 / 流派 / 显示区（索引 D4）。" })
       ] }),
       children: [
@@ -9608,8 +9608,8 @@ function XsSedimentEntry({ sessionId, api, controller, navigate, preloadedTarget
         children: busy ? "正在生成草稿…" : "导出汇总"
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__note", children: "导出只产出**草稿**：写进谱要你在下一步亲手点「确认更新」，AI 不会自动写。" }),
-    none ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__note", role: "status", children: "还没有可选的目标谱：沉淀只能写进谱（工作区 / 工作流不是谱），先去 S5 谱管理建一本。" }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__note", children: "导出只产出草稿：写进谱要你在下一步亲手点「确认更新」，AI 不会自动写。" }),
+    none ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__note", role: "status", children: "还没有可选的目标谱：沉淀只能写进谱（工作区 / 工作流不是谱），先去侧栏「谱」建一本。" }) : null,
     error === "" ? null : /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { className: "xs-sediment__error", role: "alert", children: error })
   ] });
 }

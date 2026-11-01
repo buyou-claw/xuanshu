@@ -159,11 +159,11 @@ export function XsSedimentEntry({ sessionId, api, controller, navigate, preloade
         {busy ? '正在生成草稿…' : '导出汇总'}
       </button>
       <p className="xs-sediment__note">
-        导出只产出**草稿**：写进谱要你在下一步亲手点「确认更新」，AI 不会自动写。
+        导出只产出草稿：写进谱要你在下一步亲手点「确认更新」，AI 不会自动写。
       </p>
       {none ? (
         <p className="xs-sediment__note" role="status">
-          还没有可选的目标谱：沉淀只能写进谱（工作区 / 工作流不是谱），先去 S5 谱管理建一本。
+          还没有可选的目标谱：沉淀只能写进谱（工作区 / 工作流不是谱），先去侧栏「谱」建一本。
         </p>
       ) : null}
       {error === '' ? null : <p className="xs-sediment__error" role="alert">{error}</p>}

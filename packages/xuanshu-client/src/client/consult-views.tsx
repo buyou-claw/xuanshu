@@ -156,7 +156,7 @@ export function XsConsultMountPlaceholder({ mounts }: { mounts: readonly MountRe
     <section className="xs-consult__block" data-xuanshu-block="mounts">
       <h3>③ 临时挂载（工作区 / 工作流）</h3>
       <p className="xs-consult__note" data-xuanshu-note="mount-boundary">
-        工作区 / 工作流不是谱：它们是**挂载**，谱是**勾选**。
+        工作区 / 工作流不是谱：它们是挂载，谱是勾选。
       </p>
       <div className="xs-consult__actions">
         <button

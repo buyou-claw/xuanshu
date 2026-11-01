@@ -347,7 +347,7 @@ export function XsTouchSettingsRow({ state, actions }: { state: TouchSettingsSta
           <strong>开机自启</strong>
           <p className="xs-touch__note">
             登录项优先，其次启动文件夹快捷方式；两条路都不可用时如实显示「不支持」。
-            下面那行显示的是**这台机器上实际生效**的方式，不是这里勾的值。
+            下面那行显示的是这台机器上实际生效的方式，不是这里勾的值。
           </p>
         </div>
         <label>
