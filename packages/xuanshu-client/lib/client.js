@@ -3263,14 +3263,19 @@ ${p.body}`.toLowerCase().includes(query.toLowerCase())));
             /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { disabled: !!p.error || busy, onClick: () => open(p.slug), children: "打开 / 编辑" })
           ] }, p.slug))
         ] }, group2)),
-        !filtered.length && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: rows.length ? "没有匹配的谱" : "还没有可选谱：谱由你积累，非必填、不阻塞使用。" }),
+        !filtered.length && (rows.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "没有匹配的谱" }),
           /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { onClick: () => {
             setQuery("");
             setLevel("");
             setSource("");
           }, children: "清空筛选" })
-        ] })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "还没有谱。谱由你积累，非必填、不阻塞使用；想建就从「＋ 创建新谱」开始。" }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { onClick: () => {
+            setView("create");
+          }, children: "创建第一个谱" })
+        ] }))
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "本列表只收谱。工作区 / 工作流与谱并列独立、不是谱。你自己的本地文件在藏库里，永不进 AI。" })
     ] }),

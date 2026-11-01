@@ -227,7 +227,15 @@ function PuPanel({ ctx, openSession }: { ctx: PuClient; openSession?: (sessionId
       {loading ? <p role="status">正在读取谱…</p> : <>
         <section><h2>基础输入级 base · {filtered.filter(p => p.level === 'base').length} 个</h2><p>进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。</p><p>🔒 底座（八字） · 只读 · 由出生信息与底座生成 · 默认在场 · 不可关 <button onClick={() => window.alert('底座默认在场、不可关；要修改，请重新录制出生信息并确认。')}>打开</button></p></section>
         {(['base', 'optional'] as const).map(group => <section key={group}>{group === 'optional' && <><h2>可选输入级 optional · {filtered.filter(p => p.level === group).length} 个</h2><p>底稿不采 · 问事时按需追加</p></>}{filtered.filter(p => p.level === group || (group === 'optional' && p.error)).map(p => <article key={p.slug}><div><strong>{p.name}</strong><p>{p.description}</p><small>{p.source} · {p.updatedAt}{p.stale && ' · 汇总可能过期'}</small>{p.error && <p role="alert">{p.error}</p>}</div><button disabled={!!p.error || busy} onClick={() => open(p.slug)}>打开 / 编辑</button></article>)}</section>)}
-        {!filtered.length && <div><p>{rows.length ? '没有匹配的谱' : '还没有可选谱：谱由你积累，非必填、不阻塞使用。'}</p><button onClick={() => { setQuery(''); setLevel(''); setSource(''); }}>清空筛选</button></div>}
+        {/*
+          2026-11-01 改：无谱时原来给的是「清空筛选」按钮 —— 可那时根本没有筛选条件可清，
+          点下去什么都不会变（用户会以为按钮坏了）。没有谱的时候该给的是「建一个谱」，
+          和藏库空态给「登记第一个藏」是同一个道理：空态要有一个真能推进的动作。
+          只有「有谱但被筛掉了」时才给「清空筛选」。
+        */}
+        {!filtered.length && (rows.length > 0
+          ? <div><p>没有匹配的谱</p><button onClick={() => { setQuery(''); setLevel(''); setSource(''); }}>清空筛选</button></div>
+          : <div><p>还没有谱。谱由你积累，非必填、不阻塞使用；想建就从「＋ 创建新谱」开始。</p><button onClick={() => { setView('create'); }}>创建第一个谱</button></div>)}
       </>}
       <p>本列表只收谱。工作区 / 工作流与谱并列独立、不是谱。你自己的本地文件在藏库里，永不进 AI。</p>
     </>}
