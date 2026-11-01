@@ -217,7 +217,13 @@ export function deriveAiReadiness(
   }
   const usable = providers.filter((line) => line.usable)
 
-  // ① 有默认模型，且它落在可用的那家上 → 已接上。
+  // ① 有默认模型，且它落在可用的那家上 → 配置齐了。
+  /*
+   * 2026-11-02 改：原来这里判成 "已接上"，界面上就写「已接上 AI · 可以问事了」。
+   * 但这条判定**只是看路由清单**（有没有这家 provider、密钥状态、默认模型指向哪）——
+   * 从来不发一次真请求。实测遇到过：界面说「已接上」，真去提炼时 AI 一句话都没回。
+   * 说「已接上」等于替用户担保了一次它没做过的验证。改成「配置齐了」，并明说没试过调用。
+   */
   if (defaultModel !== null) {
     const backed = usable.find((line) => line.id === defaultModel.provider)
     if (backed !== undefined) {
@@ -229,8 +235,8 @@ export function deriveAiReadiness(
         reason: {
           code: keyUnknown ? 'ready-key-unknown' : 'ready',
           text: keyUnknown
-            ? `已接上 ${backed.name ?? backed.id} · ${defaultModel.model}，但这个提供商的密钥状态未知（设置服务读不到）：先按可用处理，若问事报缺凭据就去核对。`
-            : `已接上：${backed.name ?? backed.id} · ${defaultModel.model}。`,
+            ? `配置齐了：${backed.name ?? backed.id} · ${defaultModel.model}，密钥状态读不到（设置服务没回应）：先按可用处理，真发不出去时会有报错。`
+            : `配置齐了：${backed.name ?? backed.id} · ${defaultModel.model}。这是看清单得出的，没有真发一次请求试通；发不出去时会在用的地方告诉你。`,
           next: keyUnknown ? `若问事失败，去「${AI_SETTINGS_PATH}」核对密钥。` : '可以问事了。',
         },
       }

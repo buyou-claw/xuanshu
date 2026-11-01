@@ -69,7 +69,7 @@ describe('票 29 · AI 状态面 · 已接上（configured === true）', () => {
     })
     expect(readiness.reason.code).toBe('ready')
     // 给人看的两句都必须在：原因（已接上谁）与下一步（可以问事）。
-    expect(readiness.reason.text).toContain('已接上')
+    expect(readiness.reason.text).toContain('配置齐了')
     expect(readiness.reason.text).toContain('DeepSeek')
     expect(readiness.reason.text).toContain('deepseek-chat')
     expect(readiness.reason.next).toContain('问事')
@@ -81,7 +81,7 @@ describe('票 29 · AI 状态面 · 已接上（configured === true）', () => {
     expect(readiness.providers[0].keyConfigured).toBe('unknown')
     expect(readiness.providers[0].usable).toBe(true)
     expect(readiness.reason.code).toBe('ready-key-unknown')
-    expect(readiness.reason.text).toContain('未知')
+    expect(readiness.reason.text).toContain('密钥状态读不到')
     expect(readiness.reason.next).toContain(AI_SETTINGS_PATH)
   })
 

@@ -117,12 +117,12 @@ const UNKNOWN = {
 /* ───────────────────────── 状态面（向导第 6 步的内容） ───────────────────────── */
 
 describe('票 29 · AI 状态面：configured / providers / defaultModel / reason', () => {
-  it('已接上：状态、默认模型、provider 行、只读说明都在屏上，且有 [完成]', () => {
+  it('配置齐了：状态、默认模型、provider 行、只读说明都在屏上，且有 [完成]', () => {
     const html = render(
       h(XsAiReadiness, { readiness: READY, onRetry: () => {}, onFinish: () => {}, onSkip: () => {} }),
     )
     expect(html).toContain('data-xs-state="configured"')
-    expect(html).toContain('已接上 AI')
+    expect(html).toContain('AI 配置齐了')
     expect(html).toContain('data-xuanshu-ai-default')
     expect(html).toContain('deepseek-official · deepseek-chat')
     expect(html).toContain('data-xuanshu-ai-provider="deepseek-official"')

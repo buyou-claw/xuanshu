@@ -68,7 +68,14 @@ function keyLabel(value: boolean | 'unknown'): string {
 
 /** 状态面的标题（逐字固定，测试与屏稿共用）。 */
 const STATE_TITLE: Record<AiViewState, string> = {
-  configured: '已接上 AI',
+  /**
+   * 2026-11-02 改：原来是「已接上 AI」。
+   * 这条判定只看路由清单（provider 有没有注册、密钥状态、默认模型指向哪），**从不真发一次请求**。
+   * 实测撞过一次：界面说「已接上」，真去提炼时 AI 一句话都没回 ——
+   * 用户照着「已接上」以为万事俱备，其实谁都没试过能不能调通。
+   * 改成说事实：配置齐了。
+   */
+  configured: 'AI 配置齐了',
   missing: '未接上 AI',
   unknown: 'AI 状态未知',
   checking: '正在检测 AI …',

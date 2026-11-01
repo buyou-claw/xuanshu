@@ -209,7 +209,7 @@ function deriveAiReadiness(catalog, options = {}) {
         ...base,
         reason: {
           code: keyUnknown ? "ready-key-unknown" : "ready",
-          text: keyUnknown ? `已接上 ${backed.name ?? backed.id} · ${defaultModel.model}，但这个提供商的密钥状态未知（设置服务读不到）：先按可用处理，若问事报缺凭据就去核对。` : `已接上：${backed.name ?? backed.id} · ${defaultModel.model}。`,
+          text: keyUnknown ? `配置齐了：${backed.name ?? backed.id} · ${defaultModel.model}，密钥状态读不到（设置服务没回应）：先按可用处理，真发不出去时会有报错。` : `配置齐了：${backed.name ?? backed.id} · ${defaultModel.model}。这是看清单得出的，没有真发一次请求试通；发不出去时会在用的地方告诉你。`,
           next: keyUnknown ? `若问事失败，去「${AI_SETTINGS_PATH}」核对密钥。` : "可以问事了。"
         }
       };
@@ -4071,7 +4071,14 @@ function keyLabel(value) {
   return "未知";
 }
 var STATE_TITLE = {
-  configured: "已接上 AI",
+  /**
+   * 2026-11-02 改：原来是「已接上 AI」。
+   * 这条判定只看路由清单（provider 有没有注册、密钥状态、默认模型指向哪），**从不真发一次请求**。
+   * 实测撞过一次：界面说「已接上」，真去提炼时 AI 一句话都没回 ——
+   * 用户照着「已接上」以为万事俱备，其实谁都没试过能不能调通。
+   * 改成说事实：配置齐了。
+   */
+  configured: "AI 配置齐了",
   missing: "未接上 AI",
   unknown: "AI 状态未知",
   checking: "正在检测 AI …"
