@@ -334,6 +334,41 @@ Test-Path profile\node_modules\xuanshu-host\lib\horosa\service.mjs     # 新增�
 Get-Content "$PWD\.dsh-home\xuanshu\horosa\serve.log" -Tail 50
 ```
 
+
+### 7.2 手动起 serve（包里自带的 runtime，不走 setup 取件）
+
+正常路径是 `pnpm setup:xuanshu` 取件 + 宿主托管。但有一种常见情况**绕过那条路**：
+手上已经有一份解开的 runtime 包（`runtime-payload` + `horosa_skill-*.whl`），想直接起 serve 验出盘。
+这条路 2026-11-02 真机踩过，四个坑是按**报错顺序**排的——前一个不解决，后面根本走不到。
+
+| # | 症状 | 真因 | 处置 |
+|---|---|---|---|
+| 1 | `AssertionError`（`ensure_dirs` 里 `assert self.db_path is not None`） | `Settings()` **直接构造**时 `db_path` / `output_dir` 是 `None`；只有 `Settings.from_env()` 才推导出 `<data_dir>/memory.db` | 用 `Settings.from_env()`，别用 `Settings()` |
+| 2 | `sqlite3.OperationalError: unable to open database file`（而 PowerShell 在同一个目录 `Set-Content` 能写） | **Python 子进程被沙箱挡住**，写不了 `%APPDATA%\...`：用 Python 自己的 `open()` 复现是 `PermissionError [Errno 13]` | 数据目录换到**工作盘**（实测 `E:\...` 可写），或用 `HOROSA_SKILL_DB_PATH` / `HOROSA_SKILL_OUTPUT_DIR` 指过去 |
+| 3 | `ModuleNotFoundError: No module named 'mcp'` / `'httpx'` | 运行时自带的 python **没有 pip**，装不了依赖 | 用 `uv venv` + `uv pip install <whl>` 建独立环境（会把 `mcp` / `httpx` / `uvicorn` / `sse-starlette` 一起装上） |
+| 4 | `js_engine.cli_missing: horosa-core-js CLI entry is missing` | 解压布局与启动脚本假设**不一致**：脚本按 `current\runtime\windows\{python,java,bundle}` 找，实际在 `current\{python,java,bundle}`；`horosa-core-js` 又在 `runtime-payload\horosa-core-js`，不在脚本的候选里 | 建三个 junction 把 `current\runtime\windows\{python,java,bundle}` 接过去；用 `HOROSA_CORE_JS_ROOT` 指到 `runtime-payload\horosa-core-js` |
+
+起对的入口（`serve` 不是导出名，真名是 `run_mcp_server`）：
+
+```python
+from horosa_skill.config import Settings
+from horosa_skill.surfaces.mcp_server import run_mcp_server
+s = Settings.from_env()
+s.ensure_dirs()
+run_mcp_server(s, transport="streamable-http")
+```
+
+成功标志：`Get-NetTCPConnection -State Listen -LocalPort 8765` 有输出，且日志里有 `serving ...` 与
+`Processing request of type ListToolsRequest`。
+
+> **第 4 坑之后仍可能看到 Java 侧起不来**：`Log4j2` 解析 `C:\Users\<user>/.horosa-logs/...` 这种混斜杠路径失败，
+> 报 `unable to create manager for [...access.log]`，随后 `degraded: chart-only`。
+> **这不是拦路虎**：chart 侧（Python 的 8899）能独立提供八字出盘所需的四柱与口径，
+> `bazi_birth` 照常出盘；只有依赖 Java 后端的技法会缺。别把它当成「出盘修不好」的理由——
+> 本机 2026-11-02 就是在这个 degraded 状态下走通了 1990-05-20 08:30 北京 → 庚午 辛巳 乙酉 庚辰。
+
+> 顺带一条**界面**：`js_engine.cli_missing` 这类上游 code 会一路冒到玄枢界面的 `八字出盘失败：…` 行。
+> 前缀已改成「出盘引擎返回了失败（错误码 …）」，上游 message 原样保留（那才是能搜的东西）。
 ## 8. 「非回环不暴露」
 
 horosa 的 `serve` 默认绑 `127.0.0.1`（上游口径：非回环绑定无 token 会拒启）。玄枢把这条**做成硬门**而不是约定：
