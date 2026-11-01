@@ -213,7 +213,7 @@ describe('票 08 · 动作表口径（同一个动作怎么认）', () => {
   })
 
   it('整串锚定：被置灰的快捷入口（标题 + 副标题拼一串）不算第二个入口', () => {
-    expect(actionOfLabel('问事底座未立 · 会先引导你填出生信息')).toBeUndefined()
+    expect(actionOfLabel('问事底座未立 · 也能空手先问一句')).toBeUndefined()
     expect(actionOfLabel('工作区车间')).toBeUndefined()
     // 但启用着的三格是 `data-xuanshu-nav` 认的，走结构线索（见 browser-nav 的 census）。
     expect(actionOfLabel('工作流 流水线')).toBeUndefined()
