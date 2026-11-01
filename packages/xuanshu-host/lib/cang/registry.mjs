@@ -41,7 +41,22 @@ export function createCangRegistry({ dataDir }) {
       if (!metadata.isDirectory() && !metadata.isFile()) throw new Error('只能登记本地文件或文件夹。');
       return { valid: true, path: normalized, kind: metadata.isDirectory() ? 'directory' : 'file', checkedAt: new Date().toISOString() };
     } catch (error) {
-      return { valid: false, path: normalized, reason: `指针失效：${error.code ?? error.message}`, checkedAt: new Date().toISOString() };
+      /**
+       * 2026-11-02 改：原来这里直接写 `指针失效：${error.code ?? error.message}` —— 路径写错时
+       * 界面上显示的是「指针失效：ENOENT」。ENOENT 是系统错误码，用户读不懂，
+       * 也不知道下一步该干什么（是路径写错了？还是文件被挪走了？还是没权限？）。
+       * 把几个常见的翻成人话；不认识的码仍带原码，免得把真问题藏掉。
+       */
+      const readable = {
+        ENOENT: '这个路径不存在 —— 可能写错了，或者文件/文件夹被挪走了',
+        EACCES: '没有权限读这个路径',
+        EPERM: '没有权限读这个路径',
+        ENOTDIR: '路径中间那一段不是文件夹',
+        ELOOP: '路径里有循环链接（快捷方式指向自己）',
+        ENAMETOOLONG: '路径太长，系统不接受',
+      }[error.code]
+      const why = readable ?? error.message ?? String(error.code ?? error)
+      return { valid: false, path: normalized, reason: `指针失效：${why}`, checkedAt: new Date().toISOString() };
     }
   }
   function fields(input) {
