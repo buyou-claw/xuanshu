@@ -6315,6 +6315,7 @@ var NUDGE_GRAINS = [
   // 「四分钟」= 1° 经度时差（S3 §3.1③：**不要改写成「加减分秒」**）。
   { id: "fourMinute", label: "四分钟", minutes: 4 }
 ];
+var NUDGE_NEEDS_BIRTH = "先把日期与时刻填上，微调才有东西可调。";
 var TIME_PATTERN = /^(\d{2}):(\d{2})$/;
 var DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 var pad2 = (value) => String(value).padStart(2, "0");
@@ -7469,7 +7470,7 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
         empty ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { className: "xs-wizard__hint", "data-xuanshu-hint": "need-birth", children: "先填出生信息：日期与时刻都填上才能往下走（时刻填当地时间即可）。" }) : null,
         /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "xs-wizard__nudge", "data-xuanshu-nudge": "grains", children: [
           /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { children: "③ 内联微调" }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-minus", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-minus", disabled: empty, title: empty ? NUDGE_NEEDS_BIRTH : void 0, onClick: () => {
             onNudge(grain, -1);
           }, children: "[-]" }),
           /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "xs-wizard__nudge-grains", children: NUDGE_GRAINS.map((row) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
@@ -7486,14 +7487,15 @@ function XsTimeStep({ draft, onChange, onNudge, onNow }) {
             },
             row.id
           )) }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-plus", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-plus", disabled: empty, title: empty ? NUDGE_NEEDS_BIRTH : void 0, onClick: () => {
             onNudge(grain, 1);
           }, children: "[+]" }),
           /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-now", onClick: onNow, children: "此刻" }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-apply", onClick: () => {
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", "data-xuanshu-action": "nudge-apply", disabled: empty, title: empty ? NUDGE_NEEDS_BIRTH : void 0, onClick: () => {
             onNudge(grain, 0);
           }, children: "确定" }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("small", { className: "xs-wizard__note", children: `当前粒度：${activeLabel}` })
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("small", { className: "xs-wizard__note", children: `当前粒度：${activeLabel}` }),
+          empty ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("small", { className: "xs-wizard__note", "data-xuanshu-note": "nudge-needs-birth", children: NUDGE_NEEDS_BIRTH }) : null
         ] })
       ]
     }

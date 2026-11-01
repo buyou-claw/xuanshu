@@ -26,6 +26,7 @@ import {
   CAST_MISSING_REASON,
   GENDER_OPTIONS,
   NUDGE_GRAINS,
+  NUDGE_NEEDS_BIRTH,
   NOTE_OPTIONS,
   TIME_ALG_OPTIONS,
   UNNAMED_PLACE,
@@ -161,7 +162,13 @@ export function XsTimeStep({ draft, onChange, onNudge, onNow }: XsTimeStepProps)
       ) : null}
       <div className="xs-wizard__nudge" data-xuanshu-nudge="grains">
         <span>③ 内联微调</span>
-        <button type="button" data-xuanshu-action="nudge-minus" onClick={() => { onNudge(grain, -1); }}>
+        {/*
+          2026-11-02 加：日期或时刻没填全时，微调按钮点了**什么都不发生**，也没有任何提示
+          （实测：清空时刻后点 [+]，value 与提示都没变）。
+          用户在屏上看到的是一个点了没反应的按钮 —— 本仓明令不许这样。
+          这里直接禁用，并让那行 hint 说明原因（hint 本来就在说同一件事）。
+        */}
+        <button type="button" data-xuanshu-action="nudge-minus" disabled={empty} title={empty ? NUDGE_NEEDS_BIRTH : undefined} onClick={() => { onNudge(grain, -1); }}>
           [-]
         </button>
         <span className="xs-wizard__nudge-grains">
@@ -178,16 +185,19 @@ export function XsTimeStep({ draft, onChange, onNudge, onNow }: XsTimeStepProps)
             </button>
           ))}
         </span>
-        <button type="button" data-xuanshu-action="nudge-plus" onClick={() => { onNudge(grain, 1); }}>
+        <button type="button" data-xuanshu-action="nudge-plus" disabled={empty} title={empty ? NUDGE_NEEDS_BIRTH : undefined} onClick={() => { onNudge(grain, 1); }}>
           [+]
         </button>
         <button type="button" data-xuanshu-action="nudge-now" onClick={onNow}>
           此刻
         </button>
-        <button type="button" data-xuanshu-action="nudge-apply" onClick={() => { onNudge(grain, 0); }}>
+        <button type="button" data-xuanshu-action="nudge-apply" disabled={empty} title={empty ? NUDGE_NEEDS_BIRTH : undefined} onClick={() => { onNudge(grain, 0); }}>
           确定
         </button>
         <small className="xs-wizard__note">{`当前粒度：${activeLabel}`}</small>
+        {empty ? (
+          <small className="xs-wizard__note" data-xuanshu-note="nudge-needs-birth">{NUDGE_NEEDS_BIRTH}</small>
+        ) : null}
       </div>
     </StepShell>
   );

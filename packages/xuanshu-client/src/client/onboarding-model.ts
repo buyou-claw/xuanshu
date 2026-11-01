@@ -145,6 +145,13 @@ export const NUDGE_GRAINS: readonly { id: NudgeGrain; label: string; minutes?: n
   { id: 'fourMinute', label: '四分钟', minutes: 4 },
 ];
 
+/**
+ * 2026-11-02 加：日期或时刻没填全时，微调按钮点了是**什么都不发生**的
+ * （`nudgeDateTime` 在输入不合法时原样返回）。与其给一个点了没反应的按钮，
+ * 不如禁用并说明原因 —— 本仓明令不许渲染死按钮。
+ */
+export const NUDGE_NEEDS_BIRTH = '先把日期与时刻填上，微调才有东西可调。';
+
 /** 钟表时刻串（`HH:mm`，与契约 §1 快照的 `birth.time` 同形）。 */
 const TIME_PATTERN = /^(\d{2}):(\d{2})$/;
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
