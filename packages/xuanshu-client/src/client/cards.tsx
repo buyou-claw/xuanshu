@@ -791,7 +791,16 @@ export function XsQuickLinks({
       icon: <GlyphQuickConsult className="xs-cell__icon" />,
       title: QUICKLINK.consult.title,
       // 底座未立时问事格副标题换提示句，但格**仍可用**（S4 §3④）。
-      subtitle: baseplateReady ? QUICKLINK.consult.subtitle : QUICKLINK_CONSULT_UNREADY,
+      //
+      // 2026-11-01 补：`disabled` 还有第二个来源（AI 没接上）。两个条件正交，
+      // 同时成立时副标题说「也能空手先问一句」而按钮是灰的 —— 用户读到的是假话，
+      // 而且置灰理由只在 `title`（hover 才有）。所以 AI 没接上时副标题先说这件事。
+      subtitle:
+        aiState === 'missing'
+          ? 'AI 还没接上 · 先看下面那段提示'
+          : baseplateReady
+            ? QUICKLINK.consult.subtitle
+            : QUICKLINK_CONSULT_UNREADY,
       disabled: consultDisabled,
       // 两条理由分开写：面板没装配 ≠ AI 没接上（修复去处不同）。
       reason: consultAvailable ? DISABLED_REASON.consultAi : DISABLED_REASON.consult,

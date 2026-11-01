@@ -225,7 +225,11 @@ export const DISABLED_REASON = {
   consult: '问事面板还没装配（属票 10 · 问事闭环）',
   // #29：AI 没接上时问事入口保持禁用。路径逐字与 `ai-model.ts` 的 AI_SETTINGS_PATH 一致
   // （界面上的可见原因由快捷入口卡的 `XsAiGate` 给，这里只做 title）。
-  consultAi: '问事还开不了：先接上 AI（去「设置 → 模型」配置 provider 与默认模型）。',
+  //
+  // 2026-11-01 改：原来这里也写「配置 provider 与默认模型」，与 XsAiGate 里那句说的是两回事
+  // （一个是缺 key、一个是缺 provider 选择），并排出现会让人以为要做两件事。
+  // 具体缺什么由 XsAiGate 逐字说；这里只给去处。
+  consultAi: '问事还开不了：先接上 AI（去「设置 → 模型」）。',
   workflow: '工作流面板还没装配（属票 16 · 工作流创建向导）',
   pus: '谱面板还没装配（属票 09 · 谱管理）',
   digao: '底稿面板还没装配（属票 13 · 底稿与日课）',

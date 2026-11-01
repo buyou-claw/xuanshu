@@ -2938,7 +2938,11 @@ var DISABLED_REASON = {
   consult: "问事面板还没装配（属票 10 · 问事闭环）",
   // #29：AI 没接上时问事入口保持禁用。路径逐字与 `ai-model.ts` 的 AI_SETTINGS_PATH 一致
   // （界面上的可见原因由快捷入口卡的 `XsAiGate` 给，这里只做 title）。
-  consultAi: "问事还开不了：先接上 AI（去「设置 → 模型」配置 provider 与默认模型）。",
+  //
+  // 2026-11-01 改：原来这里也写「配置 provider 与默认模型」，与 XsAiGate 里那句说的是两回事
+  // （一个是缺 key、一个是缺 provider 选择），并排出现会让人以为要做两件事。
+  // 具体缺什么由 XsAiGate 逐字说；这里只给去处。
+  consultAi: "问事还开不了：先接上 AI（去「设置 → 模型」）。",
   workflow: "工作流面板还没装配（属票 16 · 工作流创建向导）",
   pus: "谱面板还没装配（属票 09 · 谱管理）",
   digao: "底稿面板还没装配（属票 13 · 底稿与日课）",
@@ -5227,7 +5231,11 @@ function XsQuickLinks({
       icon: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(GlyphQuickConsult, { className: "xs-cell__icon" }),
       title: QUICKLINK.consult.title,
       // 底座未立时问事格副标题换提示句，但格**仍可用**（S4 §3④）。
-      subtitle: baseplateReady ? QUICKLINK.consult.subtitle : QUICKLINK_CONSULT_UNREADY,
+      //
+      // 2026-11-01 补：`disabled` 还有第二个来源（AI 没接上）。两个条件正交，
+      // 同时成立时副标题说「也能空手先问一句」而按钮是灰的 —— 用户读到的是假话，
+      // 而且置灰理由只在 `title`（hover 才有）。所以 AI 没接上时副标题先说这件事。
+      subtitle: aiState === "missing" ? "AI 还没接上 · 先看下面那段提示" : baseplateReady ? QUICKLINK.consult.subtitle : QUICKLINK_CONSULT_UNREADY,
       disabled: consultDisabled,
       // 两条理由分开写：面板没装配 ≠ AI 没接上（修复去处不同）。
       reason: consultAvailable ? DISABLED_REASON.consultAi : DISABLED_REASON.consult
