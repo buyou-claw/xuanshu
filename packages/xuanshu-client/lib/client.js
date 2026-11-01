@@ -1480,6 +1480,7 @@ function CangPanel({ api, controller, initialData }) {
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", onClick: () => controller.edit(newCangDraft()), children: "登记第一个藏" })
     ] }),
     !loading && !error && !!entries.length && !filtered.length && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { children: "没有匹配的藏名或签。" }),
+    !loading && !error && groups.size > 1 ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "xs-cang__how", "data-xuanshu-note": "group-by-tag", children: "按「签」分组：一个藏挂了几个签，就会在几组里各出现一次（不是登记了两次）。" }) : null,
     !loading && !error && [...groups].map(([label, items]) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("details", { open: true, className: "xs-cang__group", children: [
       /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("summary", { children: [
         "签「",
