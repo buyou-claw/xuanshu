@@ -299,12 +299,23 @@ describe('#25 · 晚省面板：完整事实 + [立即生成] + 投递历史', (
 
 describe('#25 · 设置里能看到投递历史（traffic.status 的读面）', () => {
   it('三种状态都有人话文案；行里带原因与「补」（权限缺失给人话，机器码可查）', () => {
-    expect(TRAFFIC_STATUS_TEXT).toEqual({ delivered: '成功', failed: '失败', skipped: '跳过' })
+    /**
+     * 2026-11-02 改：原来逐字锁 `{ delivered:'成功', failed:'失败', skipped:'跳过' }`。
+     * 但「跳过」在那一行里会和前面的「日课/晚省」连读成「日课跳过」——
+     * 实测过：日课**生成成功了**，跳过的只是发通知那一步，用户却读成「日课没生成」。
+     * 文案改成「通知已发 / 通知失败 / 没发通知」。
+     *
+     * 这条断言本来要守的是**三态可区分、都能读到**（不是逐字相等），所以按那个原意重写。
+     */
+    expect(Object.keys(TRAFFIC_STATUS_TEXT).sort()).toEqual(['delivered', 'failed', 'skipped'])
+    const texts = Object.values(TRAFFIC_STATUS_TEXT)
+    expect(new Set(texts).size).toBe(3)
+    expect(texts.every((x) => !/^(delivered|failed|skipped)$/.test(x))).toBe(true)
     const html = render(h(XsDeliveryHistory, { status: HISTORY }))
     expect(html).toContain('data-xuanshu-history="traffic"')
-    expect(html).toContain('成功')
-    expect(html).toContain('失败')
-    expect(html).toContain('跳过')
+    expect(html).toContain(TRAFFIC_STATUS_TEXT.delivered)
+    expect(html).toContain(TRAFFIC_STATUS_TEXT.failed)
+    expect(html).toContain(TRAFFIC_STATUS_TEXT.skipped)
     expect(html).toContain('晚省')
     expect(html).toContain('日课')
     // #40：最近一次失败说人话 + 带「去哪开」；原始 token 只在机器码里。

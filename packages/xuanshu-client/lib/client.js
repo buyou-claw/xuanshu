@@ -4309,9 +4309,9 @@ function autostartMethodText(method) {
   return AUTOSTART_METHOD_TEXT[method] ?? "未知（玄枢的桌面应用没在运行）";
 }
 var TRAFFIC_STATUS_TEXT = {
-  delivered: "成功",
-  failed: "失败",
-  skipped: "跳过"
+  delivered: "通知已发",
+  failed: "通知失败",
+  skipped: "没发通知"
 };
 var NOTIFY_FAILURE_TEXT = {
   "permission-denied": "权限缺失：系统通知权限被关。请到「系统设置 → 通知 → 玄枢」里打开通知权限，然后再生成一次。",

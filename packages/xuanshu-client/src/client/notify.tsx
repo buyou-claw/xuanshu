@@ -45,11 +45,23 @@ export function autostartMethodText(method?: AutostartMethod): string {
   return AUTOSTART_METHOD_TEXT[method] ?? '未知（玄枢的桌面应用没在运行）';
 }
 
-/** 投递状态的人话（#25 契约 §3：成功 / 失败 / 跳过 + 原因 + 时间 + 是否补，都能查）。 */
+/**
+ * 投递状态的人话（#25 契约 §3：成功 / 失败 / 跳过 + 原因 + 时间 + 是否补，都能查）。
+ *
+ * 2026-11-02 改：原来 `skipped: '跳过'`。投递历史那一行是几个并列 span
+ * （`<日期><哪一类><状态><原因>`），视觉上连读成「日课跳过」+「没有桌面应用」——
+ * 用户会理解成**日课被跳过了（没生成）**。
+ *
+ * 实测（把日课时刻改到 23:43，等它到点）：那条记录是 `kind=rikke / status=skipped`，
+ * 而同一时刻 `rikke.status.generatedAt` 变成了 `…15:43:00.227Z` ——
+ * **日课生成了，跳过的只是「发系统通知」这一步**。
+ *
+ * 所以把「跳过的是什么」写进文案本身，别指望用户自己接上后面那一格原因。
+ */
 export const TRAFFIC_STATUS_TEXT = {
-  delivered: '成功',
-  failed: '失败',
-  skipped: '跳过',
+  delivered: '通知已发',
+  failed: '通知失败',
+  skipped: '没发通知',
 } as const;
 
 /** 通知失败里最常被壳侧英文 token 挡住的那几种原因（#40）。 */
