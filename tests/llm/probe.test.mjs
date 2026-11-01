@@ -81,6 +81,21 @@ describe('ai.probe · 真发一次最小请求', () => {
     expect(String(result.reason)).toContain('没有可用的 provider/model 路由')
   })
 
+  it('流正常结束但一个字都没返回：算没通（假 key 就是这样悄无声息地"成功"）', async () => {
+    // 实测：把 key 换成 sk-deadbeef-… 后，provider 不抛错、也不吐 error 块，只是什么都不给。
+    // 那时若判 ok，探测按钮会报「通了 … 回的是「（空）」」—— 比不报更误导。
+    const llm = {
+      listProviders: () => [{ id: 'deepseek-official' }],
+      listModels: async () => [{ id: 'deepseek-flash' }],
+      stream: async function* stream() { /* 什么都不吐 */ },
+    }
+    const methods = createAiProbeMethods(ctxWith(llm))
+    const result = await methods['ai.probe']()
+
+    expect(result.ok).toBe(false)
+    expect(String(result.reason)).toContain('一个字都没有返回')
+  })
+
   it('回得很长时截断到 120 字（探测不需要把长篇搬回界面）', async () => {
     const long = '很'.repeat(400)
     const methods = createAiProbeMethods(ctxWith(llmOk(long)))

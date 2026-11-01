@@ -78,6 +78,26 @@ export async function streamText(llm, { system, prompt }) {
   } catch (error) {
     return { ok: false, text: '', reason: `LLM 调用失败：${String(error?.message ?? error)}`, route }
   }
+  /**
+   * 2026-11-02 加：**流正常结束但一个字都没有**，不算成功。
+   *
+   * 实测出来的：把 key 换成一个假的（`sk-deadbeef-…`），「试一下能不能用」照样报
+   * 「通了 … 回的是「（空）」」—— 因为 provider 没抛错、也没吐 error 块，只是什么文本都没给。
+   *
+   * 这个判定影响两处：
+   *   - 探测按钮会把「假 key」报成「通了」，比不报更糟；
+   *   - 底稿的 `condenseWithLlm` 会把空摘要当成 `ok`，于是 `digest:'llm'` 但摘要节是空的。
+   *
+   * 空输出就是没拿到东西，如实说。
+   */
+  if (collected.trim() === '') {
+    return {
+      ok: false,
+      text: '',
+      reason: 'LLM 这次流正常结束，但一个字都没有返回（空文本；通常是凭证无效、额度用尽，或模型把内容全放进了非文本块）',
+      route,
+    }
+  }
   return { ok: true, text: collected, reason: null, route }
 }
 
