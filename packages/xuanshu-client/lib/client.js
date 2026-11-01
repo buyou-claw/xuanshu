@@ -1436,7 +1436,10 @@ function CangPanel({ api, controller, initialData }) {
   const tags = [...new Set(entries.flatMap((entry) => entry.tags))].sort((a, b) => a.localeCompare(b, "zh-CN"));
   const filtered = filterCangEntries(entries, query, tag, sort);
   const groups = /* @__PURE__ */ new Map();
-  for (const entry of filtered) for (const label of entry.tags.length ? entry.tags : ["未贴签"]) groups.set(label, [...groups.get(label) ?? [], entry]);
+  for (const entry of filtered) {
+    const labels = tag !== "" ? [tag] : entry.tags.length ? entry.tags : ["未贴签"];
+    for (const label of labels) groups.set(label, [...groups.get(label) ?? [], entry]);
+  }
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: "xs-cang", "data-xuanshu-panel": "cang", children: [
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h1", { children: "藏库" }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { className: "xs-cang__boundary", "data-xuanshu-note": "no-ai", children: CANG_AI_FREE }),

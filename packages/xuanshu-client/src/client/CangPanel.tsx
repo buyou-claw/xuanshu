@@ -79,9 +79,18 @@ export function CangPanel({ api, controller, initialData }: CangPanelProps) {
   const empty = !loading && !error && !entries.length;
   const tags = [...new Set(entries.flatMap(entry => entry.tags))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
   const filtered = filterCangEntries(entries, query, tag, sort);
-  // 按「签」分组（没贴签的归到「未贴签」）；同一个藏挂了几个签就在几组里各出现一次。
+  /**
+   * 按「签」分组（没贴签的归到「未贴签」）；同一个藏挂了几个签就在几组里各出现一次。
+   *
+   * 2026-11-01 修：按签**筛选**时只该保留被筛的那个签。原来不管 tag 是什么，
+   * 都拿 entry.tags 全量分组 —— 用户在下拉里选了「第二签」，界面上「验证」那一组还在，
+   * 看起来像筛选没生效（实测：卡片数一张不少）。筛了签就只该看到那个签。
+   */
   const groups = new Map<string, CangEntry[]>();
-  for (const entry of filtered) for (const label of entry.tags.length ? entry.tags : ['未贴签']) groups.set(label, [...(groups.get(label) ?? []), entry]);
+  for (const entry of filtered) {
+    const labels = tag !== '' ? [tag] : entry.tags.length ? entry.tags : ['未贴签'];
+    for (const label of labels) groups.set(label, [...(groups.get(label) ?? []), entry]);
+  }
   return <section className="xs-cang" data-xuanshu-panel="cang">
     <h1>藏库</h1>
     <p className="xs-cang__boundary" data-xuanshu-note="no-ai">{CANG_AI_FREE}</p>
