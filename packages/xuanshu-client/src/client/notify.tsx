@@ -275,9 +275,13 @@ export function XsTouchSettingsRow({ state, actions }: { state: TouchSettingsSta
       <div className="xs-touch__row" data-xuanshu-setting="ai">
         <div>
           <strong>AI 建议段</strong>
+          {/*
+            2026-11-01 改：「确定性骨架」与「LLM」都是实现词。用户看到的是「关掉之后日课还剩什么」，
+            说「只留前一段（黄历三键）」他就懂了；说「不再调用 LLM」不如说「不再调用 AI」。
+          */}
           <p className="xs-touch__note">
-            日课由「黄历三键（永远有）」+「一段 AI 写的今天注意什么」两段组成。关掉后只留确定性骨架，
-            不再调用 LLM（失败也只是没有那一段，不影响日课本身）。
+            日课由「黄历三键（永远有）」+「一段 AI 写的今天注意什么」两段组成。关掉后只留前一段（黄历三键），
+            不再调用 AI（失败也只是没有那一段，不影响日课本身）。
           </p>
         </div>
         <label>
@@ -316,9 +320,14 @@ export function XsTouchSettingsRow({ state, actions }: { state: TouchSettingsSta
       <div className="xs-touch__row" data-xuanshu-setting="close-behavior">
         <div>
           <strong>关窗口行为</strong>
+          {/*
+            2026-11-01 改：原文是「勾上 = 点 × 直接退出（先停 DSH 子进程再退壳）；不勾 = 收进托盘继续跑…
+            这个开关写进共享设置，壳下次重读即生效」——「子进程」「退壳」「壳」都是实现词，
+            用户点 × 的时候不关心进程树怎么收；他要知道的只有「点了会怎样」。
+          */}
           <p className="xs-touch__note">
-            勾上 = 点 × 直接退出（先停 DSH 子进程再退壳）；不勾 = 收进托盘继续跑，日课与晚省仍会到点。
-            这个开关写进共享设置，壳下次重读即生效。
+            勾上 = 点 × 直接退出；不勾 = 收进托盘继续跑，日课与晚省仍会到点。
+            改完下次启动生效。
           </p>
         </div>
         <label>

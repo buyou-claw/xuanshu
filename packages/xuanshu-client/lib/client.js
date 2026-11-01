@@ -4274,7 +4274,7 @@ function XsTouchSettingsRow({ state, actions }) {
     /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "xs-touch__row", "data-xuanshu-setting": "ai", children: [
       /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: "AI 建议段" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "xs-touch__note", children: "日课由「黄历三键（永远有）」+「一段 AI 写的今天注意什么」两段组成。关掉后只留确定性骨架， 不再调用 LLM（失败也只是没有那一段，不影响日课本身）。" })
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "xs-touch__note", children: "日课由「黄历三键（永远有）」+「一段 AI 写的今天注意什么」两段组成。关掉后只留前一段（黄历三键）， 不再调用 AI（失败也只是没有那一段，不影响日课本身）。" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
@@ -4309,7 +4309,7 @@ function XsTouchSettingsRow({ state, actions }) {
     /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "xs-touch__row", "data-xuanshu-setting": "close-behavior", children: [
       /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { children: "关窗口行为" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "xs-touch__note", children: "勾上 = 点 × 直接退出（先停 DSH 子进程再退壳）；不勾 = 收进托盘继续跑，日课与晚省仍会到点。 这个开关写进共享设置，壳下次重读即生效。" })
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "xs-touch__note", children: "勾上 = 点 × 直接退出；不勾 = 收进托盘继续跑，日课与晚省仍会到点。 改完下次启动生效。" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
