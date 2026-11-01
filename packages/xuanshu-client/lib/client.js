@@ -5181,6 +5181,8 @@ function XsDigaoCard({
   navigate,
   mainPanels,
   onRefresh,
+  refreshing = false,
+  refreshedAt,
   onStartOnboarding,
   onRetry
 }) {
@@ -5267,6 +5269,10 @@ function XsDigaoCard({
           }
         ) : null,
         state === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "xs-card__body", "data-xuanshu-ready": "digao", children: [
+          refreshing ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "xs-card__note", role: "status", "data-xuanshu-note": "digao-refreshing", children: "正在重算底稿…" }) : refreshedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "xs-card__note", role: "status", "data-xuanshu-note": "digao-refreshed", children: [
+            "已刷新 · ",
+            refreshedAt.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "xs-digao-summary", children: [
             "关于我：",
             summary?.segments ?? 0,
@@ -5322,10 +5328,10 @@ function XsDigaoCard({
               ActionButton,
               {
                 action: "refresh-digao",
-                disabled: refreshDisabled,
+                disabled: refreshDisabled || refreshing,
                 reason: DISABLED_REASON.refreshDigao,
                 onClick: onRefresh,
-                children: ACTION_COPY.refresh
+                children: refreshing ? "刷新中…" : ACTION_COPY.refresh
               }
             )
           ] })
@@ -8554,11 +8560,19 @@ function OverviewPanel({
   });
   const baseplate = baseplateReady ?? destiny.state === "ready";
   const aiSnapshot = useAiReadiness(aiStatus);
+  const [digaoRefreshing, setDigaoRefreshing] = (0, import_react18.useState)(false);
+  const [digaoRefreshedAt, setDigaoRefreshedAt] = (0, import_react18.useState)(void 0);
   const generateRikke = () => {
     navigate("rikke");
   };
-  const refreshDigao = digaoController === void 0 ? onRefresh : () => {
-    void digaoController.refresh();
+  const refreshDigao = digaoController === void 0 && onRefresh === void 0 ? void 0 : () => {
+    setDigaoRefreshing(true);
+    const run = digaoController === void 0 ? onRefresh : () => digaoController.refresh();
+    void Promise.resolve(run?.()).catch(() => {
+    }).then(() => {
+      setDigaoRefreshing(false);
+      setDigaoRefreshedAt(/* @__PURE__ */ new Date());
+    });
   };
   const generateWansheng = () => {
     navigate("wansheng");
@@ -8579,6 +8593,8 @@ function OverviewPanel({
     onOpenDetail,
     onGenerate: generateRikke,
     onRefresh: refreshDigao,
+    refreshing: digaoRefreshing,
+    refreshedAt: digaoRefreshedAt,
     onRetry
   };
   return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "xs-overview", "data-xuanshu-panel": PANEL_ID, children: [

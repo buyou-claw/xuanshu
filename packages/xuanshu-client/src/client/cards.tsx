@@ -72,6 +72,10 @@ export interface OverviewInjected {
   onGenerate?: () => void;
   /** 底稿刷新（票 13 接线；未接线 → 置灰）。 */
   onRefresh?: () => void;
+  /** 2026-11-02：刷新正在进行（按钮文案与 role=status 都要能看见这件事）。 */
+  refreshing?: boolean;
+  /** 2026-11-02：上一次人点刷新的时刻（内容没变时，这是唯一能确认「真的跑了」的东西）。 */
+  refreshedAt?: Date;
   /** 卡级重试（票 08/13 接线；未接线 → 置灰）。 */
   onRetry?: () => void;
   /**
@@ -605,6 +609,8 @@ export function XsDigaoCard({
   navigate,
   mainPanels,
   onRefresh,
+  refreshing = false,
+  refreshedAt,
   onStartOnboarding,
   onRetry,
 }: XsDigaoCardProps) {
@@ -687,6 +693,19 @@ export function XsDigaoCard({
       ) : null}
       {state === 'ready' ? (
         <div className="xs-card__body" data-xuanshu-ready="digao">
+          {/*
+            2026-11-02 加：刷新这件事原来在屏上毫无痕迹 —— 实测后端 generatedAt
+            确实变了（14:00:04 → 14:02:49），但卡片一个字不变、role=status 一个都没有。
+            内容没变是正常的（同样三条来源），「有没有刷新过」必须另有东西说。
+          */}
+          {refreshing ? (
+            <p className="xs-card__note" role="status" data-xuanshu-note="digao-refreshing">正在重算底稿…</p>
+          ) : refreshedAt === undefined ? null : (
+            <p className="xs-card__note" role="status" data-xuanshu-note="digao-refreshed">
+              {'已刷新 · '}
+              {refreshedAt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </p>
+          )}
           <p className="xs-digao-summary">
             关于我：{summary?.segments ?? 0} 段 · 来源 {summary?.sources ?? 0} 路
           </p>
@@ -728,11 +747,11 @@ export function XsDigaoCard({
             </NavLink>
             <ActionButton
               action="refresh-digao"
-              disabled={refreshDisabled}
+              disabled={refreshDisabled || refreshing}
               reason={DISABLED_REASON.refreshDigao}
               onClick={onRefresh}
             >
-              {ACTION_COPY.refresh}
+              {refreshing ? '刷新中…' : ACTION_COPY.refresh}
             </ActionButton>
           </div>
         </div>

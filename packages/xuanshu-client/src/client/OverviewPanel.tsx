@@ -502,6 +502,9 @@ export function OverviewPanel({
   const baseplate = baseplateReady ?? destiny.state === 'ready';
   // #29：问事入口的门禁读「接上 AI」的只读状态（控制器缺席 → unknown，不静默禁用）。
   const aiSnapshot = useAiReadiness(aiStatus);
+  /** 2026-11-02：底稿刷新的两个可观察痕迹（见 refreshDigao 的注释）。 */
+  const [digaoRefreshing, setDigaoRefreshing] = useState(false);
+  const [digaoRefreshedAt, setDigaoRefreshedAt] = useState<Date | undefined>(undefined);
 
   /**
    * 日课卡 `[去生成 ->]`：**送到日课面板**，而不是就地生成。
@@ -515,12 +518,30 @@ export function OverviewPanel({
     navigate('rikke');
   };
 
-  /** 底稿卡 `[刷新]`：同样是**人点**才走。 */
+  /**
+   * 底稿卡 `[刷新]`：同样是**人点**才走。
+   *
+   * 2026-11-02 加：跑完要留两个可观察痕迹 ——
+   *   `refreshing`（跑着时按钮显示「刷新中…」、卡上给 role=status）
+   *   `refreshedAt`（跑完给一个时刻；底稿内容没变时，这是唯一能确认「真的跑了」的东西）
+   *
+   * 为什么要这个：实测点完后端 generatedAt 从 14:00:04 变成 14:02:49，
+   * 但屏幕上 15 秒采样一个字没变 —— 用户只会以为按钮坏了，于是反复点。
+   */
   const refreshDigao =
-    digaoController === undefined
-      ? onRefresh
+    digaoController === undefined && onRefresh === undefined
+      ? undefined
       : (): void => {
-          void digaoController.refresh();
+          setDigaoRefreshing(true);
+          const run = digaoController === undefined
+            ? onRefresh
+            : (): Promise<unknown> => digaoController.refresh();
+          void Promise.resolve(run?.())
+            .catch(() => { /* 失败理由由 outcome 那一路展示，这里只负责收尾 */ })
+            .then(() => {
+              setDigaoRefreshing(false);
+              setDigaoRefreshedAt(new Date());
+            });
         };
 
   /** #25：晚省卡 `[去生成 ->]`：同 `generateRikke`，送到晚省面板由那边的闸门把关。 */
@@ -562,6 +583,8 @@ export function OverviewPanel({
     onOpenDetail,
     onGenerate: generateRikke,
     onRefresh: refreshDigao,
+    refreshing: digaoRefreshing,
+    refreshedAt: digaoRefreshedAt,
     onRetry,
   };
 
