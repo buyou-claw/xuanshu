@@ -3323,7 +3323,7 @@ ${draft.body}`, summaryOnly: true });
           /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("input", { type: "file", multiple: true, onChange: (e) => setFiles(Array.from(e.target.files ?? [])) })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ul", { children: files.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("li", { children: f.name }, i)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "语音输入 v2 再做。" }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "暂时只支持文字与附件；语音还没做。" }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { disabled: !text.trim() && !files.length, onClick: () => setStep(2), children: "下一步" })
       ] }),
       step === 2 && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
