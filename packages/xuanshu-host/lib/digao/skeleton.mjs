@@ -186,9 +186,15 @@ export function renderDigaoMarkdown({ segments, digest, digestText, generatedAt 
   // 2026-11-01 改：这两句会**原样写进底稿的 .md 文件**，用户点「查看 MD 形态」就能看到。
   // 原文里的 `LLM` 与 `digest=llm` / `digest=skeleton` 是实现词（界面上那句已改成说人话，
   // 文件里却还是术语，等于同一个信息两套说法）。这两行在文件里各出现一次，就当读给用户听。
+  //
+  // 2026-11-02 再改：`skeleton` 有两种完全不同的成因，原来一律说成「AI 用不了或没用成」——
+  // 实测过 0 段素材的情况（谱是 optional 级、工作区工作流没活动），那时 AI 根本没被调用，
+  // 用户读到「AI 用不了」会去查 provider，其实是「还没有可提炼的东西」。
   const distillLine = digest === 'llm'
     ? '已提炼：AI 把多段压成一段精简汇总'
-    : '未提炼：AI 这次用不了或没用成，本份只有规则骨架'
+    : list.length === 0
+      ? '未提炼：还没有可提炼的来源（谱 / 工作区 / 工作流都还是空的），本份只有规则骨架'
+      : '未提炼：AI 这次用不了或没用成，本份只有规则骨架'
   const recent = list.filter((segment) => segment?.source !== SHIJI_CHAPTER.source)
   const past = list.filter((segment) => segment?.source === SHIJI_CHAPTER.source)
 

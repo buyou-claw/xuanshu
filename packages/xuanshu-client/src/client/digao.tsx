@@ -363,7 +363,14 @@ export function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }
 export function digestLine(meta: DigaoMeta | null | undefined): string {
   const digest = meta?.digest;
   if (digest === 'skeleton') {
-    return '生成方式：只有规则骨架（AI 这次用不了或没用成，摘要没生成）';
+    /**
+     * 2026-11-02 改：`skeleton` 有两种成因，原来一律说成「AI 用不了或没用成」。
+     * 实测 0 段素材时（谱是 optional 级、工作区工作流没活动）AI **根本没被调用** ——
+     * 用户照「AI 用不了」去查 provider，方向完全错了。没素材时直说没素材。
+     */
+    return (meta?.segments ?? 0) === 0
+      ? '生成方式：只有规则骨架（还没有可提炼的来源：谱 / 工作区 / 工作流都还是空的）'
+      : '生成方式：只有规则骨架（AI 这次用不了或没用成，摘要没生成）';
   }
   if (digest === 'llm') return '生成方式：规则骨架 + AI 摘要';
   return '生成方式：只有规则骨架（读不到生成记录，按「摘要没生成」处理）';
