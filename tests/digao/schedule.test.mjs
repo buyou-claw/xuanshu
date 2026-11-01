@@ -113,7 +113,9 @@ describe('票13 · 装配两条 daily 任务（契约 §1/§2；#25 加第三条
       ctx, dataDir: sandbox.dataDir, kind: 'rikke', title: RIKKE_TASK_TITLE, prompt: 'x', time: RIKKE_DEFAULT_TIME, timeZone: 'Asia/Shanghai',
     })
     expect(result.ok).toBe(false)
-    expect(result.reason).toContain('agents')
+    // 2026-11-01：原来断「理由里含 agents 字样」。意图是「不许静默、理由要能定位到原因」，
+    // 但硬编码实现词会让面向用户的文案没法说人话。改成按意图匹配：说清是开会话那一层的问题。
+    expect(result.reason).toMatch(/会话|agents/u)
     expect(schedule.calls.filter((call) => call.method === 'create')).toEqual([])
   })
 })

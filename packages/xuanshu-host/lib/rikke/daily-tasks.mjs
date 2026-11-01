@@ -130,8 +130,12 @@ export async function ensureDailyTask({ ctx, dataDir, kind, title, prompt, time,
       reused: false,
       task: null,
       agent: null,
-      reason: 'ctx.schedule 不可得：profile 没启用 `@deepseek-ai/dsh-experimental-schedule-bundle`（'
-        + '本仓库 `packages/xuanshu-host/cordis.patch.yml` 插了它的三行；装完要重跑 `node scripts/install-profile.mjs --home .dsh-home`）。',
+      // 2026-11-01 改：这句本质是**装配错误**（schedule 服务没装），看它的人往往是装玄枢的人，
+      // 所以 bundle 名与 install-profile 命令要留着（有测试按「能指导装配者」钉着）。
+      // 但开头得先给一句人话：用户第一眼要知道「定时不会自动跑了」。
+      reason: '定时任务建不出来：这台机器没开定时服务，所以日课 / 晚省 / 底稿不会自动跑。'
+        + '装配者：需要 `@deepseek-ai/dsh-experimental-schedule-bundle`（本仓库 `packages/xuanshu-host/cordis.patch.yml` 插了它的三行），'
+        + '装完重跑 `node scripts/install-profile.mjs --home .dsh-home`。',
     }
   }
   const daily = normalizeDailyTime(time) ?? normalizeDailyTime(RIKKE_DEFAULT_TIME)
@@ -143,7 +147,7 @@ export async function ensureDailyTask({ ctx, dataDir, kind, title, prompt, time,
 
   const agents = softGet(ctx, 'agents')
   if (!agents || typeof agents.create !== 'function') {
-    return { ok: false, reused: false, task: null, agent: null, reason: 'ctx.agents 不可得：定时任务必须绑在一个会话上（宿主建会话的能力没就绪）。' }
+    return { ok: false, reused: false, task: null, agent: null, reason: '建不出定时任务：定时任务必须绑在一个会话上，而这台机器上开不了会话（DSH 没提供）。' }
   }
 
   const sessionId = newSessionId(kind)
@@ -172,7 +176,7 @@ export async function ensureDailyTask({ ctx, dataDir, kind, title, prompt, time,
 export async function updateDailyTime({ ctx, title, time }) {
   const schedule = scheduleService(ctx)
   if (schedule === null || typeof schedule.update !== 'function') {
-    return { ok: false, schedule: null, reason: 'ctx.schedule 不可得：改不了定时时间。' }
+    return { ok: false, schedule: null, reason: '改不了定时时间：这台机器上的定时服务没开（DSH 没提供 schedule）。' }
   }
   const daily = normalizeDailyTime(time)
   if (daily === null) return { ok: false, schedule: null, reason: `时间格式不对（${JSON.stringify(time)}）：要 HH:mm。` }
@@ -189,7 +193,9 @@ export async function updateDailyTime({ ctx, title, time }) {
       change: { kind: 'daily', daily: { time: daily, time_zone: observed.timeZone } },
     })
     if (result?.updated !== true) {
-      return { ok: false, schedule: null, reason: `定时时间没改成功（${result?.code ?? '未知原因'}）：任务可能已被改过或已停用，刷新后再试。` }
+      // 2026-11-01 改：原文把 `result.code`（`invalid_rule` 这种内部码）直接拼进用户能读的句子里。
+      // 用户拿这个码什么也做不了；他能做的是「刷新再试」，再不行就是这台机器的定时服务不收这次改动。
+      return { ok: false, schedule: null, reason: '定时时间没改成功：这条 daily 任务可能已被改过或已停用。刷新页面再试一次；还是不行就是这台机器上的定时服务不接受这次改动。' }
     }
     return { ok: true, schedule: scheduleSummary(result.record ?? observed), reason: null }
   } catch (error) {
