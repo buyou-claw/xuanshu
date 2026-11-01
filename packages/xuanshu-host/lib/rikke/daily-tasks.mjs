@@ -186,10 +186,32 @@ export async function updateDailyTime({ ctx, title, time }) {
     return { ok: false, schedule: null, reason: `没找到「${title}」这条 daily 任务：先在装配期建出来（重跑 install-profile）再改时间。` }
   }
   try {
+    /**
+     * `expected` 要的是**纯记录**，不是 catalog 给的视图。
+     *
+     * 2026-11-01 修（这是「改时刻一直失败」的真正根因）：原来传的是 `expected: observed`，
+     * 而 `observed` 来自 `schedule.catalog()` —— 那是带 `status` / `deliveryHistory` / `sessionId`
+     * 的视图。DSH 侧 `decodeScheduleRecord` 要求**恰好**七个字段
+     * （`id, kind, title, prompt, time, timeZone, scheduledAt`），多一个就报
+     * `invalid_rule / expected must be a complete valid Schedule record.`
+     *
+     * 这个错误码还被我们包成「任务可能已被改过或已停用」—— 方向完全反了：
+     * 任务好好的，是我们递过去的 expected 形状不对。
+     */
+    const expected = {
+      id: observed.id,
+      kind: observed.kind,
+      title: observed.title,
+      prompt: observed.prompt,
+      time: observed.time,
+      timeZone: observed.timeZone,
+      scheduledAt: observed.scheduledAt,
+    }
+
     const result = await schedule.update({
       sessionId: observed.sessionId,
       id: observed.id,
-      expected: observed, // 完整 observed record：compare-and-update 的前提
+      expected,
       change: { kind: 'daily', daily: { time: daily, time_zone: observed.timeZone } },
     })
     if (result?.updated !== true) {

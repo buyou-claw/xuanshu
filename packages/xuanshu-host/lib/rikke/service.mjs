@@ -140,6 +140,7 @@ export function createRikkeMethods(ctx, config = {}) {
     'rikke.setTime': async (request) => {
       const source = requestOf(request)
       const updated = await updateDailyTime({ ctx, title: RIKKE_TASK_TITLE, time: source.time })
+      // 定位完删掉这一行。
       if (!updated.ok) throw new Error(updated.reason)
       syncTouchTimeSettings(dataDir, 'rikkeTime', updated.schedule.time)
       return { schedule: { time: updated.schedule.time, timeZone: updated.schedule.timeZone } }

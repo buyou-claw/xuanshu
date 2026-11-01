@@ -12,8 +12,10 @@
  *   ③ **`hour` 必须是整数**：真机对 `'07:30'` 回 `tool.invalid_payload`（有真机捕获作证）。
  *   ④ **契约修订的加性字段：拿不到就省略键**（不写 null/空串）——`schedule` / `generatedAt` /
  *      `zone` / `huangli` 四个都按这条钉。
- *   ⑤ **`setTime` 是 compare-and-update**：`update` 必须收到**完整 observed record**，
- *      否则上游判 `schedule_conflict`（真机语义，不是我们自己的规矩）。
+ *   ⑤ **`setTime` 是 compare-and-update**：`update.expected` 必须是**恰好七个字段**的纯记录
+ *      （id, kind, title, prompt, time, timeZone, scheduledAt）—— 不能把 catalog 的视图原样递过去。
+ *      2026-11-01 更正：原来这里写「必须收到完整 observed record」，于是实现真的把视图传了过去，
+ *      真机报 `invalid_rule / expected must be a complete valid Schedule record.`，改时刻因此一直失败。
  */
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -227,7 +229,7 @@ describe('票13 · rikke.setTime（compare-and-update）', () => {
     scheduledAt: '2026-10-16T07:30:00.000Z', sessionId: 'session-xs-rikke-abc', status: 'active',
   }
 
-  it('改时间成功：回 {time, timeZone}，且 update 收到**完整 observed record**', async () => {
+  it('改时间成功：回 {time, timeZone}，且 update.expected 恰好七个字段的纯记录', async () => {
     const { methods, schedule } = scene({ catalog: [TASK] })
     const result = await methods['rikke.setTime']({ time: '06:45' })
     expect(result).toEqual({ schedule: { time: '06:45', timeZone: 'Asia/Shanghai' } })
@@ -236,7 +238,9 @@ describe('票13 · rikke.setTime（compare-and-update）', () => {
     expect(update.request.sessionId).toBe('session-xs-rikke-abc')
     expect(update.request.id).toBe('sched-9')
     expect(update.request.expected.scheduledAt).toBe('2026-10-16T07:30:00.000Z')
-    expect(update.request.expected.sessionId).toBe('session-xs-rikke-abc')
+    // 2026-11-01：原来断言 expected 里有 sessionId —— 那是 update 的入参，不是记录字段。
+    // 钉真正的契约：恰好七个字段，一个不多一个不少。
+    expect(Object.keys(update.request.expected).sort()).toEqual(['id', 'kind', 'prompt', 'scheduledAt', 'time', 'timeZone', 'title'])
     expect(update.request.change).toEqual({ kind: 'daily', daily: { time: '06:45:00', time_zone: 'Asia/Shanghai' } })
   })
 
