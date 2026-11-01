@@ -4211,7 +4211,7 @@ function XsDeliveryHistory({ status }) {
         "data-xuanshu-history-kind": entry.kind ?? "",
         "data-xuanshu-history-missed": entry.missed === true ? "true" : void 0,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-touch__history-when", children: entry.at ?? entry.date ?? "时间未回传" }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-touch__history-when", children: entry.at ?? entry.date ?? "时间读不到" }),
           /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-touch__history-kind", children: entry.kind === "wansheng" ? "晚省" : entry.kind === "rikke" ? "日课" : entry.kind ?? "未知" }),
           /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-touch__history-status", children: TRAFFIC_STATUS_TEXT[entry.notify.status] ?? entry.notify.status }),
           entry.missed === true ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-touch__history-missed", "data-xuanshu-badge": "missed", children: "补" }) : null,
@@ -8682,10 +8682,10 @@ function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }) {
       /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("h1", { children: `日课 · ${date}` }),
       /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-rikke__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今日日课已到" : view.kind === "empty" ? "今天还没有生成日课" : view.kind === "error" ? "生成失败" : "正在读日课…" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__basis", "data-xuanshu-note": "time-basis", children: `时间基准：${date} ${status?.generatedAt ?? "（生成时刻未回传）"} · ${status?.zone ?? "（时区未回传）"} · 本机时钟` }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__basis", "data-xuanshu-note": "time-basis", children: `时间基准：${date} ${status?.generatedAt ?? "（生成时刻读不到）"} · ${status?.zone ?? "（时区读不到）"} · 本机时钟` }),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__basis xs-rikke__no-network", "data-xuanshu-note": "no-network", children: RIKKE_NO_NETWORK_NOTE }),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "schedule", children: schedule === void 0 ? "计划时刻：宿主未回传（在「自动化任务」面板里看这条 daily 任务）" : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用` }),
-    status?.huangli === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "engine", children: `黄历引擎：${status.huangli.tool ?? "huangli"} ${status.huangli.version ?? "（版本未回传）"}（本地，不联网）` }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "schedule", children: schedule === void 0 ? "计划时刻：暂时读不到（在「自动化任务」面板里看这条 daily 任务）" : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用` }),
+    status?.huangli === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "engine", children: `黄历引擎：${status.huangli.tool ?? "huangli"} ${status.huangli.version ?? "（版本读不到）"}（本地，不联网）` }),
     status?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "generated-at", children: `生成于 ${status.generatedAt}` }),
     view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-view": "loading", children: "正在读今天的日课…" }) : null,
     view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "xs-rikke__empty", "data-xuanshu-view": "empty", children: [
@@ -8801,7 +8801,7 @@ function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }) {
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-rikke__note", children: `时区 ${schedule?.timeZone ?? "（未回传）"}（IANA，不手改）` }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-rikke__note", children: `时区 ${schedule?.timeZone ?? "（读不到）"}（IANA，不手改）` }),
       /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "xs-rikke__actions", children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { type: "button", "data-xuanshu-action": "save-time", disabled: busy, onClick: saveTime, children: "保存" }) })
     ] })
   ] });
@@ -9024,7 +9024,7 @@ function WanshengPanel({
       status?.missed === true ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(XsMissedMark, {}) : null,
       /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今天的晚省已到" : view.kind === "empty" ? "今天还没有晚省" : view.kind === "error" ? "读取失败" : "正在读晚省…" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "schedule", children: schedule === void 0 ? "计划时刻：宿主未回传（在「自动化任务」面板里看这条 daily 任务）" : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用` }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "schedule", children: schedule === void 0 ? "计划时刻：暂时读不到（在「自动化任务」面板里看这条 daily 任务）" : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用` }),
     status?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "generated-at", children: `生成于 ${status.generatedAt}` }),
     status?.missed === true ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "missed", children: "这是补生成的一份（过去的日期），不是今天的。" }) : null,
     view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-view": "loading", children: "正在读今天的晚省…" }) : null,
@@ -9075,7 +9075,7 @@ function WanshengPanel({
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: `时区 ${schedule?.timeZone ?? "（未回传）"}（IANA，不手改）` }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: `时区 ${schedule?.timeZone ?? "（读不到）"}（IANA，不手改）` }),
       /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "xs-wansheng__actions", children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("button", { type: "button", "data-xuanshu-action": "save-time", disabled: busy, onClick: saveTime, children: "保存" }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("details", { className: "xs-wansheng__history", "data-xuanshu-history": "wansheng", children: [

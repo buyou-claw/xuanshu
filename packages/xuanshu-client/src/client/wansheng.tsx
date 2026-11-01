@@ -252,7 +252,7 @@ export function WanshengPanel({
 
       <p className="xs-wansheng__note" data-xuanshu-note="schedule">
         {schedule === undefined
-          ? '计划时刻：宿主未回传（在「自动化任务」面板里看这条 daily 任务）'
+          ? '计划时刻：暂时读不到（在「自动化任务」面板里看这条 daily 任务）'
           : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用`}
       </p>
       {status?.generatedAt === undefined ? null : (
@@ -315,7 +315,7 @@ export function WanshengPanel({
             onChange={(event) => { setTimeDraft(event.target.value); }}
           />
         </label>
-        <span className="xs-wansheng__note">{`时区 ${schedule?.timeZone ?? '（未回传）'}（IANA，不手改）`}</span>
+        <span className="xs-wansheng__note">{`时区 ${schedule?.timeZone ?? '（读不到）'}（IANA，不手改）`}</span>
         <div className="xs-wansheng__actions">
           <button type="button" data-xuanshu-action="save-time" disabled={busy} onClick={saveTime}>保存</button>
         </div>

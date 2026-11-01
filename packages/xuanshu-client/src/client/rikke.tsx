@@ -214,19 +214,19 @@ export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit
 
       {/* ① 时间基准（生成时使用）+ 不联网声明：都不可折叠。 */}
       <p className="xs-rikke__basis" data-xuanshu-note="time-basis">
-        {`时间基准：${date} ${status?.generatedAt ?? '（生成时刻未回传）'} · ${status?.zone ?? '（时区未回传）'} · 本机时钟`}
+        {`时间基准：${date} ${status?.generatedAt ?? '（生成时刻读不到）'} · ${status?.zone ?? '（时区读不到）'} · 本机时钟`}
       </p>
       <p className="xs-rikke__basis xs-rikke__no-network" data-xuanshu-note="no-network">
         {RIKKE_NO_NETWORK_NOTE}
       </p>
       <p className="xs-rikke__note" data-xuanshu-note="schedule">
         {schedule === undefined
-          ? '计划时刻：宿主未回传（在「自动化任务」面板里看这条 daily 任务）'
+          ? '计划时刻：暂时读不到（在「自动化任务」面板里看这条 daily 任务）'
           : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用`}
       </p>
       {status?.huangli === undefined ? null : (
         <p className="xs-rikke__note" data-xuanshu-note="engine">
-          {`黄历引擎：${status.huangli.tool ?? 'huangli'} ${status.huangli.version ?? '（版本未回传）'}（本地，不联网）`}
+          {`黄历引擎：${status.huangli.tool ?? 'huangli'} ${status.huangli.version ?? '（版本读不到）'}（本地，不联网）`}
         </p>
       )}
       {status?.generatedAt === undefined ? null : (
@@ -375,7 +375,7 @@ export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit
             }}
           />
         </label>
-        <span className="xs-rikke__note">{`时区 ${schedule?.timeZone ?? '（未回传）'}（IANA，不手改）`}</span>
+        <span className="xs-rikke__note">{`时区 ${schedule?.timeZone ?? '（读不到）'}（IANA，不手改）`}</span>
         <div className="xs-rikke__actions">
           <button type="button" data-xuanshu-action="save-time" disabled={busy} onClick={saveTime}>
             保存

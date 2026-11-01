@@ -150,7 +150,7 @@ export function XsDeliveryHistory({ status }: { status: TrafficStatus }) {
               data-xuanshu-history-kind={entry.kind ?? ''}
               data-xuanshu-history-missed={entry.missed === true ? 'true' : undefined}
             >
-              <span className="xs-touch__history-when">{entry.at ?? entry.date ?? '时间未回传'}</span>
+              <span className="xs-touch__history-when">{entry.at ?? entry.date ?? '时间读不到'}</span>
               <span className="xs-touch__history-kind">{entry.kind === 'wansheng' ? '晚省' : entry.kind === 'rikke' ? '日课' : (entry.kind ?? '未知')}</span>
               <span className="xs-touch__history-status">{TRAFFIC_STATUS_TEXT[entry.notify.status] ?? entry.notify.status}</span>
               {entry.missed === true ? <span className="xs-touch__history-missed" data-xuanshu-badge="missed">补</span> : null}
