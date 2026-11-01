@@ -14,6 +14,7 @@
  * 交付报告里如实标注；「人点才生成」用控制器层的行为断言 + 渲染期 spy 双重证明。
  */
 import { readFileSync } from 'node:fs'
+import { momentOf } from '../../packages/xuanshu-client/src/client/panel.ts'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createElement as h } from 'react'
@@ -235,11 +236,11 @@ describe('票 13 · 日课面板（看完整日课）', () => {
     const html = render(h(RikkePanel, { api: spyApi().api, navigate: () => {}, preloaded: STATUS_READY }))
     expect(html).toContain(`data-xuanshu-panel="${RIKKE_ID}"`)
     expect(html).toContain('日课 · 2026-10-15')
-    expect(html).toContain('2026-10-15 07:30')
+    expect(html).toContain(momentOf(STATUS_READY.generatedAt))
     expect(html).toContain('Asia/Shanghai')
     expect(html).toContain('本机时钟')
     expect(html).toContain('不联网取外部资讯：本次内容只用底座 + 上面的时间基准。')
-    expect(html).toContain('生成于 2026-10-15 07:30')
+    expect(html).toContain(`生成于 ${momentOf(STATUS_READY.generatedAt)}`)
     expect(html).toContain('huangli 0.40.1') // 来源可溯（本地 horosa 黄历）
   })
 

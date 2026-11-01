@@ -31,7 +31,7 @@ import type { DigaoApi, DigaoMeta, DigaoRead, DigaoSchedule, DigaoShijiRead, Dig
 import { matchShijiEntries, parseDigaoMarkdown } from './digao-model.js';
 import type { DigaoGroup, DigaoSegment } from './digao-model.js';
 import { installDigaoStyle } from './digao-style.js';
-import { DIGAO_ID, DIGAO_LABEL, DIGAO_ORDER, EMPTY_COPY, clockOf } from './panel.js';
+import { DIGAO_ID, DIGAO_LABEL, DIGAO_ORDER, EMPTY_COPY, clockOf, momentOf } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
 import type { RpcContext } from './rpc.js';
 import type { ShijiApi, ShijiEntry } from './shiji-api.js';
@@ -269,7 +269,7 @@ export function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }
 
       {/* ③ 时间信息：上次刷新来自 meta；下次刷新不编造。 */}
       <p className="xs-digao__note" data-xuanshu-note="last-refresh">
-        {meta?.generatedAt === undefined ? '上次刷新：（还没有生成过）' : `上次刷新 ${meta.generatedAt}`}
+        {meta?.generatedAt === undefined ? '上次刷新：（还没有生成过）' : `上次刷新 ${momentOf(meta.generatedAt)}`}
       </p>
       <p className="xs-digao__note" data-xuanshu-note="next-refresh">
         {schedule === undefined

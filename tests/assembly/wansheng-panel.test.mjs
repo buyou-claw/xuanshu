@@ -11,6 +11,7 @@
  * 真浏览器点击链路没有覆盖（与 `rikke-panel.test.mjs` 同一条边界，交付报告如实标注）。
  */
 import { createElement as h } from 'react'
+import { momentOf } from '../../packages/xuanshu-client/src/client/panel.ts'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -153,8 +154,8 @@ describe('#25 · 晚省卡：当天事实 + 补徽标 + 去问事', () => {
     expect(html).toContain('晚省 · 今天 2026-10-15')
     expect(html).toContain('今天 2 场问事')
     expect(html).toContain('今天 1 个项目有活动')
-    expect(html).toContain('2026-10-15T00:00:00.000Z 生成') // 日课
-    expect(html).toContain('2026-10-15T03:00:00.000Z 刷新过') // 底稿
+    expect(html).toContain(`${momentOf('2026-10-15T00:00:00.000Z')} 生成`) // 日课
+    expect(html).toContain(`${momentOf('2026-10-15T03:00:00.000Z')} 刷新过`) // 底稿
   })
 
   it('点晚省进问事：[去问事 ->] 指向 consult；[看完整晚省 ->] 指向 wansheng', () => {
@@ -239,8 +240,8 @@ describe('#25 · 晚省面板：完整事实 + [立即生成] + 投递历史', (
     expect(html).toContain('先收口')
     expect(html).toContain('续问')
     expect(html).toContain('XuanShu · 3 场会话')
-    expect(html).toContain('日课：2026-10-15T00:00:00.000Z 生成')
-    expect(html).toContain('底稿：2026-10-15T03:00:00.000Z 刷新过')
+    expect(html).toContain(`日课：${momentOf('2026-10-15T00:00:00.000Z')} 生成`)
+    expect(html).toContain(`底稿：${momentOf('2026-10-15T03:00:00.000Z')} 刷新过`)
   })
 
   it('[立即生成] 在（面板的主行动）；计划时刻来自 schedule', () => {

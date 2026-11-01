@@ -261,6 +261,27 @@ export function clockOf(time: string | undefined): string {
 }
 
 /**
+ * 把 ISO 时刻转成本地可读的 `11-01 10:57`。
+ *
+ * 2026-11-01 加：界面上原本直接把契约里的 ISO 串原样贴出来 ——
+ * `上次刷新 2026-11-01T02:57:20.080Z`、`生成于 2026-11-01T04:07:36.225Z`。
+ * 那是 UTC 原串，用户得自己 +8 才是本机时间；而同一个面板里「下次刷新」显示的却是本地 `03:30`，
+ * 两种口径并排放着（底稿那一屏就是这样）。
+ *
+ * 认不出就原样返回 —— 宁可在极少数异常值上难看，也不编一个时间。
+ * 不是今年才带上年份：`2025-12-31 23:59` 比 `12-31 23:59` 清楚。
+ */
+export function momentOf(iso: string | undefined): string {
+  if (iso === undefined || iso === '') return '';
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  const two = (value: number): string => String(value).padStart(2, '0');
+  const day = `${two(at.getMonth() + 1)}-${two(at.getDate())}`;
+  const clock = `${two(at.getHours())}:${two(at.getMinutes())}`;
+  return at.getFullYear() === new Date().getFullYear() ? `${day} ${clock}` : `${at.getFullYear()}-${day} ${clock}`;
+}
+
+/**
  * 票 13 的两个新 main key：`digao`（S13 底稿只读面板）/ `rikke`（S14 看完整日课）。
  *
  * 两个 key 都**不是** `conversation`：面板内没有会话座位（`DSH槽位映射.md` F1），

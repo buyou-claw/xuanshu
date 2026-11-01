@@ -23,8 +23,7 @@ import type { AiReadiness, AiReadinessController } from './ai-model.js';
 import { XsAiGate } from './ai-views.js';
 import { notifyFailureText, notifyReasonCode } from './notify.js';
 import type { HomePathsWatch } from './home-paths.js';
-import {
-  ACTION_COPY,
+import { ACTION_COPY,
   BADGE_DERIVED,
   BADGE_READONLY,
   CARD_TITLE,
@@ -34,6 +33,7 @@ import {
   QUICKLINK,
   QUICKLINK_CONSULT_UNREADY,
   QUICKLINKS_BOUNDARY,
+  momentOf,
 } from './panel.js';
 import type { CardName, CardState, PanelNavTarget } from './panel.js';
 import {
@@ -926,7 +926,7 @@ function WanshengArtifactLines({ facts }: { facts?: WanshengFacts }) {
     lines.push(
       <p key="rikke" className="xs-line" data-xuanshu-fact="rikke">
         <span className="xs-line__label">日课</span>
-        <span className="xs-line__value">{`${facts.rikke.generatedAt} 生成`}</span>
+        <span className="xs-line__value">{`${momentOf(facts.rikke.generatedAt)} 生成`}</span>
       </p>,
     );
   }
@@ -934,7 +934,7 @@ function WanshengArtifactLines({ facts }: { facts?: WanshengFacts }) {
     lines.push(
       <p key="digao" className="xs-line" data-xuanshu-fact="digao">
         <span className="xs-line__label">底稿</span>
-        <span className="xs-line__value">{`${facts.digao.generatedAt} 刷新过`}</span>
+        <span className="xs-line__value">{`${momentOf(facts.digao.generatedAt)} 刷新过`}</span>
       </p>,
     );
   }

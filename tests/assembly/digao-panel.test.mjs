@@ -18,6 +18,7 @@
  * 真浏览器里的点击链路（确认 → 删除 → 重读）**没有**被本文件覆盖——交付报告里如实标注。
  */
 import { readFileSync } from 'node:fs'
+import { momentOf } from '../../packages/xuanshu-client/src/client/panel.ts'
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -487,7 +488,7 @@ describe('票 13 · 底稿面板（只读视图）', () => {
 
   it('时间信息：上次刷新来自 meta.generatedAt；下次刷新不编造（指向自动化任务面板）', () => {
     const html = render(h(DigaoPanel, { api: spyApi().api, ...injected(), preloaded: preloadedReady }))
-    expect(html).toContain('上次刷新 2026-10-17T03:30:00.000Z')
+    expect(html).toContain(`上次刷新 ${momentOf('2026-10-17T03:30:00.000Z')}`)
     expect(html).toContain('下次刷新')
     expect(html).toContain('自动化任务')
   })
@@ -505,7 +506,7 @@ describe('票 13 · 底稿面板（只读视图）', () => {
     )
     // 计划时刻 = 03:30（契约 §1 的播种默认），与「上次刷新」分列，不合成一个数字。
     expect(html).toContain('下次刷新 03:30（Asia/Shanghai）')
-    expect(html).toContain('上次刷新 2026-10-17T03:30:00.000Z')
+    expect(html).toContain(`上次刷新 ${momentOf('2026-10-17T03:30:00.000Z')}`)
     expect(html).toContain('自动化任务')
   })
 

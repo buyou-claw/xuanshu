@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 
-import { EMPTY_COPY, clockOf } from './panel.js';
+import { EMPTY_COPY, clockOf, momentOf } from './panel.js';
 import { RIKKE_ID, RIKKE_LABEL, RIKKE_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
 import type { NotifyApi, TrafficStatus } from './notify-api.js';
@@ -216,7 +216,7 @@ export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit
 
       {/* ① 时间基准（生成时使用）+ 不联网声明：都不可折叠。 */}
       <p className="xs-rikke__basis" data-xuanshu-note="time-basis">
-        {`时间基准：${date} ${status?.generatedAt ?? '（生成时刻读不到）'} · ${status?.zone ?? '（时区读不到）'} · 本机时钟`}
+        {`时间基准：${date} ${status?.generatedAt === undefined ? '（生成时刻读不到）' : momentOf(status.generatedAt)} · ${status?.zone ?? '（时区读不到）'} · 本机时钟`}
       </p>
       <p className="xs-rikke__basis xs-rikke__no-network" data-xuanshu-note="no-network">
         {RIKKE_NO_NETWORK_NOTE}
@@ -233,7 +233,7 @@ export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit
       )}
       {status?.generatedAt === undefined ? null : (
         <p className="xs-rikke__note" data-xuanshu-note="generated-at">
-          {`生成于 ${status.generatedAt}`}
+          {`生成于 ${momentOf(status.generatedAt)}`}
         </p>
       )}
 

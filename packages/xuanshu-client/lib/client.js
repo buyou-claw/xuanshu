@@ -2965,6 +2965,15 @@ function clockOf(time) {
   if (parts.length < 2) return time;
   return `${parts[0]}:${parts[1]}`;
 }
+function momentOf(iso) {
+  if (iso === void 0 || iso === "") return "";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  const two = (value) => String(value).padStart(2, "0");
+  const day = `${two(at.getMonth() + 1)}-${two(at.getDate())}`;
+  const clock = `${two(at.getHours())}:${two(at.getMinutes())}`;
+  return at.getFullYear() === (/* @__PURE__ */ new Date()).getFullYear() ? `${day} ${clock}` : `${at.getFullYear()}-${day} ${clock}`;
+}
 var DIGAO_ID = "digao";
 var RIKKE_ID = "rikke";
 var WANSHENG_ID = "wansheng";
@@ -5319,7 +5328,7 @@ function WanshengArtifactLines({ facts }) {
     lines.push(
       /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "xs-line", "data-xuanshu-fact": "rikke", children: [
         /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__label", children: "日课" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__value", children: `${facts.rikke.generatedAt} 生成` })
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__value", children: `${momentOf(facts.rikke.generatedAt)} 生成` })
       ] }, "rikke")
     );
   }
@@ -5327,7 +5336,7 @@ function WanshengArtifactLines({ facts }) {
     lines.push(
       /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "xs-line", "data-xuanshu-fact": "digao", children: [
         /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__label", children: "底稿" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__value", children: `${facts.digao.generatedAt} 刷新过` })
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__value", children: `${momentOf(facts.digao.generatedAt)} 刷新过` })
       ] }, "digao")
     );
   }
@@ -5819,7 +5828,7 @@ function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }) {
       ))
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "xs-digao__note xs-digao__no-edit", "data-xuanshu-note": "no-edit", children: DIGAO_NO_EDIT_NOTE }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "last-refresh", children: meta?.generatedAt === void 0 ? "上次刷新：（还没有生成过）" : `上次刷新 ${meta.generatedAt}` }),
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "last-refresh", children: meta?.generatedAt === void 0 ? "上次刷新：（还没有生成过）" : `上次刷新 ${momentOf(meta.generatedAt)}` }),
     /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "xs-digao__note", "data-xuanshu-note": "next-refresh", children: schedule === void 0 ? DIGAO_NEXT_REFRESH_NOTE : `下次刷新 ${clockOf(schedule.time)}（${schedule.timeZone}）· 由「自动化任务」面板里的 daily 任务决定（可在那里改或停用）` }),
     /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "xs-digao__actions", children: [
       /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
@@ -6494,7 +6503,7 @@ function MingpanBody({
       /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { "data-xuanshu-basis": "two-clocks", children: `真太阳时 ${basis.trueSolar ?? "—"}　钟表时 ${basis.clock ?? "—"}　夏令时 ${basis.dst === true ? "有" : "无"}` })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h2", { children: "④ 快照来源" }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mingpan__origin", "data-xuanshu-origin": "snapshot", children: `horosa ${snapshot.horosa?.version ?? "—"} / 出盘于 ${snapshot.generatedAt ?? "—"}` }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mingpan__origin", "data-xuanshu-origin": "snapshot", children: `horosa ${snapshot.horosa?.version ?? "—"} / 出盘于 ${snapshot.generatedAt === void 0 ? "—" : momentOf(snapshot.generatedAt)}` }),
     /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h2", { children: "⑤ 重新录制（唯一写操作）" }),
     /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "xs-mingpan__hint", children: "改命盘只能重新录制出生信息；本屏不出盘、不写任何文件。" }),
     /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "xs-mingpan__actions", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", "data-xuanshu-action": "rerecord", onClick: onAskRerecord, children: "重新录制出生信息 ->" }) }),
@@ -8695,11 +8704,11 @@ function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit, prelo
       /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("h1", { children: `日课 · ${date}` }),
       /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-rikke__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今日日课已到" : view.kind === "empty" ? "今天还没有生成日课" : view.kind === "error" ? "生成失败" : "正在读日课…" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__basis", "data-xuanshu-note": "time-basis", children: `时间基准：${date} ${status?.generatedAt ?? "（生成时刻读不到）"} · ${status?.zone ?? "（时区读不到）"} · 本机时钟` }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__basis", "data-xuanshu-note": "time-basis", children: `时间基准：${date} ${status?.generatedAt === void 0 ? "（生成时刻读不到）" : momentOf(status.generatedAt)} · ${status?.zone ?? "（时区读不到）"} · 本机时钟` }),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__basis xs-rikke__no-network", "data-xuanshu-note": "no-network", children: RIKKE_NO_NETWORK_NOTE }),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "schedule", children: schedule === void 0 ? "计划时刻：暂时读不到（在「自动化任务」面板里看这条 daily 任务）" : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用` }),
     status?.huangli === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "engine", children: `黄历引擎：${status.huangli.tool ?? "huangli"} ${status.huangli.version ?? "（版本读不到）"}（本地，不联网）` }),
-    status?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "generated-at", children: `生成于 ${status.generatedAt}` }),
+    status?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-note": "generated-at", children: `生成于 ${momentOf(status.generatedAt)}` }),
     view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "xs-rikke__note", "data-xuanshu-view": "loading", children: "正在读今天的日课…" }) : null,
     view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "xs-rikke__empty", "data-xuanshu-view": "empty", children: [
       /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { children: EMPTY_COPY.rike.why }),
@@ -8964,8 +8973,8 @@ function FactsSection({ facts }) {
     ] }, item.sessionId)) }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(ActivityList, { items: facts?.activeWorkspaces, kind: "workspace", label: "项目" }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(ActivityList, { items: facts?.activeWorkflows, kind: "workflow", label: "工作流" }),
-    facts?.rikke?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "rikke", children: `日课：${facts.rikke.generatedAt} 生成` }),
-    facts?.digao?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "digao", children: `底稿：${facts.digao.generatedAt} 刷新过` }),
+    facts?.rikke?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "rikke", children: `日课：${momentOf(facts.rikke.generatedAt)} 生成` }),
+    facts?.digao?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "digao", children: `底稿：${momentOf(facts.digao.generatedAt)} 刷新过` }),
     facts?.shiji?.updatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "shiji", children: `事记：${facts.shiji.updatedAt} 有更新` })
   ] });
 }
@@ -9045,7 +9054,7 @@ function WanshengPanel({
       /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", "data-xuanshu-state": view.kind, children: view.kind === "ready" ? "今天的晚省已到" : view.kind === "empty" ? "今天还没有晚省" : view.kind === "error" ? "读取失败" : "正在读晚省…" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "schedule", children: schedule === void 0 ? "计划时刻：暂时读不到（在「自动化任务」面板里看这条 daily 任务）" : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用` }),
-    status?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "generated-at", children: `生成于 ${status.generatedAt}` }),
+    status?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "generated-at", children: `生成于 ${momentOf(status.generatedAt)}` }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "no-network", children: WANSHENG_NO_NETWORK_NOTE }),
     status?.missed === true ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-note": "missed", children: "这是补生成的一份（过去的日期），不是今天的。" }) : null,
     view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", "data-xuanshu-view": "loading", children: "正在读今天的晚省…" }) : null,

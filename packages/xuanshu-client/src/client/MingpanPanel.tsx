@@ -28,7 +28,7 @@ import {
   placeLabel,
   timeAlgLabel,
 } from './onboarding-model.js';
-import { ERROR_COPY, MINGPAN_ID, MINGPAN_LABEL, MINGPAN_ORDER } from './panel.js';
+import { ERROR_COPY, MINGPAN_ID, MINGPAN_LABEL, MINGPAN_ORDER, momentOf } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
 import { dataDirPath, useHomePaths } from './home-paths.js';
 import type { HomePathsWatch } from './home-paths.js';
@@ -281,7 +281,7 @@ function MingpanBody({
 
       <h2>④ 快照来源</h2>
       <p className="xs-mingpan__origin" data-xuanshu-origin="snapshot">
-        {`horosa ${snapshot.horosa?.version ?? '—'} / 出盘于 ${snapshot.generatedAt ?? '—'}`}
+        {`horosa ${snapshot.horosa?.version ?? '—'} / 出盘于 ${snapshot.generatedAt === undefined ? '—' : momentOf(snapshot.generatedAt)}`}
       </p>
 
       <h2>⑤ 重新录制（唯一写操作）</h2>

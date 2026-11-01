@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 
-import { EMPTY_COPY, clockOf } from './panel.js';
+import { EMPTY_COPY, clockOf, momentOf } from './panel.js';
 import { WANSHENG_ID, WANSHENG_LABEL, WANSHENG_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
 import type { NotifyApi, TrafficStatus } from './notify-api.js';
@@ -150,10 +150,10 @@ function FactsSection({ facts }: { facts?: WanshengFacts }) {
       <ActivityList items={facts?.activeWorkspaces} kind="workspace" label="项目" />
       <ActivityList items={facts?.activeWorkflows} kind="workflow" label="工作流" />
       {facts?.rikke?.generatedAt === undefined ? null : (
-        <p className="xs-wansheng__fact" data-xuanshu-fact="rikke">{`日课：${facts.rikke.generatedAt} 生成`}</p>
+        <p className="xs-wansheng__fact" data-xuanshu-fact="rikke">{`日课：${momentOf(facts.rikke.generatedAt)} 生成`}</p>
       )}
       {facts?.digao?.generatedAt === undefined ? null : (
-        <p className="xs-wansheng__fact" data-xuanshu-fact="digao">{`底稿：${facts.digao.generatedAt} 刷新过`}</p>
+        <p className="xs-wansheng__fact" data-xuanshu-fact="digao">{`底稿：${momentOf(facts.digao.generatedAt)} 刷新过`}</p>
       )}
       {facts?.shiji?.updatedAt === undefined ? null : (
         <p className="xs-wansheng__fact" data-xuanshu-fact="shiji">{`事记：${facts.shiji.updatedAt} 有更新`}</p>
@@ -272,7 +272,7 @@ export function WanshengPanel({
           : `计划时刻：每天 ${clockOf(schedule.time)}（${schedule.timeZone}）· 可在「自动化任务」面板里改或停用`}
       </p>
       {status?.generatedAt === undefined ? null : (
-        <p className="xs-wansheng__note" data-xuanshu-note="generated-at">{`生成于 ${status.generatedAt}`}</p>
+        <p className="xs-wansheng__note" data-xuanshu-note="generated-at">{`生成于 ${momentOf(status.generatedAt)}`}</p>
       )}
       {/* 2026-11-01：补上「不联网」声明 —— 日课那屏一直有，晚省一直没有（见 WANSHENG_NO_NETWORK_NOTE）。 */}
       <p className="xs-wansheng__note" data-xuanshu-note="no-network">{WANSHENG_NO_NETWORK_NOTE}</p>
