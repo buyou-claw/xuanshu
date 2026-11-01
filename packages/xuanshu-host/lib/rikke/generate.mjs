@@ -84,8 +84,11 @@ export async function generateRikke({
     return {
       ok: false,
       date,
+      // 2026-11-01 改：原文写「（八字冷启动向导 / `bazi.cast`）」—— `bazi.cast` 是 RPC 方法名，
+      // 反引号在界面上也原样显示。这句会**直接显示给用户**（日课卡的 error 行），
+      // 所以他只需要知道「去哪做这件事」：侧栏「填八字」。
       reason: snapshot.state === 'empty'
-        ? '底座未立：还没有出过盘。先完成出生信息（八字冷启动向导 / `bazi.cast`），日课要读底座与时间基准。'
+        ? '底座未立：还没有出过盘。先完成出生信息（去侧栏「填八字」走一遍向导），日课要读底座与时间基准。'
         : `底座快照读不出来：${snapshot.reason}`,
     }
   }

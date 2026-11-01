@@ -6637,7 +6637,7 @@ function statusLine(status) {
 var BUDGET_UNKNOWN_NOTE = "预算未知：拿不到当前模型的上下文窗口元数据。去 DSH 设置看模型配置（本机 rc.2 的采样参数 maxTokens 不是窗口，玄枢不会替你编一个数）。";
 var WORKFLOW_EMPTY_NOTE = "工作流清单的数据源属票 16（工作流创建向导）：现在还没有可挂载的工作流，先去把工作流建出来。";
 var WORKSPACE_EMPTY_NOTE = "DSH 里还没有工作区：工作区是 DSH 原有的实体，先去 DSH 的工作区界面建一个（本抽屉不提供新建入口）。";
-var WORKSPACE_UNAVAILABLE_NOTE = "这个 profile 没有客户端工作区面（ctx.workspaces）：工作区清单读不出来，挂载功能暂时不可用。";
+var WORKSPACE_UNAVAILABLE_NOTE = "这台机器上没有可用的工作区面板：工作区清单读不出来，所以暂时没法挂载。换一台装全的机器再试。";
 function createLayerFoldState() {
   const collapsed = /* @__PURE__ */ new Set();
   return {

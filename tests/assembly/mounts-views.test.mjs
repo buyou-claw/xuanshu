@@ -172,7 +172,9 @@ describe('票 12 · S8 抽屉：边界句 / 分区 / 逐层账本', () => {
   })
 
   it('工作区面不可用 / 一个工作区都没有：两种空态文案不同（别把「没面」说成「没有工作区」）', () => {
-    expect(render(drawer({ workspaceAvailable: false, workspaces: [] }))).toContain('没有客户端工作区面')
+    // 2026-11-01：原来断定「没有客户端工作区面」，但原文里还有 `profile` 与 `ctx.workspaces`
+    // 两个内部名。改成说他看到的后果 + 能做什么，断言跟着改。
+    expect(render(drawer({ workspaceAvailable: false, workspaces: [] }))).toContain('没有可用的工作区面板')
     expect(render(drawer({ workspaces: [] }))).toContain('DSH 里还没有工作区')
   })
 })

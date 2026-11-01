@@ -121,8 +121,14 @@ export const WORKFLOW_EMPTY_NOTE = '工作流清单的数据源属票 16（工�
 /** 工作区分区空态。 */
 export const WORKSPACE_EMPTY_NOTE = 'DSH 里还没有工作区：工作区是 DSH 原有的实体，先去 DSH 的工作区界面建一个（本抽屉不提供新建入口）。';
 
-/** 工作区面不可用（裁剪过的 profile）。 */
-export const WORKSPACE_UNAVAILABLE_NOTE = '这个 profile 没有客户端工作区面（ctx.workspaces）：工作区清单读不出来，挂载功能暂时不可用。';
+/**
+ * 工作区面不可用（裁剪过的 profile）。
+ *
+ * 2026-11-01 改：原文「这个 profile 没有客户端工作区面（ctx.workspaces）」里 `profile` 与
+ * `ctx.workspaces` 都是内部名。用户读到「profile」不知道指什么，「ctx.workspaces」更是源码里的字段。
+ * 改成说他看到的后果 + 能做什么。
+ */
+export const WORKSPACE_UNAVAILABLE_NOTE = '这台机器上没有可用的工作区面板：工作区清单读不出来，所以暂时没法挂载。换一台装全的机器再试。';
 
 /**
  * H2 折叠记忆：**按层**记住「用户手动收起过」的那些层；新出现的层默认展开。
