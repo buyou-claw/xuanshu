@@ -368,6 +368,19 @@ try {
     return { border: cs.borderTopWidth, radius: cs.borderTopLeftRadius, bg: cs.backgroundColor }
   })
   check('晚省：按钮有边框与圆角', wsBtn === null || (parseFloat(wsBtn.border) > 0 && parseFloat(wsBtn.radius) > 0), JSON.stringify(wsBtn))
+
+  // ㊶ 投递历史：状态文案说的是「通知」，不是「这一课」
+  await goPanel('日课')
+  const hist = await page.evaluate(() => {
+    const el = document.querySelector('[data-xuanshu-panel="rikke"]')
+    const d = el?.querySelector('[data-xuanshu-history="rikke"]')
+    if (d !== null && d !== undefined) d.open = true
+    const statuses = [...(d?.querySelectorAll('[data-xuanshu-history-row]') ?? [])].map((n) => n.getAttribute('data-xuanshu-history-row'))
+    return { text: (d?.innerText ?? '').replace(/\s+/g, ' '), statuses }
+  })
+  // 「跳过」这个词会被读成「这一课没生成」—— 实测日课生成成功了，跳过的只是发通知。
+  const histOk = hist.statuses.length === 0 || !/\s跳过\b/.test(hist.text)
+  check('投递历史不再写「跳过」（说的是通知状态，不是这一课）', histOk, hist.text.slice(0, 200))
 } finally {
   await browser.close().catch(() => {})
   const bad = results.filter((r) => !r.ok)
