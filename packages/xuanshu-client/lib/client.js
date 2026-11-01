@@ -4233,7 +4233,7 @@ function XsDeliveryHistory({ status }) {
         "data-xuanshu-history-kind": entry.kind ?? "",
         "data-xuanshu-history-missed": entry.missed === true ? "true" : void 0,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-touch__history-when", children: entry.at ?? entry.date ?? "时间读不到" }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-touch__history-when", children: entry.at === void 0 ? entry.date ?? "时间读不到" : momentOf(entry.at) }),
           /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-touch__history-kind", children: entry.kind === "wansheng" ? "晚省" : entry.kind === "rikke" ? "日课" : entry.kind ?? "未知" }),
           /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-touch__history-status", children: TRAFFIC_STATUS_TEXT[entry.notify.status] ?? entry.notify.status }),
           entry.missed === true ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "xs-touch__history-missed", "data-xuanshu-badge": "missed", children: "补" }) : null,

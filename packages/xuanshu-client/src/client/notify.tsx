@@ -21,6 +21,7 @@ import type {
 } from './notify-api.js';
 import { SHELL_SETTINGS_ENDPOINTS } from './notify-api.js';
 import type { RikkeApi } from './rikke-api.js';
+import { momentOf } from './panel.js';
 
 /** 设置行的槽位 id（`settings.general.item` 由 ui-settings-general 声明；不在场时不抛）。 */
 export const TOUCH_SETTINGS_ID = 'xuanshu.touch';
@@ -150,7 +151,9 @@ export function XsDeliveryHistory({ status }: { status: TrafficStatus }) {
               data-xuanshu-history-kind={entry.kind ?? ''}
               data-xuanshu-history-missed={entry.missed === true ? 'true' : undefined}
             >
-              <span className="xs-touch__history-when">{entry.at ?? entry.date ?? '时间读不到'}</span>
+              {/* 2026-11-01：`entry.at` 是 ISO 串，原来原样贴出来（`2026-10-15T13:30:01.000Z`）。
+                  `entry.date` 只有日期、没有时刻，不能过 momentOf，缺 at 时才退到它。 */}
+              <span className="xs-touch__history-when">{entry.at === undefined ? (entry.date ?? '时间读不到') : momentOf(entry.at)}</span>
               <span className="xs-touch__history-kind">{entry.kind === 'wansheng' ? '晚省' : entry.kind === 'rikke' ? '日课' : (entry.kind ?? '未知')}</span>
               <span className="xs-touch__history-status">{TRAFFIC_STATUS_TEXT[entry.notify.status] ?? entry.notify.status}</span>
               {entry.missed === true ? <span className="xs-touch__history-missed" data-xuanshu-badge="missed">补</span> : null}
