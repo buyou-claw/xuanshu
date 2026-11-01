@@ -77,10 +77,20 @@ const STATE_TITLE: Record<AiViewState, string> = {
 /** 状态面 / 门禁行共用的「去哪里」：有 handler 才是按钮，没有就只写路径。 */
 function AiSettingsAction({
   onOpenSettings,
+  showFallback = true,
 }: {
   onOpenSettings?: () => void;
+  /**
+   * 没有 handler 时要不要写那句兜底路径。
+   *
+   * 2026-11-01 改：门禁行里 `reason.next` 已经在说「打开 DSH「设置 → 模型」给 X 填上密钥」，
+   * 兜底那句又写「配置 provider 与默认模型」—— 同一件事两个说法并排出现，
+   * 用户会以为要做两件事。所以调用方有 `next` 时把兜底关掉。
+   */
+  showFallback?: boolean;
 }) {
   if (onOpenSettings === undefined) {
+    if (!showFallback) return null;
     return (
       <p className="xs-ai__path" data-xuanshu-ai-path={AI_SETTINGS_PATH}>
         {`请打开 DSH「${AI_SETTINGS_PATH}」配置 provider 与默认模型。`}
@@ -233,7 +243,10 @@ export function XsAiGate({ readiness, checking = false, onRetry, onOpenSettings 
           </button>
         )}
         {state === 'checking' ? null : (
-          <AiSettingsAction {...(onOpenSettings === undefined ? {} : { onOpenSettings })} />
+          <AiSettingsAction
+            {...(onOpenSettings === undefined ? {} : { onOpenSettings })}
+            showFallback={(readiness?.reason.next ?? '') === ''}
+          />
         )}
       </div>
     </div>

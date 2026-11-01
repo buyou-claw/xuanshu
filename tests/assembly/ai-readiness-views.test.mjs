@@ -94,7 +94,7 @@ const MISSING = {
   defaultModel: { provider: 'deepseek-official', model: 'deepseek-chat' },
   reason: {
     code: 'missing-key',
-    text: 'DeepSeek 已有模型，但这家没有配置密钥（key）。',
+    text: 'DeepSeek 已有模型，但这个提供商没有配置密钥（key）。',
     next: '打开 DSH「设置 → 模型」给 DeepSeek 填上密钥。',
   },
   checkedAt: '2026-10-17T00:00:00.000Z',

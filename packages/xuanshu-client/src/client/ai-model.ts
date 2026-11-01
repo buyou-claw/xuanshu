@@ -229,7 +229,7 @@ export function deriveAiReadiness(
         reason: {
           code: keyUnknown ? 'ready-key-unknown' : 'ready',
           text: keyUnknown
-            ? `已接上 ${backed.name ?? backed.id} · ${defaultModel.model}，但这家的密钥状态未知（设置服务读不到）：先按可用处理，若问事报缺凭据就去核对。`
+            ? `已接上 ${backed.name ?? backed.id} · ${defaultModel.model}，但这个提供商的密钥状态未知（设置服务读不到）：先按可用处理，若问事报缺凭据就去核对。`
             : `已接上：${backed.name ?? backed.id} · ${defaultModel.model}。`,
           next: keyUnknown ? `若问事失败，去「${AI_SETTINGS_PATH}」核对密钥。` : '可以问事了。',
         },
@@ -422,7 +422,7 @@ function missingReason(
   if (target.keyConfigured === false) {
     return {
       code: 'missing-key',
-      text: `${target.name ?? target.id} 已有模型，但这家没有配置密钥（key）。`,
+      text: `${target.name ?? target.id} 已有模型，但这个提供商没有配置密钥（key）。`,
       next: `打开 DSH「${AI_SETTINGS_PATH}」给 ${target.name ?? target.id} 填上密钥。`,
     }
   }
@@ -437,7 +437,7 @@ function missingReason(
     return {
       code: 'no-model',
       text: `${target.name ?? target.id} 已注册，但模型清单里还没有可用的模型。`,
-      next: `打开 DSH「${AI_SETTINGS_PATH}」给这家加一个模型。`,
+      next: `打开 DSH「${AI_SETTINGS_PATH}」给这个提供商加一个模型。`,
     }
   }
   // 理论到不了这里（usable 判据与上面各分支互补）；留一条不撒谎的兜底。

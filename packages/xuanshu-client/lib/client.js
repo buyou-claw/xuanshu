@@ -209,7 +209,7 @@ function deriveAiReadiness(catalog, options = {}) {
         ...base,
         reason: {
           code: keyUnknown ? "ready-key-unknown" : "ready",
-          text: keyUnknown ? `已接上 ${backed.name ?? backed.id} · ${defaultModel.model}，但这家的密钥状态未知（设置服务读不到）：先按可用处理，若问事报缺凭据就去核对。` : `已接上：${backed.name ?? backed.id} · ${defaultModel.model}。`,
+          text: keyUnknown ? `已接上 ${backed.name ?? backed.id} · ${defaultModel.model}，但这个提供商的密钥状态未知（设置服务读不到）：先按可用处理，若问事报缺凭据就去核对。` : `已接上：${backed.name ?? backed.id} · ${defaultModel.model}。`,
           next: keyUnknown ? `若问事失败，去「${AI_SETTINGS_PATH}」核对密钥。` : "可以问事了。"
         }
       };
@@ -338,7 +338,7 @@ function missingReason(providers, defaultModel) {
   if (target.keyConfigured === false) {
     return {
       code: "missing-key",
-      text: `${target.name ?? target.id} 已有模型，但这家没有配置密钥（key）。`,
+      text: `${target.name ?? target.id} 已有模型，但这个提供商没有配置密钥（key）。`,
       next: `打开 DSH「${AI_SETTINGS_PATH}」给 ${target.name ?? target.id} 填上密钥。`
     };
   }
@@ -353,7 +353,7 @@ function missingReason(providers, defaultModel) {
     return {
       code: "no-model",
       text: `${target.name ?? target.id} 已注册，但模型清单里还没有可用的模型。`,
-      next: `打开 DSH「${AI_SETTINGS_PATH}」给这家加一个模型。`
+      next: `打开 DSH「${AI_SETTINGS_PATH}」给这个提供商加一个模型。`
     };
   }
   return {
@@ -4049,9 +4049,11 @@ var STATE_TITLE = {
   checking: "正在检测 AI …"
 };
 function AiSettingsAction({
-  onOpenSettings
+  onOpenSettings,
+  showFallback = true
 }) {
   if (onOpenSettings === void 0) {
+    if (!showFallback) return null;
     return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__path", "data-xuanshu-ai-path": AI_SETTINGS_PATH, children: `请打开 DSH「${AI_SETTINGS_PATH}」配置 provider 与默认模型。` });
   }
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "xs-btn", "data-xuanshu-action": "open-ai-settings", onClick: onOpenSettings, children: `去「${AI_SETTINGS_PATH}」` });
@@ -4109,7 +4111,13 @@ function XsAiGate({ readiness, checking = false, onRetry, onOpenSettings }) {
     state === "checking" ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai-gate__next", children: readiness?.reason.next }),
     /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-ai-gate__actions", children: [
       onRetry === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "xs-btn", "data-xuanshu-action": "retry-ai", onClick: onRetry, children: "重试" }),
-      state === "checking" ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(AiSettingsAction, { ...onOpenSettings === void 0 ? {} : { onOpenSettings } })
+      state === "checking" ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+        AiSettingsAction,
+        {
+          ...onOpenSettings === void 0 ? {} : { onOpenSettings },
+          showFallback: (readiness?.reason.next ?? "") === ""
+        }
+      )
     ] })
   ] });
 }
