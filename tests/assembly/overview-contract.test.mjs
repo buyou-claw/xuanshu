@@ -419,7 +419,9 @@ describe('票 07 · 五卡渲染（冷启动空态；#25 加第 5 张晚省）',
     expect(card).toContain('工作区')
     expect(card).toContain('工作流')
     expect(card).toContain('底座未立 · 会先引导你填出生信息')
-    expect(card).toContain('谱 / 藏 / 定时任务是管理入口，在侧栏「库」与设置里，不在本卡。')
+    // 2026-11-01：原文是「在侧栏「库」与设置里」，但侧栏没有「库」这个分区（十行平铺，
+    // 谱 / 藏 各自独立注册），「定时任务」的实名是「自动化任务」。导航名必须指得到实体。
+    expect(card).toContain('谱 / 藏 / 自动化任务是管理入口：都在侧栏，不在这张卡里。')
     // 未注册的 consult / workflow 置灰 + 理由；工作区（conversation）可用。
     expect(card).toContain('问事面板还没装配（属票 10 · 问事闭环）')
     expect(card).toContain('工作流面板还没装配（属票 16 · 工作流创建向导）')

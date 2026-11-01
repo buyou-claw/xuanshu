@@ -40,3 +40,7 @@
           initialDelayMs: 1000
           maxDelayMs: 30000
           maxAttempts: 60
+- id: ui-settings-general
+  name: "@deepseek-ai/dsh-client-ui-settings-general"
+  config:
+    welcomeNoticeVersion: 2026-09-28.1

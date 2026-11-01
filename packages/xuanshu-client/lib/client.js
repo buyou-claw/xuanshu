@@ -2885,7 +2885,7 @@ var QUICKLINK = {
   workflow: { title: "工作流", subtitle: "流水线" }
 };
 var QUICKLINK_CONSULT_UNREADY = "底座未立 · 会先引导你填出生信息";
-var QUICKLINKS_BOUNDARY = "谱 / 藏 / 定时任务是管理入口，在侧栏「库」与设置里，不在本卡。";
+var QUICKLINKS_BOUNDARY = "谱 / 藏 / 自动化任务是管理入口：都在侧栏，不在这张卡里。";
 var EMPTY_COPY = {
   mingpan: {
     why: "底座还没立起来",
