@@ -144,7 +144,7 @@ describe('#25 · wansheng.generate（人点 / 定时同一份链）', () => {
     expect(generated.ok).toBe(true)
     const row = readTraffic(box.dataDir).entries[0]
     expect(row.notify.status).toBe('skipped')
-    expect(row.notify.reason).toMatch(/没有桌面壳/u)
+    expect(row.notify.reason).toMatch(/没有桌面应用/u)
   })
 
   it('晚省不读日课产物里的内容、也不写日课：两条链互不覆盖', async () => {

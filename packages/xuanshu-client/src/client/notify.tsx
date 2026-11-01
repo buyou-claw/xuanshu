@@ -41,8 +41,8 @@ export const AUTOSTART_METHOD_TEXT: Record<AutostartMethod, string> = {
  * @param method - 宿主回的 `effective.autostart.method`
  */
 export function autostartMethodText(method?: AutostartMethod): string {
-  if (method === undefined) return '未知（桌面壳未运行）';
-  return AUTOSTART_METHOD_TEXT[method] ?? '未知（桌面壳未运行）';
+  if (method === undefined) return '未知（玄枢的桌面应用没在运行）';
+  return AUTOSTART_METHOD_TEXT[method] ?? '未知（玄枢的桌面应用没在运行）';
 }
 
 /** 投递状态的人话（#25 契约 §3：成功 / 失败 / 跳过 + 原因 + 时间 + 是否补，都能查）。 */
@@ -65,7 +65,7 @@ export interface NotifyFailureLike {
 export const NOTIFY_FAILURE_TEXT: Record<string, string> = {
   'permission-denied': '权限缺失：系统通知权限被关。请到「系统设置 → 通知 → 玄枢」里打开通知权限，然后再生成一次。',
   unsupported: '系统通知不可用：这台系统 / 环境不支持系统通知。',
-  failed: '桌面壳没有弹出通知（壳没给细节）。',
+  failed: '桌面应用没弹出通知（它没给原因）。',
 };
 
 /**
@@ -369,7 +369,7 @@ export function XsTouchSettingsRow({ state, actions }: { state: TouchSettingsSta
         data-xuanshu-effective-known={effective === undefined ? 'false' : 'true'}
       >
         {effective === undefined
-          ? '实际生效方式：未知（桌面壳未运行）—— 这里的开关会写进共享设置，下次桌面壳启动时生效。'
+          ? '实际生效方式：未知（桌面应用没在运行）—— 这里的开关会存下来，下次桌面应用启动时才生效。'
           : `实际生效：${autostartMethodText(effective.autostart.method)}（${effective.autostart.enabled ? '已开' : '已关'}）`
             + ` · 关窗：${effective.closeBehavior === 'quit' ? '退出' : '收进托盘'}`
             + `${effective.autostart.enabled === shell?.autostart ? '' : '（注意：设置里的开关与实际生效不一致，可能是系统启动项被拦下了）'}`}

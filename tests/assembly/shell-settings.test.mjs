@@ -7,7 +7,7 @@
  *   1. 两个开关调到 `shell.settings.set`（`closeBehavior` / `autostart`），且**不**碰
  *      `traffic.settings.set`（摘要开关走那一份）；
  *   2. 行上如实显示**实际生效方式**（登录项 / 启动文件夹快捷方式 / 不支持 + 开/关）；
- *   3. 壳没在跑（宿主回 `{settings}` 没有 `effective`）→ 显示「未知（桌面壳未运行）」，
+ *   3. 壳没在跑（宿主回 `{settings}` 没有 `effective`）→ 显示「未知（桌面应用没在运行）」，
  *      绝不把设置里的「想要」写成「已生效」；
  *   4. `settings.general.item` 仍只有一行（纯加性，不新增面板 / 侧栏行）。
  *
@@ -123,10 +123,10 @@ describe('P1 · 行渲染：两个开关 + 实际生效方式', () => {
     expect(html).toContain('data-xuanshu-effective="autostart"')
   })
 
-  it('壳没在跑（没有 effective）→ 如实显示「未知（桌面壳未运行）」，不写成已生效', () => {
+  it('壳没在跑（没有 effective）→ 如实显示「未知（桌面应用没在运行）」，不写成已生效', () => {
     const html = render(h(XsTouchSettingsRow, { state: { ...STATE, shell: { closeBehavior: 'quit', autostart: true } }, actions: { onToggleAi() {}, onToggleSummary() {}, onToggleCloseBehavior() {}, onToggleAutostart() {} } }))
     expect(html).toContain('未知')
-    expect(html).toContain('桌面壳未运行')
+    expect(html).toContain('桌面应用没在运行')
     // 说明文字里会提到「启动文件夹快捷方式」（那是解释），但**实际生效行**不许报一个方法。
     expect(html).not.toContain('实际生效：启动文件夹快捷方式')
   })

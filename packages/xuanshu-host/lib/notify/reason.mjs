@@ -20,7 +20,7 @@
 export const NOTIFY_FAILURE_TEXT = Object.freeze({
   'permission-denied': '权限缺失：系统通知权限被关。请到「系统设置 → 通知 → 玄枢」里打开通知权限，然后再生成一次。',
   unsupported: '系统通知不可用：这台系统 / 环境不支持系统通知。',
-  failed: '桌面壳没有弹出通知（壳没给细节）。',
+  failed: '桌面应用没弹出通知（它没给原因）。',
 })
 
 /**

@@ -1,5 +1,5 @@
 /**
- * tests/shell/lib/sandbox.mjs — #23 桌面壳断言台的**临时沙箱**（不读真机 home、不碰真壳）。
+ * tests/shell/lib/sandbox.mjs — #23 桌面应用断言台的**临时沙箱**（不读真机 home、不碰真壳）。
  *
  * 硬约束（与 `tests/notify/lib/sandbox.mjs` 同一套纪律）：
  *   - 一次性 home 落在 `tests/shell/.tmp/**`（`.gitignore` 覆盖 `tests/**​/.tmp/`），

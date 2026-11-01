@@ -64,13 +64,13 @@ const KNOWN_TOKENS = ['permission-denied', 'unsupported', 'failed']
  */
 const SAMPLES = [
   ...KNOWN_TOKENS,
-  ...KNOWN_TOKENS.map((token) => `桌面壳没有弹出通知：${token}`),
+  ...KNOWN_TOKENS.map((token) => `桌面应用没有弹出通知：${token}`),
   ...KNOWN_TOKENS.map((token) => `${token}   `),
   ...KNOWN_TOKENS.map((token) => `${token}\n`),
   'not-permission-denied',
   'permission-denied-harder',
   'unsupportedx',
-  '桌面壳崩溃了：EPERM（拒绝访问）',
+  '桌面应用崩溃了：EPERM（拒绝访问）',
   '超时：等不到系统通知服务',
   '没有任何理由',
   '',
@@ -101,7 +101,7 @@ describe('#40 · R7 失败文案两侧对拍：宿主归一 ↔ 客户端渲染'
 
   it('③ 认识 token：两侧给同一个机器码 + 同一句人话（两侧都用表里的字，不各写一份）', () => {
     for (const token of KNOWN_TOKENS) {
-      for (const sample of [token, `桌面壳没有弹出通知：${token}`]) {
+      for (const sample of [token, `桌面应用没有弹出通知：${token}`]) {
         const views = conclusions(sample)
         expect(views.hostCode, `宿主没认出 ${sample}`).toBe(token)
         expect(views.clientCode, `客户端没认出 ${sample}`).toBe(token)
@@ -114,7 +114,7 @@ describe('#40 · R7 失败文案两侧对拍：宿主归一 ↔ 客户端渲染'
   })
 
   it('③ 不认识的 reason：两侧都原样保留（不抹平、可排查）', () => {
-    for (const sample of ['桌面壳崩溃了：EPERM（拒绝访问）', '超时：等不到系统通知服务', 'permission-denied-harder']) {
+    for (const sample of ['桌面应用崩溃了：EPERM（拒绝访问）', '超时：等不到系统通知服务', 'permission-denied-harder']) {
       const views = conclusions(sample)
       expect(views.hostCode, `${sample} 被误认成已知 token`).toBeUndefined()
       expect(views.clientCode).toBeUndefined()

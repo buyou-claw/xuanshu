@@ -142,7 +142,7 @@ describe('#25 · 到点 → 晚省产物 + 一条通知（kind=wansheng / target
     expect(target.sandbox.exists('wansheng', `${TODAY}.json`)).toBe(true)
     const row = readTraffic(target.sandbox.dataDir).entries[0]
     expect(row.notify.status).toBe('skipped')
-    expect(row.notify.reason).toMatch(/没有桌面壳/u)
+    expect(row.notify.reason).toMatch(/没有桌面应用/u)
   })
 })
 

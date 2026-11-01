@@ -245,7 +245,7 @@ describe('#24 · 通知失败不阻塞生成、如实落账', () => {
     expect(target.sandbox.exists('rikke', `${TODAY}.json`)).toBe(true)
     const ledger = readTraffic(target.sandbox.dataDir)
     expect(ledger.entries[0].notify.status).toBe('skipped')
-    expect(ledger.entries[0].notify.reason).toMatch(/no-shell|没有桌面壳/u)
+    expect(ledger.entries[0].notify.reason).toMatch(/no-shell|没有桌面应用/u)
     const { rikke } = readers(target)
     expect((await rikke['rikke.status']({})).notify.status).toBe('skipped')
   })

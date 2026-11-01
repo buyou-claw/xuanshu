@@ -41,13 +41,13 @@ async function attemptNotify({ dataDir, moment, manual, missed, env, buildPayloa
   if (!target.ok) {
     // `state-invalid` = 有东西自称是壳但这份状态文件不能用 → 这是**失败**，不是「没装壳」。
     if (target.reason === 'state-invalid') {
-      return { status: 'failed', reason: `桌面壳的通知端点不可用（state-invalid）：${target.detail ?? '状态文件不合契约'}` }
+      return { status: 'failed', reason: `桌面应用的通知端点不可用（state-invalid）：${target.detail ?? '状态文件不合契约'}` }
     }
     return {
       status: 'skipped',
       reason: target.reason === 'state-missing'
-        ? '桌面壳没有在运行（状态文件不存在）：不发系统通知'
-        : '没有桌面壳（浏览器模式）：不发系统通知',
+        ? '桌面应用没有在运行（状态文件不存在）：不发系统通知'
+        : '没有桌面应用（浏览器模式）：不发系统通知',
     }
   }
 
@@ -55,7 +55,7 @@ async function attemptNotify({ dataDir, moment, manual, missed, env, buildPayloa
   const payload = buildPayload({ notifySummary, now: moment })
   const sent = await postNotify(payload, { env })
   if (sent.ok === true && sent.delivered === true) return { status: 'delivered', reason: null }
-  if (sent.ok === true) return { status: 'failed', reason: `桌面壳没有弹出通知：${sent.reason}` }
+  if (sent.ok === true) return { status: 'failed', reason: `桌面应用没有弹出通知：${sent.reason}` }
   return { status: 'failed', reason: `通知没送到：${sent.reason}` }
 }
 
