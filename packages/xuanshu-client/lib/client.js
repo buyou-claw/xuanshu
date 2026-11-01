@@ -8912,6 +8912,7 @@ function createWanshengUiController(api) {
 // src/client/wansheng.tsx
 var import_react20 = require("react");
 var import_jsx_runtime23 = require("react/jsx-runtime");
+var WANSHENG_GENERATE_CONFIRM = "将覆盖今天的晚省，继续？";
 function errorText8(error) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -8974,6 +8975,7 @@ function WanshengPanel({
   const seeded = preloaded !== void 0;
   const [view, setView] = (0, import_react20.useState)(() => initialView3(preloaded));
   const [busy, setBusy] = (0, import_react20.useState)(false);
+  const [confirming, setConfirming] = (0, import_react20.useState)(false);
   const [editing, setEditing] = (0, import_react20.useState)(preloadedTimeEdit === true);
   const [timeDraft, setTimeDraft] = (0, import_react20.useState)(
     () => clockOf(preloaded !== void 0 && !("error" in preloaded) ? preloaded.schedule?.time : void 0)
@@ -9059,7 +9061,9 @@ function WanshengPanel({
           className: "xs-btn xs-btn--primary",
           "data-xuanshu-action": "generate-wansheng",
           disabled: busy,
-          onClick: generate,
+          onClick: () => {
+            setConfirming(true);
+          },
           children: busy ? "生成中…" : "立即生成"
         }
       ),
@@ -9072,6 +9076,34 @@ function WanshengPanel({
       /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("button", { type: "button", "data-xuanshu-nav": "consult", onClick: () => {
         navigate("consult");
       }, children: "去问事" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "xs-wansheng__confirm", "data-xuanshu-confirm": "regenerate", hidden: !confirming, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { "data-xuanshu-confirm-text": "regenerate", children: WANSHENG_GENERATE_CONFIRM }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "xs-wansheng__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+          "button",
+          {
+            type: "button",
+            "data-xuanshu-action": "regenerate-cancel",
+            onClick: () => {
+              setConfirming(false);
+            },
+            children: "取消"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+          "button",
+          {
+            type: "button",
+            "data-xuanshu-action": "regenerate-go",
+            onClick: () => {
+              setConfirming(false);
+              generate();
+            },
+            children: "继续生成 ->"
+          }
+        )
+      ] })
     ] }),
     note === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__note", role: "status", "data-xuanshu-note": "time-result", children: note }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "xs-wansheng__time-edit", "data-xuanshu-time-edit": "wansheng", hidden: !editing, children: [

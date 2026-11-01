@@ -35,6 +35,12 @@ type WanshengView =
 /** 静态预置（测试 / SSR：给了就不取数；`error` 形状直接落错误态）。 */
 export type WanshengPreloaded = WanshengStatus | { error: string };
 
+/**
+ * 重新生成前的那次轻确认（与日课的 `RIKKE_REGENERATE_CONFIRM` 同一套做法）。
+ * 2026-11-01：晚省原来点一下就覆盖当天的晚省，问都不问；日课那边一直是有确认的。
+ */
+export const WANSHENG_GENERATE_CONFIRM = '将覆盖今天的晚省，继续？';
+
 export interface WanshengPanelProps {
   /** 晚省数据面（`index.tsx` 用 `createWanshengApi(ctx)` 造好注入）。 */
   api: WanshengApi;
@@ -158,6 +164,7 @@ export function WanshengPanel({
   const seeded = preloaded !== undefined;
   const [view, setView] = useState<WanshengView>(() => initialView(preloaded));
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [editing, setEditing] = useState(preloadedTimeEdit === true);
   const [timeDraft, setTimeDraft] = useState<string>(() =>
     clockOf(preloaded !== undefined && !('error' in preloaded) ? preloaded.schedule?.time : undefined),
@@ -293,13 +300,38 @@ export function WanshengPanel({
           className="xs-btn xs-btn--primary"
           data-xuanshu-action="generate-wansheng"
           disabled={busy}
-          onClick={generate}
+          onClick={() => { setConfirming(true); }}
         >
           {busy ? '生成中…' : '立即生成'}
         </button>
         <button type="button" data-xuanshu-action="edit-time" onClick={() => { setEditing(!editing); }}>改时刻</button>
         <button type="button" data-xuanshu-nav="schedules" onClick={() => { navigate('schedules'); }}>打开自动化任务面板</button>
         <button type="button" data-xuanshu-nav="consult" onClick={() => { navigate('consult'); }}>去问事</button>
+      </div>
+
+      {/*
+        2026-11-01 加：日课那边点「立即生成 / 重新生成」必过一次轻确认（「将覆盖今天的日课，继续？」），
+        晚省这边原来**直接覆盖** —— 实测点一下就重新生成了，`生成于` 时间当场变掉，问都不问。
+        同一天的事实重生成会把上一份盖掉，两个面板该一致，所以照日课那条做：未确认时整块 hidden。
+      */}
+      <div className="xs-wansheng__confirm" data-xuanshu-confirm="regenerate" hidden={!confirming}>
+        <p data-xuanshu-confirm-text="regenerate">{WANSHENG_GENERATE_CONFIRM}</p>
+        <div className="xs-wansheng__actions">
+          <button
+            type="button"
+            data-xuanshu-action="regenerate-cancel"
+            onClick={() => { setConfirming(false); }}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            data-xuanshu-action="regenerate-go"
+            onClick={() => { setConfirming(false); generate(); }}
+          >
+            {'继续生成 ->'}
+          </button>
+        </div>
       </div>
 
       {note === undefined ? null : (
