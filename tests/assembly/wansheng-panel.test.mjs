@@ -203,9 +203,9 @@ describe('#25 · 晚省卡：当天事实 + 补徽标 + 去问事', () => {
     expect(html).toContain('哪些项目有活动：未知（这边暂时读不到）')
   })
 
-  it('empty：默认 21:30 的空态文案 + [立即生成]（未接线则置灰给理由）+ [改时间 ->]', () => {
+  it('empty：空态文案（不写死钟点） + [立即生成]（未接线则置灰给理由）+ [改时间 ->]', () => {
     const html = render(h(XsWanshengCard, { state: 'empty', today: '2026-10-15', ...injected() }))
-    expect(html).toContain('今天还没有晚省。晚省默认每天 21:30 生成。')
+    expect(html).toContain('今天还没有晚省。到计划时刻会自动生成。')
     expect(html).toContain('data-xuanshu-action="generate-wansheng"')
     expect(html).toContain('晚省生成还没接上（属票 04 · 晚间触达）')
     expect(html).toContain('data-xuanshu-nav="schedules"')
@@ -286,7 +286,7 @@ describe('#25 · 晚省面板：完整事实 + [立即生成] + 投递历史', (
     }
     const empty = render(h(WanshengPanel, { api, navigate: () => {}, preloaded: { date: '2026-10-15', exists: false } }))
     expect(empty).toContain('data-xuanshu-view="empty"')
-    expect(empty).toContain('今天还没有晚省。晚省默认每天 21:30 生成。')
+    expect(empty).toContain('今天还没有晚省。到计划时刻会自动生成。')
     const failed = render(h(WanshengPanel, { api, navigate: () => {}, preloaded: { error: '晚省读不出来' } }))
     expect(failed).toContain('data-xuanshu-view="error"')
     expect(failed).toContain('晚省读不出来')
@@ -436,6 +436,6 @@ describe('#25 · 概览面板接上晚省卡（第 5 张）', () => {
     const html = render(h(OverviewPanel, { ...injected(), today: '2026-10-15', preloadedBaziStatus: { state: 'empty' } }))
     const card = cardOf(html, 'wansheng')
     expect(card).toContain('data-xs-state="empty"')
-    expect(card).toContain('今天还没有晚省。晚省默认每天 21:30 生成。')
+    expect(card).toContain('今天还没有晚省。到计划时刻会自动生成。')
   })
 })
