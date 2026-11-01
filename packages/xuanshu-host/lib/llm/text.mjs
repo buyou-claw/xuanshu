@@ -61,11 +61,35 @@ export async function streamText(llm, { system, prompt }) {
     for await (const chunk of stream) {
       if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') collected += chunk.text
       if (chunk?.type === 'error') {
-        return { ok: false, text: '', reason: `LLM 流报错：${String(chunk.error ?? chunk.message ?? '未知')}`, route }
+        /**
+         * 2026-11-02 改：原来写的是 `String(chunk.error ?? chunk.message ?? '未知')`。
+         *
+         * `chunk.error` 在真机上是**对象**（`{message, code}`），`String({…})` 得到
+         * `[object Object]` —— 于是不管真实原因是 401、超时还是没配额，用户和日志看到的
+         * 都是「LLM 流报错：[object Object]」。写 `ai.probe` 单测时被这条逮住的。
+         */
+        const detail = chunk.error ?? chunk.message ?? '未知'
+        const text = typeof detail === 'string'
+          ? detail
+          : (detail?.message ?? detail?.code ?? describeValue(detail))
+        return { ok: false, text: '', reason: `LLM 流报错：${text}`, route }
       }
     }
   } catch (error) {
     return { ok: false, text: '', reason: `LLM 调用失败：${String(error?.message ?? error)}`, route }
   }
   return { ok: true, text: collected, reason: null, route }
+}
+
+/**
+ * 把不认识的值变成一句能看的话（对象走 JSON，别落到 `[object Object]`）。
+ * @param {unknown} value
+ * @returns {string}
+ */
+function describeValue(value) {
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
 }
