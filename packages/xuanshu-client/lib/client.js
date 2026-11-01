@@ -3364,11 +3364,7 @@ ${draft.body}`, summaryOnly: true });
         ] }),
         levels,
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "谱名唯一 · 目录名小写、- 连接、可含中文。所有谱均非必填。" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { children: [
-          "预览：pus/",
-          draft.name.trim().normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}-]+/gu, "-").replace(/^-+|-+$/g, ""),
-          "/"
-        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { "data-xuanshu-note": "path-preview", children: draft.name.trim() === "" ? "预览：填了谱名，这里会显示它落在 pus/ 下的路径。" : `预览：pus/${draft.name.trim().normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}-]+/gu, "-").replace(/^-+|-+$/g, "")}/` }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { onClick: () => setStep(1), children: "返回改资料" }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { disabled: busy || !draft.name.trim(), onClick: generate, children: "开始转换" })
       ] }),
