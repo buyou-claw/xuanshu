@@ -41,18 +41,23 @@ export function createPuMethods(ctx, { dataDir }) {
         if (job.canceled) return;
         const event = [...resolved.agent.session.snapshotEvents()].reverse().find(e => e.type === 'assistant/message');
         const text = event?.data?.content?.filter(part => part.type === 'text').map(part => part.text).join('\n') ?? '';
-        const json = text.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
         /**
-         * 2026-11-02 改：原来这里直接 `JSON.parse(json)`，AI 返回空或半截 JSON 时，
-         * `error.message` 是 `Unexpected end of JSON input` —— 这句原生错误会一路冒到界面上
-         * （`job.error = String(error?.message ?? error)`），用户读到的就是这串英文。
-         * 用户需要知道的是「AI 这次没按约定格式返回，重试一次」。
+         * 2026-11-02 加：AI **一句话都没回**时单说一句人话。
+         *
+         * 实测过一次：会话建出来了，但整个会话里只有元数据，一条 message 都没有
+         * （provider 那侧静默失败）。这时 `text` 是空串，`JSON.parse('')` 报
+         * `Unexpected end of JSON input` —— 把人引到「格式不对」上去，其实是「AI 没吭声」。
+         * 两种情况的下一步不一样：没回应 → 查模型配没配好；格式不对 → 重试或拆小资料。
          */
+        if (text.trim() === '') {
+          throw new Error('AI 这次一句话都没有回应（会话建好了，但没有产出内容）。先确认「设置 → 模型」里那家 provider 能用；能用的前提下点「重试」。');
+        }
+        const json = text.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
         let draft;
         try {
           draft = JSON.parse(json);
         } catch {
-          throw new Error('AI 这次没有按约定的格式返回内容（可能没生成完，或者跑偏说了别的话）。点「重试」再来一次；反复这样就把资料拆小一段再试。');
+          throw new Error('AI 回了话，但不是约定的 JSON 格式（可能没写完，或者夹了别的解释）。点「重试」再来一次；反复这样就把资料拆小一段再试。');
         }
         // AI cannot override the person's chosen name or turn a draft into a required input.
         job.draft = { ...draft, name: request.name.trim(), level: request.level };
