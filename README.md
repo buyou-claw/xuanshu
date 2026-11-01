@@ -78,7 +78,9 @@ node scripts/horosa/bazi-contract.mjs --json    # 直打回环，验信封结构
 - **Spec 001（装配基座）16 张票**由 [PR #20](https://github.com/buyou-claw/xuanshu/pull/20) 承载（覆盖并取代已关闭的 stacked PR #2 / #3 / #4 / #6 / #7 / #9）；父 issue [#1](https://github.com/buyou-claw/xuanshu/issues/1)。
 - 验证（本轮复核工作区，2026-10-17；数字抄工具输出）：`pnpm test:inventory` → **2278 条用例 / 201 文件 / 失败 2 条（均为既有已知红）/ 跳过 10 条**；装配五 seam **S2 / S3 / S4 / S5 PASS，S1 FAIL**（钉版 `dsh-app-boot@0.2.0-rc.2` 的 schema 导出器只收 native carrier，而同版官方 web bundle 自带的 `dsh-agent-preset` 是另一种 —— 上游缺陷；测试保留失败、不放宽断言、不改上游源码）；`pnpm verify:isolation` **8/8 PASS**；`tsc --noEmit` exit 0；`build-client --check` in sync（560502 B）。
 - 两条已知红 = **S1 及其连带**（「五条 seam 全绿」）。`tests/horosa/p10-e2e` 8 条与 `tests/horosa/p0-fixtures` 2 条按证据存在性跳过（真机前置件不在版本库）。
-- **真机未覆盖的项**逐条登记在 [开发进度](docs/development-status.md) §16 与 [待实测登记处](docs/design/ui-v1/待实测登记处.md)：桌面壳的真实窗口 / 托盘 / Windows toast / 自启注册（本机 `electron` 二进制下载失败，只跑了模块层）、真多家 provider 的路由清单（本机没有第二家 key）、真浏览器点击链与真 LLM 端到端。
+- **真浏览器回归 `pnpm verify:live <实例URL>`**（44 项，2026-11-02 加）：连一个**真跑着的实例**，用 Edge 逐面点击、读 `computedStyle`、读宿主数据面。与 `verify:ux`（读源码文本）分工明确——静态扫描测不出的四类问题只有这里能发现：控件没有边框（引用了不存在的 CSS 变量）、两个数字差一小时却没解释、点按钮屏幕上毫无动静（或有结论却还写「去生成」）、过时的状态断言（底座立了还写「底座未立时生成会失败」）。退出码与其它 `verify-*` 同口径（全过 0 / 有失败 1 / 用法错 2）。
+- **真机未覆盖的项**逐条登记在 [开发进度](docs/development-status.md) §16 与 [待实测登记处](docs/design/ui-v1/待实测登记处.md)：桌面壳的真实窗口 / 托盘 / Windows toast / 自启注册（本机 `electron` 二进制下载失败，只跑了模块层）、真多家 provider 的路由清单（本机没有第二家 key）。
+- **已由真机补上的项（2026-11-02）**：真浏览器点击链与真 LLM 端到端 —— 起了一个与主环境并行的桌面端实例（自有 `DSH_HOME`），用 Edge 有头模式逐面点击 + 截图，走通了「填八字 → 出盘 → 底座谱 → 日课（本地黄历 + AI 段）→ 底稿 AI 摘要 → 谱创建/编辑/搜索/筛选 → AI 连通探测」。出盘要连本地 horosa 服务，四个连环坑（`Settings.from_env` 才是正确入口、Python 子进程写不了 `AppData\Roaming`、运行时 python 没有 pip、解压布局与启动脚本假设不符）逐条记在 `.scratch/proof-home/README.md`，一键启动脚本在 `.scratch/start-horosa.mjs`。
 
 ## 许可
 
