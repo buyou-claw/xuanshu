@@ -67,9 +67,20 @@ export function createPuMethods(ctx, { dataDir }) {
          */
         const settled = await waitForTurnEnd(ctx, sessionId, { signal });
         if (settled.kind === 'aborted' || job.canceled) return;
+        /**
+         * 2026-11-02 修路径：`assistant/message` 事件的正文在 `data.message.content`，
+         * **不是** `data.content`。
+         *
+         * 原来这里写的是 `e?.data?.content`，永远是 `undefined` —— 于是不管 AI 回了什么，
+         * `text` 都是空串，界面一律报「AI 一句话都没有回应」。对照 `consult/history.mjs:72`
+         * （同一份事件、同一个仓，那边写的是 `event.data?.message?.content`）就能看出少了 `.message`。
+         */
         const readAssistant = () => {
           const e = [...resolved.agent.session.snapshotEvents()].reverse().find((x) => x.type === 'assistant/message');
-          return e?.data?.content?.filter((part) => part.type === 'text').map((part) => part.text).join('\n') ?? '';
+          const content = e?.data?.message?.content ?? e?.data?.content;
+          return Array.isArray(content)
+            ? content.filter((part) => part?.type === 'text').map((part) => part?.text ?? '').join('\n')
+            : '';
         };
         let text = readAssistant();
         /** 兜底：`turn/end` 到了但消息还没进快照（极少数时序）时，最多再等 30 秒。 */
