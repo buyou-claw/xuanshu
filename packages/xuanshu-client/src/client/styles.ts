@@ -31,15 +31,33 @@ const BASE_SHEET = `
 [class^="xs-"], [class*=" xs-"] { line-height: 1.6; }
 
 /* 可点目标的下限（判据 D-001：44×44）。放在基础段是因为它是**跨面**的一条纪律；
-   各面板自己的 padding 仍然生效，这条只是兜住「做小了没人拦」的底。 */
+   各面板自己的 padding 仍然生效，这条只是兜住「做小了没人拦」的底。
+
+   2026-11-02 修：原来这条把 input:not([type=hidden]) 一网打尽，勾选框（checkbox / radio）
+   也被按成 44×44 —— 问事面板里那两颗勾选框在屏上是 44px 的大蓝方块（实测）。
+   勾选框真正该大的是**包住它的 label 那一行**（整行宽、行高够，点哪都能中），
+   控件本身按 DSH 那套 16px 就行。所以排除 checkbox / radio / range / color。 */
 [class^="xs-"] button, [class*=" xs-"] button,
 [class^="xs-"] a[href], [class*=" xs-"] a[href],
 [class^="xs-"] select, [class*=" xs-"] select,
-[class^="xs-"] input:not([type="hidden"]), [class*=" xs-"] input:not([type="hidden"]),
+[class^="xs-"] input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+[class*=" xs-"] input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
 [class^="xs-"] textarea, [class*=" xs-"] textarea,
 [class^="xs-"] [role="button"], [class*=" xs-"] [role="button"] {
   min-height: 44px;
   min-width: 44px;
+}
+
+/* 勾选框本身按 16px，不吃文本框那套尺寸（点击区交给外层 label）。 */
+[class^="xs-"] input[type="checkbox"], [class*=" xs-"] input[type="checkbox"],
+[class^="xs-"] input[type="radio"], [class*=" xs-"] input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-width: 0;
+  min-height: 0;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
 }
 `;
 

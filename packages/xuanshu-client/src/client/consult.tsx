@@ -435,6 +435,11 @@ function installConsultStyle(): void {
 .xs-consult button:disabled{opacity:.5;cursor:not-allowed}
 .xs-btn--primary{background:var(--xs-accent);border-color:var(--xs-accent);color:var(--xs-accent-fg)}
 .xs-consult input,.xs-consult select,.xs-consult textarea{font:inherit;color:inherit;background:var(--xs-surface-card);border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-control);padding:7px;box-sizing:border-box;max-width:100%}
+/* 2026-11-02：勾选框原来吃着文本框那条规则（padding:7px + border:1px），量出来 44×44，
+   在屏上是个巨大的蓝方块。checkbox 不该有 padding / border，尺寸按 DSH 自己那套 16px。 */
+.xs-consult input[type=checkbox]{width:16px;height:16px;padding:0;margin:0;border:none;border-radius:0;background:none;flex:0 0 auto}
+/* 「临时挂载…」按钮的默认 white-space 是 normal，中文会在任意处断行成两块。 */
+.xs-consult button{white-space:nowrap}
 .xs-consult textarea{display:block;width:100%;min-height:72px}
 .xs-consult__block{border:1px solid var(--xs-edge-card);border-radius:var(--xs-radius-card);padding:var(--xs-space-card-pad);margin:12px 0}
 .xs-consult__row{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--xs-edge-card);flex-wrap:wrap}
