@@ -289,7 +289,7 @@ describe('票 10 · 历史列表（S7 §2.1 / §2.3 / §6）', () => {
     expect(html).toContain('data-xuanshu-action="back-lobby"')
   })
 
-  it('工具栏：搜索框 + 范围三档；导出 / 删除是**置灰的展示位**（契约未冻结这两个 RPC）', () => {
+  it('工具栏：搜索框 + 范围三档；导出 / 删除是**置灰的展示位**（并说明还没做）', () => {
     const html = render(h(XsConsultHistoryList, listProps()))
     expect(html).toContain('data-xuanshu-field="history-search"')
     expect(html).toContain('data-xuanshu-field="history-range"')
@@ -297,7 +297,7 @@ describe('票 10 · 历史列表（S7 §2.1 / §2.3 / §6）', () => {
       const button = tagOf(html, `data-xuanshu-action="${action}"`)
       expect(button, `${action} 未接入时必须置灰而不是假按钮`).toContain('disabled')
     }
-    expect(html).toContain('契约未冻结')
+    expect(html).toContain('还没做，所以这两个按钮是灰的')
   })
 
   it('首次空态：为什么空 + 下一步主按钮 + 次按钮（S7 §2.3①），不写「暂无数据」', () => {

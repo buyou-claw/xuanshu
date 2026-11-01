@@ -2860,13 +2860,13 @@ function XsConsultHistoryList({
           type: "button",
           "data-xuanshu-action": "export-selected",
           disabled: true,
-          title: "契约未冻结导出 RPC（属后续票）",
+          title: "导出还没做（属后续票）",
           children: "导出选中"
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "delete-selected", disabled: true, title: "契约未冻结删除 RPC（属后续票）", children: "删除" })
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "delete-selected", disabled: true, title: "删除还没做（属后续票）", children: "删除" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "contract-scope", children: "契约未冻结导出与删除的 RPC（§2 只有六个方法）：这两个动作先置灰，不做假按钮。" }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "contract-scope", children: "导出与删除还没做，所以这两个按钮是灰的 —— 不是坏了。" }),
     loading ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-state": "loading", children: "正在读本地会话清单…" }) : null,
     error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__error", "data-xuanshu-error": "list", role: "alert", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { children: error }),

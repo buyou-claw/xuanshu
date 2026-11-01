@@ -393,16 +393,21 @@ export function XsConsultHistoryList({
           type="button"
           data-xuanshu-action="export-selected"
           disabled
-          title="契约未冻结导出 RPC（属后续票）"
+          title="导出还没做（属后续票）"
         >
           导出选中
         </button>
-        <button type="button" data-xuanshu-action="delete-selected" disabled title="契约未冻结删除 RPC（属后续票）">
+        <button type="button" data-xuanshu-action="delete-selected" disabled title="删除还没做（属后续票）">
           删除
         </button>
       </div>
+      {/*
+        2026-11-02 改：原来这句是「契约未冻结导出与删除的 RPC（§2 只有六个方法）：这两个动作先置灰，
+        不做假按钮。」—— `RPC`、`§2`、`六个方法` 全是给开发者看的话，用户读到只会觉得莫名其妙。
+        意思其实很简单：这两个动作现在还没做，所以按钮是灰的，不是坏了。
+      */}
       <p className="xs-consult__note" data-xuanshu-note="contract-scope">
-        契约未冻结导出与删除的 RPC（§2 只有六个方法）：这两个动作先置灰，不做假按钮。
+        导出与删除还没做，所以这两个按钮是灰的 —— 不是坏了。
       </p>
 
       {loading ? (
