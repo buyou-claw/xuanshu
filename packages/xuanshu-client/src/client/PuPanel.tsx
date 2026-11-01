@@ -304,6 +304,16 @@ function PuPanel({ ctx, openSession }: { ctx: PuClient; openSession?: (sessionId
   </main>;
 }
 /**
+ * 侧栏「谱」行的图标（与 `cang.tsx` 的 `CangIcon` 同风格：24 视窗、1.5 描边、currentColor）。
+ *
+ * 2026-11-02 加：这个位置原来传的是 `<span aria-hidden="true">谱</span>` —— 一段**文字**。
+ * 侧栏把它当图标渲染，于是「谱」这个字出现了两遍（label 一次、图标一次）。
+ */
+function PuIcon({ size = 20 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2" /><path d="M8.5 8 H15.5" /><path d="M8.5 12 H15.5" /><path d="M8.5 16 H13" /></svg>;
+}
+
+/**
  * 谱面板的**加性**注册（main key `pus` + 侧栏行 `pus`）。
  *
  * 由客户端根入口 `index.tsx` 的 `apply()` 调用（总装配）；单独调用也成立，
@@ -319,7 +329,12 @@ export function installPuPanel(ctx: Context & RpcContext): void {
       readService<{ openSession?(id: string): void }>(ctx, 'uiWorkspace')?.openSession?.(sessionId);
     },
   }) }, PuPanel as never));
-  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: 'pus', order: 40, label: '谱' }, () => <span aria-hidden="true">谱</span>));
+  /**
+   * 2026-11-02 修：第二个参数是**图标槽**，原来传的是 `<span>谱</span>`（文字），
+   * 于是侧栏渲染成「谱 谱」—— label 一个「谱」，图标又一个「谱」。
+   * 对照 `cang.tsx` 的 `CangIcon`：那里传的是正经的 `<svg>`。这里补一个同风格的谱图标。
+   */
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: 'pus', order: 40, label: '谱' }, PuIcon));
   registerStyleSheet('xs-pu-style', `.xs-pu{padding:24px;overflow:auto;height:100%;color:var(--dsw-alias-text-primary);background:var(--dsw-alias-bg-canvas)}.xs-pu header,.xs-pu-toolbar,.xs-pu article{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.xs-pu article{justify-content:space-between;padding:12px;border-bottom:1px solid var(--dsw-alias-border-default)}.xs-pu label{display:block;margin:12px 0}.xs-pu input,.xs-pu select,.xs-pu textarea,.xs-pu button{color:inherit;background:var(--dsw-alias-bg-surface);border:1px solid var(--dsw-alias-border-default);border-radius:8px;padding:8px;font:inherit}.xs-pu button{cursor:pointer;margin:4px}.xs-pu button:disabled{opacity:.5;cursor:default}.xs-pu textarea{display:block;width:100%;min-height:100px;box-sizing:border-box}.xs-pu .xs-pu-body{min-height:220px;font-family:monospace}.xs-pu-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px}.xs-pu section{margin:24px 0}.xs-pu [role=alert]{padding:12px;border:1px solid var(--dsw-alias-border-danger)}@media(max-width: ${BREAKPOINT_WIDE_PX}px){.xs-pu-detail{grid-template-columns:1fr}.xs-pu{padding:16px}}`)
   installXuanshuStyles()
 }

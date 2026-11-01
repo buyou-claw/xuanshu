@@ -3413,6 +3413,14 @@ ${draft.body}`, summaryOnly: true });
     ] })
   ] });
 }
+function PuIcon({ size = 20 }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("rect", { x: "5", y: "3.5", width: "14", height: "17", rx: "2" }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("path", { d: "M8.5 8 H15.5" }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("path", { d: "M8.5 12 H15.5" }),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("path", { d: "M8.5 16 H13" })
+  ] });
+}
 function installPuPanel(ctx) {
   ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: "pus", inject: () => ({
     ctx,
@@ -3421,7 +3429,7 @@ function installPuPanel(ctx) {
       readService(ctx, "uiWorkspace")?.openSession?.(sessionId);
     }
   }) }, PuPanel));
-  ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: "pus", order: 40, label: "谱" }, () => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { "aria-hidden": "true", children: "谱" })));
+  ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: "pus", order: 40, label: "谱" }, PuIcon));
   registerStyleSheet("xs-pu-style", `.xs-pu{padding:24px;overflow:auto;height:100%;color:var(--dsw-alias-text-primary);background:var(--dsw-alias-bg-canvas)}.xs-pu header,.xs-pu-toolbar,.xs-pu article{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.xs-pu article{justify-content:space-between;padding:12px;border-bottom:1px solid var(--dsw-alias-border-default)}.xs-pu label{display:block;margin:12px 0}.xs-pu input,.xs-pu select,.xs-pu textarea,.xs-pu button{color:inherit;background:var(--dsw-alias-bg-surface);border:1px solid var(--dsw-alias-border-default);border-radius:8px;padding:8px;font:inherit}.xs-pu button{cursor:pointer;margin:4px}.xs-pu button:disabled{opacity:.5;cursor:default}.xs-pu textarea{display:block;width:100%;min-height:100px;box-sizing:border-box}.xs-pu .xs-pu-body{min-height:220px;font-family:monospace}.xs-pu-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px}.xs-pu section{margin:24px 0}.xs-pu [role=alert]{padding:12px;border:1px solid var(--dsw-alias-border-danger)}@media(max-width: ${BREAKPOINT_WIDE_PX}px){.xs-pu-detail{grid-template-columns:1fr}.xs-pu{padding:16px}}`);
   installXuanshuStyles();
 }
