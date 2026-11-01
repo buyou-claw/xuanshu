@@ -217,7 +217,8 @@ function PuPanel({ ctx, openSession }: { ctx: PuClient; openSession?: (sessionId
     pendingJob = created; pendingView = 'create'; pendingSelected = undefined; setJob(created); setStep(3);
   });
   const filtered = rows.filter(p => (!level || p.level === level) && (!source || p.source === source) && (!query || `${p.name}\n${p.description}\n${p.body}`.toLowerCase().includes(query.toLowerCase())));
-  return <main className="xs-pu" aria-label="谱管理">
+  /* 2026-11-02：补 `data-xuanshu-panel`（其余九个面都有，谱与工作流两个没有；同因见 WorkflowPanel 的注释）。 */
+  return <main className="xs-pu" data-xuanshu-panel="pus" aria-label="谱管理">
     <header><h1>{view === 'create' ? '创建新谱' : view === 'detail' ? `谱管理 / ${selected?.name}` : '谱管理'}</h1>{view !== 'list' && <button onClick={back}>← 返回列表</button>}</header>
     {error && <div role="alert">{error} <button onClick={() => void reload()}>重试</button><p>数据目录：$DSH_HOME/xuanshu/pus/</p></div>}
     {view === 'list' && <>

@@ -147,7 +147,10 @@ export function WorkflowPanel({ api, navigate, preloaded }: WorkflowPanelProps) 
   const { running, exported: exportedItems } = splitWorkflows(view.kind === 'ready' ? view.items : []);
 
   return (
-    <section className="xs-workflow" aria-label={WORKFLOW_LABEL}>
+    /* 2026-11-02：补 `data-xuanshu-panel`。其余九个面都有这个属性，谱与工作流两个没有 ——
+       于是任何按属性判定「当前在哪一屏」的东西（巡检脚本、无障碍检查、我的实测）都会看漏它们，
+       我自己就为此误判过两次（以为「点了快捷入口没反应」）。 */
+    <section className="xs-workflow" data-xuanshu-panel="workflow" aria-label={WORKFLOW_LABEL}>
       <header className="xs-workflow__head">
         <h1 className="xs-workflow__title">{WORKFLOW_LABEL}</h1>
         <button type="button" className="xs-workflow__create" onClick={onCreate} disabled={busy}>

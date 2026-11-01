@@ -3205,7 +3205,7 @@ function PuPanel({ ctx, openSession }) {
   const filtered = rows.filter((p) => (!level || p.level === level) && (!source || p.source === source) && (!query || `${p.name}
 ${p.description}
 ${p.body}`.toLowerCase().includes(query.toLowerCase())));
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("main", { className: "xs-pu", "aria-label": "谱管理", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("main", { className: "xs-pu", "data-xuanshu-panel": "pus", "aria-label": "谱管理", children: [
     /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("header", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h1", { children: view === "create" ? "创建新谱" : view === "detail" ? `谱管理 / ${selected?.name}` : "谱管理" }),
       view !== "list" && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { onClick: back, children: "← 返回列表" })
@@ -9289,81 +9289,86 @@ function WorkflowPanel({ api, navigate, preloaded }) {
     })();
   };
   const { running, exported: exportedItems } = splitWorkflows(view.kind === "ready" ? view.items : []);
-  return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "xs-workflow", "aria-label": WORKFLOW_LABEL, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("header", { className: "xs-workflow__head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h1", { className: "xs-workflow__title", children: WORKFLOW_LABEL }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__create", onClick: onCreate, disabled: busy, children: busy ? "创建中…" : "创建工作流" })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__note", children: WORKFLOW_BOUNDARY_NOTE }),
-    createError !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", role: "alert", children: [
-      "创建工作流失败：",
-      createError
-    ] }) : null,
-    view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: "正在读工作流列表…" }) : null,
-    view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__alert", role: "alert", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", children: [
-        "工作流列表读不出来：",
-        view.message
+  return (
+    /* 2026-11-02：补 `data-xuanshu-panel`。其余九个面都有这个属性，谱与工作流两个没有 ——
+       于是任何按属性判定「当前在哪一屏」的东西（巡检脚本、无障碍检查、我的实测）都会看漏它们，
+       我自己就为此误判过两次（以为「点了快捷入口没反应」）。 */
+    /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("section", { className: "xs-workflow", "data-xuanshu-panel": "workflow", "aria-label": WORKFLOW_LABEL, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("header", { className: "xs-workflow__head", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h1", { className: "xs-workflow__title", children: WORKFLOW_LABEL }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__create", onClick: onCreate, disabled: busy, children: busy ? "创建中…" : "创建工作流" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__retry", "data-xuanshu-action": "retry-list", onClick: load, children: "重试" })
-    ] }) : null,
-    view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: "还没有工作流：点上面的「创建工作流」说清要求，用会话里的 coding 工具真跑一遍，你觉得跑通了再来导出。" }) : null,
-    running.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__group", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h2", { className: "xs-workflow__groupTitle", children: "进行中" }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("ul", { className: "xs-workflow__list", children: running.map((item) => /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("li", { className: "xs-workflow__item", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "xs-workflow__name", children: item.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "xs-workflow__sub", children: workflowSubtitle(item) }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__open", onClick: () => {
-          setDraft((current) => ({ ...current, sessionId: item.sessionId }));
-          navigate("conversation");
-        }, children: "打开会话" }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__pick", onClick: () => setDraft((current) => ({ ...current, sessionId: item.sessionId, name: current.name })), children: "选它导出" })
-      ] }, item.id)) })
-    ] }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__group", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h2", { className: "xs-workflow__groupTitle", children: "判定与导出" }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__rule", children: WORKFLOW_HUMAN_JUDGE_NOTE }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: WORKFLOW_EXPORT_HINT }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("label", { className: "xs-workflow__field", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "会话" }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("input", { value: draft.sessionId, onChange: (event) => setDraft((current) => ({ ...current, sessionId: event.target.value })), placeholder: "session-xs-workflow-…" })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("label", { className: "xs-workflow__field", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "名字" }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("input", { value: draft.name, onChange: (event) => setDraft((current) => ({ ...current, name: event.target.value })), placeholder: "weekly-industry-digest" })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("label", { className: "xs-workflow__field", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "description" }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("input", { value: draft.description, onChange: (event) => setDraft((current) => ({ ...current, description: event.target.value })), placeholder: "一句话说清这个工作流做什么" })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("label", { className: "xs-workflow__field", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "正文" }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("textarea", { value: draft.content, onChange: (event) => setDraft((current) => ({ ...current, content: event.target.value })), rows: 6, placeholder: "把会话里跑通的那套步骤写进来（SKILL.md 的正文）" })
-      ] }),
-      blockers.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("ul", { className: "xs-workflow__blockers", children: blockers.map((reason) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("li", { children: reason }, reason)) }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__export", onClick: onExport, disabled: busy || blockers.length > 0, children: "我认为跑通了 → 导出 skill" }),
-      exportError !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", role: "alert", children: [
-        "导出失败：",
-        exportError
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__note", children: WORKFLOW_BOUNDARY_NOTE }),
+      createError !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", role: "alert", children: [
+        "创建工作流失败：",
+        createError
       ] }) : null,
-      exported !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__done", children: [
-        "已导出 ",
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("code", { children: exported.name }),
-        " → ",
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("code", { children: exported.path }),
-        "（在 DSH 技能中心里可见，来源 user-dsh）"
-      ] }) : null
-    ] }),
-    exportedItems.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__group", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h2", { className: "xs-workflow__groupTitle", children: "已导出" }),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("ul", { className: "xs-workflow__list", children: exportedItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("li", { className: "xs-workflow__item", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "xs-workflow__name", children: item.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "xs-workflow__sub", children: workflowSubtitle(item) })
-      ] }, item.id)) })
-    ] }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__note", children: WORKFLOW_OUT_OF_SCOPE_NOTE }),
-    /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__note", children: WORKFLOW_LOCAL_NOTE })
-  ] });
+      view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: "正在读工作流列表…" }) : null,
+      view.kind === "error" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__alert", role: "alert", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", children: [
+          "工作流列表读不出来：",
+          view.message
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__retry", "data-xuanshu-action": "retry-list", onClick: load, children: "重试" })
+      ] }) : null,
+      view.kind === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: "还没有工作流：点上面的「创建工作流」说清要求，用会话里的 coding 工具真跑一遍，你觉得跑通了再来导出。" }) : null,
+      running.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__group", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h2", { className: "xs-workflow__groupTitle", children: "进行中" }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("ul", { className: "xs-workflow__list", children: running.map((item) => /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("li", { className: "xs-workflow__item", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "xs-workflow__name", children: item.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "xs-workflow__sub", children: workflowSubtitle(item) }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__open", onClick: () => {
+            setDraft((current) => ({ ...current, sessionId: item.sessionId }));
+            navigate("conversation");
+          }, children: "打开会话" }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__pick", onClick: () => setDraft((current) => ({ ...current, sessionId: item.sessionId, name: current.name })), children: "选它导出" })
+        ] }, item.id)) })
+      ] }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__group", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h2", { className: "xs-workflow__groupTitle", children: "判定与导出" }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__rule", children: WORKFLOW_HUMAN_JUDGE_NOTE }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", children: WORKFLOW_EXPORT_HINT }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("label", { className: "xs-workflow__field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "会话" }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("input", { value: draft.sessionId, onChange: (event) => setDraft((current) => ({ ...current, sessionId: event.target.value })), placeholder: "session-xs-workflow-…" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("label", { className: "xs-workflow__field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "名字" }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("input", { value: draft.name, onChange: (event) => setDraft((current) => ({ ...current, name: event.target.value })), placeholder: "weekly-industry-digest" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("label", { className: "xs-workflow__field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "description" }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("input", { value: draft.description, onChange: (event) => setDraft((current) => ({ ...current, description: event.target.value })), placeholder: "一句话说清这个工作流做什么" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("label", { className: "xs-workflow__field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { children: "正文" }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("textarea", { value: draft.content, onChange: (event) => setDraft((current) => ({ ...current, content: event.target.value })), rows: 6, placeholder: "把会话里跑通的那套步骤写进来（SKILL.md 的正文）" })
+        ] }),
+        blockers.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("ul", { className: "xs-workflow__blockers", children: blockers.map((reason) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("li", { children: reason }, reason)) }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__export", onClick: onExport, disabled: busy || blockers.length > 0, children: "我认为跑通了 → 导出 skill" }),
+        exportError !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", role: "alert", children: [
+          "导出失败：",
+          exportError
+        ] }) : null,
+        exported !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__done", children: [
+          "已导出 ",
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("code", { children: exported.name }),
+          " → ",
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("code", { children: exported.path }),
+          "（在 DSH 技能中心里可见，来源 user-dsh）"
+        ] }) : null
+      ] }),
+      exportedItems.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "xs-workflow__group", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h2", { className: "xs-workflow__groupTitle", children: "已导出" }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("ul", { className: "xs-workflow__list", children: exportedItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("li", { className: "xs-workflow__item", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "xs-workflow__name", children: item.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "xs-workflow__sub", children: workflowSubtitle(item) })
+        ] }, item.id)) })
+      ] }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__note", children: WORKFLOW_OUT_OF_SCOPE_NOTE }),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__note", children: WORKFLOW_LOCAL_NOTE })
+    ] })
+  );
 }
 function WorkflowIcon({ size = 20 }) {
   return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
