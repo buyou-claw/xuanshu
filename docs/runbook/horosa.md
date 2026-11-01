@@ -390,16 +390,36 @@ INFO - Tomcat started on port(s): 9999 (http) with context path ''
 > 要看进度就翻它自己的 appender 文件：`<HOME>/.horosa-logs/astrostudyboot/<年>/<月>/<日>/spring/spring.log`
 > 与 `.../info/info.log`（`org.springframework` 那条 logger 是 `level="info"`）。
 
-**第三个坑：`degraded: chart-only` 的真因不是 bug，是缺 MongoDB。**
-Tomcat 起来之后请求仍永不返回（60 秒超时 × 3），因为：
+#### Java 侧后两个坑：Mongo 存在 + 主机名解析
+
+Tomcat 起来之后请求仍**永不返回**（`/common/time` 连试三次都 60 秒超时），日志里只有：
 
 ```
 INFO - create cachefactory with name:bazi, of class:boundless.types.cache.MongoCacheFactory
 ```
 
-**连 `bazi` 缓存都是 `MongoCacheFactory`**，而本机 27017 没有服务在听 → 每个请求都堵在连 Mongo 上。
-所以这套 Java 后端**离开 Mongo 不能提供服务**；要验 Java 侧技法，先起一个 Mongo。
-（玄枢的出盘不需要它 —— chart 侧（Python 的 8899）独立给四柱与口径，`degraded: chart-only` 下照样出盘。）
+**连 `bazi` 缓存都挂在 Mongo 上**。于是：
+
+| # | 症状 | 真因 | 处置 |
+|---|---|---|---|
+| c | 请求 60 秒超时 | 本机 27017 **没有任何服务在听** | 起一个 mongod（实测 v8.0.4：`mongod --dbpath <E盘>\mongo-data --port 27017 --bind_ip 127.0.0.1`） |
+| d | Mongo 起来了，**仍然 60 秒超时** | `conf/properties/cache/bazi.properties` 里写的是 **`mongodb.ip=mongodb.host`** —— 一个上游假设的 DNS 名，本机 `No such host is known` | hosts 加一行 **`127.0.0.1 mongodb.host`**（`C:\Windows\System32\drivers\etc\hosts`） |
+
+**d 修完之后，症状从「60 秒超时」直接变成「7 毫秒应答」：**
+
+```
+/common/time  →  HTTP 500, 212ms（第一次）/ 7ms（第二次）/ 9ms（第三次）
+                 {"ResultCode": 9999, "Result": "no.register.app.in.sys.forapp%3A"}
+```
+
+那个 500 是**业务层**的（「应用未在系统注册」），基础设施已经全通。
+
+> **注意哪些 cache 配置用的是 `127.0.0.1`**：`onlineclient` / `dlbazifeature` / `dlsample10000` 这几个本来就写 `127.0.0.1`；
+> 其余（含 `bazi`、`mongochart`、`books`、`userbooks`、`adminuser`、`clientapps`、`mongonongli`、`mongopredictive`、`mongotranslog`）
+> 全写 `mongodb.host`。所以**光改哪个配置文件没用** —— 得让那个主机名能解析。
+
+> 玄枢的出盘**不需要**这套 Java 后端：chart 侧（Python 的 8899）独立给四柱与口径，
+> `degraded: chart-only` 下照样出盘（实测庚午 辛巳 乙酉 庚辰）。Java 侧只是额外技法。
 > 顺带一条**界面**：`js_engine.cli_missing` 这类上游 code 会一路冒到玄枢界面的 `八字出盘失败：…` 行。
 > 前缀已改成「出盘引擎返回了失败（错误码 …）」，上游 message 原样保留（那才是能搜的东西）。
 ## 8. 「非回环不暴露」
