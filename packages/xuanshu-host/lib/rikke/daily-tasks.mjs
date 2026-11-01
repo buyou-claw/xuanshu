@@ -195,7 +195,14 @@ export async function updateDailyTime({ ctx, title, time }) {
     if (result?.updated !== true) {
       // 2026-11-01 改：原文把 `result.code`（`invalid_rule` 这种内部码）直接拼进用户能读的句子里。
       // 用户拿这个码什么也做不了；他能做的是「刷新再试」，再不行就是这台机器的定时服务不收这次改动。
-      return { ok: false, schedule: null, reason: '定时时间没改成功：这条 daily 任务可能已被改过或已停用。刷新页面再试一次；还是不行就是这台机器上的定时服务不接受这次改动。' }
+      // 2026-11-01：把 DSH 给的 `message` 留下来（进 diagnostic，不拼进给用户看的那句）。
+      // `invalid_rule` 一个码对应四五条不同校验，丢掉 message 等于丢掉唯一能定位的那句话。
+      return {
+        ok: false,
+        schedule: null,
+        reason: '定时时间没改成功：这条 daily 任务可能已被改过或已停用。刷新页面再试一次；还是不行就是这台机器上的定时服务不接受这次改动。',
+        diagnostic: { code: result?.code ?? null, message: result?.message ?? null },
+      }
     }
     return { ok: true, schedule: scheduleSummary(result.record ?? observed), reason: null }
   } catch (error) {
