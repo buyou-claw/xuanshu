@@ -270,7 +270,28 @@ function PuPanel({ ctx, openSession }: { ctx: PuClient; openSession?: (sessionId
         const saved = await call<Pu>('pu.update', { slug: selected.slug, draft, confirmed: true }); setSelected(saved); setDraft(saved); setOriginal(JSON.stringify(saved)); await reload();
       })}>保存</button>
       <button disabled={busy || job?.status === 'running'} onClick={() => void run(async () => { const created = await call<Job>('pu.generate', { name: draft.name, level: draft.level, text: `# 当前谱\n${draft.description}\n${draft.body}`, summaryOnly: true }); pendingJob = created; pendingView = 'detail'; pendingSelected = { ...selected, ...draft }; setJob(created); })}>重建 summary（AI 提炼）</button>
+      {/*
+        2026-11-02 加提示：点「重建 summary」等十几秒后，**汇总框里的内容一个字都没变**
+        （AI 只是生成了「候选」，不自动覆盖人写的东西），旁边悄悄多出一个「采用候选汇总」按钮。
+        实测时我自己都以为重建失败了 —— 用户更不会去猜「多了个按钮就是成功」。
+        所以分三态说清楚：正在提炼 / 提炼好了等你采用 / 提炼失败。
+      */}
+      {job?.status === 'running' ? (
+        <p className="xs-pu__note" role="status" data-xuanshu-note="summary-rebuilding">
+          正在让 AI 重新提炼汇总…（原来的汇总先不动，提炼完你决定要不要采用）
+        </p>
+      ) : null}
       {job?.status === 'ready' && job.draft && <button onClick={() => { field('summary', job.draft!.summary); pendingJob = undefined; setJob(undefined); }}>采用候选汇总（保存后落盘）</button>}
+      {job?.status === 'ready' && job.draft ? (
+        <p className="xs-pu__note" role="status" data-xuanshu-note="summary-candidate">
+          新汇总已经提炼好了（还在这个框外面）：点「采用候选汇总」才会替换上面的内容，替换后还要点「保存」才真正写入文件。
+        </p>
+      ) : null}
+      {job?.status === 'error' ? (
+        <p className="xs-pu__error" role="alert" data-xuanshu-note="summary-failed">
+          重建没有成功：{job.error ?? '没有给出原因'}
+        </p>
+      ) : null}
     </>}
     {view === 'create' && <><p aria-label="创建步骤">① 给资料 → ② 定义谱名 → ③ AI 转换中 → ④ 生成预览 → ⑤ 确认落盘</p>
       {step === 1 && <><label>资料文字<textarea value={text} onChange={e => setText(e.target.value)} placeholder="把你知道的先写进来" /></label><label>附件（MD / PDF / 任意文件）<input type="file" multiple onChange={e => setFiles(Array.from(e.target.files ?? []))} /></label><ul>{files.map((f, i) => <li key={i}>{f.name}</li>)}</ul><p>{/* 2026-11-01：原文「语音输入 v2 再做」把版本计划写给了用户。用户不关心哪个版本做，只关心现在能不能用语音 —— 所以直说现在支持什么。 */}暂时只支持文字与附件；语音还没做。</p><button disabled={!text.trim() && !files.length} onClick={() => setStep(2)}>下一步</button></>}

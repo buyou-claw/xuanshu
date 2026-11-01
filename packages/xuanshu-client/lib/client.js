@@ -3336,11 +3336,17 @@ ${draft.body}`, summaryOnly: true });
         pendingSelected = { ...selected, ...draft };
         setJob(created);
       }), children: "重建 summary（AI 提炼）" }),
+      job?.status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-pu__note", role: "status", "data-xuanshu-note": "summary-rebuilding", children: "正在让 AI 重新提炼汇总…（原来的汇总先不动，提炼完你决定要不要采用）" }) : null,
       job?.status === "ready" && job.draft && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { onClick: () => {
         field("summary", job.draft.summary);
         pendingJob = void 0;
         setJob(void 0);
-      }, children: "采用候选汇总（保存后落盘）" })
+      }, children: "采用候选汇总（保存后落盘）" }),
+      job?.status === "ready" && job.draft ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-pu__note", role: "status", "data-xuanshu-note": "summary-candidate", children: "新汇总已经提炼好了（还在这个框外面）：点「采用候选汇总」才会替换上面的内容，替换后还要点「保存」才真正写入文件。" }) : null,
+      job?.status === "error" ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "xs-pu__error", role: "alert", "data-xuanshu-note": "summary-failed", children: [
+        "重建没有成功：",
+        job.error ?? "没有给出原因"
+      ] }) : null
     ] }),
     view === "create" && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { "aria-label": "创建步骤", children: "① 给资料 → ② 定义谱名 → ③ AI 转换中 → ④ 生成预览 → ⑤ 确认落盘" }),
