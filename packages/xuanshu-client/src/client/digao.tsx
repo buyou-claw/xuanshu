@@ -297,6 +297,15 @@ export function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }
         >
           {raw ? '收起 MD 形态' : '查看 MD 形态'}
         </button>
+        {/*
+          2026-11-02 加：上面那行写着「由『自动化任务』面板里的 daily 任务决定（可在那里改或停用）」，
+          但**没有指过去的路** —— 日课与晚省面板都有 `[打开自动化任务面板]`，只有底稿没有。
+          实测：`digao.setTime` 是「未知玄枢操作」（底稿那条任务不由玄枢播种，改不了），
+          要改只能去 DSH 那个面板。补一个入口，别让人自己找侧栏。
+        */}
+        <button type="button" data-xuanshu-nav="schedules" onClick={() => { navigate('schedules'); }}>
+          打开自动化任务面板
+        </button>
       </div>
 
       {note === undefined ? null : (

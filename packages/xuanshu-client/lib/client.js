@@ -5981,7 +5981,10 @@ function DigaoPanel({ api, shiji, navigate, preloaded, preloadedRawView }) {
           },
           children: raw ? "收起 MD 形态" : "查看 MD 形态"
         }
-      )
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", "data-xuanshu-nav": "schedules", onClick: () => {
+        navigate("schedules");
+      }, children: "打开自动化任务面板" })
     ] }),
     note === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "xs-digao__alert", role: "alert", "data-xuanshu-alert": "refresh", children: note }),
     view.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "xs-digao__note", "data-xuanshu-view": "loading", children: "正在读底稿…" }) : null,
