@@ -12,7 +12,7 @@
  * （`openSection` 只经 `settings.onboarding` 的 owner props 下发；见票 28 侦察 §5.3），
  * 所以没有 handler 时只显示逐字路径文本。**绝不渲染一个点了没反应的按钮**——那正是本票要修的 bug。
  */
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import { AI_SETTINGS_PATH } from './ai-model.js';
 import type { AiReadiness, AiReadinessController, AiReadinessSnapshot } from './ai-model.js';
@@ -123,6 +123,11 @@ export interface XsAiReadinessProps {
   onFinish?: () => void;
   /** 任何状态都能跳过（不把人卡在读不到里）。 */
   onSkip?: () => void;
+  /**
+   * 2026-11-02 加：真发一次最小请求，看 AI 到底能不能用。
+   * 不给就不渲染按钮（绝不渲染一个点了没反应的按钮）。
+   */
+  onProbe?: () => Promise<{ ok: boolean; ms: number; route?: { provider: string; model: string }; reply?: string; reason?: string }>
 }
 
 /**
@@ -137,9 +142,25 @@ export function XsAiReadiness({
   onOpenSettings,
   onFinish,
   onSkip,
+  onProbe,
 }: XsAiReadinessProps) {
   const state = viewStateOf(readiness, checking);
   const title = STATE_TITLE[state];
+  /** 「试一下」的三态：未点 / 正在试 / 有结果。 */
+  const [probing, setProbing] = useState(false);
+  const [probe, setProbe] = useState<{ ok: boolean; ms: number; route?: { provider: string; model: string }; reply?: string; reason?: string } | undefined>(undefined);
+  const runProbe = async (): Promise<void> => {
+    if (onProbe === undefined || probing) return;
+    setProbing(true);
+    setProbe(undefined);
+    try {
+      setProbe(await onProbe());
+    } catch (error: unknown) {
+      setProbe({ ok: false, ms: 0, reason: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setProbing(false);
+    }
+  };
 
   return (
     <section className="xs-ai" data-xuanshu-ai="readiness" data-xs-state={state}>
@@ -199,6 +220,23 @@ export function XsAiReadiness({
           </button>
         )}
         {/*
+          2026-11-02 加：「试一下 AI」。
+          上面那一整块（状态、provider 清单、默认模型）都是**看配置清单**得出的，
+          从来没有真发过一次请求。实测有过界面写「AI 配置齐了」、真用时却 401 的情况，
+          排查花了三个小时 —— 有这个按钮，三十秒就能看出来。
+        */}
+        {onProbe === undefined ? null : (
+          <button
+            type="button"
+            className="xs-btn"
+            data-xuanshu-action="probe-ai"
+            disabled={probing}
+            onClick={() => { void runProbe(); }}
+          >
+            {probing ? '正在试…' : '试一下能不能用'}
+          </button>
+        )}
+        {/*
           2026-11-02 修：原来这里没传 `showFallback`，默认 true —— 于是**已经接上 AI** 时，
           向导第 6 步仍然顶着「已接上 AI · 可以问事了」的标题，底下又写「请打开 DSH「设置 → 模型」
           配置 provider 与默认模型。」，旁边还杵着一个「重试」。用户读到的是两句互相打脸的话。
@@ -221,8 +259,23 @@ export function XsAiReadiness({
         )}
       </div>
 
+      {/*
+        探测结果：只说三件事 —— 通没通、走的哪条路由用了多久、失败的话原因是什么。
+        失败原因原样带出来（401 / 超时 / 没有路由），这正是用户需要看到的。
+      */}
+      {probe === undefined ? null : probe.ok ? (
+        <p className="xs-ai__note" role="status" data-xuanshu-ai-probe="ok">
+          {`通了：${probe.route === undefined ? '（路由未报）' : `${probe.route.provider} · ${probe.route.model}`}，`
+            + `耗时 ${(probe.ms / 1000).toFixed(1)} 秒，回的是「${probe.reply === undefined || probe.reply === '' ? '（空）' : probe.reply}」。`}
+        </p>
+      ) : (
+        <p className="xs-ai__error" role="alert" data-xuanshu-ai-probe="failed">
+          {`没通：${probe.reason ?? '没有给出原因'}`}
+        </p>
+      )}
+
       <p className="xs-ai__note" data-xuanshu-ai-note="readonly">
-        检测只读：玄枢只读路由清单，不写 provider 配置与密钥。
+        检测只读：玄枢只读路由清单，不写 provider 配置与密钥。（「试一下能不能用」会真发一句最短的话，除此之外不做任何事。）
       </p>
     </section>
   );

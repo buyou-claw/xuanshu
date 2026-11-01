@@ -88,6 +88,7 @@ import { createTrafficMethods } from './notify/service.mjs';
 // #25：晚省的四个 RPC（确定性事实，不调模型）。
 import { createWanshengMethods } from './wansheng/service.mjs';
 import { createPuMethods, installPuSkill } from './pu/service.mjs';
+import { createAiProbeMethods } from './llm/probe.mjs';
 import { DEFAULT_TIME_ZONE, installDailyTasks } from './rikke/daily-tasks.mjs';
 import { baseZone, createRikkeMethods } from './rikke/service.mjs';
 import { installRpc } from './rpc.mjs';
@@ -620,6 +621,9 @@ export function apply(ctx, config) {
     installSedimentSkill(ctx);
     installRpc(ctx, {
       ...createPuMethods(ctx, { dataDir }),
+      // 2026-11-02：「试一下 AI」—— 真发一次最小请求，如实报告路由/耗时/失败原因。
+      // 整条链路（DSH 模型页 + 玄枢 AI 状态）都只看配置清单，这里是唯一一处真跑一次的地方。
+      ...createAiProbeMethods(ctx),
       ...createCangMethods(ctx, { dataDir }),
       // 票 08：八字出盘 / 快照 / 底座谱 / 城市库 / 时区（契约 §2 的六个 bazi.* 方法）。
       // 出盘只走票 06 装出来的 `xuanshuHorosa` 服务（上面 installHorosa 已 provide 它），

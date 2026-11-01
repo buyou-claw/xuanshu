@@ -659,6 +659,8 @@ export interface XsAiStepProps {
   onFinish: () => void;
   /** 任何状态都能跳过；跳过后入口仍禁用（说明在下面那行）。 */
   onSkip: () => void;
+  /** 2026-11-02：真发一次最小请求，看 AI 能不能用。 */
+  onProbe?: () => Promise<{ ok: boolean; ms: number; route?: { provider: string; model: string }; reply?: string; reason?: string }>
 }
 
 export function XsAiStep({
@@ -668,6 +670,7 @@ export function XsAiStep({
   onOpenSettings,
   onFinish,
   onSkip,
+  onProbe,
 }: XsAiStepProps) {
   const configured = readiness?.configured === true;
   return (
@@ -689,6 +692,7 @@ export function XsAiStep({
         {...(onOpenSettings === undefined ? {} : { onOpenSettings })}
         onFinish={onFinish}
         onSkip={onSkip}
+        {...(onProbe === undefined ? {} : { onProbe })}
       />
       {configured ? null : (
         <p className="xs-ai__note" data-xuanshu-ai-skip="missing">

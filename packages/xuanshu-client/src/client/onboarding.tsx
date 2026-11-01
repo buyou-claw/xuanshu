@@ -45,6 +45,7 @@ import type { AiReadinessController } from './ai-model.js';
 import { useAiReadiness } from './ai-views.js';
 import { ONBOARDING_ID, ONBOARDING_LABEL, ONBOARDING_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
+import { rpcCall } from './rpc.js';
 import type { RpcContext } from './rpc.js';
 
 /** 手输被忽略时的提示（非法值忽略不回填，但要让人知道发生了什么）。 */
@@ -314,6 +315,10 @@ export function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiS
           checking={aiSnapshot?.checking === true}
           {...(aiStatus === undefined ? {} : { onRetry: () => { void aiStatus.refresh(); } })}
           {...(onOpenAiSettings === undefined ? {} : { onOpenSettings: onOpenAiSettings })}
+          /**
+           * 2026-11-02 加：真发一次最小请求。整条链路平时只看配置清单，这里是唯一一处真跑。
+           */
+          onProbe={async () => rpcCall<{ ok: boolean; ms: number; route?: { provider: string; model: string }; reply?: string; reason?: string }>({}, 'ai.probe')}
           onFinish={leaveAiStep}
           onSkip={leaveAiStep}
         />

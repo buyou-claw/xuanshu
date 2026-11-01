@@ -4115,10 +4115,25 @@ function XsAiReadiness({
   onRetry,
   onOpenSettings,
   onFinish,
-  onSkip
+  onSkip,
+  onProbe
 }) {
   const state = viewStateOf(readiness, checking);
   const title = STATE_TITLE[state];
+  const [probing, setProbing] = (0, import_react9.useState)(false);
+  const [probe, setProbe] = (0, import_react9.useState)(void 0);
+  const runProbe = async () => {
+    if (onProbe === void 0 || probing) return;
+    setProbing(true);
+    setProbe(void 0);
+    try {
+      setProbe(await onProbe());
+    } catch (error) {
+      setProbe({ ok: false, ms: 0, reason: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setProbing(false);
+    }
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("section", { className: "xs-ai", "data-xuanshu-ai": "readiness", "data-xs-state": state, children: [
     /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__status", "data-xuanshu-ai-status": state, children: title }),
     state === "checking" ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__note", children: "正在读路由清单（只读检测，不写任何配置）。" }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
@@ -4147,6 +4162,19 @@ function XsAiReadiness({
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-ai__actions", children: [
       onRetry === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "xs-btn", "data-xuanshu-action": "retry-ai", onClick: onRetry, children: "重试" }),
+      onProbe === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "xs-btn",
+          "data-xuanshu-action": "probe-ai",
+          disabled: probing,
+          onClick: () => {
+            void runProbe();
+          },
+          children: probing ? "正在试…" : "试一下能不能用"
+        }
+      ),
       /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
         AiSettingsAction,
         {
@@ -4157,7 +4185,8 @@ function XsAiReadiness({
       onFinish === void 0 || state !== "configured" ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "xs-btn xs-btn--primary", "data-xuanshu-action": "finish-ai", onClick: onFinish, children: "完成，回总览 ->" }),
       onSkip === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "xs-btn", "data-xuanshu-action": "skip-ai", onClick: onSkip, children: "跳过" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__note", "data-xuanshu-ai-note": "readonly", children: "检测只读：玄枢只读路由清单，不写 provider 配置与密钥。" })
+    probe === void 0 ? null : probe.ok ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__note", role: "status", "data-xuanshu-ai-probe": "ok", children: `通了：${probe.route === void 0 ? "（路由未报）" : `${probe.route.provider} · ${probe.route.model}`}，耗时 ${(probe.ms / 1e3).toFixed(1)} 秒，回的是「${probe.reply === void 0 || probe.reply === "" ? "（空）" : probe.reply}」。` }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__error", role: "alert", "data-xuanshu-ai-probe": "failed", children: `没通：${probe.reason ?? "没有给出原因"}` }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__note", "data-xuanshu-ai-note": "readonly", children: "检测只读：玄枢只读路由清单，不写 provider 配置与密钥。（「试一下能不能用」会真发一句最短的话，除此之外不做任何事。）" })
   ] });
 }
 function XsAiGate({ readiness, checking = false, onRetry, onOpenSettings }) {
@@ -7808,7 +7837,8 @@ function XsAiStep({
   onRetry,
   onOpenSettings,
   onFinish,
-  onSkip
+  onSkip,
+  onProbe
 }) {
   const configured = readiness?.configured === true;
   return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
@@ -7830,7 +7860,8 @@ function XsAiStep({
             onRetry,
             ...onOpenSettings === void 0 ? {} : { onOpenSettings },
             onFinish,
-            onSkip
+            onSkip,
+            ...onProbe === void 0 ? {} : { onProbe }
           }
         ),
         configured ? null : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { className: "xs-ai__note", "data-xuanshu-ai-skip": "missing", children: "跳过后问事入口仍禁用，并指向「设置 → 模型」——随时可以在总览或向导里重新检测。" })
@@ -8044,6 +8075,7 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiStatus, 
           void aiStatus.refresh();
         } },
         ...onOpenAiSettings === void 0 ? {} : { onOpenSettings: onOpenAiSettings },
+        onProbe: async () => rpcCall({}, "ai.probe"),
         onFinish: leaveAiStep,
         onSkip: leaveAiStep
       }
