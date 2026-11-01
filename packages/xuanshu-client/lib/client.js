@@ -4186,7 +4186,7 @@ function XsAiReadiness({
       onSkip === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "xs-btn", "data-xuanshu-action": "skip-ai", onClick: onSkip, children: "跳过" })
     ] }),
     probe === void 0 ? null : probe.ok ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__note", role: "status", "data-xuanshu-ai-probe": "ok", children: `通了：${probe.route === void 0 ? "（路由未报）" : `${probe.route.provider} · ${probe.route.model}`}，耗时 ${(probe.ms / 1e3).toFixed(1)} 秒，回的是「${probe.reply === void 0 || probe.reply === "" ? "（空）" : probe.reply}」。` }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__error", role: "alert", "data-xuanshu-ai-probe": "failed", children: `没通：${probe.reason ?? "没有给出原因"}` }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__note", "data-xuanshu-ai-note": "readonly", children: "检测只读：玄枢只读路由清单，不写 provider 配置与密钥。（「试一下能不能用」会真发一句最短的话，除此之外不做任何事。）" })
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "xs-ai__note", "data-xuanshu-ai-note": "readonly", children: onProbe === void 0 ? "检测只读：玄枢只读路由清单，不写 provider 配置与密钥。" : "检测只读：玄枢只读路由清单，不写 provider 配置与密钥。（「试一下能不能用」会真发一句最短的话，除此之外不做任何事。）" })
   ] });
 }
 function XsAiGate({ readiness, checking = false, onRetry, onOpenSettings }) {
