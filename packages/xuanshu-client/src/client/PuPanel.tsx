@@ -143,6 +143,8 @@ function PuPanel({ ctx, openSession }: { ctx: PuClient; openSession?: (sessionId
     return { intent, view, selected, draft: view === 'detail' && selected !== undefined ? selected : blank };
   });
   const [view, setView] = useState<'list' | 'detail' | 'create'>(mount.view);
+  /** 2026-11-02：底座（八字）那条「为什么不能改」的内联说明是否展开（替代原来的 window.alert）。 */
+  const [baseExplaining, setBaseExplaining] = useState(false);
   const [step, setStep] = useState(pendingJob ? 3 : 1); const [job, setJob] = useState<Job | undefined>(pendingJob);
   const [text, setText] = useState(''); const [files, setFiles] = useState<File[]>([]);
   const [draft, setDraft] = useState<Draft>(mount.draft); const [selected, setSelected] = useState<Pu | undefined>(mount.selected);
@@ -227,7 +229,28 @@ function PuPanel({ ctx, openSession }: { ctx: PuClient; openSession?: (sessionId
         <select aria-label="来源筛选" value={source} onChange={e => setSource(e.target.value)}><option value="">全部来源</option>{['manual', 'ai-assisted', 'sediment', 'workflow'].map(s => <option key={s}>{s}</option>)}</select>
         <button onClick={() => { setView('create'); setStep(pendingJob ? 3 : 1); setJob(pendingJob); if (!pendingJob) setDraft(blank); }}>＋ 创建新谱</button></div>
       {loading ? <p role="status">正在读取谱…</p> : <>
-        <section><h2>基础输入级 base · {filtered.filter(p => p.level === 'base').length} 个</h2><p>进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。</p><p>🔒 底座（八字） · 只读 · 由出生信息与底座生成 · 默认在场 · 不可关 <button onClick={() => window.alert('底座默认在场、不可关；要修改，请重新录制出生信息并确认。')}>打开</button></p></section>
+        {/*
+          2026-11-02 改：原来这行是「…不可关 [打开]」，点下去弹 `window.alert(...)`。两处不对：
+          ① 按钮叫「打开」，可它打不开任何东西，只是告诉你为什么改不了（名不副实）；
+          ② 用了 `window.alert` —— 本仓明令不用原生弹窗（`rikke.tsx` 那句注释写得清楚：
+             `不用 window.confirm，那样文案就不可断言`），而且它阻断交互。
+          改成内联展开：按钮叫「为什么不能改」，点了在本行下方出现一句可断言的说明。
+        */}
+        <section>
+          <h2>基础输入级 base · {filtered.filter(p => p.level === 'base').length} 个</h2>
+          <p>进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。</p>
+          <p>
+            {'🔒 底座（八字） · 只读 · 由出生信息与底座生成 · 默认在场 · 不可关 '}
+            <button data-xuanshu-action="base-why" onClick={() => { setBaseExplaining(!baseExplaining); }}>
+              为什么不能改
+            </button>
+          </p>
+          {baseExplaining ? (
+            <p className="xs-pu__note" data-xuanshu-note="base-why">
+              底座（八字）由出生信息算出来，默认在场、不可关。要改就重新录一次出生信息并确认 —— 走侧栏「填八字」那个向导。
+            </p>
+          ) : null}
+        </section>
         {(['base', 'optional'] as const).map(group => <section key={group}>{group === 'optional' && <><h2>可选输入级 optional · {filtered.filter(p => p.level === group).length} 个</h2><p>底稿不采 · 问事时按需追加</p></>}{filtered.filter(p => p.level === group || (group === 'optional' && p.error)).map(p => <article key={p.slug}><div><strong>{p.name}</strong><p>{p.description}</p><small>{p.source} · {momentOf(p.updatedAt)}{p.stale && ' · 汇总可能过期'}</small>{p.error && <p role="alert">{p.error}</p>}</div><button disabled={!!p.error || busy} onClick={() => open(p.slug)}>打开 / 编辑</button></article>)}</section>)}
         {/*
           2026-11-01 改：无谱时原来给的是「清空筛选」按钮 —— 可那时根本没有筛选条件可清，

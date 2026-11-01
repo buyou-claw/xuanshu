@@ -3069,6 +3069,7 @@ function PuPanel({ ctx, openSession }) {
     return { intent, view: view2, selected: selected2, draft: view2 === "detail" && selected2 !== void 0 ? selected2 : blank };
   });
   const [view, setView] = (0, import_react6.useState)(mount.view);
+  const [baseExplaining, setBaseExplaining] = (0, import_react6.useState)(false);
   const [step, setStep] = (0, import_react6.useState)(pendingJob ? 3 : 1);
   const [job, setJob] = (0, import_react6.useState)(pendingJob);
   const [text, setText] = (0, import_react6.useState)("");
@@ -3254,8 +3255,11 @@ ${p.body}`.toLowerCase().includes(query.toLowerCase())));
           /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: "进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。" }),
           /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { children: [
             "🔒 底座（八字） · 只读 · 由出生信息与底座生成 · 默认在场 · 不可关 ",
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { onClick: () => window.alert("底座默认在场、不可关；要修改，请重新录制出生信息并确认。"), children: "打开" })
-          ] })
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { "data-xuanshu-action": "base-why", onClick: () => {
+              setBaseExplaining(!baseExplaining);
+            }, children: "为什么不能改" })
+          ] }),
+          baseExplaining ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "xs-pu__note", "data-xuanshu-note": "base-why", children: "底座（八字）由出生信息算出来，默认在场、不可关。要改就重新录一次出生信息并确认 —— 走侧栏「填八字」那个向导。" }) : null
         ] }),
         ["base", "optional"].map((group2) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { children: [
           group2 === "optional" && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
