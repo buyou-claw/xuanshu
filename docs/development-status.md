@@ -756,7 +756,7 @@ headless → PASS（189 行）。这条 seam 要验的是「真 CLI 启动 → �
 
 # pnpm verify:assembly
 [S2] PASS 192 行挂载；xuanshu-host/client state=2
-[S3] PASS 客户端产物 550301B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 551241B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL（钉版上游 schema 导出器缺陷，与 Spec 001 同一已知红）
@@ -930,7 +930,7 @@ F4 其余 runbook 去绝对路径、F5 `--update` 写基线按 key 排序；合�
 | E2 | `docs/agents/parallel-work.md`（38 行：起工作树、junction 跟穿禁令、基线/产物归属、`client.js` 冲突重建、合并顺序）+ `docs/agents/review-checklist.md`（27 行：装配面断言 / 夹具正确域字段 / 跨包重复表与死导出 / 数字来源，各带本轮实例指针）+ `AGENTS.md` 两处**按分支触发**指针（起 worktree 前 / 跑 code-review 前） |
 
 **验证（数字抄工具输出；本行随当前验证块刷新，原轮次基线见下一行）**：`pnpm verify:all` exit 0（类型 + 产物同步 + 清单门 + 文档数字门）；
-`[doc-numbers] OK：2267 条用例 / 199 个文件 / 550301 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
+`[doc-numbers] OK：2267 条用例 / 199 个文件 / 551241 B`；E1 真实仓 `--dry-run` 识别根 + 3 个包级链接、零落盘。
 E1/E3 与两轴复核修复新增 25 条用例后基线 `--update` 为 **1839 条 / 167 文件**，文档数字由新门核对。
 
 **这一轮的教训**：把「每次都要记得做」的事拆成两种处置——能机械判定的（数字漂移、链接安全）做成门；
@@ -959,14 +959,14 @@ Windows 大小写凭据变体；目标位置按真实路径拒绝进入 home 或
 # pnpm verify:all → exit 0（类型 + 产物同步 + 清单门 + 文档数字门）
 [inventory] 用例 2267 条（基线 2267）/ 文件 199 个 / 失败 2 条（已知红 2 条） / 文件级失败 0 个 / 跳过 10 条 / vitest exit 1
 [inventory] 通过：没有用例消失、没有已知红之外的失败、没有文件级失败。
-[doc-numbers] OK：2267 条用例 / 199 个文件 / 550301 B
+[doc-numbers] OK：2267 条用例 / 199 个文件 / 551241 B
 
 # pnpm verify:isolation
 结果：8/8 通过，exit 0（6503ms）
 
 # pnpm verify:assembly → exit 1，仅 S1 既有上游缺陷
 [S2] PASS 192 行挂载；xuanshu-host.state=2 xuanshu-client.state=2
-[S3] PASS 客户端产物 550301B；物化/注册/槽位自检全过
+[S3] PASS 客户端产物 551241B；物化/注册/槽位自检全过
 [S4] PASS 基线 185 行全部命中
 [S5] PASS report 新写出 ok=true，patchRowIds=192 含两行
 [S1] FAIL unrecognized Loader tree carrier（同 §16.3）
