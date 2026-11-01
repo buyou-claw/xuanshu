@@ -32,15 +32,49 @@ export function createPuMethods(ctx, { dataDir }) {
     }
     const { sessionId } = await controller.create({ cwd }); signal.throwIfAborted();
     const job = { id, sessionId, status: 'running', canceled: false }; jobs.set(id, job);
-    const prompt = `${skill}\n\n用户定义：${JSON.stringify({ name: request.name, level: request.level })}\n资料文字：\n${request.text ?? ''}\n附件（当前目录，只读来源）：${JSON.stringify(files)}\n${request.summaryOnly ? '本次只重新提炼 summary；其他字段保持用户提供的事实。' : ''}`;
+    /**
+     * 2026-11-02 改：原来不管有没有附件，都往 prompt 里塞一句
+     *   `附件（当前目录，只读来源）：[]`
+     * skill 开头又写着「用 DSH coding 文件工具读取附件」。两句话合起来，AI 在没有附件的
+     * 情况下也会去调文件工具 —— 然后卡在审批上（实测：界面停在「AI 正在读取资料」，
+     * 另一个面板里躺着一条没人批的审批，`whenIdle` 于是提前返回，最终一条 assistant 消息都没有）。
+     *
+     * 用户只是贴了一段文字，本来不需要任何工具。所以：
+     *   - 没有附件 → 不提附件，并明确要求「本次不要调用任何工具」
+     *   - 有附件 → 才写附件清单，让 AI 去读
+     */
+    const attachments = files.length === 0
+      ? '本次没有附件：资料只有下面这段文字，**不要调用任何工具**（不用读文件、不用搜索），直接按格式输出 JSON。'
+      : `附件（当前目录，只读来源，需要时用文件工具读取）：${JSON.stringify(files)}`;
+    const prompt = `${skill}\n\n用户定义：${JSON.stringify({ name: request.name, level: request.level })}\n资料文字：\n${request.text ?? ''}\n${attachments}\n${request.summaryOnly ? '本次只重新提炼 summary；其他字段保持用户提供的事实。' : ''}`;
     void (async () => {
       try {
         await controller.prompt({ requestId: randomUUID(), sessionId, mode: 'queue', content: [{ type: 'text', text: prompt }], clientTimeZone: request.clientTimeZone ?? 'Asia/Shanghai' }, new AbortController().signal);
         const resolved = await controller.resolveAgent(sessionId); if (resolved.error) throw resolved.error;
+        /**
+         * 2026-11-02 修时序：原来是 `prompt` 之后**立刻** `whenIdle()` 再取最后一条 assistant 消息。
+         *
+         * `prompt` 只是把消息排进队列；agent 未必已经开跑。这时 `whenIdle()` 立刻返回「已经空闲」，
+         * 于是 `snapshotEvents()` 里连一条 assistant 消息都没有 —— 界面上就是「AI 一句话都没有回应」。
+         * 实测同一个 key、同一份资料，有时能跑（那次 AI 说了「正在读取资料」）、有时不能，
+         * 就是这个竞态。真正的失败信号不是「idle 了」，而是「等了很久一条消息都没有」。
+         *
+         * 所以：先 whenIdle，然后轮询到**真的出现 assistant 消息**为止（最长 3 分钟）；
+         * 期间用户点「中断」就退出。轮完还没有才报「没回应」。
+         */
         await resolved.agent.whenIdle();
+        const readAssistant = () => {
+          const e = [...resolved.agent.session.snapshotEvents()].reverse().find((x) => x.type === 'assistant/message');
+          return e?.data?.content?.filter((part) => part.type === 'text').map((part) => part.text).join('\n') ?? '';
+        };
+        let text = readAssistant();
+        const deadline = Date.now() + 180_000;
+        while (text.trim() === '' && !job.canceled && Date.now() < deadline) {
+          await new Promise((resolve) => { setTimeout(resolve, 3000); });
+          await resolved.agent.whenIdle().catch(() => {});
+          text = readAssistant();
+        }
         if (job.canceled) return;
-        const event = [...resolved.agent.session.snapshotEvents()].reverse().find(e => e.type === 'assistant/message');
-        const text = event?.data?.content?.filter(part => part.type === 'text').map(part => part.text).join('\n') ?? '';
         /**
          * 2026-11-02 加：AI **一句话都没回**时单说一句人话。
          *
