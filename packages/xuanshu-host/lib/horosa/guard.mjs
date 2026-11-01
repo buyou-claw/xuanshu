@@ -490,13 +490,22 @@ export async function mcpInitialize({ host = HOROSA_DEFAULT_HOST, port = HOROSA_
   if (!init.ok || !reply) {
     evidence.step = 'initialize'
     evidence.error = init.error ?? 'no-jsonrpc-reply'
+    /**
+     * 2026-11-02 改：这句会一路冒到界面上（`八字出盘没走到信封：…`），
+     * 而原文里的 `MCP initialize`、`ECONNREFUSED`、`信封` 用户一个都读不懂。
+     * 用户需要知道的只有两件事：连的是哪个本地服务、它现在是什么状态。
+     * 原码保留在括号里（排查时有用），但排在人话后面。
+     */
+    const why = init.error === 'ECONNREFUSED'
+      ? '这台机器上没有服务在监听这个地址（连接被拒）'
+      : String(evidence.error)
     return {
       ok: false,
       status: init.status,
       sessionId: init.sessionId,
       serverInfo: null,
       evidence,
-      detail: `${url} 的 MCP initialize 失败：${evidence.error}（HTTP ${init.status ?? '-'}${init.contentType ? `，${init.contentType}` : ''}）。`,
+      detail: `出盘要连本地黄历服务 ${url}，现在连不上：${why}（HTTP ${init.status ?? '-'}${init.contentType ? `，${init.contentType}` : ''}；原始错误 ${evidence.error}）。`,
     }
   }
   if (reply.error) {

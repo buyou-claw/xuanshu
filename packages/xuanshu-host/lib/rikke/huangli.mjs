@@ -67,7 +67,7 @@ export async function callHuangli({ ctx, date, hour, timeoutMs }) {
   if (!called || called.ok !== true || !called.envelope) {
     // 走到信封才算 ok（与 `mcpCallTool` 同族语义）；没走到 → 把原话带出去。
     const code = called?.code ?? 'mcp-call-failed'
-    const detail = typeof called?.detail === 'string' && called.detail !== '' ? called.detail : '没走到信封'
+    const detail = typeof called?.detail === 'string' && called.detail !== '' ? called.detail : '这次调用没有返回结果'
     return { ...empty, code, reason: `黄历没调通（${code}）：${detail}` }
   }
 

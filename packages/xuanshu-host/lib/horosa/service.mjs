@@ -594,7 +594,11 @@ export function createHorosaRuntime({ ctx, config, log, paths, plan, env, homedi
         phase: 'error',
         code: 'mcp-call-failed',
         tool: HOROSA_BAZI_TOOL,
-        detail: `八字出盘没走到信封：${called.detail}`,
+        /*
+          2026-11-02 改：原来前缀是「八字出盘没走到信封：」——「信封」是内部对 MCP 响应包的叫法，
+          用户读不懂。这里只留「八字出盘失败：」，后面的 detail 自己会把原因说完。
+        */
+        detail: `八字出盘失败：${called.detail}`,
         hint: '先看端点四态（/xuanshu-horosa status）与 serve 日志：<dataDir>/serve.log。',
         pillars: null,
         fourColumns: null,
@@ -650,7 +654,7 @@ export function createHorosaRuntime({ ctx, config, log, paths, plan, env, homedi
         envelope: null,
         tool,
         code: 'mcp-call-failed',
-        detail: `${tool} 没走到信封：${called.detail}`,
+        detail: `${tool} 调用失败：${called.detail}`,
         from: called.from ?? null,
         evidence: called.evidence ?? null,
       }
