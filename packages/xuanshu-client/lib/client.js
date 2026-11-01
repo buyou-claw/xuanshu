@@ -1445,7 +1445,15 @@ var ERROR_COPY = {
 var ACTION_COPY = {
   startOnboarding: "开始填写出生信息 ->",
   openDetail: "看详情 ->",
-  generate: "立即生成",
+  /**
+   * 2026-11-02 改：原来叫「立即生成」，点下去**直接**覆盖当天的日课/晚省。
+   *
+   * 而面板里的同名动作（`RikkePanel` / `WanshengPanel`）都要过一次轻确认
+   * （「将覆盖今天的日课，继续？」）—— 同一个动作，在两个入口两种代价。
+   * 卡面空间放不下确认块，所以卡片改成「把人送到面板去生成」，由那一处的闸门统一把关。
+   * 按钮文案也要跟着变，否则点「立即生成」跳到别的屏会让人意外。
+   */
+  generate: "去生成 ->",
   watchFull: "看完整日课 ->",
   changeTime: "改时间 ->",
   openDigao: "打开底稿 ->",
@@ -1458,7 +1466,8 @@ var ACTION_COPY = {
   // #25：晚省的四个出口。
   watchWansheng: "看完整晚省 ->",
   goConsult: "去问事 ->",
-  generateWansheng: "立即生成",
+  /** 2026-11-02：同 `ACTION_COPY.generate` —— 卡片只做跳转，生成闸门在晚省面板里。 */
+  generateWansheng: "去生成 ->",
   history: "投递历史"
 };
 var DISABLED_REASON = {
@@ -8443,14 +8452,14 @@ function OverviewPanel({
   });
   const baseplate = baseplateReady ?? destiny.state === "ready";
   const aiSnapshot = useAiReadiness(aiStatus);
-  const generateRikke = rikkeController === void 0 ? onGenerate : () => {
-    void rikkeController.generate();
+  const generateRikke = () => {
+    navigate("rikke");
   };
   const refreshDigao = digaoController === void 0 ? onRefresh : () => {
     void digaoController.refresh();
   };
-  const generateWansheng = wanshengController === void 0 ? void 0 : () => {
-    void wanshengController.generate();
+  const generateWansheng = () => {
+    navigate("wansheng");
   };
   const retryRikke = rikkeController === void 0 ? onRetry : () => {
     rikkeController.clearOutcome();

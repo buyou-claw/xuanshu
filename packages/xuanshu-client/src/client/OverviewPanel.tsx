@@ -504,15 +504,16 @@ export function OverviewPanel({
   const aiSnapshot = useAiReadiness(aiStatus);
 
   /**
-   * 日课卡 `[立即生成]`：**人点**才走（`rikkeController.generate()` 是唯一调用点；
-   * 数据面缺席时退回注入面的回调，票 07 的 fail-soft 置灰原样保留）。
+   * 日课卡 `[去生成 ->]`：**送到日课面板**，而不是就地生成。
+   *
+   * 2026-11-02 改：原来这里直接 `rikkeController.generate()` —— 点一下就把当天的日课覆盖掉，
+   * 一句确认都没有；而日课面板里的同名动作要过一次轻确认（「将覆盖今天的日课，继续？」）。
+   * 同一个动作两个入口两种代价。卡面放不下确认块，所以这里只负责导航，
+   * 生成闸门统一在 `RikkePanel` 那一处，语义不再有两套。
    */
-  const generateRikke =
-    rikkeController === undefined
-      ? onGenerate
-      : (): void => {
-          void rikkeController.generate();
-        };
+  const generateRikke = (): void => {
+    navigate('rikke');
+  };
 
   /** 底稿卡 `[刷新]`：同样是**人点**才走。 */
   const refreshDigao =
@@ -522,13 +523,10 @@ export function OverviewPanel({
           void digaoController.refresh();
         };
 
-  /** #25：晚省卡 `[立即生成]`：人点才走（`wanshengController.generate()` 是唯一调用点）。 */
-  const generateWansheng =
-    wanshengController === undefined
-      ? undefined
-      : (): void => {
-          void wanshengController.generate();
-        };
+  /** #25：晚省卡 `[去生成 ->]`：同 `generateRikke`，送到晚省面板由那边的闸门把关。 */
+  const generateWansheng = (): void => {
+    navigate('wansheng');
+  };
 
   /**
    * 卡级重试（D2：只重跑该卡取数，其它卡不动）。

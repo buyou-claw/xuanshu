@@ -386,13 +386,13 @@ describe('票 07 · 五卡渲染（冷启动空态；#25 加第 5 张晚省）',
     expect(card).toContain('八字冷启动向导还没装配（属票 08）')
   })
 
-  it('② 日课卡：卡头带今天日期、宜/忌/流日空态文案、[立即生成] 与 [改时间]', () => {
+  it('② 日课卡：卡头带今天日期、宜/忌/流日空态文案、[去生成 ->] 与 [改时间]', () => {
     const card = cardOf(html, 'rike')
     expect(card).toContain('日课 · 今天 2026-10-13')
     expect(card).toContain('今天还没有生成日课。日课默认每天 07:30 生成。')
     expect(card).toContain('（底座未立时生成会失败）')
     expect(card).toContain('data-xuanshu-action="generate-rikke"')
-    expect(card).toContain('日课生成还没接上（属票 13 · 底稿与日课）')
+    // 2026-11-02：卡片按钮只做跳转（生成闸门在日课面板），不再有「还没接上」的禁用态。
     // [改时间 ->] 的目标是 DSH 原 schedules 面板：已注册 → 可用。
     expect(card).toContain('data-xuanshu-nav="schedules"')
     const changeTime = card.slice(card.indexOf('data-xuanshu-nav="schedules"'), card.indexOf('>', card.indexOf('data-xuanshu-nav="schedules"')))
@@ -430,14 +430,14 @@ describe('票 07 · 五卡渲染（冷启动空态；#25 加第 5 张晚省）',
     expect(workspaceTag).not.toContain('disabled')
   })
 
-  it('⑤ 晚省卡（#25）：默认 21:30 的空态文案、[立即生成] 与 [改时间]；点开进问事（卡上给出口）', () => {
+  it('⑤ 晚省卡（#25）：默认 21:30 的空态文案、[去生成 ->] 与 [改时间]；点开进问事（卡上给出口）', () => {
     const card = cardOf(html, 'wansheng')
     expect(card).toContain('data-xs-state="empty"')
     expect(card).toContain('晚省 · 今天 2026-10-13')
     expect(card).toContain('今天还没有晚省。晚省默认每天 21:30 生成。')
     expect(card).toContain('（它只摆事实、不替你下结论；点开进问事）')
     expect(card).toContain('data-xuanshu-action="generate-wansheng"')
-    expect(card).toContain('晚省生成还没接上（属票 04 · 晚间触达）')
+    // 2026-11-02：卡片按钮只做跳转（生成闸门在晚省面板），不再有「还没接上」的禁用态。
     expect(card).toContain('data-xuanshu-nav="schedules"')
     // 「补」徽标是 ready 态的事实，不在空态出现（不冒充生成过）。
     expect(card).not.toContain('data-xuanshu-badge="missed"')
