@@ -118,7 +118,7 @@ function ActivityList({ items, kind, label }: {
         {items.map((item) => (
           <li key={item.id} {...(kind === 'workspace' ? { 'data-xuanshu-workspace': item.id } : { 'data-xuanshu-workflow': item.id })}>
             {`${item.title} · ${item.sessionCount} 场会话`}
-            {item.lastActiveAt === undefined ? null : <span className="xs-wansheng__note">{` · 最后活跃 ${item.lastActiveAt}`}</span>}
+            {item.lastActiveAt === undefined ? null : <span className="xs-wansheng__note">{` · 最后活跃 ${momentOf(item.lastActiveAt)}`}</span>}
           </li>
         ))}
       </ul>
@@ -142,7 +142,7 @@ function FactsSection({ facts }: { facts?: WanshengFacts }) {
           {sessions.items.map((item) => (
             <li key={item.sessionId} data-xuanshu-consult={item.sessionId}>
               {item.title}
-              {item.lastTurnAt === undefined ? null : <span className="xs-wansheng__note">{` · 最后一句 ${item.lastTurnAt}`}</span>}
+              {item.lastTurnAt === undefined ? null : <span className="xs-wansheng__note">{` · 最后一句 ${momentOf(item.lastTurnAt)}`}</span>}
             </li>
           ))}
         </ul>
@@ -156,7 +156,7 @@ function FactsSection({ facts }: { facts?: WanshengFacts }) {
         <p className="xs-wansheng__fact" data-xuanshu-fact="digao">{`底稿：${momentOf(facts.digao.generatedAt)} 刷新过`}</p>
       )}
       {facts?.shiji?.updatedAt === undefined ? null : (
-        <p className="xs-wansheng__fact" data-xuanshu-fact="shiji">{`事记：${facts.shiji.updatedAt} 有更新`}</p>
+        <p className="xs-wansheng__fact" data-xuanshu-fact="shiji">{`事记：${momentOf(facts.shiji.updatedAt)} 有更新`}</p>
       )}
     </section>
   );

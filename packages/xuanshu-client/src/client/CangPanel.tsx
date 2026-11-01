@@ -29,6 +29,7 @@
  *      同名只会把「这里其实有两扇门」这件事藏起来（用户在不同状态看到不同的门，找不到同一个按钮）。
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { momentOf } from './panel.js';
 import type { CangApi, CangController, CangEntry, CangList } from './cang-model.js';
 import { CANG_AI_FREE, newCangDraft } from './cang-model.js';
 import { dataDirPath } from './home-paths.js';
@@ -122,7 +123,7 @@ export function CangPanel({ api, controller, initialData }: CangPanelProps) {
       <h2>{entry.name} <span className="xs-cang__status">已登记</span></h2>
       <p>签：{entry.tags.join(' · ') || '未贴签'}</p>
       <p>路径（只读）：<code>{entry.path}</code></p>
-      <p>{entry.pointer.valid ? '指针有效 · 玄枢未读取' : `指针失效 · ${entry.pointer.reason ?? ''}`} <small>最后校验：{entry.pointer.checkedAt}</small></p>
+      <p>{entry.pointer.valid ? '指针有效 · 玄枢未读取' : `指针失效 · ${entry.pointer.reason ?? ''}`} <small>最后校验：{momentOf(entry.pointer.checkedAt)}</small></p>
       <div className="xs-cang__actions">
         {/* 三个入口各自受 `entry.actions` 开关控制；打开/显示位置还要桌面可用 + 指针有效。 */}
         {entry.actions.open && <button type="button" data-action="open" disabled={busy || !desktop || !entry.pointer.valid} title={!desktop ? '宿主没有可用桌面，请复制路径在本机打开' : entry.pointer.reason} onClick={() => void action(() => api.open(entry.id))}>以默认程序打开</button>}

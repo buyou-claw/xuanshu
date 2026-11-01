@@ -942,7 +942,7 @@ function WanshengArtifactLines({ facts }: { facts?: WanshengFacts }) {
     lines.push(
       <p key="shiji" className="xs-line" data-xuanshu-fact="shiji">
         <span className="xs-line__label">事记</span>
-        <span className="xs-line__value">{`${facts.shiji.updatedAt} 有更新`}</span>
+        <span className="xs-line__value">{`${momentOf(facts.shiji.updatedAt)} 有更新`}</span>
       </p>,
     );
   }

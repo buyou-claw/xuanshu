@@ -1313,10 +1313,6 @@ function BestofTriggerHost({ controller, onTrigger, resolveSessionId }) {
 // src/client/CangPanel.tsx
 var import_react3 = require("react");
 
-// src/client/cang-model.ts
-var CANG_AI_FREE = "藏永不进 AI：只登记指针、签与跳转 —— 玄枢不读、不索引、不分析、不进上下文";
-var newCangDraft = () => ({ path: "", name: "", tags: [], actions: { open: true, reveal: true, copy: true } });
-
 // src/client/home-paths.ts
 var import_react2 = require("react");
 var DATA_DIR_PLACEHOLDER = "玄枢数据目录";
@@ -1382,6 +1378,138 @@ function dataDirPath(dataDir, ...segments) {
 function homePath(home, ...segments) {
   return joinXsDisplayPath(isUsablePathValue(home) ? home : HOME_PLACEHOLDER, segments);
 }
+
+// src/client/panel.ts
+var PANEL_ID = "overview";
+var PANEL_ORDER = 20;
+var PANEL_LABEL = "总览";
+var ONBOARDING_ID = "onboarding";
+var MINGPAN_ID = "mingpan";
+var ONBOARDING_LABEL = "填八字";
+var MINGPAN_LABEL = "命盘";
+var ONBOARDING_ORDER = 80;
+var MINGPAN_ORDER = 90;
+var CONSULT_ID = "consult";
+var CONSULT_LABEL = "问事";
+var CONSULT_ORDER = 30;
+var PANEL_TITLE = "自我总览";
+var PANEL_HOME = "家";
+function panelLocalNote(dataDir) {
+  return typeof dataDir === "string" && dataDir.trim() !== "" ? `数据都在本地 ${withTrailingSeparator(dataDirPath(dataDir))}` : `数据都在本地（${withTrailingSeparator(DATA_DIR_PLACEHOLDER)}）`;
+}
+var CARD_TITLE = {
+  mingpan: "命盘 / 八字",
+  rike: "日课",
+  digao: "底稿",
+  quicklinks: "快捷入口",
+  wansheng: "晚省"
+};
+var BADGE_READONLY = "只读 · 由出生信息与底座生成";
+var BADGE_DERIVED = "纯派生 · 不可手改";
+var QUICKLINK = {
+  consult: { title: "问事", subtitle: "书房" },
+  conversation: { title: "工作区", subtitle: "车间" },
+  workflow: { title: "工作流", subtitle: "流水线" }
+};
+var QUICKLINK_CONSULT_UNREADY = "底座未立 · 也能空手先问一句";
+var QUICKLINKS_BOUNDARY = "谱 / 藏 / 自动化任务是管理入口：都在侧栏，不在这张卡里。";
+var EMPTY_COPY = {
+  mingpan: {
+    why: "底座还没立起来",
+    sub: "填一次出生信息，命盘就点亮了。（预计 1 分钟；之后不再重复录入）"
+  },
+  rike: {
+    why: "今天还没有生成日课。日课默认每天 07:30 生成。",
+    sub: "（底座未立时生成会失败）"
+  },
+  digaoUnready: {
+    why: "底座未立，还没有可提炼的来源。",
+    sub: "这里不会先有内容：提炼源是 0。"
+  },
+  digaoNeverRefreshed: {
+    why: "底稿还没生成过。",
+    sub: "刷新一次就会按三路来源拼出骨架。"
+  },
+  // #25：晚省空态（它只摆事实；没生成时给两个出口：[立即生成] 与 [改时间]）。
+  wansheng: {
+    why: "今天还没有晚省。晚省默认每天 21:30 生成。",
+    sub: "（它只摆事实、不替你下结论；点开进问事）"
+  }
+};
+var ERROR_COPY = {
+  mingpan: "命盘快照读不出来（文件缺失或格式不符）。",
+  rike: "日课生成失败：底座未就绪 / 推运调用失败。",
+  digao: "底稿读不出来。",
+  wansheng: "晚省读不出来（产物缺失或格式不符）。"
+};
+var ACTION_COPY = {
+  startOnboarding: "开始填写出生信息 ->",
+  openDetail: "看详情 ->",
+  generate: "立即生成",
+  watchFull: "看完整日课 ->",
+  changeTime: "改时间 ->",
+  openDigao: "打开底稿 ->",
+  refresh: "刷新",
+  retry: "重试",
+  sourcePu: "谱",
+  sourceWorkspace: "工作区",
+  sourceWorkflow: "工作流",
+  adjustSource: "要改就改源头：",
+  // #25：晚省的四个出口。
+  watchWansheng: "看完整晚省 ->",
+  goConsult: "去问事 ->",
+  generateWansheng: "立即生成",
+  history: "投递历史"
+};
+var DISABLED_REASON = {
+  consult: "问事面板还没装配（属票 10 · 问事闭环）",
+  // #29：AI 没接上时问事入口保持禁用。路径逐字与 `ai-model.ts` 的 AI_SETTINGS_PATH 一致
+  // （界面上的可见原因由快捷入口卡的 `XsAiGate` 给，这里只做 title）。
+  //
+  // 2026-11-01 改：原来这里也写「配置 provider 与默认模型」，与 XsAiGate 里那句说的是两回事
+  // （一个是缺 key、一个是缺 provider 选择），并排出现会让人以为要做两件事。
+  // 具体缺什么由 XsAiGate 逐字说；这里只给去处。
+  consultAi: "问事还开不了：先接上 AI（去「设置 → 模型」）。",
+  workflow: "工作流面板还没装配（属票 16 · 工作流创建向导）",
+  pus: "谱面板还没装配（属票 09 · 谱管理）",
+  digao: "底稿面板还没装配（属票 13 · 底稿与日课）",
+  rikke: "日课面板还没装配（属票 13 · 底稿与日课）",
+  onboarding: "八字冷启动向导还没装配（属票 08）",
+  generate: "日课生成还没接上（属票 13 · 底稿与日课）",
+  refreshDigao: "底稿刷新还没接上（属票 13 · 底稿与日课）",
+  openDetail: "命盘详情还没装配（属票 08）",
+  retry: "取数重试还没接上（属票 08 / 13）",
+  wansheng: "晚省面板还没装配（属票 04 · 晚间触达）",
+  generateWansheng: "晚省生成还没接上（属票 04 · 晚间触达）"
+};
+function clockOf(time) {
+  if (time === void 0) return "";
+  const parts = time.split(":");
+  if (parts.length < 2) return time;
+  return `${parts[0]}:${parts[1]}`;
+}
+function momentOf(iso) {
+  if (iso === void 0 || iso === "") return "";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  const two = (value) => String(value).padStart(2, "0");
+  const day = `${two(at.getMonth() + 1)}-${two(at.getDate())}`;
+  const clock = `${two(at.getHours())}:${two(at.getMinutes())}`;
+  return at.getFullYear() === (/* @__PURE__ */ new Date()).getFullYear() ? `${day} ${clock}` : `${at.getFullYear()}-${day} ${clock}`;
+}
+var DIGAO_ID = "digao";
+var RIKKE_ID = "rikke";
+var WANSHENG_ID = "wansheng";
+var DIGAO_LABEL = "底稿";
+var RIKKE_LABEL = "日课";
+var WANSHENG_LABEL = "晚省";
+var DIGAO_ORDER = 60;
+var RIKKE_ORDER = 100;
+var WANSHENG_ORDER = 110;
+
+// src/client/cang-model.ts
+var CANG_AI_FREE = "藏永不进 AI：只登记指针、签与跳转 —— 玄枢不读、不索引、不分析、不进上下文";
+var newCangDraft = () => ({ path: "", name: "", tags: [], actions: { open: true, reveal: true, copy: true } });
 
 // src/client/CangPanel.tsx
 var import_jsx_runtime3 = require("react/jsx-runtime");
@@ -1511,7 +1639,7 @@ function CangPanel({ api, controller, initialData }) {
           " ",
           /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("small", { children: [
             "最后校验：",
-            entry.pointer.checkedAt
+            momentOf(entry.pointer.checkedAt)
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "xs-cang__actions", children: [
@@ -2856,134 +2984,6 @@ function XsConsultHistoryReader({
   ] });
 }
 
-// src/client/panel.ts
-var PANEL_ID = "overview";
-var PANEL_ORDER = 20;
-var PANEL_LABEL = "总览";
-var ONBOARDING_ID = "onboarding";
-var MINGPAN_ID = "mingpan";
-var ONBOARDING_LABEL = "填八字";
-var MINGPAN_LABEL = "命盘";
-var ONBOARDING_ORDER = 80;
-var MINGPAN_ORDER = 90;
-var CONSULT_ID = "consult";
-var CONSULT_LABEL = "问事";
-var CONSULT_ORDER = 30;
-var PANEL_TITLE = "自我总览";
-var PANEL_HOME = "家";
-function panelLocalNote(dataDir) {
-  return typeof dataDir === "string" && dataDir.trim() !== "" ? `数据都在本地 ${withTrailingSeparator(dataDirPath(dataDir))}` : `数据都在本地（${withTrailingSeparator(DATA_DIR_PLACEHOLDER)}）`;
-}
-var CARD_TITLE = {
-  mingpan: "命盘 / 八字",
-  rike: "日课",
-  digao: "底稿",
-  quicklinks: "快捷入口",
-  wansheng: "晚省"
-};
-var BADGE_READONLY = "只读 · 由出生信息与底座生成";
-var BADGE_DERIVED = "纯派生 · 不可手改";
-var QUICKLINK = {
-  consult: { title: "问事", subtitle: "书房" },
-  conversation: { title: "工作区", subtitle: "车间" },
-  workflow: { title: "工作流", subtitle: "流水线" }
-};
-var QUICKLINK_CONSULT_UNREADY = "底座未立 · 也能空手先问一句";
-var QUICKLINKS_BOUNDARY = "谱 / 藏 / 自动化任务是管理入口：都在侧栏，不在这张卡里。";
-var EMPTY_COPY = {
-  mingpan: {
-    why: "底座还没立起来",
-    sub: "填一次出生信息，命盘就点亮了。（预计 1 分钟；之后不再重复录入）"
-  },
-  rike: {
-    why: "今天还没有生成日课。日课默认每天 07:30 生成。",
-    sub: "（底座未立时生成会失败）"
-  },
-  digaoUnready: {
-    why: "底座未立，还没有可提炼的来源。",
-    sub: "这里不会先有内容：提炼源是 0。"
-  },
-  digaoNeverRefreshed: {
-    why: "底稿还没生成过。",
-    sub: "刷新一次就会按三路来源拼出骨架。"
-  },
-  // #25：晚省空态（它只摆事实；没生成时给两个出口：[立即生成] 与 [改时间]）。
-  wansheng: {
-    why: "今天还没有晚省。晚省默认每天 21:30 生成。",
-    sub: "（它只摆事实、不替你下结论；点开进问事）"
-  }
-};
-var ERROR_COPY = {
-  mingpan: "命盘快照读不出来（文件缺失或格式不符）。",
-  rike: "日课生成失败：底座未就绪 / 推运调用失败。",
-  digao: "底稿读不出来。",
-  wansheng: "晚省读不出来（产物缺失或格式不符）。"
-};
-var ACTION_COPY = {
-  startOnboarding: "开始填写出生信息 ->",
-  openDetail: "看详情 ->",
-  generate: "立即生成",
-  watchFull: "看完整日课 ->",
-  changeTime: "改时间 ->",
-  openDigao: "打开底稿 ->",
-  refresh: "刷新",
-  retry: "重试",
-  sourcePu: "谱",
-  sourceWorkspace: "工作区",
-  sourceWorkflow: "工作流",
-  adjustSource: "要改就改源头：",
-  // #25：晚省的四个出口。
-  watchWansheng: "看完整晚省 ->",
-  goConsult: "去问事 ->",
-  generateWansheng: "立即生成",
-  history: "投递历史"
-};
-var DISABLED_REASON = {
-  consult: "问事面板还没装配（属票 10 · 问事闭环）",
-  // #29：AI 没接上时问事入口保持禁用。路径逐字与 `ai-model.ts` 的 AI_SETTINGS_PATH 一致
-  // （界面上的可见原因由快捷入口卡的 `XsAiGate` 给，这里只做 title）。
-  //
-  // 2026-11-01 改：原来这里也写「配置 provider 与默认模型」，与 XsAiGate 里那句说的是两回事
-  // （一个是缺 key、一个是缺 provider 选择），并排出现会让人以为要做两件事。
-  // 具体缺什么由 XsAiGate 逐字说；这里只给去处。
-  consultAi: "问事还开不了：先接上 AI（去「设置 → 模型」）。",
-  workflow: "工作流面板还没装配（属票 16 · 工作流创建向导）",
-  pus: "谱面板还没装配（属票 09 · 谱管理）",
-  digao: "底稿面板还没装配（属票 13 · 底稿与日课）",
-  rikke: "日课面板还没装配（属票 13 · 底稿与日课）",
-  onboarding: "八字冷启动向导还没装配（属票 08）",
-  generate: "日课生成还没接上（属票 13 · 底稿与日课）",
-  refreshDigao: "底稿刷新还没接上（属票 13 · 底稿与日课）",
-  openDetail: "命盘详情还没装配（属票 08）",
-  retry: "取数重试还没接上（属票 08 / 13）",
-  wansheng: "晚省面板还没装配（属票 04 · 晚间触达）",
-  generateWansheng: "晚省生成还没接上（属票 04 · 晚间触达）"
-};
-function clockOf(time) {
-  if (time === void 0) return "";
-  const parts = time.split(":");
-  if (parts.length < 2) return time;
-  return `${parts[0]}:${parts[1]}`;
-}
-function momentOf(iso) {
-  if (iso === void 0 || iso === "") return "";
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return iso;
-  const two = (value) => String(value).padStart(2, "0");
-  const day = `${two(at.getMonth() + 1)}-${two(at.getDate())}`;
-  const clock = `${two(at.getHours())}:${two(at.getMinutes())}`;
-  return at.getFullYear() === (/* @__PURE__ */ new Date()).getFullYear() ? `${day} ${clock}` : `${at.getFullYear()}-${day} ${clock}`;
-}
-var DIGAO_ID = "digao";
-var RIKKE_ID = "rikke";
-var WANSHENG_ID = "wansheng";
-var DIGAO_LABEL = "底稿";
-var RIKKE_LABEL = "日课";
-var WANSHENG_LABEL = "晚省";
-var DIGAO_ORDER = 60;
-var RIKKE_ORDER = 100;
-var WANSHENG_ORDER = 110;
-
 // src/client/PuPanel.tsx
 var import_react6 = require("react");
 var import_jsx_runtime7 = require("react/jsx-runtime");
@@ -3264,7 +3264,7 @@ ${p.body}`.toLowerCase().includes(query.toLowerCase())));
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("small", { children: [
                 p.source,
                 " · ",
-                p.updatedAt,
+                momentOf(p.updatedAt),
                 p.stale && " · 汇总可能过期"
               ] }),
               p.error && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { role: "alert", children: p.error })
@@ -3298,7 +3298,7 @@ ${p.body}`.toLowerCase().includes(query.toLowerCase())));
         "元信息：spec pu/1 · source ",
         selected.source,
         " · updated_at ",
-        selected.updatedAt,
+        momentOf(selected.updatedAt),
         " · 签：预留字段，暂不启用"
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { children: [
@@ -5344,7 +5344,7 @@ function WanshengArtifactLines({ facts }) {
     lines.push(
       /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "xs-line", "data-xuanshu-fact": "shiji", children: [
         /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__label", children: "事记" }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__value", children: `${facts.shiji.updatedAt} 有更新` })
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "xs-line__value", children: `${momentOf(facts.shiji.updatedAt)} 有更新` })
       ] }, "shiji")
     );
   }
@@ -8958,7 +8958,7 @@ function ActivityList({ items, kind, label }) {
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": `${kind}s`, children: items === void 0 ? `哪些${label}有活动：未知（这边暂时读不到）` : items.length === 0 ? `今天没有${label}活动` : `今天 ${items.length} 个${label}有活动` }),
     items === void 0 || items.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("ul", { className: "xs-wansheng__workspace-list", children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("li", { ...kind === "workspace" ? { "data-xuanshu-workspace": item.id } : { "data-xuanshu-workflow": item.id }, children: [
       `${item.title} · ${item.sessionCount} 场会话`,
-      item.lastActiveAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: ` · 最后活跃 ${item.lastActiveAt}` })
+      item.lastActiveAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: ` · 最后活跃 ${momentOf(item.lastActiveAt)}` })
     ] }, item.id)) })
   ] });
 }
@@ -8969,13 +8969,13 @@ function FactsSection({ facts }) {
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "consult", children: sessions === void 0 ? "今天几场问事：未知（这边暂时读不到）" : `今天 ${sessions.count} 场问事` }),
     sessions === void 0 || sessions.items.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("ul", { className: "xs-wansheng__consult-list", children: sessions.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("li", { "data-xuanshu-consult": item.sessionId, children: [
       item.title,
-      item.lastTurnAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: ` · 最后一句 ${item.lastTurnAt}` })
+      item.lastTurnAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "xs-wansheng__note", children: ` · 最后一句 ${momentOf(item.lastTurnAt)}` })
     ] }, item.sessionId)) }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(ActivityList, { items: facts?.activeWorkspaces, kind: "workspace", label: "项目" }),
     /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(ActivityList, { items: facts?.activeWorkflows, kind: "workflow", label: "工作流" }),
     facts?.rikke?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "rikke", children: `日课：${momentOf(facts.rikke.generatedAt)} 生成` }),
     facts?.digao?.generatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "digao", children: `底稿：${momentOf(facts.digao.generatedAt)} 刷新过` }),
-    facts?.shiji?.updatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "shiji", children: `事记：${facts.shiji.updatedAt} 有更新` })
+    facts?.shiji?.updatedAt === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("p", { className: "xs-wansheng__fact", "data-xuanshu-fact": "shiji", children: `事记：${momentOf(facts.shiji.updatedAt)} 有更新` })
   ] });
 }
 function WanshengPanel({

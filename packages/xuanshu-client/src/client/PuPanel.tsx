@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { momentOf } from './panel.js';
 import type { Context } from '@deepseek-ai/cordis';
 import { readService } from './ctx-service.js';
 import { rpcCall } from './rpc.js';
@@ -226,7 +227,7 @@ function PuPanel({ ctx, openSession }: { ctx: PuClient; openSession?: (sessionId
         <button onClick={() => { setView('create'); setStep(pendingJob ? 3 : 1); setJob(pendingJob); if (!pendingJob) setDraft(blank); }}>＋ 创建新谱</button></div>
       {loading ? <p role="status">正在读取谱…</p> : <>
         <section><h2>基础输入级 base · {filtered.filter(p => p.level === 'base').length} 个</h2><p>进底稿提炼源 · 级别≠必填：所有谱都非必填，唯一必填项是底座八字。</p><p>🔒 底座（八字） · 只读 · 由出生信息与底座生成 · 默认在场 · 不可关 <button onClick={() => window.alert('底座默认在场、不可关；要修改，请重新录制出生信息并确认。')}>打开</button></p></section>
-        {(['base', 'optional'] as const).map(group => <section key={group}>{group === 'optional' && <><h2>可选输入级 optional · {filtered.filter(p => p.level === group).length} 个</h2><p>底稿不采 · 问事时按需追加</p></>}{filtered.filter(p => p.level === group || (group === 'optional' && p.error)).map(p => <article key={p.slug}><div><strong>{p.name}</strong><p>{p.description}</p><small>{p.source} · {p.updatedAt}{p.stale && ' · 汇总可能过期'}</small>{p.error && <p role="alert">{p.error}</p>}</div><button disabled={!!p.error || busy} onClick={() => open(p.slug)}>打开 / 编辑</button></article>)}</section>)}
+        {(['base', 'optional'] as const).map(group => <section key={group}>{group === 'optional' && <><h2>可选输入级 optional · {filtered.filter(p => p.level === group).length} 个</h2><p>底稿不采 · 问事时按需追加</p></>}{filtered.filter(p => p.level === group || (group === 'optional' && p.error)).map(p => <article key={p.slug}><div><strong>{p.name}</strong><p>{p.description}</p><small>{p.source} · {momentOf(p.updatedAt)}{p.stale && ' · 汇总可能过期'}</small>{p.error && <p role="alert">{p.error}</p>}</div><button disabled={!!p.error || busy} onClick={() => open(p.slug)}>打开 / 编辑</button></article>)}</section>)}
         {/*
           2026-11-01 改：无谱时原来给的是「清空筛选」按钮 —— 可那时根本没有筛选条件可清，
           点下去什么都不会变（用户会以为按钮坏了）。没有谱的时候该给的是「建一个谱」，
@@ -239,7 +240,7 @@ function PuPanel({ ctx, openSession }: { ctx: PuClient; openSession?: (sessionId
       </>}
       <p>本列表只收谱。工作区 / 工作流与谱并列独立、不是谱。你自己的本地文件在藏库里，永不进 AI。</p>
     </>}
-    {view === 'detail' && selected && <>{preview}<p>{draft.level === 'base' ? '本谱是底稿提炼源（进底稿）' : '底稿不采；问事时按需追加'} · 级别变更下次底稿刷新生效。</p><p>元信息：spec pu/1 · source {selected.source} · updated_at {selected.updatedAt} · 签：预留字段，暂不启用</p><p>数据目录：$DSH_HOME/xuanshu/pus/{selected.slug}/</p>
+    {view === 'detail' && selected && <>{preview}<p>{draft.level === 'base' ? '本谱是底稿提炼源（进底稿）' : '底稿不采；问事时按需追加'} · 级别变更下次底稿刷新生效。</p><p>元信息：spec pu/1 · source {selected.source} · updated_at {momentOf(selected.updatedAt)} · 签：预留字段，暂不启用</p><p>数据目录：$DSH_HOME/xuanshu/pus/{selected.slug}/</p>
       <button disabled={busy} onClick={() => void run(async () => {
         if (draft.body !== selected.body && draft.summary !== selected.summary && !window.confirm(`正文与汇总均改变。${draft.level === 'base' ? '会影响底稿提炼源。' : '只在问事按需追加。'}确认保存这些事实？`)) return;
         const saved = await call<Pu>('pu.update', { slug: selected.slug, draft, confirmed: true }); setSelected(saved); setDraft(saved); setOriginal(JSON.stringify(saved)); await reload();
