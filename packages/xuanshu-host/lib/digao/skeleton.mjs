@@ -183,9 +183,12 @@ function bySourceLine(bySource) {
 export function renderDigaoMarkdown({ segments, digest, digestText, generatedAt }) {
   const list = asArray(segments)
   const meta = buildDigaoMeta({ segments: list, digest, generatedAt })
+  // 2026-11-01 改：这两句会**原样写进底稿的 .md 文件**，用户点「查看 MD 形态」就能看到。
+  // 原文里的 `LLM` 与 `digest=llm` / `digest=skeleton` 是实现词（界面上那句已改成说人话，
+  // 文件里却还是术语，等于同一个信息两套说法）。这两行在文件里各出现一次，就当读给用户听。
   const distillLine = digest === 'llm'
-    ? '已提炼：LLM 把多段压成一段精简汇总（digest=llm）'
-    : '未提炼：LLM 不可用或失败，本份为规则骨架（digest=skeleton）'
+    ? '已提炼：AI 把多段压成一段精简汇总'
+    : '未提炼：AI 这次用不了或没用成，本份只有规则骨架'
   const recent = list.filter((segment) => segment?.source !== SHIJI_CHAPTER.source)
   const past = list.filter((segment) => segment?.source === SHIJI_CHAPTER.source)
 

@@ -223,7 +223,7 @@ describe('票13 · 降级如实标注（契约 §1/§4）', () => {
     const markdown = renderDigaoMarkdown({ segments: buildSegments(SOURCES), digest: 'skeleton', generatedAt: GENERATED_AT })
     expect(markdown).not.toContain('## 摘要')
     expect(markdown).toContain('未提炼')
-    expect(markdown).toContain('digest=skeleton')
+    expect(markdown).toContain('只有规则骨架')
   })
 
   it("digest='llm'：`## 摘要` 节带 LLM 压出来的那段，且不再写「未提炼」", () => {
