@@ -367,6 +367,39 @@ run_mcp_server(s, transport="streamable-http")
 > `bazi_birth` 照常出盘；只有依赖 Java 后端的技法会缺。别把它当成「出盘修不好」的理由——
 > 本机 2026-11-02 就是在这个 degraded 状态下走通了 1990-05-20 08:30 北京 → 庚午 辛巳 乙酉 庚辰。
 
+
+#### Java 侧的同类两例（`degraded: chart-only` 的真正拦路）
+
+上面第 2 条说的是「子进程写不了 `C:\Users\Administrator`」。**Java 侧撞的是同一个病根**，
+两处不同落点，症状完全不同、都不像权限问题：
+
+| # | 症状 | 它想写哪里 | 处置 |
+|---|---|---|---|
+| a | 启动就死，`log4j2 Unable to create file ...\.horosa-logs\...\all\other.log` + `Could not create directory` | `C:\Users\Administrator/.horosa-logs/astrostudyboot/<年>/<月>/<日>/...` | 把 **`HOME`**（以及 `USERPROFILE`）指到工作盘再起 JVM。`log4j2.xml` 里写的是 `${env:HOME:-${sys:user.home}}/.horosa-logs/astrostudyboot`，所以这个变量**能改**，不是硬编码 |
+| b | 起来了但**永不回请求**（`/common/time` 连试三次都 60 秒超时） | `C:\Users\Administrator\AppData\Local\Temp\tomcat.9999.*` | 加 **`-Djava.io.tmpdir=<工作盘>\tmp`**，并把 `TEMP` / `TMP` 也指过去。`spring.log` 里给的是 `Unable to create tempDir` + `AccessDeniedException` |
+
+两条修完，日志会明确告诉你成功了：
+
+```
+INFO - Tomcat initialized with port(s): 9999 (http)
+INFO - Root WebApplicationContext: initialization completed in 2577 ms
+INFO - Tomcat started on port(s): 9999 (http) with context path ''
+```
+
+> **注意 `Root level="warn"`**：`log4j2.xml` 的 root 是 `warn`，所以 info 级启动进度**不会**进 stdout。
+> 要看进度就翻它自己的 appender 文件：`<HOME>/.horosa-logs/astrostudyboot/<年>/<月>/<日>/spring/spring.log`
+> 与 `.../info/info.log`（`org.springframework` 那条 logger 是 `level="info"`）。
+
+**第三个坑：`degraded: chart-only` 的真因不是 bug，是缺 MongoDB。**
+Tomcat 起来之后请求仍永不返回（60 秒超时 × 3），因为：
+
+```
+INFO - create cachefactory with name:bazi, of class:boundless.types.cache.MongoCacheFactory
+```
+
+**连 `bazi` 缓存都是 `MongoCacheFactory`**，而本机 27017 没有服务在听 → 每个请求都堵在连 Mongo 上。
+所以这套 Java 后端**离开 Mongo 不能提供服务**；要验 Java 侧技法，先起一个 Mongo。
+（玄枢的出盘不需要它 —— chart 侧（Python 的 8899）独立给四柱与口径，`degraded: chart-only` 下照样出盘。）
 > 顺带一条**界面**：`js_engine.cli_missing` 这类上游 code 会一路冒到玄枢界面的 `八字出盘失败：…` 行。
 > 前缀已改成「出盘引擎返回了失败（错误码 …）」，上游 message 原样保留（那才是能搜的东西）。
 ## 8. 「非回环不暴露」
