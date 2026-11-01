@@ -50,6 +50,14 @@ import type { RpcContext } from './rpc.js';
 /** 手输被忽略时的提示（非法值忽略不回填，但要让人知道发生了什么）。 */
 const MANUAL_REJECTED_HINT = '经纬度不合法，已忽略（经度在前，例如 118.78 / 32.06）';
 
+/**
+ * 取消向导前的确认文案。
+ *
+ * 2026-11-02：原来点「取消向导」直接清空并回总览，填了几步也一句不问。
+ * 这里要让人知道**丢的是什么**（刚填的出生信息），而不是一句泛泛的「确定放弃吗」。
+ */
+export const WIZARD_CANCEL_CONFIRM = '刚填的出生信息还没落盘，取消就没了。确定放弃？';
+
 /** 城市搜索的调度器（小库即时 + 180ms 防抖后的大库），生命周期绑在组件上。 */
 function useCityQuery(api: BaziApi, query: string): CityQueryState {
   const controller = useMemo(
@@ -98,6 +106,8 @@ export function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiS
   const [gateAnswer, setGateAnswer] = useState('');
   const [result, setResult] = useState<CastResult | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  /** 2026-11-02：取消向导前的那次确认（只在真的填过东西时才拦）。 */
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const castSequence = useRef(0);
   const zoneSequence = useRef(0);
 
@@ -186,6 +196,19 @@ export function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiS
     setGateAnswer('');
     navigate('overview');
   };
+
+  /**
+   * 是否**填过东西**（决定「取消向导」要不要拦一下）。
+   *
+   * 2026-11-02 加：判据取「已经走过一步以上」或「三个关键字段里任一非空」。
+   * 只看 step 会漏掉「第 1 步填了日期就点取消」；只看字段会在第 2 步出生地为空时
+   * 反而放行（那时用户已经填过时间了）。两个条件取或，宁可多问一次。
+   */
+  const filled = ((): boolean => {
+    if (step > 1) return true;
+    const d = draft as { date?: string; time?: string; birthplace?: string };
+    return (d.date ?? '') !== '' || (d.time ?? '') !== '' || (d.birthplace ?? '') !== '';
+  })();
 
   /**
    * 离开「接上 AI」这一步（完成或跳过都走这里）。
@@ -320,8 +343,37 @@ export function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiS
           {'下一步 ->'}
         </button>
         <span className="xs-wizard__spacer" />
-        <button type="button" data-xuanshu-action="cancel" onClick={cancel}>取消向导</button>
+        {/*
+          2026-11-02 改：原来「取消向导」直接 `setDraft(defaultDraft())` + 回总览 —— 实测填完 5 步
+          （时间 / 出生地 / 时区 / 口径）点一下，全没了，一句确认都没有。日课「重新生成」那种
+          只覆盖一份产物都要问一次，这里丢的是用户一格一格填进来的出生信息，更该问。
+          只在**真的填过**时拦（第 1 步什么都没填就直接取消，不该被拦）。
+        */}
+        <button
+          type="button"
+          data-xuanshu-action="cancel"
+          onClick={() => {
+            if (filled) setConfirmingCancel(true);
+            else cancel();
+          }}
+        >
+          取消向导
+        </button>
       </footer>
+
+      <div className="xs-wizard__confirm" data-xuanshu-confirm="cancel" hidden={!confirmingCancel}>
+        <p data-xuanshu-confirm-text="cancel">{WIZARD_CANCEL_CONFIRM}</p>
+        <div className="xs-wizard__footer">
+          <button type="button" data-xuanshu-action="cancel-dismiss" onClick={() => { setConfirmingCancel(false); }}>继续填</button>
+          <button
+            type="button"
+            data-xuanshu-action="cancel-confirm"
+            onClick={() => { setConfirmingCancel(false); cancel(); }}
+          >
+            放弃并离开
+          </button>
+        </div>
+      </div>
     </main>
   );
 }

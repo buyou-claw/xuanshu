@@ -7804,6 +7804,7 @@ function XsAiStep({
 // src/client/onboarding.tsx
 var import_jsx_runtime19 = require("react/jsx-runtime");
 var MANUAL_REJECTED_HINT = "经纬度不合法，已忽略（经度在前，例如 118.78 / 32.06）";
+var WIZARD_CANCEL_CONFIRM = "刚填的出生信息还没落盘，取消就没了。确定放弃？";
 function useCityQuery(api, query) {
   const controller = (0, import_react17.useMemo)(
     () => createCityQuery({
@@ -7830,6 +7831,7 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiStatus, 
   const [gateAnswer, setGateAnswer] = (0, import_react17.useState)("");
   const [result, setResult] = (0, import_react17.useState)(void 0);
   const [busy, setBusy] = (0, import_react17.useState)(false);
+  const [confirmingCancel, setConfirmingCancel] = (0, import_react17.useState)(false);
   const castSequence = (0, import_react17.useRef)(0);
   const zoneSequence = (0, import_react17.useRef)(0);
   const aiSnapshot = useAiReadiness(aiStatus);
@@ -7898,6 +7900,11 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiStatus, 
     setGateAnswer("");
     navigate("overview");
   };
+  const filled = (() => {
+    if (step > 1) return true;
+    const d = draft;
+    return (d.date ?? "") !== "" || (d.time ?? "") !== "" || (d.birthplace ?? "") !== "";
+  })();
   const leaveAiStep = () => {
     setDraft(defaultDraft());
     setStep(1);
@@ -8030,7 +8037,38 @@ function OnboardingPanel({ api, controller, navigate, preloadedDraft, aiStatus, 
         gotoStep(step + 1);
       }, children: "下一步 ->" }),
       /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "xs-wizard__spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("button", { type: "button", "data-xuanshu-action": "cancel", onClick: cancel, children: "取消向导" })
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+        "button",
+        {
+          type: "button",
+          "data-xuanshu-action": "cancel",
+          onClick: () => {
+            if (filled) setConfirmingCancel(true);
+            else cancel();
+          },
+          children: "取消向导"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "xs-wizard__confirm", "data-xuanshu-confirm": "cancel", hidden: !confirmingCancel, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("p", { "data-xuanshu-confirm-text": "cancel", children: WIZARD_CANCEL_CONFIRM }),
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "xs-wizard__footer", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("button", { type: "button", "data-xuanshu-action": "cancel-dismiss", onClick: () => {
+          setConfirmingCancel(false);
+        }, children: "继续填" }),
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+          "button",
+          {
+            type: "button",
+            "data-xuanshu-action": "cancel-confirm",
+            onClick: () => {
+              setConfirmingCancel(false);
+              cancel();
+            },
+            children: "放弃并离开"
+          }
+        )
+      ] })
     ] })
   ] });
 }
