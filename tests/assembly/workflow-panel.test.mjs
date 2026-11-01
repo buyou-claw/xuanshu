@@ -145,9 +145,11 @@ describe('票16 · 纯逻辑：分段、副标题、导出可提交判据', () =
     expect(splitWorkflows(undefined)).toEqual({ running: [], exported: [] })
   })
 
-  it('workflowSubtitle：导出过的显示日期；没导出的显示「等你判定」（不编时刻）', () => {
-    expect(workflowSubtitle(ITEMS[1])).toBe('已导出 · 2026-10-11')
-    expect(workflowSubtitle(ITEMS[0])).toBe('进行中（等你判定）')
+  it('workflowSubtitle：导出过的显示时刻；没导出的带上建的时间；两者都缺就不编时刻', () => {
+    // 2026-11-02：列表项有了 createdAt，用来区分同名的「未命名工作流」。
+    expect(workflowSubtitle(ITEMS[1])).toMatch(/^已导出 · \d{2}-\d{2} \d{2}:\d{2}$/u)
+    expect(workflowSubtitle(ITEMS[0])).toBe('进行中（等你判定）') // 这条 mock 没有 createdAt
+    expect(workflowSubtitle({ ...ITEMS[0], createdAt: '2026-10-15T03:00:00.000Z' })).toMatch(/^进行中（等你判定）· \d{2}-\d{2} \d{2}:\d{2} 建$/u)
   })
 
   it('exportBlockers：空 → 无阻塞；缺项逐条给理由；名字不合 kebab 单独一条', () => {

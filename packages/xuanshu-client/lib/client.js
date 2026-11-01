@@ -9215,7 +9215,8 @@ function exportBlockers(draft) {
   return blockers;
 }
 function workflowSubtitle(item) {
-  if (typeof item.exportedAt === "string" && item.exportedAt !== "") return `已导出 · ${item.exportedAt.slice(0, 10)}`;
+  if (typeof item.exportedAt === "string" && item.exportedAt !== "") return `已导出 · ${momentOf(item.exportedAt)}`;
+  if (typeof item.createdAt === "string" && item.createdAt !== "") return `进行中（等你判定）· ${momentOf(item.createdAt)} 建`;
   return "进行中（等你判定）";
 }
 
@@ -9298,6 +9299,7 @@ function WorkflowPanel({ api, navigate, preloaded }) {
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("h1", { className: "xs-workflow__title", children: WORKFLOW_LABEL }),
         /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "xs-workflow__create", onClick: onCreate, disabled: busy, children: busy ? "创建中…" : "创建工作流" })
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__hint", "data-xuanshu-note": "create-hint", children: "点「创建工作流」会先新开一个会话：切到「选择工作区」→ 跑通那套步骤 → 回来在这里判定并导出 skill。" }),
       /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("p", { className: "xs-workflow__note", children: WORKFLOW_BOUNDARY_NOTE }),
       createError !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("p", { className: "xs-workflow__error", role: "alert", children: [
         "创建工作流失败：",

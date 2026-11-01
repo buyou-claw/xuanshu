@@ -6,6 +6,7 @@
  * 这类规则可以在断言台里被直接钉住，而不必去点 DOM。
  */
 import type { WorkflowItem } from './workflow-api.js';
+import { momentOf } from '../panel.js';
 
 /** 面板 id / 侧栏行（S12 §2【B】：两处同字符串）。 */
 export const WORKFLOW_ID = 'workflow';
@@ -49,8 +50,15 @@ export function exportBlockers(draft: { name?: string; description?: string; con
   return blockers;
 }
 
-/** 列表项的一句话副标题（时间只做展示，缺了就说「未导出」而不是编一个时刻）。 */
+/**
+ * 列表项的一句话副标题（时间只做展示，缺了就说「未导出」而不是编一个时刻）。
+ *
+ * 2026-11-02 改：未导出的条目原来一律显示「进行中（等你判定）」。连点几次「创建工作流」
+ * 就会出现好几条**名字和副标题都完全一样**的「未命名工作流」，用户没法分辨是哪一条。
+ * `createdAt` 记录里本来就有（`listWorkflows` 甚至按它倒序），只是没暴露 —— 现在把它显示出来。
+ */
 export function workflowSubtitle(item: WorkflowItem): string {
-  if (typeof item.exportedAt === 'string' && item.exportedAt !== '') return `已导出 · ${item.exportedAt.slice(0, 10)}`;
+  if (typeof item.exportedAt === 'string' && item.exportedAt !== '') return `已导出 · ${momentOf(item.exportedAt)}`;
+  if (typeof item.createdAt === 'string' && item.createdAt !== '') return `进行中（等你判定）· ${momentOf(item.createdAt)} 建`;
   return '进行中（等你判定）';
 }

@@ -121,9 +121,17 @@ export function listWorkflows(dataDir, { strict = false } = {}) {
   return out.sort((left, right) => String(right.createdAt ?? '').localeCompare(String(left.createdAt ?? '')))
 }
 
-/** 清单 → 契约 §4 的列表项（`exportedAt` 只有导出过才有 —— 缺失即省略键）。 */
+/**
+ * 清单 → 契约 §4 的列表项（`exportedAt` / `createdAt` 缺失即省略键）。
+ *
+ * 2026-11-02 加 `createdAt`：列表里多条「未命名工作流」原来全都只显示
+ * 「进行中（等你判定）」—— 名字一样、副标题一样，用户没法区分是哪一条（实测连点几次创建
+ * 就出现四条一模一样的）。`createdAt` 本来就在记录里（`service.mjs` 创建时写入、`listWorkflows`
+ * 还按它倒序排），只是没往界面上暴露。
+ */
 export function toWorkflowItem(record) {
   const item = { id: String(record.id ?? record.sessionId ?? ''), name: String(record.name ?? UNNAMED_WORKFLOW), sessionId: String(record.sessionId ?? '') }
   if (typeof record.exportedAt === 'string' && record.exportedAt !== '') item.exportedAt = record.exportedAt
+  if (typeof record.createdAt === 'string' && record.createdAt !== '') item.createdAt = record.createdAt
   return item
 }

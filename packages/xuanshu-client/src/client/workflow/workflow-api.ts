@@ -12,12 +12,14 @@
 import { rpcCall } from '../rpc.js';
 import type { RpcContext } from '../rpc.js';
 
-/** 门厅列表的一条（`exportedAt` 只有导出过才有）。 */
+/** 门厅列表的一条（`exportedAt` / `createdAt` 都是缺失即省略键）。 */
 export interface WorkflowItem {
   id: string;
   name: string;
   sessionId: string;
   exportedAt?: string;
+  /** 2026-11-02 加：用来区分多条同名的「未命名工作流」（见 workflowSubtitle）。 */
+  createdAt?: string;
 }
 
 /** `workflow.list` 的返回。 */

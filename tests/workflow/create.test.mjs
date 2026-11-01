@@ -105,7 +105,12 @@ describe('票16 · workflow.create（契约 §4）', () => {
     const { sessionId } = await methods['workflow.create']({ seed: '报价单生成' })
     const listed = await methods['workflow.list']({})
     expect(listed.items).toHaveLength(1)
-    expect(listed.items[0]).toEqual({ id: sessionId, name: '报价单生成', sessionId })
+    // 2026-11-02：列表项多了 createdAt（区分同名条目用），不再逐键相等。
+    expect(listed.items[0].id).toBe(sessionId)
+    expect(listed.items[0].name).toBe('报价单生成')
+    expect(listed.items[0].sessionId).toBe(sessionId)
+    expect(typeof listed.items[0].createdAt).toBe('string')
+    expect(Number.isNaN(Date.parse(listed.items[0].createdAt))).toBe(false)
     expect(Object.prototype.hasOwnProperty.call(listed.items[0], 'exportedAt')).toBe(false)
   })
 

@@ -157,6 +157,14 @@ export function WorkflowPanel({ api, navigate, preloaded }: WorkflowPanelProps) 
           {busy ? '创建中…' : '创建工作流'}
         </button>
       </header>
+      {/*
+        2026-11-02 加：点「创建工作流」会**切走**到 DSH 的「选择工作区」界面（工作流 = 可复用 skill
+        + 一次跑通过的会话，所以要先开会话）。实测点下去整屏换掉，页面上没有任何字预告这件事 ——
+        用户按「创建工作流」以为是就地新建，结果被扔到另一个界面。
+      */}
+      <p className="xs-workflow__hint" data-xuanshu-note="create-hint">
+        点「创建工作流」会先新开一个会话：切到「选择工作区」→ 跑通那套步骤 → 回来在这里判定并导出 skill。
+      </p>
       <p className="xs-workflow__note">{WORKFLOW_BOUNDARY_NOTE}</p>
       {createError !== undefined ? <p className="xs-workflow__error" role="alert">创建工作流失败：{createError}</p> : null}
 
