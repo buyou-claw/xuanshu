@@ -573,7 +573,12 @@ export function XsRikkeCard({
               reason={DISABLED_REASON.generate}
               onClick={onGenerate}
             >
-              {ACTION_COPY.generate}
+              {/*
+                2026-11-02 改：ready 态说明当天产物**已经有了**，按钮不该再叫「去生成」——
+                截图实测：宜/忌/流日/AI 段全在，底下还挂着「去生成 ->」，用户会以为没生成成功。
+                动作不变（还是送到面板，闸门在那一处），只说清是「再生成一次」。
+              */}
+              {ACTION_COPY.regenerate}
             </ActionButton>
           </div>
         </div>
@@ -1084,7 +1089,8 @@ export function XsWanshengCard({
               reason={DISABLED_REASON.generateWansheng}
               onClick={onGenerate}
             >
-              {ACTION_COPY.generateWansheng}
+              {/* 2026-11-02：同日课卡 —— 当天产物已经在屏上时，按钮说「重新生成」。 */}
+              {ACTION_COPY.regenerate}
             </ActionButton>
           </div>
         </div>
