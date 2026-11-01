@@ -8615,7 +8615,7 @@ function initialView2(preloaded) {
   }
   return { kind: "ready", status: preloaded };
 }
-function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }) {
+function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit, preloadedHistory }) {
   const seeded = preloaded !== void 0;
   const [view, setView] = (0, import_react19.useState)(() => initialView2(preloaded));
   const [busy, setBusy] = (0, import_react19.useState)(false);
@@ -8816,6 +8816,10 @@ function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }) {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "xs-rikke__note", children: `时区 ${schedule?.timeZone ?? "（读不到）"}（IANA，不手改）` }),
       /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "xs-rikke__actions", children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { type: "button", "data-xuanshu-action": "save-time", disabled: busy, onClick: saveTime, children: "保存" }) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("details", { className: "xs-rikke__history", "data-xuanshu-history": "rikke", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("summary", { children: "投递历史" }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(DeliveryHistoryHost, { notify, preloaded: preloadedHistory })
     ] })
   ] });
 }

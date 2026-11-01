@@ -19,8 +19,8 @@ import type { Context } from '@deepseek-ai/cordis';
 import { EMPTY_COPY, clockOf } from './panel.js';
 import { RIKKE_ID, RIKKE_LABEL, RIKKE_ORDER } from './panel.js';
 import type { PanelNavTarget } from './panel.js';
-import type { NotifyApi } from './notify-api.js';
-import { notifyFailureText, notifyReasonCode } from './notify.js';
+import type { NotifyApi, TrafficStatus } from './notify-api.js';
+import { DeliveryHistoryHost, notifyFailureText, notifyReasonCode } from './notify.js';
 import type { RikkeAiNote, RikkeApi, RikkeStatus } from './rikke-api.js';
 import { rikkeAiView } from './rikke-model.js';
 import { installRikkeStyle } from './rikke-style.js';
@@ -53,6 +53,8 @@ export interface RikkePanelProps {
   preloaded?: RikkePreloaded;
   /** 静态预置「改时刻」编辑器已展开（静态渲染点不了按钮）。 */
   preloadedTimeEdit?: boolean;
+  /** 静态预置的投递历史（测试 / SSR：给了就不发 `traffic.status`）。 */
+  preloadedHistory?: TrafficStatus;
 }
 
 /** AI 段（#24 两段式的第二段；三态文案的唯一来源是 `rikke-model.ts`）。 */
@@ -89,7 +91,7 @@ function initialView(preloaded: RikkePreloaded | undefined): RikkeView {
  * @param props - 数据面、导航与静态预置。
  * @returns 日课面板节点。
  */
-export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit }: RikkePanelProps) {
+export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit, preloadedHistory }: RikkePanelProps) {
   const seeded = preloaded !== undefined;
   const [view, setView] = useState<RikkeView>(() => initialView(preloaded));
   const [busy, setBusy] = useState(false);
@@ -382,6 +384,17 @@ export function RikkePanel({ api, navigate, notify, preloaded, preloadedTimeEdit
           </button>
         </div>
       </div>
+
+      {/*
+        2026-11-01 加：投递历史（成功 / 失败 / 跳过 + 原因 + 时间 + 是否补）。
+        晚省那屏一直有这块，日课没有 —— 于是「早上那条日课到底推没推出去」在界面上无从查证，
+        而晚省同样一个 daily 任务却能看到。同一类东西两套待遇，补上。
+        `notify` 这个 prop 日课本来就有（#24 用它把「推到但没看」标已读），只是没人拿来渲染历史。
+      */}
+      <details className="xs-rikke__history" data-xuanshu-history="rikke">
+        <summary>投递历史</summary>
+        <DeliveryHistoryHost notify={notify} preloaded={preloadedHistory} />
+      </details>
     </main>
   );
 }
