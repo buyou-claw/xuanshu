@@ -4128,7 +4128,13 @@ function XsAiReadiness({
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "xs-ai__actions", children: [
       onRetry === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "xs-btn", "data-xuanshu-action": "retry-ai", onClick: onRetry, children: "重试" }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(AiSettingsAction, { ...onOpenSettings === void 0 ? {} : { onOpenSettings } }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+        AiSettingsAction,
+        {
+          ...onOpenSettings === void 0 ? {} : { onOpenSettings },
+          showFallback: state !== "configured"
+        }
+      ),
       onFinish === void 0 || state !== "configured" ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "xs-btn xs-btn--primary", "data-xuanshu-action": "finish-ai", onClick: onFinish, children: "完成，回总览 ->" }),
       onSkip === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", className: "xs-btn", "data-xuanshu-action": "skip-ai", onClick: onSkip, children: "跳过" })
     ] }),

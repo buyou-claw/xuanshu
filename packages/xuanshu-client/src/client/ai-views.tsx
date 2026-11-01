@@ -191,7 +191,17 @@ export function XsAiReadiness({
             重试
           </button>
         )}
-        <AiSettingsAction {...(onOpenSettings === undefined ? {} : { onOpenSettings })} />
+        {/*
+          2026-11-02 修：原来这里没传 `showFallback`，默认 true —— 于是**已经接上 AI** 时，
+          向导第 6 步仍然顶着「已接上 AI · 可以问事了」的标题，底下又写「请打开 DSH「设置 → 模型」
+          配置 provider 与默认模型。」，旁边还杵着一个「重试」。用户读到的是两句互相打脸的话。
+          门禁组件（`XsAiGate`）一直是按 `readiness.reason.next` 判断的，这里照同一套：
+          只有未接上（或没有下一步指引）时才显示那句配置路径。
+        */}
+        <AiSettingsAction
+          {...(onOpenSettings === undefined ? {} : { onOpenSettings })}
+          showFallback={state !== 'configured'}
+        />
         {onFinish === undefined || state !== 'configured' ? null : (
           <button type="button" className="xs-btn xs-btn--primary" data-xuanshu-action="finish-ai" onClick={onFinish}>
             {'完成，回总览 ->'}
