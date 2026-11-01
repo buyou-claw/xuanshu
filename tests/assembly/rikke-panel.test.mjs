@@ -309,7 +309,7 @@ describe('票 13 · 日课面板（看完整日课）', () => {
     expect(html).toContain('今天还没有生成日课')
     expect(html).toContain('data-xuanshu-action="generate-rikke"')
     expect(html).toContain('data-xuanshu-action="edit-time"')
-    expect(html).toContain('（底座未立时生成会失败）')
+    expect(html).toContain('（生成要读底座；底座还没立时，点生成会失败并给出原因）')
   })
 })
 

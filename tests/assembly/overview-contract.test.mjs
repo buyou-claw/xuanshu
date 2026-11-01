@@ -390,7 +390,7 @@ describe('票 07 · 五卡渲染（冷启动空态；#25 加第 5 张晚省）',
     const card = cardOf(html, 'rike')
     expect(card).toContain('日课 · 今天 2026-10-13')
     expect(card).toContain('今天还没有生成日课。到计划时刻会自动生成。')
-    expect(card).toContain('（底座未立时生成会失败）')
+    expect(card).toContain('（生成要读底座；底座还没立时，点生成会失败并给出原因）')
     expect(card).toContain('data-xuanshu-action="generate-rikke"')
     // 2026-11-02：卡片按钮只做跳转（生成闸门在日课面板），不再有「还没接上」的禁用态。
     // [改时间 ->] 的目标是 DSH 原 schedules 面板：已注册 → 可用。
