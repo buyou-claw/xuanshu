@@ -110,14 +110,14 @@ export function createConsultMethods(ctx, config = {}) {
   async function ensureAgent(sessionId) {
     const agents = softGet(ctx, 'agents')
     if (typeof agents?.create !== 'function') {
-      throw new Error('DSH agent 服务（ctx.agents）不可得：驱动不了这个会话。')
+      throw new Error('驱动不了这个会话：这台机器上缺了驱动会话的服务（DSH 没提供）。')
     }
     const held = handles.get(sessionId)
     if (held?.agent) return held.agent
     const live = typeof agents.get === 'function' ? agents.get(sessionId) : undefined
     if (live) return live
     if (typeof agents.resume !== 'function') {
-      throw new Error(`会话 ${sessionId} 不在本进程活着，且 ctx.agents 不能 resume：先 consult.create 或让 DSH 会话面板打开它。`)
+      throw new Error(`会话 ${sessionId} 现在没活着，这台机器也接不回它：重新开一次问事，或在 DSH 会话面板里打开它。`)
     }
     const handle = await resumeConsultAgent(ctx, { sessionId })
     handles.set(sessionId, handle)
@@ -184,7 +184,7 @@ export function createConsultMethods(ctx, config = {}) {
 
       const agents = softGet(ctx, 'agents')
       if (typeof agents?.create !== 'function') {
-        throw new Error('DSH agent 服务（ctx.agents）不可得：建不出能跑的会话（工具能力来自 agent preset）。')
+        throw new Error('建不出能跑的会话：这台机器上缺了会话服务（DSH 没提供）。换一台装全的机器，或在 DSH 里把 agent 服务开起来。')
       }
 
       const sessionId = newConsultSessionId()
@@ -309,7 +309,7 @@ export function createConsultMethods(ctx, config = {}) {
 
       const query = softGet(ctx, 'sessionQuery')
       if (typeof query?.readSession !== 'function') {
-        throw new Error('DSH 会话查询服务（ctx.sessionQuery）不可得：会话正文读不出来（问事记录本身还在，列表与勾选谱不受影响）。')
+        throw new Error('会话正文读不出来（这台机器上缺了读会话的服务）：问事记录本身还在，列表与勾选谱不受影响。')
       }
 
       let snapshot

@@ -360,7 +360,7 @@ export function createBestOfMethods(ctx, config = {}) {
   async function sessionAgent(sessionId) {
     const agents = softGet(ctx, 'agents')
     if (typeof agents?.get !== 'function' && typeof agents?.resume !== 'function') {
-      throw new Error('DSH agent 服务（ctx.agents）不可得：这一份采用稿写不进会话。')
+      throw new Error('这一份采用稿写不进会话：这台机器上缺了驱动会话的服务（DSH 没提供）。')
     }
     const live = typeof agents.get === 'function' ? agents.get(sessionId) : undefined
     if (live !== undefined && live !== null) return live
@@ -392,7 +392,7 @@ export function createBestOfMethods(ctx, config = {}) {
     const message = await createBestofAdoptedMessage(text, { searchDirs: messageSearchDirs(), merged })
     const agent = await sessionAgent(record.sessionId)
     if (typeof agent?.followup !== 'function') {
-      throw new Error('这个会话的 agent 不能 followup：采用稿写不进会话（宿主 DSH 版本不同？）。')
+      throw new Error('采用稿写不进会话：这个会话接不上，可能是 DSH 版本不同。重新开一次问事再试。')
     }
     agent.followup(message)
     const entry = { candidateId: view.adoptedId, messageId: message.id, source: BESTOF_ADOPTED_SOURCE_KIND, at: new Date().toISOString() }
@@ -720,7 +720,7 @@ export function createBestOfMethods(ctx, config = {}) {
   /** judge 的一次调用（单独抽出来是为了让「调用失败」与「判定不可用」两条路分开写）。 */
   async function collectJudge({ route, question, body, signal }) {
     const llm = softGet(ctx, 'llm')
-    if (typeof llm?.stream !== 'function') throw new Error('宿主没有可用的 LLM 服务（ctx.llm）。')
+    if (typeof llm?.stream !== 'function') throw new Error('AI 没接上，这一步发不出去。去「设置 → 模型」把提供商和密钥配好再试。')
     return collectStream(
       llm.stream({
         provider: route.provider,

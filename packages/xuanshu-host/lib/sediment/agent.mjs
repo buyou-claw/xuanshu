@@ -35,14 +35,14 @@ function softGet(ctx, name) {
 export async function ensureConsultAgent(ctx, sessionId, { resume }) {
   const agents = softGet(ctx, 'agents')
   if (typeof agents?.create !== 'function') {
-    throw new Error('DSH agent 服务（ctx.agents）不可得：驱动不了这场问事会话，也就产不出草稿。')
+    throw new Error('产不出草稿：这台机器上缺了驱动会话的服务（DSH 没提供），所以问事会话跑不起来。')
   }
   if (typeof agents.get === 'function') {
     const live = agents.get(sessionId)
     if (live !== undefined && live !== null) return live
   }
   if (typeof agents.resume !== 'function') {
-    throw new Error(`这场问事会话（${sessionId}）不在本进程活着，且 ctx.agents 不能 resume：先在会话面板里打开它，或重新问一句。`)
+    throw new Error(`这场问事会话（${sessionId}）现在没活着，这台机器也接不回它：先在会话面板里打开它，或重新问一句。`)
   }
   const handle = await resume(ctx, { sessionId })
   const agent = handle?.agent

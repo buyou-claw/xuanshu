@@ -29,7 +29,10 @@ function softGet(ctx, name) {
 /** 取 llm 服务；缺了给可读错误（调用方已经过能力门，这里是第二道保险）。 */
 function requireLlm(ctx) {
   const llm = softGet(ctx, 'llm')
-  if (typeof llm?.stream !== 'function') throw new Error('宿主没有可用的 LLM 服务（ctx.llm）：合参发不出去。')
+  // 2026-11-01 改：这句会显示给用户（多 AI 合参发不出去时的原因）。
+  // 原文「宿主没有可用的 LLM 服务（ctx.llm）」里 `宿主` 是内部叫法、`ctx.llm` 是字段名。
+  // 用户需要的是「AI 没接上，去设置里接」这个结论，不是字段名。
+  if (typeof llm?.stream !== 'function') throw new Error('AI 没接上，合参发不出去。去「设置 → 模型」把提供商和密钥配好再试。')
   return llm
 }
 

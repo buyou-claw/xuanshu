@@ -482,10 +482,10 @@ describe('task-14 · 采用后：采用稿进历史，落选候选永不进日�
     const { bestOf, delivery } = await bestof['bestof.adopt']({ runId: started.runId, decision: 'adopt', adoptedId: 'c1' })
     expect(bestOf.adoptedId).toBe('c1') // 人点过就是点过了
     expect(delivery.ok).toBe(false)
-    expect(delivery.error).toMatch(/ctx\.agents/u)
+    expect(delivery.error).toMatch(/驱动会话的服务|写不进会话/u)
     expect(allDeliveries(agents), '全部通道，一条都没写进去').toEqual(before)
     const record = recordOf(sandbox, session.sessionId)
-    expect(record.deliveryError).toMatch(/ctx\.agents/u)
+    expect(record.deliveryError).toMatch(/驱动会话的服务|写不进会话/u)
     expect(record.deliveries).toBeUndefined()
     // 记录里没有 `deliveredAt`：界面据此不会说「已写进历史」（`state` 冷读也说同一句话）。
     expect(record.deliveredAt).toBeUndefined()

@@ -140,7 +140,7 @@ describe('consult.read · 正文走 ctx.sessionQuery.readSession', () => {
 
   it('没有 sessionQuery 服务：明确说清读不了正文（不假装空会话）', async () => {
     const { api, session } = await scene({ withSessionQuery: false })
-    await expect(api['consult.read']({ sessionId: session.sessionId })).rejects.toThrow(/sessionQuery|会话查询/u)
+    await expect(api['consult.read']({ sessionId: session.sessionId })).rejects.toThrow(/读会话的服务|读不出/u)
   })
 
   it('没有旁挂清单的会话：拒绝（先 consult.list 看有没有）', async () => {

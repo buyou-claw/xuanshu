@@ -87,7 +87,9 @@ async function compositionOptions(ctx, requested) {
   try {
     preset = await composeAgentPreset(ctx, requested)
   } catch (error) {
-    throw new Error(`组合 agent preset 失败：${String(error?.message ?? error)}（问事会话的工具与提示都来自 preset，缺了它这一场问事开不起来）。`)
+    // 2026-11-01 改：原文「组合 agent preset 失败…（工具与提示都来自 preset）」里的 `preset` 是内部概念。
+    // 用户只需要知道「会话开不起来」以及「原始错误在下面」。
+    throw new Error(`这场问事会话开不起来：准备会话配置时出错了（${String(error?.message ?? error)}）。`)
   }
   const agentOptions = defaultModelSelection(ctx)
   return {
@@ -135,7 +137,10 @@ export function consultAgentCapability(ctx) {
 export async function createConsultAgent(ctx, { sessionId, cwd }) {
   const agents = softGet(ctx, 'agents')
   if (typeof agents?.create !== 'function') {
-    throw new Error('DSH agent 服务（ctx.agents）不可得：建不出能跑的会话（工具能力来自 agent preset）。')
+    // 2026-11-01 改：这句会显示给用户。原文「DSH agent 服务（ctx.agents）不可得…
+    // （工具能力来自 agent preset）」里 `ctx.agents` 与 `agent preset` 都是实现词。
+    // 用户需要知道的是「这台机器上缺了能跑会话的那层服务」以及「这不是你操作错了」。
+    throw new Error('这台机器上缺了能跑会话的服务（DSH 没提供），所以问事发不出去。换一台装全的机器，或在 DSH 里把 agent 服务开起来。')
   }
   const { setup, agentOptions, agentPreset } = await compositionOptions(ctx)
   return agents.create({
@@ -157,7 +162,8 @@ export async function createConsultAgent(ctx, { sessionId, cwd }) {
 export async function resumeConsultAgent(ctx, { sessionId }) {
   const agents = softGet(ctx, 'agents')
   if (typeof agents?.resume !== 'function') {
-    throw new Error('DSH agent 服务（ctx.agents）不可得或不能 resume：接不回这个会话。')
+    // 同上一处：`ctx.agents` 与 `resume` 都不该出现在给用户看的句子里。
+    throw new Error('接不回这个会话：这台机器上缺了恢复会话的服务（DSH 没提供）。换一台装全的机器再试，或重新开一次问事。')
   }
   const stored = await storedAgentPreset(ctx, sessionId)
   let composition
