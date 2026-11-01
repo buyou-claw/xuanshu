@@ -42,7 +42,18 @@ export function createPuMethods(ctx, { dataDir }) {
         const event = [...resolved.agent.session.snapshotEvents()].reverse().find(e => e.type === 'assistant/message');
         const text = event?.data?.content?.filter(part => part.type === 'text').map(part => part.text).join('\n') ?? '';
         const json = text.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-        const draft = JSON.parse(json);
+        /**
+         * 2026-11-02 改：原来这里直接 `JSON.parse(json)`，AI 返回空或半截 JSON 时，
+         * `error.message` 是 `Unexpected end of JSON input` —— 这句原生错误会一路冒到界面上
+         * （`job.error = String(error?.message ?? error)`），用户读到的就是这串英文。
+         * 用户需要知道的是「AI 这次没按约定格式返回，重试一次」。
+         */
+        let draft;
+        try {
+          draft = JSON.parse(json);
+        } catch {
+          throw new Error('AI 这次没有按约定的格式返回内容（可能没生成完，或者跑偏说了别的话）。点「重试」再来一次；反复这样就把资料拆小一段再试。');
+        }
         // AI cannot override the person's chosen name or turn a draft into a required input.
         job.draft = { ...draft, name: request.name.trim(), level: request.level };
         validatePuDraft(job.draft);
