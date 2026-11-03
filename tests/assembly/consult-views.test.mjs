@@ -289,15 +289,34 @@ describe('票 10 · 历史列表（S7 §2.1 / §2.3 / §6）', () => {
     expect(html).toContain('data-xuanshu-action="back-lobby"')
   })
 
-  it('工具栏：搜索框 + 范围三档；导出 / 删除是**置灰的展示位**（并说明还没做）', () => {
+  it('工具栏：搜索框 + 范围三档；导出仍是**置灰的展示位**，删除已改成行内动作', () => {
     const html = render(h(XsConsultHistoryList, listProps()))
     expect(html).toContain('data-xuanshu-field="history-search"')
     expect(html).toContain('data-xuanshu-field="history-range"')
-    for (const action of ['export-selected', 'delete-selected']) {
-      const button = tagOf(html, `data-xuanshu-action="${action}"`)
-      expect(button, `${action} 未接入时必须置灰而不是假按钮`).toContain('disabled')
-    }
-    expect(html).toContain('还没做，所以这两个按钮是灰的')
+    const exportButton = tagOf(html, 'data-xuanshu-action="export-selected"')
+    expect(exportButton, '导出未接入时必须置灰而不是假按钮').toContain('disabled')
+    // 删除不再占工具条（那里没有「选中」模型，只能置灰）；它是**行内动作**，见下一条用例。
+    expect(html).not.toContain('data-xuanshu-action="delete-selected"')
+    expect(html).toContain('导出还没做，所以这个按钮是灰的')
+  })
+
+  it('历史行：每行一枚 [删除]（行内动作，二次确认的入口），不是假按钮', () => {
+    const html = render(h(XsConsultHistoryList, listProps()))
+    const deleteButton = tagOf(html, 'data-xuanshu-action="delete-consult"')
+    expect(deleteButton, '删除已实现，必须可点（不带 disabled）').not.toContain('disabled')
+    // 按钮文案在标签之后：标签只断言属性，文案在整段 HTML 里断言。
+    expect(html).toContain('删除')
+    expect(deleteButton).toContain('title="把这次问事从历史里移除"')
+    // 二次确认在点之后才出现，静态首屏只看到入口本身。
+    expect(html).not.toContain('data-xuanshu-confirm="delete-consult"')
+    // 点行仍然是读它：删除与读不许混成一个按钮。
+    expect(html).toContain('data-xuanshu-row=')
+  })
+
+  it('删除失败：错误条留在列表上方（不静默），也不冒充「已删」', () => {
+    const html = render(h(XsConsultHistoryList, listProps({ deleteError: '删除失败：问事记录不存在' })))
+    expect(html).toContain('data-xuanshu-error="delete-consult"')
+    expect(html).toContain('删除失败：问事记录不存在')
   })
 
   it('首次空态：为什么空 + 下一步主按钮 + 次按钮（S7 §2.3①），不写「暂无数据」', () => {

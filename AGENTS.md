@@ -31,3 +31,6 @@
 - **数字引用**：用例计数抄 `pnpm test:inventory`，装配 seam 抄 `pnpm verify:assembly`；其他统计遵循 [复核清单 §4](docs/agents/review-checklist.md#4-文档数字只从工具输出抄已机器化)。
 - **证据前置**：`.scratch/` 中有未入库的测试前置。改动前读 [开发台账](docs/development-status.md) §10，并检查相关测试实际读取的文件；缺件导致的失败或跳过单独记录。
 - **完成条件**：任务范围内的改动均有对应验证；未验证项和既有已知红有明确归属。最终说明交付内容、验证结果与剩余限制；涉及提交时核对文件范围，避免带入无关数据。
+- **过渡期台账**：`docs/development-status.md` 按 ADR-0016 最终退出仓库（届时「现状」只从代码、测试与 `docs/adr/` 读）；它当前仍被另一个会话使用。**当前验证数字的唯一去处是 `README.md` 的 `## 状态` 段**（`scripts/check-doc-numbers.mjs` 机器核对，台账不再被核对）。
+- **清理目录**：worktree 的 `node_modules` 是指向主仓的 junction，`Remove-Item -Recurse` 会跟穿它、删掉仓库根的真件 —— 用 `pnpm cleanup:worktrees`。
+- **文档只留两类**（ADR-0016）：ADR（为什么这样定）与意图（要什么）。**不要再写交付规格 / 票面 / 复核报告** —— 要求写进测试名与断言，裁决写进 `docs/adr/`。

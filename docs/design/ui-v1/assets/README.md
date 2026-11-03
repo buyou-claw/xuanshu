@@ -3,7 +3,7 @@
 > **这是什么**：玄枢自有界面（S1–S15）可直接引用/导入的**素材资源文件**——线性图标集、空态/插画、品牌标识、设计 token 取值（light/dark 双模）、组件皮肤规格、冷启动文案表——以及本清单（命名 / 目录 / 技术契约 / 总对账表）。
 > **这不是什么**：**不含实现代码**（无 tsx / 组件 / 样式表工程化接线；`tokens/` 是 token 资源不是组件代码）、**不含视觉精修**（光影/图层/动效曲线精调留 UI 阶段）。
 > 输入：[`../shared/素材需求台账.json`](../shared/素材需求台账.json)（124 条 + 5 复用别名 + 93 token 交接）；token 命名与语义权威 = [`../shared/设计token字典.md`](../shared/设计token字典.md)；各屏视觉元素要求 = [`../screens/`](../screens/) 各屏 §10。
-> 出处：票 03（`.scratch/assembly-foundation/issues/03-ui-asset-production.md`）｜ 日期：2026-10-11 ｜ 状态：draft
+> 出处：票 03（票面已按 ADR-0016 退出仓库，见 `docs/adr/0016-code-is-the-only-source-of-truth.md`）｜ 日期：2026-10-11 ｜ 状态：draft
 > 术语一律用 `CONTEXT.md` 定名；禁用旧名（模块 / 资产<指「藏」的旧名> / 资料库 / 每日运势 / 聚合模块 / 写回 / 同步 / 归档）。
 
 ---

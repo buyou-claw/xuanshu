@@ -34,7 +34,7 @@ Spec 001 的实现决策里写着「问事容器：新 main key `consult` 面板
 
 - **会话 id 形状成为契约的一部分**：`session-xs-consult-……` 前缀被断言钉住；改前缀等于改数据格式，要按数据迁移对待。
 - **历史回看有两条来源，权威分开**：**旁挂清单**是「问过哪些事」的权威（含本次勾选的谱与挂载），**会话日志**是正文的权威（用 `ctx.sessionQuery.readSession(id)` 读，本机是 `session.v4.jsonl.zstd`，**不要自己解压**）。列表页 = 读旁挂目录，不要靠扫会话日志反推。
-- **spec 的原文必须改掉**：`docs/specs/001-assembly-foundation.md` 的实现决策里 `meta.xuanshu={…}` 与 `message.candidates` 两处已改为指向本 ADR 与 ADR-0010。**不改 spec 只改代码，下一个照 spec 实现的人会再踩一次**——这正是本 ADR 存在的理由。
+- **照着旧规格实现会踩坑**：旧规格的实现决策里写着 `meta.xuanshu={…}` 与 `message.candidates` 两处口径，**下一个照它实现的人会再踩一次**——这正是本 ADR 存在的理由。旧规格按 ADR-0016 退出仓库（原文只在 git 历史里可取），因此这两处的现行口径**唯一去处是本 ADR 的决定句与其后的具体定值（第 1–7 条）＋ ADR-0010**；代码侧的落点是 `session-xs-*` 前缀与旁挂清单（`packages/xuanshu-host/lib/consult/store.mjs`）。
 - **票 13 的定时会话同样受约束**：日课「今天是否已做过」不能靠会话事件类型（ADR 同款理由），也不能靠 `schedule` 服务（它只记 `lastDelivery`/`deliveryHistory`，没有「当日打卡」语义）——要自己存，载体同上。
 - **消息级标记的能力边界被显式缩小**：自定义 `MessageSourceMap` kind 只解决「这条消息是谁注入的」，不解决「这个会话属于哪一类」。不要再指望一个字段干两件事。
 - **第 5 条的范围后来又缩了一次（ADR-0012）**：问事的**材料**（底座谱 / 底稿 / 勾选谱 / 挂载）改成在 `agent/pre-step` 处交付 —— 交付的落点仍然是**会话日志**（loop 会把这一步的消息 append 成 `user/message`），所以这个 kind 照旧在轨迹 / 历史里看得见一条「注入」行；变的是**时机**：不再靠 `inject()` 排进 inbox（那条路会被 `dispose()` 取消），而是每一问由边界判断「缺什么」再补。仍会进日志的注入类消息还包括票 15 的沉淀提示与票 11 的采用稿。

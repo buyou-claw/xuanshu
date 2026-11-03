@@ -10,15 +10,15 @@
 node scripts/worktree-create.mjs <name> --base feat/spec-002-integration
 ```
 
-- 一条命令完成：建树 + 建分支（默认 `fix/<name>`）+ 只链依赖（主仓根 `node_modules` 与主仓里**已存在**的 `packages/*/node_modules`；缺的会打印「跳过」）。末行会打印可直接复制的 `cd "<worktree 绝对路径>"`。
+- 一条命令完成：建树 + 建分支（默认 `fix/<name>`）+ 只链依赖（主仓根 `node_modules`、主仓里**已存在**的 `packages/*/node_modules` 与 `profile/node_modules` —— 后者是隔离实例的 DSH CLI 所在，缺了 worktree 里起不来实例；缺的会打印「跳过」）。末行会打印可直接复制的 `cd "<worktree 绝对路径>"`。
 - 先看计划：同一条命令加 `--dry-run`（不建目录、不改 git）。分支名用 `--branch <name>` 覆盖。
 - 不要手工 `git worktree add` + `mklink`：漏链跑不起来，链错就是下一节的跟穿事故。名字非法 / 目录或分支已存在时脚本会**拒绝且现场零改动**。
 
 ## 2. junction 跟穿（禁令）
 
-- 实现者 worktree 的 `node_modules` 是指向主仓的 junction/symlink；**任何递归删除都会跟穿它，删掉的是主仓真件**（2026-10-17 实测：主仓 `node_modules` 被清空，见 `docs/development-status.md` §16.4 第 7 条）。
-- **收 worktree 只走**（主仓根执行）：`pnpm cleanup:worktrees`。它先证明分支 tip 已是 HEAD 的祖先（未并回只报告、不删）→ 脏工作区 `git stash --include-untracked` 存档 → 摘链接（只删链接本身、绝不进目标）→ deregister + 删目录。证明链条目见 `docs/development-status.md` §10「清理轮：找回票 13 客户端半的最后一棒」。
-- 禁止手写 `Remove-Item -Recurse` / `cmd /c rmdir /s` 清工作树或依赖目录；连 `tests/**/.tmp` 这类临时目录也别用递归删除（同款事故面，§16.4 第 2 条）。
+- 实现者 worktree 的 `node_modules` 是指向主仓的 junction/symlink；**任何递归删除都会跟穿它，删掉的是主仓真件**（2026-10-17 实测：实现者按票在 worktree 里 `mklink /J node_modules <主仓>/node_modules`，收 worktree 时 `git worktree remove` 递归删除**跟穿 junction**，把主仓根 `node_modules` 清空 —— `vitest` / `tsc` 起不来，`.dsh-home` 里 profile 的 `node_modules` 也一起空了）。**恢复**：`ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile --offline`（pnpm store 还在）→ `node scripts/install-profile.mjs --home .dsh-home` → `pnpm verify:all` 复绿。**护栏**：`scripts/lib/cleanup-junctions.mjs` 在 `git worktree remove` **之前**先摘掉 worktree 内所有 junction/symlink（只删链接本身、绝不进目标），判据在 `tests/lib/cleanup-junctions.test.mjs`（含「目标哨兵文件必须活着」）。教训：`rmdir /s` 不跟随 reparse point 只保护最后那一步，**先删目录的是 git**。
+- **收 worktree 只走**（主仓根执行）：`pnpm cleanup:worktrees`。它先证明分支 tip 已是 HEAD 的祖先（未并回只报告、不删）→ 脏工作区 `git stash --include-untracked` 存档 → 摘链接（只删链接本身、绝不进目标）→ deregister + 删目录。**这条证明链是必须的，不是流程洁癖**：2026-10-15 的清理轮里，票 13 客户端半有**两笔从未并回集成分支**的提交（合并方向走了一半：集成分支并入该分支后，客户端又并回一次、再提交一笔），靠 `git log -S'clearOutcome' --oneline HEAD` 在合并前输出 NONE 才被逮到；「先证明 branch tip 是 HEAD 祖先」就是为了让这类没回来的最后一棒**当场暴露而不是被静默删掉**。判据的具体做法见 `tests/lib/cleanup-junctions.test.mjs` 与 `scripts/cleanup-worktrees.mjs` 文件头。
+- 禁止手写 `Remove-Item -Recurse` / `cmd /c rmdir /s` 清工作树或依赖目录；连 `tests/**/.tmp` 这类临时目录也别用递归删除（同款事故面：隔离台的临时 home 在红的时候不会被清，重跑会红在「现场回收干净」，清理要走 `cmd /c rmdir /s /q tests\isolation\.tmp`）。
 - 收之前先看名单：`pnpm cleanup:worktrees -- --dry-run`。只在实现者全部收工、分支已提交后跑——脚本按「分支是否已并入」判，不看还有没有人在用。
 
 ## 3. 用例基线与客户端产物归属
@@ -35,4 +35,4 @@ node scripts/worktree-create.mjs <name> --base feat/spec-002-integration
 
 1. 在你的分支上：`git merge feat/spec-002-integration --no-edit`；`client.js` 冲突按上节重建。
 2. 重跑受影响用例（至少该票验证命令 + `tests/assembly`），把结果抄进报告。
-3. 之后集成分支若再前进、或你的分支又提交，**报告前再并一次**：清理门按「分支 tip 是 HEAD 祖先」判，少并一次就可能丢提交（见 `docs/development-status.md` §「工作方式」的「合并方向的最后一棒」条）。
+3. 之后集成分支若再前进、或你的分支又提交，**报告前再并一次**：清理门按「分支 tip 是 HEAD 祖先」判，少并一次就可能丢提交。**这是实测踩过的坑**：票 13 客户端两笔就是这么丢的 —— 集成分支并入你的分支之后，你的分支又并回集成分支一次、再提交一笔，最后一棒没回来；`cleanup:worktrees` 的「必须是 HEAD 祖先」正是拦这个的。

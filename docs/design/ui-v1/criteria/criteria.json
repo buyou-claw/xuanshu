@@ -33,8 +33,8 @@
       "id": "D",
       "title": "密度与点击目标",
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
-        "anchor": "点击目标 ≥44×44"
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "### 11.1 视觉档位（克制留白）"
       },
       "ruleCount": 2
     },
@@ -42,8 +42,8 @@
       "id": "C",
       "title": "对比度与可读性",
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
-        "anchor": "视觉档位（克制留白）"
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "### 11.1 视觉档位（克制留白）"
       },
       "ruleCount": 3
     },
@@ -51,8 +51,8 @@
       "id": "N",
       "title": "导航（入口唯一 / 返回落点 / 键盘可达）",
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
-        "anchor": "同时登记一个新判据族：**导航模型**"
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "## 12. 导航模型（入口唯一 / 返回落点 / 键盘可达）"
       },
       "ruleCount": 3
     },
@@ -200,7 +200,7 @@
         "file": "docs/design/ui-v1/assets/tokens/type-scale.md",
         "anchor": "字号分「语义档」，实现票在组件里**点名档位 token，不写死 px**"
       },
-      "humanReason": "「一眼能不能分出层级」是审美判断：字号差、字重差都能被机器量（那已由 C-001/C-002 覆盖），但「这屏读起来是不是有层次」没有可复现的阈值。按 spec 003 §判据硬门槛，它只能由人看一次并签字，不许伪装成机器判据。",
+      "humanReason": "「一眼能不能分出层级」是审美判断：字号差、字重差都能被机器量（那已由 C-001/C-002 覆盖），但「这屏读起来是不是有层次」没有可复现的阈值。按本目录 §3 第 2 条硬门槛（`human-only` 必须写清机器判不了的原因），它只能由人看一次并签字，不许伪装成机器判据。",
       "tombstone": false
     },
     {
@@ -214,7 +214,7 @@
         "kind": "rendered"
       },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "点击目标 ≥44×44"
       },
       "humanReason": null,
@@ -231,7 +231,7 @@
         "kind": "rendered"
       },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "单屏主操作 ≤1"
       },
       "humanReason": null,
@@ -248,7 +248,7 @@
         "kind": "rendered"
       },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "正文 ≥16px"
       },
       "humanReason": null,
@@ -265,7 +265,7 @@
         "kind": "rendered"
       },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "行高 ≥1.5"
       },
       "humanReason": null,
@@ -282,7 +282,7 @@
         "kind": "rendered"
       },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "对比度达 WCAG AA"
       },
       "humanReason": null,
@@ -299,7 +299,7 @@
         "kind": "rendered"
       },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "同一个动作只有一个入口"
       },
       "humanReason": null,
@@ -316,7 +316,7 @@
         "kind": "rendered"
       },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "从抽屉 / 面板返回时回到我来的地方"
       },
       "humanReason": null,
@@ -333,8 +333,8 @@
         "kind": "rendered"
       },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
-        "anchor": "键盘能走完一条完整任务（Tab 顺序、Esc 关抽屉、焦点可见）"
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "键盘能走完一条完整任务"
       },
       "humanReason": null,
       "tombstone": false
@@ -357,23 +357,23 @@
       "tombstone": false
     }
   ],
-  "version": "50ed6179a32ee09b5353345539f9334427e307f6ce959bdd723436c4651fa0c9",
+  "version": "daf211ca3347aef73ba49465140b5f3739b7e451c22db6463cdb43a0fae85f31",
   "ruleFiles": [
     {
       "file": "docs/design/ui-v1/criteria/rules/C.json",
-      "sha256": "960dceadb792c88914d992200136503366530737e7cdb93ad7f7bb317cc2967e"
+      "sha256": "b5f976acfaf12f544f37ce8a7e81637f5e015f5f0233046f25fef24161e74daa"
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/D.json",
-      "sha256": "267753b60a7c211b8bbe8572509bb6025d3a9af6b08f252d53180b4415aef4ca"
+      "sha256": "2edcf0e2e7193f4a485356d1d5ccfac028a3b1edc8e08b8746191365446846fb"
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/L.json",
-      "sha256": "89d0bfe6e8908a454def269ded79669eac64213883bd38d6cf072e4a9f8273fb"
+      "sha256": "f068d5e21d494b2b508e42b7d40bd74a5d4b34c1e2e63f4bf9bf55f2a373c0dd"
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/N.json",
-      "sha256": "ead586c63ee04340b016fa07c86c772e83ab66597280160b3fb030391bdb36ed"
+      "sha256": "1088f63a648ed693571659e3ecc9f4e7ff220d3daec52fb1b7ce74e092ca3849"
     },
     {
       "file": "docs/design/ui-v1/criteria/rules/S.json",

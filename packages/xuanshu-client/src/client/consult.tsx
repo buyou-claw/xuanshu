@@ -117,6 +117,10 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
   const [reader, setReader] = useState<ReaderState>({ kind: 'idle' });
   const [query, setQuery] = useState('');
   const [range, setRange] = useState<HistoryRange>('all');
+  /** 正在删的那一行（按钮禁用 + 「删除中…」，避免连点）。 */
+  const [deletingId, setDeletingId] = useState<string | undefined>(undefined);
+  /** 删除失败的可读原因（失败就留在列表上方，不静默）。 */
+  const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
   /** 用户是否动过勾选（动过之后，晚到的 defaults 不许覆盖他的选择）。 */
   const touched = useRef(preloaded?.defaults !== undefined);
 
@@ -140,6 +144,28 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
       .list()
       .then((answer) => { setItems({ kind: 'ready', value: answer.items }); })
       .catch((error: unknown) => { setItems({ kind: 'error', message: errorText(error) }); });
+  };
+
+  /**
+   * 回收一次问事：删旁挂索引 → **重取**列表。
+   *
+   * 为什么不就地过滤：列表的权威在宿主（旁挂目录）。本地先删掉那一行，
+   * 「其实没删成功」就会看起来像成功了 —— 失败必须留在屏幕上（`deleteError`）。
+   * 删除只发生在列表视图里（阅读器此时是关着的），所以不动 `reader`。
+   */
+  const deleteConsult = (sessionId: string): void => {
+    setDeletingId(sessionId);
+    setDeleteError(undefined);
+    void api
+      .delete({ sessionId })
+      .then(() => {
+        setDeletingId(undefined);
+        reloadItems();
+      })
+      .catch((error: unknown) => {
+        setDeletingId(undefined);
+        setDeleteError(`删除失败：${errorText(error)}`);
+      });
   };
 
   useEffect(() => {
@@ -337,6 +363,9 @@ export function ConsultPanel({ api, navigate, openSession, refreshSessions, moun
           onStart={() => { setView('lobby'); }}
           onCreatePu={() => { requestPuCreateAndGo(navigate); }}
           onRetry={reloadItems}
+          onDelete={deleteConsult}
+          deletingId={deletingId}
+          deleteError={deleteError}
         />
       ) : null}
 

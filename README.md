@@ -16,11 +16,12 @@
 | `xuanshu-portrait.md` | 产品画像 |
 | `docs/architecture-v1.md` | 技术架构 v1（分层、装配清单、机制映射、数据流、Spike 清单） |
 | `docs/pu-spec-v1.md` | 谱规范 v1 |
-| `docs/specs/` | 交付 specs（001 装配基座 = issue #1；002 住进去 = issue #21） |
-| `docs/adr/` | 架构决策记录（0001 装配不 fork / 0002 首页替换 / 0003 藏不上 AI / 0004 钉版 / 0005 谱是信息 / 0006 双实例隔离 / 0007 setup 一条命令 / 0008 horosa 静态挂载与宿主托管 / 0009 会话归属与旁挂清单 / 0010 判官不用结构化输出 / 0011 schedule bundle / 0012 上下文与挂载走 pre-step 边界 / 0013 事记 / 0014 玄枢自己的壳与 home） |
+| `docs/adr/` | 架构决策记录（0001 装配不 fork / 0002 首页替换 / 0003 藏不上 AI / 0004 钉版 / 0005 谱是信息 / 0006 双实例隔离 / 0007 setup 一条命令 / 0008 horosa 静态挂载与宿主托管 / 0009 会话归属与旁挂清单 / 0010 判官不用结构化输出 / 0011 schedule bundle / 0012 上下文与挂载走 pre-step 边界 / 0013 事记 / 0014 玄枢自己的壳与 home / 0015 体验质量线判据 / 0016 代码是唯一事实真源） |
 | `docs/runbook/` | 操作手册（`setup.md` = 一键安装；`home.md` = **玄枢自己的 home**（产品 `~/.xuanshu` / 开发 `.dsh-home`）/ 换与迁移 / 8 品类数据与一键备份；`shell.md` = **桌面壳**（窗口/托盘/常驻/自启/系统通知）与真机手测清单；`dual-instance.md` = 与 desktop 并跑；`horosa.md` = horosa 底座） |
 | `docs/research/` | 上游侦察报告（DSH / horosa-skill / 星阙桌面端 / 真太阳时 / 事实核查） |
-| `docs/agents/` | agent 工作流配置（issue tracker / domain docs） |
+| `docs/agents/` | agent 工作流配置（issue tracker / domain docs / 并行实现 / 复核清单） |
+
+> 文档边界（ADR-0016）：**代码是唯一事实真源**；spec / 票 / 复核报告是过程产物，按该 ADR 退出仓库（历史原文在 git 历史里可取）；长期只留 **ADR（为什么这样定）** 与**意图**（要什么）。所以本索引里没有「交付规格」这一行——现行口径请读 `docs/adr/` 与代码。
 
 ## 仓库结构
 
@@ -35,7 +36,7 @@
 | `scripts/install-profile.mjs` | 装配：让 `profile/` 出现在 `$DSH_HOME/profiles/xuanshu`（link / copy 两种模式），再 `pnpm install` |
 | `scripts/verify-assembly.mjs` · `tests/assembly/` | **装配契约测试台**：启动装配后的 profile，断言「装配成功 / 两个插件包在运行时树中 / 补丁行 id 未漂移」 |
 | `scripts/isolation/` · `scripts/verify-isolation.mjs` · `tests/isolation/` | **开发期双实例隔离**：独立 `$DSH_HOME` + 独立端口 + horosa `8765` 单占用守卫；断言玄枢 home 永不指向 `~/.dsh`、与 desktop 并跑无串扰（ADR-0006 / ADR-0014） |
-| `docs/` | 架构、specs、ADR、runbook、上游侦察 |
+| `docs/` | 架构、ADR、runbook、上游侦察、agent 指引（无 specs：交付规格按 ADR-0016 退出仓库） |
 
 ```bash
 pnpm install                                     # 仓库根依赖（构建管线用）
@@ -71,15 +72,16 @@ node scripts/horosa/bazi-contract.mjs --json    # 直打回环，验信封结构
 
 ## 状态
 
-- **Spec 002（住进去）10 张票全部实现完毕**：[父 issue #21](https://github.com/buyou-claw/xuanshu/issues/21)、规格 `docs/specs/002-reside-and-use.md`，已随 [PR #32](https://github.com/buyou-claw/xuanshu/pull/32) 并入 `main`（票 #22–#31）。形态决策见 `docs/adr/0013`（事记）与 `docs/adr/0014`（玄枢自己的壳与 home，与 DSH 桌面版零交集）。
-- 本轮全量复核修复事记并发与读失败、判官超时与停止、日课近期素材、晚省活动以及备份完整性/凭据/路径边界；两轴发现与回归证据见 [复核报告](docs/reviews/spec002-7b829d2-review.md)，验证见开发台账 §16.8。
+- **Spec 002（住进去）10 张票全部实现完毕**：[父 issue #21](https://github.com/buyou-claw/xuanshu/issues/21)，已随 [PR #32](https://github.com/buyou-claw/xuanshu/pull/32) 并入 `main`（票 #22–#31）。形态决策见 `docs/adr/0013`（事记）与 `docs/adr/0014`（玄枢自己的壳与 home，与 DSH 桌面版零交集）。
+- 本轮全量复核修复事记并发与读失败、判官超时与停止、日课近期素材、晚省活动以及备份完整性/凭据/路径边界；每条裁决都落进了代码、测试与 `docs/adr/`（两轴复核报告本身按 ADR-0016 退出仓库）。
 - 交付面（Spec 002）：**玄枢自己的 home**（产品 `~/.xuanshu` / 开发 `.dsh-home`，永不读写 `~/.dsh`）→ **桌面壳** `xuanshu-shell`（自有窗口 / 托盘 / 关窗退后台 / 自启 / 系统通知，看护自己的 DSH 子进程）→ **两次触达**（日课 07:30 两段式 + 晚省 21:30 确定性事实；错过补课标「补」+ 触达账）→ **事记**（底稿第四来源：一个项目一条、冻结与墓碑）→ **底稿两段**（最近在做什么 / 曾经做过什么，四路来源标记）→ **接上 AI**（冷启动第 6 步 + 问事只读门禁）→ **真多家合参**（只读路由清单 / 2–4 路不同 provider / 异源判官 / 跑前确认 / 并发与超时）→ **我的数据**（8 品类体积 + 一键备份，含会话、不含密钥）。另补掉 Spec 001 两处遗留缺陷（问事回看按轮采用稿、工作流挂载注入已导出 `SKILL.md`）。零 DSH 源码改动。
 - **环境加固（E1–E3，#42–#44）**：worktree 一条命令起（含依赖链接与安全拒绝）、文档数字漂移变成 `verify:all` 的机器门、并行实现与复核指引按分支触发可读。
+- **Spec 04（实操体验评估）首批 A 阶段**：[父 issue #73](https://github.com/buyou-claw/xuanshu/issues/73)，票 #74–#82。交付的是**证据线与发现**，不是修复：环境探测（`pnpm probe:experience`）、证据记录器（`scripts/experience/evidence.mjs`，40 条用例钉确定性/状态词表/脱敏/目录断言）、隔离实例「保留 home」选项、实操 runner（`scripts/experience/run.mjs` + `scenarios/`，一条命令起实例→走真实入口→落证据包），并用它真跑了 E01–E09。**发现数条阻断级缺陷（进不去 DSH 会话、错误提示在视口外、空提交仍建会话、切走丢草稿违反设计稿 §13.1），按 ADR-0017 只登记不修**；报告与截图在 `ux-reports/experience-round-01/`（gitignore）。本线不进 `verify:all`（ADR-0017 第 8 条）。
 - **Spec 001（装配基座）16 张票**由 [PR #20](https://github.com/buyou-claw/xuanshu/pull/20) 承载（覆盖并取代已关闭的 stacked PR #2 / #3 / #4 / #6 / #7 / #9）；父 issue [#1](https://github.com/buyou-claw/xuanshu/issues/1)。
-- 验证（本轮复核工作区，2026-10-17；数字抄工具输出）：`pnpm test:inventory` → **2278 条用例 / 201 文件 / 失败 2 条（均为既有已知红）/ 跳过 10 条**；装配五 seam **S2 / S3 / S4 / S5 PASS，S1 FAIL**（钉版 `dsh-app-boot@0.2.0-rc.2` 的 schema 导出器只收 native carrier，而同版官方 web bundle 自带的 `dsh-agent-preset` 是另一种 —— 上游缺陷；测试保留失败、不放宽断言、不改上游源码）；`pnpm verify:isolation` **8/8 PASS**；`tsc --noEmit` exit 0；`build-client --check` in sync（560520 B）。
+- 验证（数字抄工具输出，`2026-11-03` 全量）：`pnpm test:inventory` → **2562 条用例 / 212 文件 / 失败 0 条 / 跳过 51 条**；`tsc --noEmit` exit 0；`build-client --check` in sync（563648 B）。装配五 seam 与 `pnpm verify:isolation` 需要先装 profile（`node scripts/install-profile.mjs --home .dsh-home`），属环境前置，不在 `verify:all` 里。
 - 两条已知红 = **S1 及其连带**（「五条 seam 全绿」）。`tests/horosa/p10-e2e` 8 条与 `tests/horosa/p0-fixtures` 2 条按证据存在性跳过（真机前置件不在版本库）。
 - **真浏览器回归 `pnpm verify:live <实例URL>`**（44 项，2026-11-02 加）：连一个**真跑着的实例**，用 Edge 逐面点击、读 `computedStyle`、读宿主数据面。与 `verify:ux`（读源码文本）分工明确——静态扫描测不出的四类问题只有这里能发现：控件没有边框（引用了不存在的 CSS 变量）、两个数字差一小时却没解释、点按钮屏幕上毫无动静（或有结论却还写「去生成」）、过时的状态断言（底座立了还写「底座未立时生成会失败」）。退出码与其它 `verify-*` 同口径（全过 0 / 有失败 1 / 用法错 2）。
-- **真机未覆盖的项**逐条登记在 [开发进度](docs/development-status.md) §16 与 [待实测登记处](docs/design/ui-v1/待实测登记处.md)：桌面壳的真实窗口 / 托盘 / Windows toast / 自启注册（本机 `electron` 二进制下载失败，只跑了模块层）、真多家 provider 的路由清单（本机没有第二家 key）。
+- **真机未覆盖的项**逐条登记在 [待实测登记处](docs/design/ui-v1/待实测登记处.md)：桌面壳的真实窗口 / 托盘 / Windows toast / 自启注册（本机 `electron` 二进制下载失败，只跑了模块层）、真多家 provider 的路由清单（本机没有第二家 key）。
 - **已由真机补上的项（2026-11-02）**：真浏览器点击链与真 LLM 端到端 —— 起了一个与主环境并行的桌面端实例（自有 `DSH_HOME`），用 Edge 有头模式逐面点击 + 截图，走通了「填八字 → 出盘 → 底座谱 → 日课（本地黄历 + AI 段）→ 底稿 AI 摘要 → 谱创建/编辑/搜索/筛选 → AI 连通探测」。出盘要连本地 horosa 服务，四个连环坑（`Settings.from_env` 才是正确入口、Python 子进程写不了 `AppData\Roaming`、运行时 python 没有 pip、解压布局与启动脚本假设不符）逐条记在 `.scratch/proof-home/README.md`，一键启动脚本在 `.scratch/start-horosa.mjs`。
 
 ## 许可

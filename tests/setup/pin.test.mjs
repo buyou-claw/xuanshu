@@ -54,7 +54,7 @@ const fixturesPresent = existsSync(SHA256SUMS_TXT) && existsSync(RUNTIME_MANIFES
 it('两份离线证据副本都在（缺了就必须红，不许静默跳过）', () => {
   expect(
     fixturesPresent,
-    `离线证据副本缺失：${CAPTURES_DIR}\n（.scratch/ 不入库；按 scripts/setup/horosa-pin.json 的 release URL 取回，见 docs/development-status.md §10）`,
+    `离线证据副本缺失：${CAPTURES_DIR}\n（.scratch/ 不入库；按 scripts/setup/horosa-pin.json 的 release URL 取回）`,
   ).toBe(true)
 })
 

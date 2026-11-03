@@ -1,11 +1,11 @@
 /**
  * tests/lib/worktree-create.test.mjs —— `scripts/worktree-create.mjs` 的判据台。
  *
- * 为什么要有这条脚本（E1 / #42）：实现者起工作树靠手工记忆——`git worktree add` 之后还要记得
+ * 为什么要有这条脚本：实现者起工作树靠手工记忆——`git worktree add` 之后还要记得
  * 把主仓根 `node_modules` 与各 `packages/<pkg>/node_modules` 链进来（不链就 build/测试起不来），
  * 而链多了又踩上 2026-10-17 的事故：`git worktree remove` 跟穿 junction 清空主仓依赖
- * （`docs/development-status.md` §16.4 第 7 条）。这条命令把「建 + 链 + 可复制进入方式」收成一条，
- * 并把「只链不复制、绝不写链接目标」当硬语义。
+ * （worktree 的 `node_modules` 是指向主仓的 junction，递归删除会跟穿到主仓真件）。这条命令把
+ * 「建 + 链 + 可复制进入方式」收成一条，并把「只链不复制、绝不写链接目标」当硬语义。
  *
  * 断言面 = **外部可观察物**：进程退出码 / stdout / 新工作树里的链接与文件 / 目标里的哨兵文件 /
  * 目标仓库根目录的变化。不在真实仓库建 worktree、不联网、不安装任何包。
@@ -50,6 +50,10 @@ function makeRepo() {
   }
   mkdirSync(join(repo, 'packages', 'a', 'node_modules'), { recursive: true })
   writeFileSync(join(repo, 'packages', 'a', 'node_modules', 'sentinel.txt'), 'pkg-alive', 'utf8')
+  // profile/node_modules（gitignore 的真目录）：隔离实例的 DSH CLI 在它下面。
+  // 不链它 → worktree 里 `startIsolatedInstance` 起不来（实测：22 个渲染面全 collection-failed）。
+  mkdirSync(join(repo, 'profile', 'node_modules'), { recursive: true })
+  writeFileSync(join(repo, 'profile', 'node_modules', 'sentinel.txt'), 'profile-alive', 'utf8')
   runGit(repo, ['add', 'README.md', 'packages/a/package.json', 'packages/b/package.json'])
   runGit(repo, ['commit', '-q', '-m', 'init'])
   return repo
@@ -120,6 +124,7 @@ describe('worktree-create：一条命令建工作树（临时仓库端到端）'
     // 依赖链接就位：根 + 已存在的包级；不存在的目标跳过。
     expectLink(worktree, 'node_modules', 'root-alive')
     expectLink(worktree, 'packages/a/node_modules', 'pkg-alive')
+    expectLink(worktree, 'profile/node_modules', 'profile-alive')
     expect(existsSync(join(worktree, 'packages', 'b', 'node_modules'))).toBe(false)
     // 只说一条可复制的进入方式（路径 + 分支）。
     expect(result.stdout).toContain('fix/wt-ok')
@@ -164,6 +169,24 @@ describe('worktree-create：一条命令建工作树（临时仓库端到端）'
     expect(branchExists(repo, 'fix/wt-flags')).toBe(false)
     expect(result.stdout).toContain('feat/custom')
     expectLink(worktree, 'node_modules', 'root-alive')
+  })
+
+  /**
+   * profile/node_modules 是**可缺的**：没装过 profile 的机器（CI / 新 clone）上它不存在。
+   * 缺它不是错误 —— 但必须「跳过且说出来」，否则下一个人会以为链过了，
+   * 然后在 worktree 里起隔离实例时才撞上「没有 DSH CLI」。
+   */
+  it('主仓没装 profile 时跳过 profile/node_modules，并明说跳过而不是静默', () => {
+    const repo = makeRepo()
+    rmSync(join(repo, 'profile'), { recursive: true, force: true })
+
+    const result = runCli(['wt-no-profile', '--repo', repo], { env: {} })
+
+    expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(0)
+    const worktree = join(repo, ...WORKTREES, 'wt-no-profile')
+    expect(existsSync(join(worktree, 'profile', 'node_modules'))).toBe(false)
+    expect(result.stdout).toContain('profile/node_modules')
+    expect(result.stdout).toContain('跳过')
   })
 })
 

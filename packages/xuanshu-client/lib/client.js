@@ -2469,7 +2469,15 @@ var CONSULT_ENDPOINTS = {
   list: "consult.list",
   read: "consult.read",
   rename: "consult.rename",
-  defaults: "consult.defaults"
+  defaults: "consult.defaults",
+  /**
+   * 回收一次问事（删旁挂清单）。
+   *
+   * 为什么它不叫「删除会话」：玄枢只拥有**旁挂索引**，DSH 的会话记录归 DSH
+   * （上游没有给第三方删会话的接口）。所以这里删掉的是「玄枢还记着这次问事」这件事实，
+   * 而不是替上游删数据 —— 响应里的 `sessionStorageKept` 就是这条边界。
+   */
+  delete: "consult.delete"
 };
 function createConsultApi(ctx) {
   return {
@@ -2483,7 +2491,13 @@ function createConsultApi(ctx) {
       signal
     ),
     rename: (payload, signal) => rpcCall(ctx, CONSULT_ENDPOINTS.rename, payload, signal),
-    defaults: (signal) => rpcCall(ctx, CONSULT_ENDPOINTS.defaults, {}, signal)
+    defaults: (signal) => rpcCall(ctx, CONSULT_ENDPOINTS.defaults, {}, signal),
+    delete: (payload, signal) => rpcCall(
+      ctx,
+      CONSULT_ENDPOINTS.delete,
+      payload,
+      signal
+    )
   };
 }
 
@@ -2845,6 +2859,63 @@ function XsConsultRecentCard({ session, onContinue }) {
     /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "xs-consult__actions", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "continue-consult", onClick: onContinue, children: "继续这次问事 ▸" }) })
   ] });
 }
+function XsConsultHistoryRow({
+  item,
+  deleting = false,
+  onOpen,
+  onDelete
+}) {
+  const [confirming, setConfirming] = (0, import_react5.useState)(false);
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__row-line", "data-xuanshu-row-line": item.sessionId, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
+      "button",
+      {
+        type: "button",
+        className: "xs-consult__row-hit",
+        "data-xuanshu-row": item.sessionId,
+        onClick: () => {
+          onOpen(item.sessionId);
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__shortid", children: shortConsultId(item.sessionId) }),
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__row-title", children: item.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("small", { className: "xs-consult__note", children: formatHistoryMeta(item) })
+        ]
+      }
+    ),
+    confirming ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { className: "xs-consult__row-confirm", "data-xuanshu-confirm": "delete-consult", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__note", children: "删了就不再出现在历史里（DSH 里的会话本体不动）" }),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+        "button",
+        {
+          type: "button",
+          "data-xuanshu-action": "confirm-delete-consult",
+          disabled: deleting,
+          onClick: () => {
+            onDelete(item.sessionId);
+            setConfirming(false);
+          },
+          children: deleting ? "删除中…" : "确认删除"
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "cancel-delete-consult", onClick: () => {
+        setConfirming(false);
+      }, children: "取消" })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+      "button",
+      {
+        type: "button",
+        "data-xuanshu-action": "delete-consult",
+        disabled: deleting,
+        title: "把这次问事从历史里移除",
+        onClick: () => {
+          setConfirming(true);
+        },
+        children: deleting ? "删除中…" : "删除"
+      }
+    )
+  ] });
+}
 function XsConsultHistoryList({
   items,
   loading,
@@ -2859,7 +2930,10 @@ function XsConsultHistoryList({
   onBack,
   onStart,
   onCreatePu,
-  onRetry
+  onRetry,
+  onDelete,
+  deletingId,
+  deleteError
 }) {
   const filtered = filterHistory(items, query, range, now);
   const groups = groupHistory(filtered, now);
@@ -2904,10 +2978,10 @@ function XsConsultHistoryList({
           title: "导出还没做（属后续票）",
           children: "导出选中"
         }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", "data-xuanshu-action": "delete-selected", disabled: true, title: "删除还没做（属后续票）", children: "删除" })
+      )
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "contract-scope", children: "导出与删除还没做，所以这两个按钮是灰的 —— 不是坏了。" }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-note": "contract-scope", children: "导出还没做，所以这个按钮是灰的 —— 不是坏了。" }),
+    deleteError === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__error", "data-xuanshu-error": "delete-consult", children: deleteError }),
     loading ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "xs-consult__note", "data-xuanshu-state": "loading", children: "正在读本地会话清单…" }) : null,
     error === void 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__error", "data-xuanshu-error": "list", role: "alert", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { children: error }),
@@ -2945,20 +3019,13 @@ function XsConsultHistoryList({
     ] }) : null,
     groups.map((group2) => /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "xs-consult__group", "data-xuanshu-history-group": group2.key, children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h4", { className: "xs-consult__group-head", children: group2.label }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { className: "xs-consult__rows", children: group2.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
-        "button",
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { className: "xs-consult__rows", children: group2.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+        XsConsultHistoryRow,
         {
-          type: "button",
-          className: "xs-consult__row-hit",
-          "data-xuanshu-row": item.sessionId,
-          onClick: () => {
-            onOpen(item.sessionId);
-          },
-          children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__shortid", children: shortConsultId(item.sessionId) }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "xs-consult__row-title", children: item.title }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("small", { className: "xs-consult__note", children: formatHistoryMeta(item) })
-          ]
+          item,
+          deleting: deletingId === item.sessionId,
+          onOpen,
+          onDelete
         }
       ) }, item.sessionId)) })
     ] }, group2.key)),
@@ -3500,6 +3567,8 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
   const [reader, setReader] = (0, import_react7.useState)({ kind: "idle" });
   const [query, setQuery] = (0, import_react7.useState)("");
   const [range, setRange] = (0, import_react7.useState)("all");
+  const [deletingId, setDeletingId] = (0, import_react7.useState)(void 0);
+  const [deleteError, setDeleteError] = (0, import_react7.useState)(void 0);
   const touched = (0, import_react7.useRef)(preloaded?.defaults !== void 0);
   const seeded = preloaded !== void 0;
   const reloadDefaults = () => {
@@ -3520,6 +3589,17 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
       setItems({ kind: "ready", value: answer.items });
     }).catch((error) => {
       setItems({ kind: "error", message: errorText2(error) });
+    });
+  };
+  const deleteConsult = (sessionId) => {
+    setDeletingId(sessionId);
+    setDeleteError(void 0);
+    void api.delete({ sessionId }).then(() => {
+      setDeletingId(void 0);
+      reloadItems();
+    }).catch((error) => {
+      setDeletingId(void 0);
+      setDeleteError(`删除失败：${errorText2(error)}`);
     });
   };
   (0, import_react7.useEffect)(() => {
@@ -3692,7 +3772,10 @@ function ConsultPanel({ api, navigate, openSession, refreshSessions, mountSlot, 
         onCreatePu: () => {
           requestPuCreateAndGo(navigate);
         },
-        onRetry: reloadItems
+        onRetry: reloadItems,
+        onDelete: deleteConsult,
+        deletingId,
+        deleteError
       }
     ) : null,
     view === "history" && reader.kind !== "idle" ? reader.kind === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(

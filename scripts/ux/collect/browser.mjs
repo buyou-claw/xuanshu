@@ -21,7 +21,7 @@
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { createServer, request } from 'node:http'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -159,32 +159,152 @@ function httpGet(target, cookie) {
 }
 
 /**
+ * 隔离实例停止时的**清理决策**（票 #76 / ADR-0017 第 4 条）。
+ *
+ * 把它做成纯函数是为了「能被判结构语义」：`tests/ux/isolated-instance-keephome.test.mjs` 与
+ * `runInstanceTeardown` 走的是同一份决策，不必为了验证「删不删」而真起一个 DSH 实例。
+ *
+ * 四种动作、两位开关，其中只有 `removeHome` 受 `keepHome` 影响：
+ *   - `restoreProfile`（恒 true）：还原被首跑改写的**仓库共享** profile（`cordis.yml` / 入库件
+ *     `cordis.patch.yml`）。保留 home 是给「下一轮复用」的，不是给「留脏仓库」的 —— 这项防护两种模式都不许丢。
+ *   - `unlinkProfileJunctions`（恒 true）：先摘掉 `<home>/profiles/<name>` 这些指向仓库 `profile/`
+ *     的 junction。**保留 home 时同样必须摘**：不摘的坏处有两层——① home 里的 `profiles/xuanshu`
+ *     是个跨进程悬空链接，下一轮复用时 `install-profile` 的 `prepareTarget` 会先拆它再重建（能走，
+ *     但多一次无谓的拆/建）；② 任何后来清理这个 home 的人（手工、或 `keepHome:false` 的那一轮）
+ *     做递归删除时，链接还在就等于把跟穿风险留给对方。摘链接**只删链接本身、绝不进目标**，
+ *     与本仓护栏 `scripts/lib/cleanup-junctions.mjs` 同语义。
+ *   - `removeHome`（= `!keepHome`）：**唯一**被本选项改变的删除动作。`false` 时递归删 home（今天的行为）；
+ *     `true` 时一次递归删除都不发，home 与其中 sessions / storages 全留着，清理交人显式发起。
+ *
+ * @param {{keepHome?: boolean}} [options] `keepHome` 默认 `false`（= 既有巡检行为）
+ * @returns {{keepHome: boolean, restoreProfile: boolean, unlinkProfileJunctions: boolean, removeHome: boolean}}
+ */
+export function planInstanceTeardown({ keepHome = false } = {}) {
+  // 真值判定用 `Boolean` 而不是 `=== true`：唯一「可能伤人」的方向是递归删除，
+  // 传了个非 `true` 的假值意图（如字符串）时宁可保留 home，也不要删掉别人的数据。
+  const keep = Boolean(keepHome)
+  return {
+    keepHome: keep,
+    restoreProfile: true,
+    unlinkProfileJunctions: true,
+    removeHome: !keep,
+  }
+}
+
+/**
+ * 执行清理决策（票 #76）。顺序**沿用改动前那一条**：还原共享 profile → 摘 junction → 递归删 home。
+ *
+ * `ops` 是**测试注入点**（seam），不是给业务调用方用的旋钮：票面标准 4 要求「打开 keepHome 时
+ * 那条 `rmSync(home, {recursive:true})` 一次都没被调用」，而这条断言在真目录上写不出来
+ * （删了就是删了，只能断言「不存在」，反证不了「没走递归删除这条路径」）。所以每个外部动作
+ * 各给一个可替换的槽位，默认实现就是今天的那三行。生产路径传不传 `ops` 结果完全一样。
+ *
+ * @param {{
+ *   home: string,
+ *   keepHome?: boolean,
+ *   restoreProfile?: () => void,
+ *   ops?: {
+ *     removeHome?: (home: string) => void,
+ *     unlinkJunction?: (link: string) => void,
+ *   },
+ * }} input
+ * @returns {{keepHome: boolean, restoreProfile: boolean, unlinkProfileJunctions: boolean, removeHome: boolean, unlinked: string[]}}
+ */
+export function runInstanceTeardown({ home, keepHome = false, restoreProfile = () => {}, ops = {} }) {
+  const plan = planInstanceTeardown({ keepHome })
+  const unlinkJunction = ops.unlinkJunction ?? ((link) => {
+    try {
+      if (process.platform === 'win32') spawnSync('cmd', ['/c', 'rmdir', link], { encoding: 'utf8' })
+      else rmdirSync(link)
+    } catch { /* 不是 junction 就算 */ }
+  })
+  const removeHome = ops.removeHome ?? ((target) => {
+    try { rmSync(target, { recursive: true, force: true }) } catch { /* 临时目录留着不致命 */ }
+  })
+
+  if (plan.restoreProfile) restoreProfile()
+  const unlinked = []
+  if (plan.unlinkProfileJunctions) {
+    const profilesDir = join(home, 'profiles')
+    if (existsSync(profilesDir)) {
+      for (const name of readdirSync(profilesDir)) {
+        const link = join(profilesDir, name)
+        unlinked.push(link)
+        unlinkJunction(link)
+      }
+    }
+  }
+  // `keepHome: true` 时**一次递归删除都不发**：home 与其中的 sessions / storages 留给下一轮，
+  // 任何清理由人显式发起（票面标准 3/4）。上面摘掉的只是链接本身，不跟着走链接里的内容。
+  if (plan.removeHome) removeHome(home)
+  return { ...plan, unlinked }
+}
+
+/**
+ * 共享 profile 里会被**首跑改写**的两个文件（`01-recon.md` §2 坑 2）：
+ * `cordis.yml`（DSH 每次启动重写的运行期产物，gitignore）与 `cordis.patch.yml`（**入库件**）。
+ * 实测：关掉首跑的欢迎说明会让 DSH 往 patch 里追加 `welcomeNoticeVersion` —— 于是「只读巡检」
+ * 会留下一个脏工作区。
+ */
+const SHARED_PROFILE_FILES = ['cordis.patch.yml', 'cordis.yml']
+
+/**
+ * 启动前给共享 profile 拍快照，拿回一个「原样写回」的动作（票 #76 把它从 `startIsolatedInstance`
+ * 的闭包里提出来，是为了让「保留 home 也仍然执行这项防护」能被单独判到）。
+ *
+ * 只认 `SHARED_PROFILE_FILES` 那一小组：快照时不存在的，还原时删掉（它是我们起的这一轮生成的）；
+ * 快照时存在的，逐字节写回。仓库里别的东西一个字节都不碰。
+ *
+ * @param {{repoRoot: string}} input
+ * @returns {{paths: string[], restore: () => void}} `restore` 失败不抛（还原失败不该覆盖主结论）
+ */
+export function captureSharedProfile({ repoRoot }) {
+  const snapshots = SHARED_PROFILE_FILES.map((name) => {
+    const path = join(repoRoot, 'profile', name)
+    return { path, before: existsSync(path) ? readFileSync(path) : null }
+  })
+  const restore = () => {
+    try {
+      for (const { path, before } of snapshots) {
+        if (before === null) rmSync(path, { force: true })
+        else writeFileSync(path, before)
+      }
+    } catch { /* 还原失败不该覆盖主结论，但会在报告 notes 里被看到（调用方对比 git status） */ }
+  }
+  return { paths: snapshots.map((snapshot) => snapshot.path), restore }
+}
+
+/**
  * 起一个隔离实例。
  *
  * 为什么用「临时 home + link 模式 profile」：DSH 只从 `$DSH_HOME/profiles/<name>` 启动，而
  * link 模式让这个位置是一个指向仓库 `profile/` 的 junction —— 于是 node_modules 不必重装，
  * 但 sessions / storages / 凭据全在临时 home 里（真实数据一个字节都不碰）。
  *
- * @returns {Promise<{url: string, port: number, home: string, stop: () => Promise<void>}>}
+ * `keepHome`（票 #76，默认 `false`）只改一件事：**停止进程之后删不删 home**。
+ *   - `false`（既有巡检 / `collectBrowser`）：删掉临时 home，与改动前完全一致。
+ *   - `true`（实操评估要跨轮验「离开 → 再回来 → 从历史找回」，ADR-0017 第 4 条）：进程停止，
+ *     home 连同 `sessions/` `storages/` `xuanshu/` 全部留着。**任何清理由人显式发起**，这里一次
+ *     递归删除都不发。
+ * 两种模式**都**照旧执行「还原共享 profile 的临时改写」与「先摘 junction」，顺序也不变。
+ *
+ * `home`（同票新增，可选）是跨轮复用的入口：不给就 `mkdtempSync` 新建一个（今天的行为）；
+ * 给上一轮 `keepHome: true` 留下的那个目录 = 在同一个现场上再起一次（也可以给一个固定的评估
+ * home，如 `.experience-home/`，目录不存在时这里建出来）。装配仍然走 `install-profile --skip-install`，
+ * 它对「已存在且指向仓库 profile/ 的链接」是幂等的（先拆链接再重建）。
+ *
+ * @param {{repoRoot: string, log?: (text: string) => void, keepHome?: boolean, home?: string}} [input]
+ * @returns {Promise<{url: string, port: number, home: string, keepHome: boolean, stop: () => Promise<object>}>}
  */
-export async function startIsolatedInstance({ repoRoot, log = () => {} }) {
-  const home = mkdtempSync(join(tmpdir(), 'xuanshu-ux-'))
+export async function startIsolatedInstance({ repoRoot, log = () => {}, keepHome = false, home: homeInput }) {
+  const home = homeInput ?? mkdtempSync(join(tmpdir(), 'xuanshu-ux-'))
+  // 传进来的 home 可能还不存在（固定评估目录）；已存在时 recursive mkdir 是无操作，默认路径不受影响。
+  mkdirSync(home, { recursive: true })
+  const teardownPlan = planInstanceTeardown({ keepHome })
   // link 模式让临时 home 的 profile 指向仓库 `profile/`（不重装依赖），代价是 DSH 启动/首跑会**改写**
-  // 那个目录里的两个文件：`cordis.yml`（运行期产物，gitignore）与 `cordis.patch.yml`（入库件！）。
-  // 实测：关掉首跑的欢迎说明会让 DSH 往 patch 里追加 `welcomeNoticeVersion` —— 于是「只读巡检」
-  // 会留下一个脏工作区。所以启动前快照、stop() 时原样写回：巡检一个字都不许留在仓库里。
-  const patchFile = join(repoRoot, 'profile', 'cordis.patch.yml')
-  const rootConfig = join(repoRoot, 'profile', 'cordis.yml')
-  const patchBefore = existsSync(patchFile) ? readFileSync(patchFile) : null
-  const rootBefore = existsSync(rootConfig) ? readFileSync(rootConfig) : null
-  const restoreProfile = () => {
-    try {
-      if (patchBefore === null) rmSync(patchFile, { force: true })
-      else writeFileSync(patchFile, patchBefore)
-      if (rootBefore === null) rmSync(rootConfig, { force: true })
-      else writeFileSync(rootConfig, rootBefore)
-    } catch { /* 还原失败不该覆盖主结论，但会在报告 notes 里被看到（调用方对比 git status） */ }
-  }
+  // 那个目录里的两个文件（见 captureSharedProfile 的注释）：启动前快照、stop() 时原样写回 ——
+  // 巡检一个字都不许留在仓库里。**保留 home 时这项防护同样执行**（票 #76 标准 3）。
+  const { restore: restoreProfile } = captureSharedProfile({ repoRoot })
 
   const install = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'install-profile.mjs'), '--home', home, '--skip-install'], {
     cwd: repoRoot,
@@ -234,22 +354,10 @@ export async function startIsolatedInstance({ repoRoot, log = () => {} }) {
   const stop = async () => {
     try { child.kill() } catch { /* 已经退出 */ }
     await sleep(300)
-    restoreProfile()
-    // 先摘 junction 再删目录：直接递归删会跟穿到仓库 profile（本仓踩过，见 docs/agents/parallel-work.md §2）。
-    const profilesDir = join(home, 'profiles')
-    if (existsSync(profilesDir)) {
-      for (const name of readdirSync(profilesDir)) {
-        const link = join(profilesDir, name)
-        try {
-          if (process.platform === 'win32') spawnSync('cmd', ['/c', 'rmdir', link], { encoding: 'utf8' })
-          else rmdirSync(link)
-        } catch { /* 不是 junction 就算 */ }
-      }
-    }
-    try { rmSync(home, { recursive: true, force: true }) } catch { /* 临时目录留着不致命 */ }
+    return runInstanceTeardown({ home, keepHome: teardownPlan.keepHome, restoreProfile })
   }
 
-  return { url, port, home, stop }
+  return { url, port, home, keepHome: teardownPlan.keepHome, stop }
 }
 
 /** 让页面等一会儿：DSH 的客户端插件是异步装的，等 DOM 稳定比等某个具体选择器稳。 */

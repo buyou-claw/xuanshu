@@ -89,8 +89,10 @@ describe('票 09 · D-002 / C 族已登记（加判据 = 改四处，缺一处�
     for (const id of NEW_IDS) expect(typeof ASSERTIONS[id]).toBe('function')
   })
 
-  it('出处锚落在 spec 003 的视觉档位那一条上（判据不许自造规则）', () => {
-    expect(BY_ID.get('D-002').source.file).toBe('docs/specs/003-ux-quality-line.md')
+  it('出处锚落在设计稿的视觉档位那一节上（判据不许自造规则）', () => {
+    // 出处搬家的理由见 ADR-0016 第 4 条：判据的权威是设计稿（ADR-0015 第 1 条），
+    // 曾经的 spec 003 出处例外随该 spec 一起删除；锚点文本一字未改，只是搬家。
+    expect(BY_ID.get('D-002').source.file).toBe('docs/design/ui-v1/README.md')
     expect(BY_ID.get('D-002').source.anchor).toContain('单屏主操作 ≤1')
     expect(BY_ID.get('C-001').source.anchor).toContain('正文 ≥16px')
     expect(BY_ID.get('C-002').source.anchor).toContain('行高 ≥1.5')
