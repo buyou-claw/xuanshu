@@ -344,6 +344,75 @@ export interface XsConsultHistoryListProps {
    */
   onCreatePu: () => void;
   onRetry: () => void;
+  /**
+   * 回收一次问事：删掉旁挂索引，行随之从列表下线（DSH 会话本体不动）。
+   * 二次确认在行内做（`data-xuanshu-confirm="delete-consult"`）——删掉没有撤销。
+   */
+  onDelete: (sessionId: string) => void;
+  /** 正在删的那一行（按钮显示「删除中…」并禁用，避免连点）。 */
+  deletingId?: string;
+  /** 删除失败的**可读**原因（失败就留在列表上方，不静默）。 */
+  deleteError?: string;
+}
+
+/**
+ * 历史列表里的一行：点行 = 读它；「删除」先问一次（回收一次问事）。
+ *
+ * 为什么确认放在行内而不是弹全局对话框：这段界面在 `consult` 面板里，没有 `shell.overlay`
+ * 的可靠渲染面（EXP-006 实测抽屉打不开）；行内确认不依赖那个槽位，也不会遮住别的行。
+ */
+export function XsConsultHistoryRow({
+  item,
+  deleting = false,
+  onOpen,
+  onDelete,
+}: {
+  item: ConsultSummary;
+  deleting?: boolean;
+  onOpen: (sessionId: string) => void;
+  onDelete: (sessionId: string) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <div className="xs-consult__row-line" data-xuanshu-row-line={item.sessionId}>
+      <button
+        type="button"
+        className="xs-consult__row-hit"
+        data-xuanshu-row={item.sessionId}
+        onClick={() => { onOpen(item.sessionId); }}
+      >
+        <span className="xs-consult__shortid">{shortConsultId(item.sessionId)}</span>
+        <span className="xs-consult__row-title">{item.title}</span>
+        <small className="xs-consult__note">{formatHistoryMeta(item)}</small>
+      </button>
+      {confirming ? (
+        <span className="xs-consult__row-confirm" data-xuanshu-confirm="delete-consult">
+          <span className="xs-consult__note">{'删了就不再出现在历史里（DSH 里的会话本体不动）'}</span>
+          <button
+            type="button"
+            data-xuanshu-action="confirm-delete-consult"
+            disabled={deleting}
+            onClick={() => { onDelete(item.sessionId); setConfirming(false); }}
+          >
+            {deleting ? '删除中…' : '确认删除'}
+          </button>
+          <button type="button" data-xuanshu-action="cancel-delete-consult" onClick={() => { setConfirming(false); }}>
+            取消
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          data-xuanshu-action="delete-consult"
+          disabled={deleting}
+          title="把这次问事从历史里移除"
+          onClick={() => { setConfirming(true); }}
+        >
+          {deleting ? '删除中…' : '删除'}
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function XsConsultHistoryList({
@@ -361,6 +430,9 @@ export function XsConsultHistoryList({
   onStart,
   onCreatePu,
   onRetry,
+  onDelete,
+  deletingId,
+  deleteError,
 }: XsConsultHistoryListProps) {
   const filtered = filterHistory(items, query, range, now);
   const groups = groupHistory(filtered, now);
@@ -388,7 +460,11 @@ export function XsConsultHistoryList({
           <option value="today">今天</option>
           <option value="earlier">更早</option>
         </select>
-        {/* 导出与删除：契约没冻结这两个 RPC（§2 只有六个方法）——置灰留位，不做假按钮。 */}
+        {/*
+          导出仍是后续票；删除已经做了，但**不在工具条上**——工具条没有「选中」模型，
+          放在这里只能置灰（那正是原来那条「按钮是灰的」）。现在删除是**行内动作**，
+          一行一次、带二次确认，见 `XsConsultHistoryRow`。
+        */}
         <button
           type="button"
           data-xuanshu-action="export-selected"
@@ -397,18 +473,21 @@ export function XsConsultHistoryList({
         >
           导出选中
         </button>
-        <button type="button" data-xuanshu-action="delete-selected" disabled title="删除还没做（属后续票）">
-          删除
-        </button>
       </div>
       {/*
         2026-11-02 改：原来这句是「契约未冻结导出与删除的 RPC（§2 只有六个方法）：这两个动作先置灰，
         不做假按钮。」—— `RPC`、`§2`、`六个方法` 全是给开发者看的话，用户读到只会觉得莫名其妙。
         意思其实很简单：这两个动作现在还没做，所以按钮是灰的，不是坏了。
+        2026-11-03 改：删除已经做了（行内 [删除] + 二次确认），所以这句只说导出。
       */}
       <p className="xs-consult__note" data-xuanshu-note="contract-scope">
-        导出与删除还没做，所以这两个按钮是灰的 —— 不是坏了。
+        {'导出还没做，所以这个按钮是灰的 —— 不是坏了。'}
       </p>
+      {deleteError === undefined ? null : (
+        <p className="xs-consult__error" data-xuanshu-error="delete-consult">
+          {deleteError}
+        </p>
+      )}
 
       {loading ? (
         <p className="xs-consult__note" data-xuanshu-state="loading">正在读本地会话清单…</p>
@@ -469,16 +548,12 @@ export function XsConsultHistoryList({
           <ul className="xs-consult__rows">
             {group.items.map((item) => (
               <li key={item.sessionId}>
-                <button
-                  type="button"
-                  className="xs-consult__row-hit"
-                  data-xuanshu-row={item.sessionId}
-                  onClick={() => { onOpen(item.sessionId); }}
-                >
-                  <span className="xs-consult__shortid">{shortConsultId(item.sessionId)}</span>
-                  <span className="xs-consult__row-title">{item.title}</span>
-                  <small className="xs-consult__note">{formatHistoryMeta(item)}</small>
-                </button>
+                <XsConsultHistoryRow
+                  item={item}
+                  deleting={deletingId === item.sessionId}
+                  onOpen={onOpen}
+                  onDelete={onDelete}
+                />
               </li>
             ))}
           </ul>

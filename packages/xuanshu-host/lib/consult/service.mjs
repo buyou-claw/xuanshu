@@ -342,6 +342,26 @@ export function createConsultMethods(ctx, config = {}) {
     },
 
     /**
+     * 回收一次问事（可回收性）：删掉**旁挂清单**这一份索引，列表随之下线。
+     *
+     * 边界写死在这里，别指望调用方记得：
+     *   - 只删玄枢自己的旁挂文件；`$DSH_HOME/sessions/**` 是 DSH 的会话记录，
+     *     上游 rc.2 没有给第三方删除会话的接口 → **不越界**（响应里 `sessionStorageKept: true` 明说这件事）。
+     *   - 正在生成中的会话也允许删；后续 `consult.send` 会因为清单不在而报「不存在」——
+     *     这比让它继续往一份已经下线的记录里记账更容易看懂。
+     *   - 不存在就报错（不静默成功）：否则界面会把「本来就没有」当成「删掉了」。
+     */
+    'consult.delete': async (request) => {
+      const source = request && typeof request === 'object' && !Array.isArray(request) ? request : {}
+      const sessionId = requireSessionId(source.sessionId)
+      const existed = store.remove(sessionId)
+      if (!existed) {
+        throw new Error(`问事记录不存在：${sessionId}（列表以旁挂清单为准；consult.list 里没有它）。`)
+      }
+      return { deleted: true, sessionId, sessionStorageKept: true }
+    },
+
+    /**
      * 临时挂载（票 12，契约 §2）：把「这次要临时引进来看看」的工作区 / 工作流写进
      * **同一份旁挂清单的 `mounts` 字段**（不另开权威），与勾选谱 `pus` 并列。
      *

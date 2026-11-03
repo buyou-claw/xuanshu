@@ -20,7 +20,7 @@ function fakeCtx(value = { ok: true }) {
 }
 
 describe('票 10 · 问事数据面的方法名逐字对齐契约 §2', () => {
-  it('六个方法名就是契约表格那一列的原文', () => {
+  it('六个契约方法 + 一个加性方法（delete）的方法名逐字对齐', () => {
     expect(CONSULT_ENDPOINTS).toEqual({
       create: 'consult.create',
       send: 'consult.send',
@@ -28,6 +28,8 @@ describe('票 10 · 问事数据面的方法名逐字对齐契约 §2', () => {
       read: 'consult.read',
       rename: 'consult.rename',
       defaults: 'consult.defaults',
+      // 加性方法（2026-11-03）：只补「回收一次问事」，契约 §2 的六个一字未动。
+      delete: 'consult.delete',
     })
   })
 
@@ -41,6 +43,7 @@ describe('票 10 · 问事数据面的方法名逐字对齐契约 §2', () => {
     await api.read({ sessionId: 'session-xs-consult-x' })
     await api.rename({ sessionId: 'session-xs-consult-x', title: '转岗时机' })
     await api.defaults()
+    await api.delete({ sessionId: 'session-xs-consult-x' })
 
     expect(calls.map((call) => [call.channel, call.endpoint])).toEqual([
       ['/xuanshu', 'consult.create'],
@@ -49,11 +52,13 @@ describe('票 10 · 问事数据面的方法名逐字对齐契约 §2', () => {
       ['/xuanshu', 'consult.read'],
       ['/xuanshu', 'consult.rename'],
       ['/xuanshu', 'consult.defaults'],
+      ['/xuanshu', 'consult.delete'],
     ])
     expect(calls[0].payload).toEqual({ pus: ['ziwei-biji'] })
     expect(calls[1].payload).toEqual({ sessionId: 'session-xs-consult-x', text: '帮我看转岗时机' })
     expect(calls[3].payload).toEqual({ sessionId: 'session-xs-consult-x' })
     expect(calls[4].payload).toEqual({ sessionId: 'session-xs-consult-x', title: '转岗时机' })
+    expect(calls[6].payload).toEqual({ sessionId: 'session-xs-consult-x' })
   })
 
   it('create 的 pus 可省（不勾任何可选谱 = 空手问一句），省掉时不下发这个键', async () => {

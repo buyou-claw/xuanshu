@@ -2,8 +2,9 @@
 /**
  * `scripts/worktree-create.mjs` —— 实现者 worktree 的「一条命令起」。
  *
- * 手工起工作树的成本不止 `git worktree add`：还要记得把仓库根 `node_modules` 与各
- * `packages/<pkg>/node_modules` 链进新工作树，否则 build / 测试起不来；而链多了又踩上
+ * 手工起工作树的成本不止 `git worktree add`：还要记得把仓库根 `node_modules`、各
+ * `packages/<pkg>/node_modules` 与 `profile/node_modules`（隔离实例的 DSH CLI 在它下面）链进新工作树，
+ * 否则 build / 测试 / 起实例都起不来；而链多了又踩上
  * 2026-10-17 的事故（`docs/development-status.md` §16.4 第 7 条）：`git worktree remove`
  * 在 Windows 上会**跟穿 junction**，把主仓 `node_modules` 清空。所以这条命令把
  * 「建 worktree + 建分支 + 只链依赖 + 打印可复制的进入方式」收成一条，并钉死两条语义：
@@ -117,8 +118,15 @@ function resolveRepo(opts) {
 }
 
 /**
- * 列出要链的依赖：仓库根 `node_modules` + 每个**已存在**的 `packages/<pkg>/node_modules`。
- * 目标是主仓里已装好的依赖目录；这里只描述，不创建。
+ * 列出要链的依赖：仓库根 `node_modules` + 每个**已存在**的 `packages/<pkg>/node_modules`
+ * + `profile/node_modules`。目标是主仓里已装好的依赖目录；这里只描述，不创建。
+ *
+ * 为什么 `profile/node_modules` 也得链（2026-11-02 实测）：
+ *   隔离实例用 link 模式装配 home（`profiles/xuanshu` 指向仓库 `profile/`），DSH CLI 的入口是
+ *   `profile/node_modules/@deepseek-ai/dsh/lib/bin.js`。它是 gitignore 的真目录，**不随 worktree 检出**，
+ *   于是 worktree 里的 `startIsolatedInstance` 会死在「隔离 home 里没有 DSH CLI」，
+ *   浏览器半边整轮退化成 collection-failed（一次实测：22 个渲染面全红）。
+ *   它缺失是**正常状态**（CI / 新 clone 没装过 profile），所以按「跳过并打印」处理，不当失败。
  * @returns {{create: {label: string, target: string, link: string}[], skip: {label: string, why: string}[]}}
  */
 function planLinks(repoRoot, worktreePath) {
@@ -137,6 +145,7 @@ function planLinks(repoRoot, worktreePath) {
   }
 
   consider('根 node_modules', join(repoRoot, 'node_modules'), join(worktreePath, 'node_modules'))
+  consider('profile/node_modules', join(repoRoot, 'profile', 'node_modules'), join(worktreePath, 'profile', 'node_modules'))
 
   let packageNames = []
   try {

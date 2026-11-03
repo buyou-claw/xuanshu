@@ -62,7 +62,8 @@ function call(route, method, payload = {}) {
   return route.handler(method, payload, new AbortController().signal)
 }
 
-const CONTRACT_METHODS = ['consult.create', 'consult.send', 'consult.list', 'consult.read', 'consult.rename', 'consult.defaults']
+// 契约 §2 的六个 + 2026-11-03 的加性方法 consult.delete（它同样必须挂在通道上）。
+const CONTRACT_METHODS = ['consult.create', 'consult.send', 'consult.list', 'consult.read', 'consult.rename', 'consult.defaults', 'consult.delete']
 
 describe('票 10 · 六个方法挂在同一条 /xuanshu 通道上（契约 §2）', () => {
   it('通道路径 = /xuanshu；六个方法名逐字可调，且与 pu.* / cang.* / bazi.* 合并而不是互相覆盖', async () => {

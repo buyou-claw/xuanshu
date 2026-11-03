@@ -330,6 +330,21 @@ export function createConsultStore(dataDir) {
     },
 
     /**
+     * 删一份旁挂清单（回收一次问事）。返回「删之前它在不在」——
+     * **不存在不算成功**：否则调用方会把「本来就没有」当成「删掉了」。
+     *
+     * 只删玄枢自己的旁挂索引，**不碰** `$DSH_HOME/sessions/**`（那是 DSH 的会话记录，
+     * 上游没有给第三方删会话的接口；越界删别人的数据比留一行更难查）。
+     */
+    remove(sessionId) {
+      if (!isConsultSessionId(sessionId)) return false
+      const file = fileOf(sessionId)
+      if (!existsSync(file)) return false
+      rmSync(file, { force: true })
+      return true
+    },
+
+    /**
      * 只允许改这几样：`pus` 是开会话时的选择（本票没有改选择的 RPC），
      * `mounts` 归票 12（`consult.setMounts` —— 走同一份旁挂清单，不另开权威），
      * `mountsInjected` 归注入侧（`boundary.mjs`：**逐层**记「内容已经交给模型」的那一份，

@@ -200,6 +200,22 @@ pnpm dev:xuanshu      # 开发档：<repo>/.dsh-home + 19388
 home 里没有它时 CLS 会直接报 `profile "xuanshu" does not exist`。先跑 setup（或
 `node scripts/install-profile.mjs --home <home>`）。
 
+### 只想起来看一眼（`serve:xuanshu`）
+
+```powershell
+pnpm serve:xuanshu              # 起实例 → 打出带 token 的 URL → 顺手开浏览器；Ctrl+C 停
+pnpm serve:xuanshu -- --list    # 只列候选 home 与各自的问事记录数，不启动
+pnpm serve:xuanshu -- --home D:\xuanshu-home --no-open
+```
+
+选 home 的顺序：`--home` ＞ `$XUANSHU_DSH_HOME` ＞ 有记录的 `.experience-home/round-01`
+（在 worktree 里跑会自动回溯**主检出**那一份）＞ `.dsh-home` ＞ 新建 `.experience-home/serve`。
+
+与 `dev:xuanshu` 的分工：`dev:xuanshu` 走 `scripts/isolation/startup.mjs`，要求 home 里已经装好完整
+profile，适合「长期开发档」；`serve:xuanshu` 每次都用 `install-profile --skip-install` 重新接一遍
+（对已有链接幂等），所以**实操评估跑完之后想自己上手看一眼**这种场景不会卡在 `[profile] FAIL`。
+两条都不碰真实 `~/.dsh`：解析结果等于或位于它下面会当场拒绝。
+
 ## 7. 回滚 / 清理
 
 装是加法，回滚是删：
@@ -207,7 +223,8 @@ home 里没有它时 CLS 会直接报 `profile "xuanshu" does not exist`。先�
 ```powershell
 # 只删一个 profile —— 用 cmd 的 rmdir，不要用 PowerShell 的 Remove-Item -Recurse：
 # profiles 下的 node_modules 里有 pnpm 的目录联接（junction），Remove-Item 会**跟着联接**
-# 删到全局 store 里的真件（本仓已实际踩过，见 docs/development-status.md 的操作陷阱 3）。
+# 删到全局 store 里的真件（本仓已实际踩过：2026-10-17 收 worktree 时 `git worktree remove`
+# 跟穿 junction、把主仓 node_modules 清空；恢复要 pnpm install --offline + 重装 profile）。
 cmd /c rmdir /s /q "%USERPROFILE%\.xuanshu\profiles\xuanshu"
 # 整个玄枢 home（会话 + 数据 + 凭据全在里面，删前自己确认）
 cmd /c rmdir /s /q "%USERPROFILE%\.xuanshu"

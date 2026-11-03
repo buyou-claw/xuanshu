@@ -303,7 +303,7 @@ DSH **没有** conversation 作用域的「右栏子槽」；右列是一个**�
 | 创建请求 | `ScheduleCreateRequest { prompt: string; title: string; after_seconds?; at?; every_seconds?; daily?; weekly?; cron? }` —— **`title` 必填**（≤120 字，非空），缺 / 空 / 超长 → `invalid_prompt` | `dsh-schedule/lib/types/types.d.ts:305-323`；`dsh-schedule/lib/types/index.d.ts:56-68` |
 | 规则种类 | `after` / `at` / `every` / **`daily`（显式 IANA 时区的每日墙钟）** / `weekly`（ISO 星期集合 + IANA 时区） / `cron`（五段 Vixie 表达式 + 显式 IANA 时区） | `dsh-schedule/lib/types/types.d.ts:14-99`、`:335-350` |
 | 客户端面 | typert 远程 `schedule/catalog|list|create…` + `dsh-client-ui-schedule`；UI 面板 key = **`schedules`**，侧栏行 order 10 | `dsh-schedule/lib/typert.remote-client.d.ts:17-21`；`dsh-client-ui-schedule/lib/client.js:6683`、`:6793-6810` |
-| **可用性前置** | **`schedule` 不在 `dsh-base`**：只由可选 bundle `@deepseek-ai/dsh-experimental-schedule-bundle` 声明。玄枢 profile 不加它 ⇒ `ctx.get('schedule') === undefined` 且 **boot 不报错** | `.scratch/assembly-foundation/notes/boot-contract.md` §5.1、§(d) 第 7 条；`dsh-base/cordis.patch.yml` 无 schedule 行 |
+| **可用性前置** | **`schedule` 不在 `dsh-base`**：只由可选 bundle `@deepseek-ai/dsh-experimental-schedule-bundle` 声明。玄枢 profile 不加它 ⇒ `ctx.get('schedule') === undefined` 且 **boot 不报错** | `dsh-base/cordis.patch.yml` 无 schedule 行（可自行核对）；补丁行提供 `ctx.schedule` 的决策见 `docs/adr/0011-schedule-via-package-patch-not-profile-bundle.md` |
 
 ### 6.3 `ctx.commands`
 
@@ -418,7 +418,7 @@ DSH **没有** conversation 作用域的「右栏子槽」；右列是一个**�
 | `docs/research/dsh-recon.md` §2.3 / §3.2 | 遮蔽规则「数值小者渲染；同 priority 第二个注册会 throw」，**未区分 list 是加性的** | 一致，且明确：**`list` 槽每个 `id` 一个 cell，不同 id 是加性的**（不遮蔽、都渲染）；`sidebar.panellist` 的 `replaceRisk` 是 `none` | 补充：「加性」是 **list 的 cell 语义**，不是「所有 list 槽都加性」（同 id 仍遮蔽 + 同 priority 仍 throw） |
 | `docs/research/dsh-recon.md` §3.1 | 暗示 `conversation.hero.brand.mark` 是「品牌标志」子槽（可被替换） | 目录证据：该槽 `occupants: []`、`replaceRisk: none` —— 它是**空槽**（加性座位），不是「已被官方占用、需要遮蔽」的槽 | 以目录为准 |
 | `docs/research/dsh-recon.md` §7 末段 + `packages/xuanshu-client/README.md:122-134` | primitives 是「基线（免声明）」外部依赖（技术事实成立） | **技术事实成立，但上游另有插件作者规则**：不得 require 任何 Harness Client 包，应照抄形状自研（`practices.md:35`）。两者不矛盾：种子词决定「require 不会失败」，实践规则决定「不该 require」 | **本仓遵守实践规则**：§5 降级为「形状参照」；实现票不得 import primitives |
-| `.scratch/assembly-foundation/notes/client-plugin-contract.md` §(e) 第 7 条 | 「`references/practices.md:35` 禁止 import `@deepseek-ai/dsh-client-ui-primitives`」并称此点为「已知陷阱」 | **已复核为真**，且是**明文规则**而非陷阱（原文含「Write your own controls and match the host instead … keep only `--dsw-alias-*` token references」） | 升级为 §0 F4（三条先读结论之一）；`practices.md` 同文件另有 `:12`（先选渲染面）、`:33`（不要 iframe）、`:34`（管理列表参照 Plugin Manager）、`:36`（不要写 DOM 到组件外）、`:37`（Chat 行的正统注册法）五条对玄枢直接适用，已分别并入 §5 / §6.7 / §7 |
+| 早前的侦察笔记（未入库前置）称「`references/practices.md:35` 禁止 import `@deepseek-ai/dsh-client-ui-primitives`」并把这当作「已知陷阱」 | **已复核为真**，且是**明文规则**而非陷阱（原文含「Write your own controls and match the host instead … keep only `--dsw-alias-*` token references」） | 升级为 §0 F4（三条先读结论之一）；`practices.md` 同文件另有 `:12`（先选渲染面）、`:33`（不要 iframe）、`:34`（管理列表参照 Plugin Manager）、`:36`（不要写 DOM 到组件外）、`:37`（Chat 行的正统注册法）五条对玄枢直接适用，已分别并入 §5 / §6.7 / §7 |
 
 ### 8.3 对实现票的硬提醒
 

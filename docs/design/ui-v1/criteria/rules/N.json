@@ -2,8 +2,8 @@
   "family": "N",
   "title": "导航（入口唯一 / 返回落点 / 键盘可达）",
   "source": {
-    "file": "docs/specs/003-ux-quality-line.md",
-    "anchor": "同时登记一个新判据族：**导航模型**"
+    "file": "docs/design/ui-v1/README.md",
+    "anchor": "## 12. 导航模型（入口唯一 / 返回落点 / 键盘可达）"
   },
   "rules": [
     {
@@ -14,7 +14,7 @@
       "severity": "major",
       "appliesTo": { "kind": "rendered" },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "同一个动作只有一个入口"
       }
     },
@@ -26,7 +26,7 @@
       "severity": "major",
       "appliesTo": { "kind": "rendered" },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "从抽屉 / 面板返回时回到我来的地方"
       }
     },
@@ -38,8 +38,8 @@
       "severity": "major",
       "appliesTo": { "kind": "rendered" },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
-        "anchor": "键盘能走完一条完整任务（Tab 顺序、Esc 关抽屉、焦点可见）"
+        "file": "docs/design/ui-v1/README.md",
+        "anchor": "键盘能走完一条完整任务"
       }
     }
   ]

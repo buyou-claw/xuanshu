@@ -1,11 +1,14 @@
 /**
- * 票 10 · 问事数据面（`/xuanshu` 通道上 `consult.*` 六个方法；冻结契约 §2）。
+ * 票 10 · 问事数据面（`/xuanshu` 通道上 `consult.*` 方法；冻结契约 §2 + 后续加性方法）。
  *
  * 与票 08 的 `bazi-api.ts` 同款理由：方法名与请求形状是**两个实现者共享的接口面**，
  * 写在一处才能逐字比对契约表格（`tests/assembly/consult-api.test.mjs`）。
  *
- * 客户端**不造 sessionId**（ADR-0009 §1：id 由玄枢自铸、但铸造在宿主半）——
- * 本模块只搬运 `consult.create` 返回的那个 id。
+ * `consult.delete` 是**加性**方法（2026-11-03 加）：它不改变任何既有请求/响应形状，
+ * 只补上「把一次问事从玄枢的历史里回收」这件事。契约 §2 的六个方法一字未动。
+ *
+ * 客户端**不造 sessionId**（ADR-0009 §1：id 由玄枢自铸、但铸造在宿主半）——本模块只搬运
+ * `consult.create` 返回的那个 id。
  */
 import { rpcCall } from './rpc.js';
 import type { RpcContext } from './rpc.js';
@@ -102,6 +105,14 @@ export const CONSULT_ENDPOINTS = {
   read: 'consult.read',
   rename: 'consult.rename',
   defaults: 'consult.defaults',
+  /**
+   * 回收一次问事（删旁挂清单）。
+   *
+   * 为什么它不叫「删除会话」：玄枢只拥有**旁挂索引**，DSH 的会话记录归 DSH
+   * （上游没有给第三方删会话的接口）。所以这里删掉的是「玄枢还记着这次问事」这件事实，
+   * 而不是替上游删数据 —— 响应里的 `sessionStorageKept` 就是这条边界。
+   */
+  delete: 'consult.delete',
 } as const;
 
 /** 问事数据面的形状（门厅与历史子页共用一份）。 */
@@ -127,6 +138,14 @@ export interface ConsultApi {
   rename(payload: { sessionId: string; title: string }, signal?: AbortSignal): Promise<{ session: ConsultSummary }>;
   /** 勾选区的两组数据：恒定在场项 + 可选谱。 */
   defaults(signal?: AbortSignal): Promise<ConsultDefaults>;
+  /**
+   * 回收一次问事：删掉**旁挂清单**这一份索引，历史列表随之下线。
+   * `sessionStorageKept: true` 表示 DSH 那边的会话记录仍在（玄枢不越界删上游数据）。
+   */
+  delete(
+    payload: { sessionId: string },
+    signal?: AbortSignal,
+  ): Promise<{ deleted: true; sessionId: string; sessionStorageKept: true }>;
 }
 
 /**
@@ -148,5 +167,12 @@ export function createConsultApi(ctx: RpcContext): ConsultApi {
       ),
     rename: (payload, signal) => rpcCall<{ session: ConsultSummary }>(ctx, CONSULT_ENDPOINTS.rename, payload, signal),
     defaults: (signal) => rpcCall<ConsultDefaults>(ctx, CONSULT_ENDPOINTS.defaults, {}, signal),
+    delete: (payload, signal) =>
+      rpcCall<{ deleted: true; sessionId: string; sessionStorageKept: true }>(
+        ctx,
+        CONSULT_ENDPOINTS.delete,
+        payload,
+        signal,
+      ),
   };
 }
