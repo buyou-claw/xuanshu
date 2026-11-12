@@ -1,0 +1,14 @@
+ts	phase	decision	why	evidence	result
+2026-11-12T06:09:02.079Z	界定	选藏库登记作为样板	可在无模型环境走真实表单并核实磁盘和重启	自动用户体验侦察与Debug.md	待实测
+2026-11-12T06:09:02.091Z	设计	为每次实操准备 copy profile	首跑会改 profile 配置，需要和仓库及旧 home 隔离	../../runbook/dual-instance.md	待实测
+2026-11-12T06:15:19.481Z	取证自检	使用系统 Edge 的实际安装路径	Playwright 默认 channel 路径指向不存在的用户级安装	../../../ux-reports/experience-scout-2026-11-12/scout-01/steps.jsonl	自动化缺陷，待复测
+2026-11-12T06:21:38.306Z	探索	按可见反馈登记虚构笔记	错误路径被禁用并确认没有落盘，改正后通过真实控件登记	../../../ux-reports/experience-scout-2026-11-12/scout-02/steps.jsonl	VERIFIED
+2026-11-12T06:21:38.308Z	取证	按真实标题定位新登记卡片	按精确正文定位误把包含已登记状态的标题判成缺失	../../../ux-reports/experience-scout-2026-11-12/scout-02/screens/020-1.yml	自动化缺陷，已纠正断言
+2026-11-12T06:24:51.610Z	重启	记录同一 home 重启后空白	端口已释放，新进程握手成功且注册表字节不变，插件根界面报 SlotAssemblyError	../../../ux-reports/experience-scout-2026-11-12/scout-02/console.jsonl	磁盘通过，界面恢复待复跑
+2026-11-12T06:29:07.859Z	重启	记录恢复瞬间的模型遮罩与后续空白	导航出现后仍有首跑配置提示阻挡，需用真实控件关闭并验证藏库终态	../../../ux-reports/experience-scout-2026-11-12/scout-02/screens/032-1.png	界面找回尚待证实
+2026-11-12T06:29:23.759Z	重启	重启并关闭模型遮罩后从藏库找回笔记	恢复后用可见标题和磁盘同一 ID 与 SHA256 双重核对	../../../ux-reports/experience-scout-2026-11-12/scout-02/steps.jsonl	VERIFIED，重启行为有差异
+2026-11-12T06:33:14.158Z	重放	复现文件选择入口缺失并缩成两步	两次完整重放和两次两步路径均命中，单步缺可见前置	../../../ux-reports/experience-scout-2026-11-12/picker-replay/replay.json	VERIFIED
+2026-11-12T06:33:14.160Z	重放	核对第一次重启的根槽错误	两个新 home 的有效重放中导航正常，保留原异常和不同结果	../../../ux-reports/experience-scout-2026-11-12/restart-replay/replay.json	未稳定复现
+2026-11-12T06:33:14.161Z	核验	运行既有 verify:live	在已登记但无出生信息、无密钥的隔离实例上核对真机断言	../../../ux-reports/experience-scout-2026-11-12/scout-02/verify-live.log	38/45，环境相关和未独立裁定失败保留
+2026-11-12T06:33:14.161Z	核验	记录 verify:all 的工作区基线红	类型及产物同步通过，清单门报告 3 次 EPERM、既有文档漂移和 pin 证据缺失	../../../.scratch/test-inventory-report.json	NOT VERIFIED，exit 1
+2026-11-12T06:37:23.238Z	复核	验证原型的原始证据和最终两步路径	四份主 trace 的 ZIP 完整，覆盖链接有效，独立复核后明确最短性仅及保留触发动作的子序列	../../../ux-reports/experience-scout-2026-11-12/picker-final-smoke/replay.json	VERIFIED
