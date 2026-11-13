@@ -22,6 +22,7 @@
 | 清理 worktree、依赖目录或测试临时目录 | 先读 [并行实现 §2](docs/agents/parallel-work.md#2-junction-跟穿禁令)，再使用其中的安全清理流程 |
 | 运行 code-review、两轴复核或复核本轮 diff | [复核清单](docs/agents/review-checklist.md)：真实入口、夹具、跨包契约与运行时 API 的检查要求 |
 | 修改客户端源码或处理客户端产物冲突 | [并行实现 §3–4](docs/agents/parallel-work.md#3-用例基线与客户端产物归属)：生成物重建、同步提交与冲突处置 |
+| 在真实 Edge 中实跑用户体验验证、重放或缩减 UX 异常 | [verify-xuanshu-experience 技能](.codex/skills/verify-xuanshu-experience/SKILL.md)：启动与 Doctor、目标驱动探索、证据门槛、重放配置与关停；功能地图在 [features](.codex/skills/verify-xuanshu-experience/features/README.md) |
 
 ## 验证与交付
 

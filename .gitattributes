@@ -17,6 +17,8 @@
 /package.json text eol=lf
 /pnpm-workspace.yaml text eol=lf
 /vitest.config.mjs text eol=lf
+# 技能副本要与 Codex 实际加载的 `~/.codex/skills` 副本逐字节对齐（见 .codex/skills/verify-xuanshu-experience/README.md）
+/.codex/** text eol=lf
 
 # 二进制不参与行尾转换
 *.png binary
