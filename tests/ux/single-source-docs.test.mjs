@@ -50,9 +50,14 @@ describe('票 12 · 判据只有一份权威', () => {
 
   it('「五列判据」的定义只出现在 criteria/README.md 一处', () => {
     const files = walk(REPO_ROOT).filter((file) => file.endsWith('.md'))
-    // 允许提到五列的**指针型**文档：术语表（定义词）、spec（提要求）、ADR（记决策）、台账（记数字）。
-    // 它们指向权威，不复制权威；真正的第二份判据书会出现在别处（例如 design/ui-v2/…），那才是要拦的。
-    const allowed = ['CONTEXT.md', 'docs/specs/', 'docs/adr/', 'docs/development-status.md', 'docs/design/ui-v1/criteria/']
+    // 允许提到五列的**指针型**文档：术语表（定义词）、ADR（记决策）、设计稿（判据的权威）、
+    // 架构与产品定义（提要求）。它们指向权威，不复制权威；真正的第二份判据书会出现在别处
+    // （例如 design/ui-v2/…），那才是要拦的。
+    //
+    // `docs/specs/` 已按 ADR-0016 删除，所以这条前缀**不再出现在白名单里**——留着等于给
+    // 「再写一份规格」开门。`docs/development-status.md` 仍暂留（另一个会话在用），故仍豁免；
+    // 它退出仓库时把这一条一并撤掉（见 ADR-0016 Consequences）。
+    const allowed = ['CONTEXT.md', 'docs/adr/', 'docs/development-status.md', 'docs/design/ui-v1/criteria/']
     const defining = files.filter((file) => {
       const relativePath = relative(REPO_ROOT, file).replaceAll('\\', '/')
       if (allowed.some((prefix) => relativePath === prefix || relativePath.startsWith(prefix))) return false

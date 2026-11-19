@@ -1,9 +1,9 @@
 /**
- * 门厅小字的对比度契约（issue #64 / UX-02 · 判据 C-003「对比度达 WCAG AA」）。
+ * 门厅小字的对比度契约（判据 C-003「对比度达 WCAG AA」）。
  *
  * 为什么要把这条单独钉成静态断言：C-003 的机器判定在浏览器半边（`pnpm verify:ux --browser`
- * 量 computed-style），而实现者票在 worktree 里跑不了浏览器（`docs/development-status.md`
- * §17.6 第 2 条）。于是「改深了没有」只靠一次浏览器体检兜底 —— 体检之前谁都不知道。
+ * 量 computed-style），而 worktree 里浏览器半边起不来（临时 home 的 profile 是 link 到 worktree
+ * 的 `profile/`，那份没有 node_modules）。于是「改深了没有」只靠一次浏览器体检兜底 —— 体检之前谁都不知道。
  * 这里改从**样式源 + token 文件**算同一个比值，让回退在几毫秒内红，而不是等下一轮浏览器录制。
  *
  * 三份真值，**各有出处**，本文件不手抄任何一个数字：

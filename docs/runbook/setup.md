@@ -232,4 +232,4 @@ cmd /c rmdir /s /q "<repo>\.dsh-home"                        #    粗暴版：�
 - `docs/adr/0004-pin-upstream-versions.md` —— 钉版决策与上游升级清单。
 - [home.md](home.md) —— 玄枢的 home（产品 `~/.xuanshu` / 开发 `<repo>/.dsh-home`）：在哪、怎么换、怎么迁移、为什么与 DSH 桌面版互不影响。
 - `docs/runbook/dual-instance.md` —— 开发期双实例隔离（`$DSH_HOME` / 端口 / `8765` 四态守卫 / 回滚）。
-- `docs/specs/001-assembly-foundation.md` —— 装配基座 spec（User Stories 1–4）。
+- `docs/architecture-v1.md` —— 装配基座的分层与装配清单（User Stories 1–4 要的那套地基，现行形态看这里，不看已退出仓库的规格）。

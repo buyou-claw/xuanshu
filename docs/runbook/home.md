@@ -207,7 +207,8 @@ home 里没有它时 CLS 会直接报 `profile "xuanshu" does not exist`。先�
 ```powershell
 # 只删一个 profile —— 用 cmd 的 rmdir，不要用 PowerShell 的 Remove-Item -Recurse：
 # profiles 下的 node_modules 里有 pnpm 的目录联接（junction），Remove-Item 会**跟着联接**
-# 删到全局 store 里的真件（本仓已实际踩过，见 docs/development-status.md 的操作陷阱 3）。
+# 删到全局 store 里的真件（本仓已实际踩过：2026-10-17 收 worktree 时 `git worktree remove`
+# 跟穿 junction、把主仓 node_modules 清空；恢复要 pnpm install --offline + 重装 profile）。
 cmd /c rmdir /s /q "%USERPROFILE%\.xuanshu\profiles\xuanshu"
 # 整个玄枢 home（会话 + 数据 + 凭据全在里面，删前自己确认）
 cmd /c rmdir /s /q "%USERPROFILE%\.xuanshu"

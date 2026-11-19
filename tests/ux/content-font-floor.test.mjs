@@ -1,10 +1,10 @@
 /**
- * 正文 16px 下限（票 UX-01 / #63 · 判据 C-001）。
+ * 正文 16px 下限（判据 C-001）。
  *
  * 为什么必须在这里钉：判据 C-001 量的是**渲染值**，而宿主在容器上定义了
  * `--dsh-content-font-size`（真浏览器实测 14px）—— 于是 `var(--dsh-content-font-size, 16px)`
  * 的 fallback **永远不生效**，样式里写着 16 也照样量到 14。浏览器半边在 CI / worktree 里
- * 起不来（见 `docs/development-status.md` §17.6），所以这条断言补的是「取值本身带下限」：
+ * 起不来（同 `tests/assembly/overview-contrast.test.mjs` 的理由），所以这条断言补的是「取值本身带下限」：
  * 给定宿主 token = 14，声明必须解到 ≥16；宿主把 token 抬到 20 时也必须跟着抬（不是写死 16）。
  *
  * 第二条断言防的是「唯一能过判据的坏办法」：把整屏调成同号。元信息（tag / badge / 状态行 /

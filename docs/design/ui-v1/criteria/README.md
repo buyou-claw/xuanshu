@@ -113,6 +113,6 @@ UX-FIX: T-001 | 面板标题改用 token 字号档 | packages/xuanshu-client/src
 
 ### 4.5 为什么不进 `verify:all`
 
-spec 003 的 Out of Scope 写着「巡检不进 `verify:all` 的门：升级成门需另立 ADR」（ADR-0015 第 8 条）。
+巡检不进 `verify:all` 的门：要升级成门需另立 ADR（本条口径在 ADR-0015 第 8 条，自足，不依赖任何已退出的规格）。
 这三条检查因此挂在 `verify:ux:fix` / `verify:ux:authority` / `verify:ux:regreen` 上，由修复流程**显式调用**；
 `verify:all` 保持原样，只保证它不被这一票弄坏。

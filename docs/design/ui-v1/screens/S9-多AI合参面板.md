@@ -1,13 +1,13 @@
 # S9 · 多 AI 合参面板
 
 > 归属票：11 ｜ 层级：会话内区块 ｜ 槽位：`consult` 会话流内的一条 assistant 消息区块（`conversation.*` 具名槽或自研区块挂点——(需确认)）
-> 上游依据：`docs/specs/001-assembly-foundation.md` 用户故事 17、18、33 与 Implementation Decisions「多 AI 合参」；`docs/architecture-v1.md` §5「多 AI 合参」/§6「问事」；`.scratch/assembly-foundation/issues/11-best-of-n.md`；`docs/design/ui-v1/README.md` §6.1 定案 D4 + §6.2 防脏状态 H3/H4
+> 上游依据：`docs/adr/0010-judge-without-structured-output.md`（judge 槽不用 `json_schema strict`，改「工具调用参数 JSON + 校验」，失败回落完成顺序第一份）；`docs/adr/0012-consult-context-at-pre-step-boundary.md`（合参是旁路、不改主会话注入）；`docs/architecture-v1.md` §5「多 AI 合参」/§6「问事」；`docs/design/ui-v1/README.md` §6.1 定案 D4 + §6.2 防脏状态 H3/H4
 > 规格级复用来源：**Best-of-N**（上游实现名：多模型对比）——规格级复用，不搬代码；锚点表见 `shared/星阙交互规格索引.md` §3.1（30 行交互点）/§3.3（D20–D29）
 > 本屏不做什么：不自动采用任何候选（C9）；候选流**不带工具**（本区块只产文本、不产生写操作）；不另配模型密钥（复用 DSH provider 配置）；首版只做 **2 路**（D20；架构按 2–4 路预留，4 路属 N13 后置）；上游 `rejudge`（重跑判官）玄枢 v1 **不做**（README §6.1；属 N 清单）
 
 ## 1. 目的与入口
 
-- **从哪进（双触发，二者等价）**：① **conversation 面板的原生 composer** 里输入 `/多模型 <问题>` 发送；② composer 上沿 / 会话内区块上的「多 AI 合参」按钮（未带问题时，先弹一行输入框问「这一轮要合参的问题是？」）。**命令名照抄上游**：`/多模型`（主，`utils/aiChat/commands.js:28`；票 11 与 `docs/specs/001-assembly-foundation.md:72` 已把这两个字钉死）＋ 玄枢别名 `/合参` ＋ 上游别名 `bestof`；**产品功能名一律写「多 AI 合参」**，界面文案不出现「多模型对比」（那只是第 7 节里的上游实现名）。（注：`shared/星阙交互规格索引.md` §3.3 D21 的「命令改名为 `/合参`」建议已被 lead 收口否决，**该索引行需回改**。）
+- **从哪进（双触发，二者等价）**：① **conversation 面板的原生 composer** 里输入 `/多模型 <问题>` 发送；② composer 上沿 / 会话内区块上的「多 AI 合参」按钮（未带问题时，先弹一行输入框问「这一轮要合参的问题是？」）。**命令名照抄上游**：`/多模型`（主，`utils/aiChat/commands.js:28`；这两个字由 `docs/design/ui-v1/README.md` §6.3 第 3 条定死）＋ 玄枢别名 `/合参` ＋ 上游别名 `bestof`；**产品功能名一律写「多 AI 合参」**，界面文案不出现「多模型对比」（那只是第 7 节里的上游实现名）。（注：`shared/星阙交互规格索引.md` §3.3 D21 的「命令改名为 `/合参`」建议已被 lead 收口否决，**该索引行需回改**。）
 - **渲染面（README §6.4 D5）**：本区块**不挂在 `consult` 面板下**（该面板没有会话绑定）；它注册在 DSH `conversation` 面板的会话绑定子槽里，用户「进入会话」的动作即 `ctx.layout.selectPanel(null)`（D6）。
 - **开关**：设置里「多 AI 合参」默认**关**（用户故事 18「平时轻量、需要时再开」）；关闭时按钮与命令都在，触发时先提示一次并给「去设置打开」。
 - **去哪出**：S6（采用 / 合并 / 否决后回到会话流，本轮变成一条 assistant 消息）；S7（历史回看只带采用稿）；S8（候选截断护栏与挂载预算同口径）；S10（会话结束后的沉淀）。
@@ -198,7 +198,7 @@
 
 | 交互点 | 星阙出处（上游实现名：多模型对比 Best-of-N） | 复用 / 偏离 + 理由 |
 |---|---|---|
-| `/多模型` 命令（别名 `/合参` · `bestof`）+ 面板按钮双触发 | 索引 §3.1「命令注册」`utils/aiChat/commands.js:28`；解析规则 `commands.js:60-69` | 规格级复用（**命令名照抄上游 `/多模型`**，票 11 与 `docs/specs/001-assembly-foundation.md:72` 钉死；玄枢另加别名 `/合参`，上游别名 `bestof` 保留；`//` 不触发照抄）；**偏离（定名）**：产品功能名用「多 AI 合参」，折叠 Tag 用「多 AI 合参 N 份」（索引 D22），「多模型对比」只作上游实现名出现在本表与第 7 节表头。（索引 §3.3 D21 的改名建议作废，需回改索引。） |
+| `/多模型` 命令（别名 `/合参` · `bestof`）+ 面板按钮双触发 | 索引 §3.1「命令注册」`utils/aiChat/commands.js:28`；解析规则 `commands.js:60-69` | 规格级复用（**命令名照抄上游 `/多模型`**，本稿定在 `docs/design/ui-v1/README.md` §6.3 第 3 条；玄枢另加别名 `/合参`，上游别名 `bestof` 保留；`//` 不触发照抄）；**偏离（定名）**：产品功能名用「多 AI 合参」，折叠 Tag 用「多 AI 合参 N 份」（索引 D22），「多模型对比」只作上游实现名出现在本表与第 7 节表头。（索引 §3.3 D21 的改名建议作废，需回改索引。） |
 | 三条守卫（空问题 / 生成中 / 无模型） | 索引 §3.1「空参数与并发护栏」`components/aianalysis/chat/useChatBestOf.js:157-162` | 规格级复用（时序一致） |
 | 预估费用确认（无价表也要确认） | 索引 §3.1「预估费用确认框」`.../chat/useChatAssist.js:266-269`；预估口径 `useChatBestOf.js:172`、`utils/aiBestOfN.js:40-50` | 规格级复用；金额精度按上游 `fmtCost`（< $0.01 → 4 位小数，否则 2 位，索引 D26） |
 | 两种模式 / 四视角 / 缺省两级回落 | 索引 §3.1「两种模式」「四个视角与 directive」「缺省空配置的回落」`BestOfPanel.js:31-41`、`utils/aiBestOfN.js:10-15`、`useChatBestOf.js:163-166`、`aiBestOfN.js:21` | 规格级复用（四段 directive 逐字可用）；**首版收敛**：只启用经典 + 审慎两视角（D20/N13）；「不同模型」多选在设置里可见但标后续版本 |
@@ -269,7 +269,7 @@
 
 ## 11. 验收自检
 
-对照 `.scratch/assembly-foundation/issues/11-best-of-n.md` checklist（并覆盖票 02 第 1、3 条验收项与 README §6.1/§6.2）：
+对照票 11 checklist（票面已按 ADR-0016 退出仓库，条目要点即下表左列；另覆盖票 02 第 1、3 条验收项与 README §6.1/§6.2）：
 
 | checklist | 怎么验 |
 |---|---|

@@ -56,7 +56,7 @@
 
 ## 5. 正文下限的裁决与清偿（2026-10-31）
 
-spec 003 §21 要求「正文 ≥16px」，而本表 `§2` 原先的 `body` 档写的是 **14px**——两边都是权威，
+「正文 ≥16px」是 `README.md` §11.1 的视觉档位表（唯一权威）定下的下限，而本表 `§2` 原先的 `body` 档写的是 **14px**——两边都是权威，
 实测会把巡检判据 C-001 卡在自相矛盾上（判据量渲染值，实现照表落 14px，于是每条正文都红）。
 
 **裁决：16px 是目标，14px 是原实现的取值。** 已按下面这条路径清偿：
@@ -76,6 +76,6 @@ spec 003 §21 要求「正文 ≥16px」，而本表 `§2` 原先的 `body` 档�
 元信息仍自带 12–14px（tag / badge / 状态行 / 路径 / 计数），层级不塌。
 写死 rem 的标题级选择器（`.xs-consult h3` / `h4`、字段标签、`__round-head`）各钉一次，
 因为 rem 是绝对值、不参与继承。**判据照旧、阈值未动**：C-001 是否转绿以主仓
-`--browser` 实测为准（worktree 里浏览器半边起不来，见 `docs/development-status.md` §17.6 第 2 条）。
+`--browser` 实测为准（worktree 里浏览器半边起不来：`worktree-create` 只链 `packages/*/node_modules`，而临时 home 的 `profiles/xuanshu` 指向 worktree 的 `profile/`，那份没有 node_modules —— 所以采集只能主仓跑）。
 
-依据：spec 003 §21 + WCAG AA 正文可读性 + 本轮定下的视觉方向 A（Apple 式克制留白，正文不吃小字）。
+依据：`README.md` §11.1（正文 ≥16px 的下限）+ WCAG AA 正文可读性 + 本轮定下的视觉方向 A（Apple 式克制留白，正文不吃小字）。

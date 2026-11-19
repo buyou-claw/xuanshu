@@ -3,7 +3,7 @@
 > 侦察对象 = 玄枢实际跑的钉版 `@deepseek-ai/*@0.2.0-rc.2`（`.dsh-home/profiles/xuanshu/node_modules/@deepseek-ai/`）
 > ＋ 桌面外壳 `E:\DeepSeek Harness\resources\app.asar`（`@deepseek-ai/dsh-desktop@0.2.0-rc.2`，只读内存解包，未落盘）。
 > 文中 `@deepseek-ai/dsh-desktop/...` 均指 app.asar 内路径；`packages/...` 指本仓。
-> `docs/specs/` 现只有 001，本文件是 002 立项前的可行性证据，不是 spec。
+> **本文件是上游可行性侦察证据，不是规格**（规格按 ADR-0016 交付后退出仓库，本目录只留侦察证据）。
 
 ## 结论先行
 

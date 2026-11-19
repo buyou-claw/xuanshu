@@ -1,23 +1,23 @@
 #!/usr/bin/env node
 /**
- * `scripts/check-doc-numbers.mjs` —— **文档数字门：手抄的数字一漂就红**（票 E3 / #43）。
+ * `scripts/check-doc-numbers.mjs` —— **文档数字门：手抄的数字一漂就红**。
  *
- * 为什么需要它：本仓有两次「数字只从工具输出里抄」的成文纪律，然后照样漂
- * （`docs/development-status.md` §16.4「数字只从工具输出里抄」：992 vs 1020；之后又漂过 1811/164 → 1814/165）。
+ * 为什么需要它：本仓有「数字只从工具输出里抄」的成文纪律，然后照样漂过四次
+ * （992 vs 1020；1811/164 → 1814/165；559944 → 560502；557338 → 558918）。
  * 纪律挡不住手抄，机器判据才挡得住：这里的每条断言都**先把真值从工具源读出来**再比对文档。
+ *
+ * **核对目标只剩一处**（ADR-0016 第 2 条）：开发台账 `docs/development-status.md` 不再被核对，
+ * 它是手抄的复制品；当前验证数字只留 `README.md` 的 `## 状态` 段一处，由本门继续核对。
+ * 门不撤、只收窄——「数字必须来自工具输出」这条纪律仍由机器执行。
+ * （台账文件本身按 ADR-0016 退出仓库，但它眼下仍被另一个会话使用，所以还没删；这不影响本门。）
  *
  * 真值（唯一来源，脚本里不抄任何数字）：
  *   - `tests/test-inventory.json` 的 `total` 与 `files` 键数（`pnpm test:inventory --update` 写的基线）；
  *   - `packages/xuanshu-client/lib/client.js` 的实际字节数（`statSync().size`，即 `build-client --check` 比的那份产物）。
  *
- * 核对什么（**只核当前验证块**，历史章节里的旧数字不判漂移）：
- *   - `README.md` 的 `## 状态` 段：`pnpm test:inventory` 行（用例数 / 文件数）与 `build-client --check` 行（产物字节）；
- *   - `docs/development-status.md` 的 `#### 16.3` / `#### 16.7` / `#### 16.8` 三个当前验证块：
- *     §16.3 核 `[inventory]` 行（用例数 / 文件数）、`[S3] PASS 客户端产物 NB` 行，
- *     以及「清单基线已按最终用例数 `--update`（N / M）」那一行；
- *     §16.7 与 §16.8 都核 `[doc-numbers] OK：N 条用例 / M 个文件 / K B` 一行（三个数字都核）；
- *     §16.8 另外核 `[inventory]` 行与 `[S3]` 产物字节行（main 全量复核块的最终验证）。
- *     （§16.6 是历史轮：数字属于那一轮，**不核**——门只认当前块，见 tests/lib/check-doc-numbers.test.mjs。）
+ * 核对什么：
+ *   - `README.md` 的 `## 状态` 段：`pnpm test:inventory` 行（用例数 / 文件数）与 `build-client --check` 行（产物字节）。
+ *   - **`## 历史` 段里的旧数字不判漂移**：门只认当前块（见 tests/lib/check-doc-numbers.test.mjs）。
  *
  * 退出码（「没验」与「验了但红了」分开，与 `scripts/check-test-inventory.mjs` 同一口径）：
  *   0 = 当前验证块与工具源一致；
@@ -28,7 +28,7 @@
  *   node scripts/check-doc-numbers.mjs                          # 用仓库默认路径
  *   node scripts/check-doc-numbers.mjs --root <dir>             # 换仓库根（判据用例用合成目录）
  *   node scripts/check-doc-numbers.mjs --inventory <file> --artifact <file>
- *   node scripts/check-doc-numbers.mjs --readme <file> --status <file>
+ *   node scripts/check-doc-numbers.mjs --readme <file>
  *
  * 只读：不修改任何文档或产物；不联网；不跑测试套件（毫秒级）。
  */
@@ -42,12 +42,11 @@ const DEFAULT_ROOT = resolve(HERE, '..')
 /** 「没法验」专用错误：与「漂移」分开（exit 2 vs exit 1）。 */
 class CannotVerify extends Error {}
 
-const USAGE = `用法：node scripts/check-doc-numbers.mjs [--root <dir>] [--inventory <file>] [--artifact <file>] [--readme <file>] [--status <file>]
+const USAGE = `用法：node scripts/check-doc-numbers.mjs [--root <dir>] [--inventory <file>] [--artifact <file>] [--readme <file>]
   --root       仓库根（默认 = 脚本所在仓库）
   --inventory  用例清单真源（默认 tests/test-inventory.json，相对 --root）
   --artifact   客户端产物（默认 packages/xuanshu-client/lib/client.js，相对 --root）
   --readme     要核对的 README（默认 README.md，相对 --root）
-  --status     要核对的开发台账（默认 docs/development-status.md，相对 --root）
 退出码：0 = 一致；1 = 漂移（逐条列出）；2 = 没法验（真源/文档/当前验证块缺失或读不出来）。`
 
 /** 解析命令行；未知参数 / 缺值一律「没法验」。 */
@@ -57,7 +56,6 @@ function parseArgs(argv) {
     inventory: 'tests/test-inventory.json',
     artifact: 'packages/xuanshu-client/lib/client.js',
     readme: 'README.md',
-    status: 'docs/development-status.md',
     help: false,
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -73,7 +71,6 @@ function parseArgs(argv) {
       case '--inventory': options.inventory = take(); break
       case '--artifact': options.artifact = take(); break
       case '--readme': options.readme = take(); break
-      case '--status': options.status = take(); break
       case '--help':
       case '-h': options.help = true; break
       default: throw new CannotVerify(`未知参数 ${arg}\n${USAGE}`)
@@ -84,7 +81,6 @@ function parseArgs(argv) {
   options.inventory = underRoot(options.inventory)
   options.artifact = underRoot(options.artifact)
   options.readme = underRoot(options.readme)
-  options.status = underRoot(options.status)
   return options
 }
 
@@ -137,40 +133,8 @@ function readTruth(options) {
 
 /**
  * 一条规则 = 「这一行是数字声明」+「从这一行抽哪几个数、期望多少」。
- * `kind` 用于「当前块里必须有 inventory 行与产物字节行」的覆盖检查；`optional` 表示有则核、无则跳过。
+ * `kind` 用于「当前块里必须有 inventory 行与产物字节行」的覆盖检查。
  */
-const INVENTORY_IN_BRACKETS = {
-  kind: 'inventory',
-  // 只认「[inventory] 用例 N 条…」这种**声明行**；`[inventory] 通过：…` 是结论行，不含数字。
-  when: (line) => /^\s*\[inventory\]\s*用例/u.test(line),
-  extract: (line, truth) => [
-    { name: '用例数', expected: truth.total, match: line.match(/用例\s*(\d+)\s*条/u) },
-    { name: '文件数', expected: truth.fileCount, match: line.match(/文件\s*(\d+)\s*个/u) },
-  ],
-}
-
-/** §16.3 的散文行：「清单基线已按最终用例数 `--update`（1835 / 167）」。 */
-const BASELINE_PAIR = {
-  kind: 'inventory',
-  optional: true,
-  when: (line) => line.includes('清单基线') && line.includes('--update'),
-  extract: (line, truth) => {
-    const match = line.match(/[（(]\s*(\d+)\s*\/\s*(\d+)\s*[）)]/u)
-    return [
-      { name: '用例数', expected: truth.total, match: match === null ? null : [match[0], match[1]] },
-      { name: '文件数', expected: truth.fileCount, match: match === null ? null : [match[0], match[2]] },
-    ]
-  },
-}
-
-/** `[S3] PASS 客户端产物 522070B`（verify:assembly 输出的那一行）。 */
-const ARTIFACT_S3_LINE = {
-  kind: 'artifact',
-  when: (line) => line.includes('客户端产物'),
-  extract: (line, truth) => [
-    { name: '客户端产物字节', expected: truth.artifactBytes, match: line.match(/客户端产物\s*(\d+)\s*B/u) },
-  ],
-}
 
 /** `build-client --check in sync（522070B）`（README 的 `## 状态` 段）。 */
 const ARTIFACT_IN_SYNC_LINE = {
@@ -192,45 +156,16 @@ const README_INVENTORY_LINE = {
 }
 
 /**
- * §16.7 / §16.8 共用的当前块行：`[doc-numbers] OK：1835 条用例 / 167 个文件 / 522070 B`（verify:all 末步的 summary）。
- * 一行里三个数字，拆成两条规则共享同一个 `when`：`kind` 决定「当前块必须出现哪类数字」的覆盖检查。
- */
-const whenDocNumbersOk = (line) => line.includes('[doc-numbers] OK')
-
-const DOC_NUMBERS_OK_COUNTS = {
-  kind: 'inventory',
-  when: whenDocNumbersOk,
-  extract: (line, truth) => [
-    { name: '用例数', expected: truth.total, match: line.match(/\[doc-numbers\]\s*OK[：:]\s*(\d+)\s*条用例/u) },
-    { name: '文件数', expected: truth.fileCount, match: line.match(/\/\s*(\d+)\s*个文件/u) },
-  ],
-}
-
-const DOC_NUMBERS_OK_ARTIFACT = {
-  kind: 'artifact',
-  when: whenDocNumbersOk,
-  extract: (line, truth) => [
-    { name: '客户端产物字节', expected: truth.artifactBytes, match: line.match(/\/\s*(\d+)\s*B(?![A-Za-z])/u) },
-  ],
-}
-
-/**
  * 文档规格：一个文件 → 若干「当前验证块」（按标题定位）。
  * `required` = 这一段里必须出现的数字种类（缺了就是「没法验」，不静默放过）。
+ *
+ * ADR-0016 第 2 条：台账删除后，唯一核对目标 = README 的 `## 状态` 段。
  */
 const DOC_SPECS = [
   {
     option: 'readme',
     sections: [
       { id: '「## 状态」段', pattern: /^##\s+状态\s*$/u, rules: [README_INVENTORY_LINE, ARTIFACT_IN_SYNC_LINE], required: ['inventory', 'artifact'] },
-    ],
-  },
-  {
-    option: 'status',
-    sections: [
-      { id: '「#### 16.3」当前验证块', pattern: /^#{1,6}\s*16\.3\b/u, rules: [INVENTORY_IN_BRACKETS, ARTIFACT_S3_LINE, BASELINE_PAIR], required: ['inventory', 'artifact'] },
-      { id: '「#### 16.7」当前验证块', pattern: /^#{1,6}\s*16\.7\b/u, rules: [DOC_NUMBERS_OK_COUNTS, DOC_NUMBERS_OK_ARTIFACT], required: ['inventory', 'artifact'] },
-      { id: '「#### 16.8」当前验证块', pattern: /^#{1,6}\s*16\.8\b/u, rules: [INVENTORY_IN_BRACKETS, ARTIFACT_S3_LINE, DOC_NUMBERS_OK_COUNTS, DOC_NUMBERS_OK_ARTIFACT], required: ['inventory', 'artifact'] },
     ],
   },
 ]
@@ -240,7 +175,7 @@ const DOC_SPECS = [
 /**
  * 代码围栏掩码：``` 之内的 `# 注释行` 不是 Markdown 标题。
  *
- * 实测踩到：§16.3 的代码块里第一行是 `# pnpm test:inventory…`，按「以 # 开头就是标题」找段尾，
+ * 实测踩到：代码块里第一行常是 `# pnpm test:inventory…`，按「以 # 开头就是标题」找段尾，
  * 会当场把段结束在自己脚下（span 只剩 3 行）——判据就会漏掉整块。围栏必须参与标题识别。
  * @returns {boolean[]} 每一行是否位于代码围栏内（围栏行本身也算）
  */

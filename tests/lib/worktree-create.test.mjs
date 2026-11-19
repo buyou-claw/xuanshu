@@ -1,11 +1,11 @@
 /**
  * tests/lib/worktree-create.test.mjs —— `scripts/worktree-create.mjs` 的判据台。
  *
- * 为什么要有这条脚本（E1 / #42）：实现者起工作树靠手工记忆——`git worktree add` 之后还要记得
+ * 为什么要有这条脚本：实现者起工作树靠手工记忆——`git worktree add` 之后还要记得
  * 把主仓根 `node_modules` 与各 `packages/<pkg>/node_modules` 链进来（不链就 build/测试起不来），
  * 而链多了又踩上 2026-10-17 的事故：`git worktree remove` 跟穿 junction 清空主仓依赖
- * （`docs/development-status.md` §16.4 第 7 条）。这条命令把「建 + 链 + 可复制进入方式」收成一条，
- * 并把「只链不复制、绝不写链接目标」当硬语义。
+ * （worktree 的 `node_modules` 是指向主仓的 junction，递归删除会跟穿到主仓真件）。这条命令把
+ * 「建 + 链 + 可复制进入方式」收成一条，并把「只链不复制、绝不写链接目标」当硬语义。
  *
  * 断言面 = **外部可观察物**：进程退出码 / stdout / 新工作树里的链接与文件 / 目标里的哨兵文件 /
  * 目标仓库根目录的变化。不在真实仓库建 worktree、不联网、不安装任何包。

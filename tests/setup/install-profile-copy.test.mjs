@@ -1,12 +1,12 @@
 /**
  * tests/setup/install-profile-copy.test.mjs — copy 模式的**回归用例**。
  *
- * 为什么必须存在（复核报告 `docs/reviews/spec001-a2ceaf3-review.md` 的 Standards 3 / Standards 4）：
- *   - Standards 3：copy 模式把自有插件依赖改写成 `link:<仓库绝对路径>`，于是 pnpm **只建联接、不装**
+ * 为什么必须存在（两个实测缺陷，不是风格问题）：
+ *   - copy 模式把自有插件依赖改写成 `link:<仓库绝对路径>`，于是 pnpm **只建联接、不装**
  *     被链接包自己的 dependencies —— 目标 profile 的 node_modules 里没有 `tz-lookup`，
  *     `xuanshu-host` 一 import 就是 ERR_MODULE_NOT_FOUND；而且包仍然靠仓库绝对路径活着，
  *     ADR-0008 的 copy 场景（运行环境里没有仓库）根本不成立。
- *   - Standards 4：复制列表里没有 `pnpm-lock.yaml`，`--skip-install` 装配出来的 profile
+ *   - 复制列表里没有 `pnpm-lock.yaml`，`--skip-install` 装配出来的 profile
  *     连一个锁文件都没有，`pnpm install --frozen-lockfile` 无从校验。
  *
  * 修复后的契约（本文件钉的就是这四条）：

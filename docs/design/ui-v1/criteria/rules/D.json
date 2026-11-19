@@ -2,8 +2,8 @@
   "family": "D",
   "title": "密度与点击目标",
   "source": {
-    "file": "docs/specs/003-ux-quality-line.md",
-    "anchor": "点击目标 ≥44×44"
+    "file": "docs/design/ui-v1/README.md",
+    "anchor": "### 11.1 视觉档位（克制留白）"
   },
   "rules": [
     {
@@ -14,7 +14,7 @@
       "severity": "major",
       "appliesTo": { "kind": "rendered" },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "点击目标 ≥44×44"
       }
     },
@@ -26,7 +26,7 @@
       "severity": "major",
       "appliesTo": { "kind": "rendered" },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "单屏主操作 ≤1"
       }
     }

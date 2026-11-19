@@ -2,8 +2,8 @@
   "family": "C",
   "title": "对比度与可读性",
   "source": {
-    "file": "docs/specs/003-ux-quality-line.md",
-    "anchor": "视觉档位（克制留白）"
+    "file": "docs/design/ui-v1/README.md",
+    "anchor": "### 11.1 视觉档位（克制留白）"
   },
   "rules": [
     {
@@ -14,7 +14,7 @@
       "severity": "major",
       "appliesTo": { "kind": "rendered" },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "正文 ≥16px"
       }
     },
@@ -26,7 +26,7 @@
       "severity": "major",
       "appliesTo": { "kind": "rendered" },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "行高 ≥1.5"
       }
     },
@@ -38,7 +38,7 @@
       "severity": "major",
       "appliesTo": { "kind": "rendered" },
       "source": {
-        "file": "docs/specs/003-ux-quality-line.md",
+        "file": "docs/design/ui-v1/README.md",
         "anchor": "对比度达 WCAG AA"
       }
     }

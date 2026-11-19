@@ -1,9 +1,7 @@
 /**
  * 票 13 · 日课定时任务接上**可执行的生成链**（复核 Spec 1 的回归判据）
  *
- * 复核的原文（`docs/reviews/spec001-a2ceaf3-review.md` 的逐项对照表）：
- *
- * > Spec 1：定时任务未接可执行生成链 —— `rikke/daily-tasks.mjs:142` 仍裸建 agent。
+ * 曾经的红（Spec 1 定时任务未接可执行生成链 —— `rikke/daily-tasks.mjs:142` 仍裸建 agent）：
  *
  * 两处**实**的差距（不是风格问题）：
  *
